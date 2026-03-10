@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.base import BaseProcessing
+from gin_bids_py_analysis.data.loader import load_ieeg
 
 from .params import HilbertParams
 from .result import HilbertProcessingResult
@@ -37,7 +38,7 @@ class HilbertProcessing(BaseProcessing):
         TODO: Implement once the data loader interface (``gin_bids_py_analysis.data``)
               is available and the algorithm is defined.
         """
-        raise NotImplementedError(
-            "HilbertProcessing.process_group() is a stub — implement once the "
-            "data loader interface is available in gin_bids_py_analysis.data."
-        )
+
+        loaded_data = load_ieeg(group.primary)
+        
+        return HilbertProcessingResult(group)

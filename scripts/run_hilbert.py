@@ -17,7 +17,7 @@ from gin_bids_py_analysis.processing.hilbert import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path("/data/my_study")
+BIDS_ROOT = Path(r"D:\CBT\bids")
 
 # BIDS entity filters: only files matching ALL of these will be processed.
 # Remove any key you don't want to filter on.

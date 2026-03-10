@@ -54,11 +54,6 @@ def build_bids_path(
     for key in _ENTITY_ORDER:
         if key in norm:
             parts.append(f"{key}-{norm[key]}")
-    # Append any remaining entities not in the canonical list (alphabetical)
-    canonical_set = set(_ENTITY_ORDER)
-    for key in sorted(norm):
-        if key not in canonical_set:
-            parts.append(f"{key}-{norm[key]}")
 
     filename = "_".join(parts) + f"_{suffix}{extension}"
 

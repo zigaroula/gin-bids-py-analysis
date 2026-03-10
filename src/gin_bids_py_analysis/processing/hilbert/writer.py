@@ -37,9 +37,6 @@ class HilbertProcessingWriter(BaseProcessingWriter):
             raise TypeError(
                 f"Expected HilbertProcessingResult, got {type(result).__name__!r}"
             )
-        # TODO: implement serialisation once HilbertProcessingResult.output is typed.
-        # e.g.: np.save(output_path, result.output)
-        raise NotImplementedError(
-            "HilbertProcessingWriter._write_data() is a stub — implement once "
-            "HilbertProcessingResult.output type is finalised."
-        )
+        
+        # write placeholder empty file: implement once the output format and serialisation strategy are finalised
+        output_path.touch()

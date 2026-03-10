@@ -18,6 +18,7 @@ separation between **computation** and **file I/O** in the processing pipeline.
 | **Import name** | `gin_bids_py_analysis` |
 | **Python** | ≥ 3.10 |
 | **Dep management** | plain `pip` + `setuptools`; install with `pip install -e ".[dev]"` |
+| **Virtual env** | `.venv` at the project root — always use `.venv\Scripts\pip` / `.venv\Scripts\python` / `.venv\Scripts\pytest` for all installs, runs, and tests |
 | **Test runner** | `pytest` |
 
 ---
@@ -182,9 +183,9 @@ out_paths = processor.run(files, writer, n_jobs=-1)  # all CPUs
 ## Running Tests
 
 ```bash
-pip install -e ".[dev]"
-pytest
-pytest --cov=gin_bids_py_analysis --cov-report=term-missing
+.venv\Scripts\pip install -e ".[dev]"
+.venv\Scripts\pytest
+.venv\Scripts\pytest --cov=gin_bids_py_analysis --cov-report=term-missing
 ```
 
 Tests that require a real pybids-indexed dataset are marked `@pytest.mark.skip`
