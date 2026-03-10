@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from joblib import Parallel, delayed
+from pydantic import BaseModel
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
@@ -19,6 +20,40 @@ def _coerce_to_groups(items: list[BIDSFile | BIDSFileGroup]) -> list[BIDSFileGro
         BIDSFileGroup(primary=item) if isinstance(item, BIDSFile) else item
         for item in items
     ]
+
+class BaseProcessingParams(BaseModel):
+    """
+    Base class for all processing parameter models.
+
+    Subclass this in each analysis subpackage to declare algorithm parameters
+    (e.g. filter settings, frequency bands, sampling rate).  An instance is
+    passed to the processor constructor and stored as ``self.params`` for use
+    in :meth:`process_group`.
+    """
+
+
+class BaseWriterParams(BaseModel):
+    """
+    Base class for all writer parameter models.
+
+    Carries the output routing fields required by
+    :meth:`BaseProcessingWriter.write` plus any format-specific options declared
+    in subclasses (e.g. output format, compression level).
+
+    Required fields (must be provided by caller or overridden with defaults
+    in a concrete subclass):
+
+    - ``bids_root`` — root of the BIDS dataset; ``derivatives/<pipeline_label>``
+      is created automatically.
+    - ``pipeline_label`` — becomes ``desc-<label>`` in the output filename.
+    - ``output_suffix`` — BIDS suffix of the output file.
+    - ``output_extension`` — file extension including the leading dot.
+    """
+
+    bids_root: Path
+    pipeline_label: str
+    output_suffix: str
+    output_extension: str
 
 
 @dataclass
@@ -50,26 +85,20 @@ class BaseProcessingWriter(ABC):
 
     - :meth:`write` is **concrete** and handles all shared setup: it derives
       the output path from ``result.source_group.primary``'s entities plus the
-      pipeline label, creates the output directory, and then delegates the
-      actual serialisation to :meth:`_write_data`.
+      pipeline label (taken from ``params.pipeline_label``), creates the output
+      directory, and then delegates the actual serialisation to
+      :meth:`_write_data`.
     - :meth:`_write_data` is **abstract** and is the only method subclasses
       need to implement.
 
-    Subclasses must also declare three class-level constants:
-
-    .. code-block:: python
-
-        PIPELINE_LABEL = "hilbert"   # becomes desc-<label> in the filename
-        OUTPUT_SUFFIX  = "hilbert"   # BIDS suffix of the output file
-        OUTPUT_EXTENSION = ".npy"    # file extension including the dot
+    The constructor takes a :class:`BaseWriterParams` instance (or a subclass)
+    that provides the output routing config (``bids_root``, ``pipeline_label``,
+    ``output_suffix``, ``output_extension``) plus any format-specific options
+    declared by the concrete subclass.
     """
 
-    PIPELINE_LABEL: str
-    OUTPUT_SUFFIX: str
-    OUTPUT_EXTENSION: str
-
-    def __init__(self, bids_root: Path) -> None:
-        self._bids_root = bids_root
+    def __init__(self, params: BaseWriterParams) -> None:
+        self.params = params if params is not None else BaseWriterParams()
 
     def write(
         self,
@@ -86,20 +115,20 @@ class BaseProcessingWriter(ABC):
         Returns:
             :class:`~pathlib.Path` to the written output file.
         """
-        output_root = self._bids_root / "derivatives" / self.PIPELINE_LABEL
+        output_root = self.params.bids_root / "derivatives" / self.params.pipeline_label
         primary = result.source_group.primary
         entities = {
             k: v
             for k, v in primary.entities.items()
             if k not in _PROVENANCE_ENTITIES
         }
-        entities["desc"] = self.PIPELINE_LABEL
+        entities["desc"] = self.params.pipeline_label
 
         output_path = build_bids_path(
             entities=entities,
             root=output_root,
-            suffix=self.OUTPUT_SUFFIX,
-            extension=self.OUTPUT_EXTENSION,
+            suffix=self.params.output_suffix,
+            extension=self.params.output_extension,
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
 

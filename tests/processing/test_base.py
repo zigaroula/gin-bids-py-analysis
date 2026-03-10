@@ -20,6 +20,7 @@ from gin_bids_py_analysis.processing.base import (
     BaseProcessing,
     BaseProcessingResult,
     BaseProcessingWriter,
+    BaseWriterParams,
 )
 
 
@@ -38,12 +39,19 @@ class _DummyProcessor(BaseProcessing):
 
 
 class _DummyWriter(BaseProcessingWriter):
-    PIPELINE_LABEL = "dummy"
-    OUTPUT_SUFFIX = "dummy"
-    OUTPUT_EXTENSION = ".npy"
-
     def _write_data(self, result: BaseProcessingResult, output_path: Path) -> None:
         pass  # no-op for tests; output_path is already created by the base
+
+
+def _dummy_writer(bids_root: Path) -> _DummyWriter:
+    """Helper: build a _DummyWriter with minimal BaseWriterParams."""
+    params = BaseWriterParams(
+        bids_root=bids_root,
+        pipeline_label="dummy",
+        output_suffix="dummy",
+        output_extension=".npy",
+    )
+    return _DummyWriter(params)
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +79,7 @@ def test_result_value_field(mock_bids_file: BIDSFile) -> None:
 
 
 def test_writer_returns_path(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
-    writer = _DummyWriter(tmp_path)
+    writer = _dummy_writer(tmp_path)
     result = _DummyResult(source_group=BIDSFileGroup(primary=mock_bids_file))
     out = writer.write(result)
     assert isinstance(out, Path)
@@ -79,14 +87,14 @@ def test_writer_returns_path(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
 
 def test_run_writes_and_returns_paths(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
     groups = [BIDSFileGroup(primary=mock_bids_file), BIDSFileGroup(primary=mock_bids_file)]
-    paths = _DummyProcessor().run(groups, _DummyWriter(tmp_path))
+    paths = _DummyProcessor().run(groups, _dummy_writer(tmp_path))
     assert len(paths) == 2
     assert all(isinstance(p, Path) for p in paths)
 
 
 def test_run_n_jobs_parallel(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
     groups = [BIDSFileGroup(primary=mock_bids_file), BIDSFileGroup(primary=mock_bids_file)]
-    paths = _DummyProcessor().run(groups, _DummyWriter(tmp_path), n_jobs=2)
+    paths = _DummyProcessor().run(groups, _dummy_writer(tmp_path), n_jobs=2)
     assert len(paths) == 2
 
 
@@ -121,7 +129,7 @@ def test_execute_accepts_bare_bids_files(mock_bids_file: BIDSFile) -> None:
 
 
 def test_run_accepts_bare_bids_files(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
-    paths = _DummyProcessor().run([mock_bids_file], _DummyWriter(tmp_path))
+    paths = _DummyProcessor().run([mock_bids_file], _dummy_writer(tmp_path))
     assert len(paths) == 1
     assert isinstance(paths[0], Path)
 

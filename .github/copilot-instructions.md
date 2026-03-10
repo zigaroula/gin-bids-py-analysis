@@ -30,7 +30,7 @@ src/gin_bids_py_analysis/
 ├── data/           iEEG data loaders — PLACEHOLDER, see data/__init__.py
 └── processing/     Analysis pipeline (compute and I/O are separated)
     └── hilbert/    Hilbert-transform analysis subpackage (stub)
-scripts/            Runnable argparse scripts; use joblib for parallelism
+scripts/            Simple edit-and-run scripts (no argparse; edit params at top)
 tests/              pytest test suite (mirrors src/ structure)
 ```
 
@@ -53,15 +53,17 @@ tests/              pytest test suite (mirrors src/ structure)
 | Class | File | Responsibility |
 |---|---|---|
 | `BaseProcessing` | `base.py` | Abstract. Concrete `execute(groups, n_jobs) -> list[BaseProcessingResult]` fans out to abstract `process_group(group) -> BaseProcessingResult`. **No file I/O allowed here.** |
+| `BaseProcessingParams` | `base.py` | Pydantic v2 base for algorithm parameters (frequency bands, filter settings, etc.). Subclassed per analysis as `<Name>Params`. |
 | `BaseProcessingResult` | `base.py` | Abstract dataclass. `source_group: BIDSFileGroup`, `metadata: dict`. Subclassed per analysis. |
-| `BaseProcessingWriter` | `base.py` | Abstract. `write(result, output_root) -> Path`. Auto-builds BIDS output path from `result.source_group.primary`'s entities + pipeline label. |
+| `BaseProcessingWriter` | `base.py` | Abstract. `__init__(params: BaseWriterParams)`. Concrete `write(result) -> Path` builds BIDS output path; abstract `_write_data(result, path)` for subclasses. |
+| `BaseWriterParams` | `base.py` | Pydantic v2 base for writer options. Carries `bids_root`, `pipeline_label`, `output_suffix`, `output_extension` plus any format-specific options in subclasses. |
 
 ---
 
 ## Design Rules
 
 1. **No I/O in processors.**
-   `BaseProcessing.process_file()` is pure computation. All disk writes go through a
+   `BaseProcessing.process_group()` is pure computation. All disk writes go through a
    `BaseProcessingWriter` subclass. This keeps processors independently testable
    and safe for parallel execution.
 
@@ -79,17 +81,18 @@ tests/              pytest test suite (mirrors src/ structure)
 
 4. **Per-analysis subclasses.**
    Each analysis in `processing/<name>/` must define:
-   - `<Name>Params(BaseModel)` — Pydantic v2
+   - `<Name>Params(BaseProcessingParams)` — Pydantic v2, algorithm parameters
+   - `<Name>WriterParams(BaseWriterParams)` — Pydantic v2, writer options; override `pipeline_label`, `output_suffix`, `output_extension` with defaults; caller only needs to supply `bids_root`
    - `<Name>ProcessingResult(BaseProcessingResult)` — dataclass
-   - `<Name>ProcessingWriter(BaseProcessingWriter)` — uses `build_bids_path()` from `result.source_group.primary`
+   - `<Name>ProcessingWriter(BaseProcessingWriter)` — only implements `_write_data()`; path construction is inherited
    - `<Name>Processing(BaseProcessing)` — overrides `process_group(group)` only; receives params via constructor
 
-5. **Pydantic v2 for all processing params.**
-   Pass the params object to the processor constructor, not to `execute()`.
+5. **Pydantic v2 for all params.**
+   Processing params go to the processor constructor; writer params go to the writer constructor.
 
-6. **Parallelism at the script level.**
-   Use `joblib` in `scripts/` for multi-subject parallelism.
-   Processors must be stateless and side-effect-free (no shared mutable state).
+6. **Parallelism via joblib.**
+   `execute()` and `run()` both accept `n_jobs`. Processors must be stateless and
+   side-effect-free (no shared mutable state).
 
 7. **`data/` is a placeholder.**
    Do not implement data loading until the source project module is available.
@@ -101,14 +104,15 @@ tests/              pytest test suite (mirrors src/ structure)
 
 1. Create `src/gin_bids_py_analysis/processing/<name>/` with:
    ```
-   __init__.py      — re-export the four classes below
-   params.py        — <Name>Params(BaseModel)
-   result.py        — <Name>ProcessingResult(BaseProcessingResult)
-   writer.py        — <Name>ProcessingWriter(BaseProcessingWriter)
-   processor.py     — <Name>Processing(BaseProcessing)
+   __init__.py         — re-export all classes below
+   params.py           — <Name>Params(BaseProcessingParams)
+   writer_params.py    — <Name>WriterParams(BaseWriterParams)
+   result.py           — <Name>ProcessingResult(BaseProcessingResult)
+   writer.py           — <Name>ProcessingWriter(BaseProcessingWriter)
+   processor.py        — <Name>Processing(BaseProcessing)
    ```
-2. In `writer.py`, use `build_bids_path()` from `gin_bids_py_analysis.bids.helpers`
-   to construct the output path automatically from `source_file.entities`.
+2. In `writer_params.py`, set defaults for `pipeline_label`, `output_suffix`, and
+   `output_extension`; leave `bids_root` without a default so callers must supply it.
 3. Add tests in `tests/processing/<name>/`.
 4. **Update this file**: add the new analysis to the module map and key classes tables.
 
@@ -137,7 +141,7 @@ print(files[0].entities)         # full entity dict
 from pathlib import Path
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup
 from gin_bids_py_analysis.processing.hilbert import (
-    HilbertParams, HilbertProcessing, HilbertProcessingWriter,
+    HilbertParams, HilbertProcessing, HilbertProcessingWriter, HilbertWriterParams,
 )
 
 ds = BIDSDataset("/path/to/bids")
@@ -145,7 +149,7 @@ files = ds.get_files(subject="01", suffix="ieeg")
 
 params = HilbertParams(freq_bands=[(1, 4), (8, 12)], sfreq=1000.0)
 processor = HilbertProcessing(params)
-writer = HilbertProcessingWriter(Path("/path/to/bids"))
+writer = HilbertProcessingWriter(HilbertWriterParams(bids_root=Path("/path/to/bids")))
 
 # Simplest case — pass files directly (auto-wrapped into single-file groups)
 out_paths = processor.run(files, writer)

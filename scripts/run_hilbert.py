@@ -10,6 +10,7 @@ from gin_bids_py_analysis.processing.hilbert import (
     HilbertParams,
     HilbertProcessing,
     HilbertProcessingWriter,
+    HilbertWriterParams,
 )
 
 # ---------------------------------------------------------------------------
@@ -33,6 +34,10 @@ PARAMS = HilbertParams(
     sfreq=1000.0,
 )
 
+WRITER_PARAMS = HilbertWriterParams(
+    bids_root=BIDS_ROOT
+)
+
 N_JOBS = 1  # parallelism across files; set to -1 to use all available CPUs
 
 # ---------------------------------------------------------------------------
@@ -45,7 +50,7 @@ if __name__ == "__main__":
     print(f"Found {len(files)} file(s). Running with n_jobs={N_JOBS}.")
 
     processor = HilbertProcessing(PARAMS)
-    writer = HilbertProcessingWriter(BIDS_ROOT)
+    writer = HilbertProcessingWriter(WRITER_PARAMS)
 
     out_paths = processor.run(files, writer, n_jobs=N_JOBS)
     for p in out_paths:

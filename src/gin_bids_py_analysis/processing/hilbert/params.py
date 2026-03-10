@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from gin_bids_py_analysis.processing.base import BaseProcessingParams, BaseWriterParams
 
 
-class HilbertParams(BaseModel):
+class HilbertParams(BaseProcessingParams):
     """
     Parameters for Hilbert-transform-based analysis.
 
@@ -19,3 +21,26 @@ class HilbertParams(BaseModel):
         gt=0,
         description="Sampling frequency in Hz.",
     )
+
+class HilbertWriterParams(BaseWriterParams):
+    """
+    Writer parameters for the Hilbert analysis pipeline.
+
+    Provides defaults for the three output-routing fields so that only
+    ``bids_root`` needs to be supplied at construction time.
+
+    Example::
+
+        from pathlib import Path
+        from gin_bids_py_analysis.processing.hilbert import HilbertWriterParams, HilbertProcessingWriter
+
+        writer = HilbertProcessingWriter(HilbertWriterParams(bids_root=Path("/data/my_study")))
+
+    TODO: add ``output_format: Literal["npy", "mat"] = "npy"`` once the
+    serialisation strategy is finalised.
+    """
+
+    pipeline_label: str = "hilbert"
+    output_suffix: str = "hilbert"
+    output_extension: str = ".h5"
+

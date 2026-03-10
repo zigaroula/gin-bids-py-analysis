@@ -12,18 +12,25 @@ class HilbertProcessingWriter(BaseProcessingWriter):
     Writes :class:`HilbertProcessingResult` to a BIDS derivatives folder.
 
     Path construction, directory creation, and BIDS naming are all handled
-    by :meth:`BaseProcessingWriter.write`.  This class only needs to declare
-    the three pipeline constants and implement :meth:`_write_data`.
+    by :meth:`BaseProcessingWriter.write`.  This class only needs to
+    implement :meth:`_write_data`.
+
+    Pass a :class:`~gin_bids_py_analysis.processing.hilbert.HilbertWriterParams`
+    instance to the constructor — only ``bids_root`` is required, the pipeline
+    routing fields default to Hilbert-appropriate values.
 
     Example::
 
-        writer = HilbertProcessingWriter(Path("/data/my_study"))
+        from pathlib import Path
+        from gin_bids_py_analysis.processing.hilbert import (
+            HilbertWriterParams, HilbertProcessingWriter,
+        )
+
+        writer = HilbertProcessingWriter(
+            HilbertWriterParams(bids_root=Path("/data/my_study"))
+        )
         out_path = writer.write(result)
     """
-
-    PIPELINE_LABEL = "hilbert"
-    OUTPUT_SUFFIX = "hilbert"
-    OUTPUT_EXTENSION = ".npy"  # TODO: update when output format is finalised
 
     def _write_data(self, result: BaseProcessingResult, output_path: Path) -> None:
         if not isinstance(result, HilbertProcessingResult):

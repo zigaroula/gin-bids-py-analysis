@@ -1,4 +1,4 @@
-from .params import HilbertParams
+from .params import HilbertParams, HilbertWriterParams
 from .processor import HilbertProcessing
 from .result import HilbertProcessingResult
 from .writer import HilbertProcessingWriter
@@ -8,4 +8,5 @@ __all__ = [
     "HilbertProcessing",
     "HilbertProcessingResult",
     "HilbertProcessingWriter",
+    "HilbertWriterParams",
 ]
