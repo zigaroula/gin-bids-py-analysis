@@ -51,7 +51,8 @@ PARAMS = HilbertParams(
 )
 
 WRITER_PARAMS = HilbertWriterParams(
-    bids_root=BIDS_ROOT
+    bids_root=BIDS_ROOT,
+    output_extension=".vhdr"
 )
 
 N_JOBS = 1  # parallelism across files; set to -1 to use all available CPUs

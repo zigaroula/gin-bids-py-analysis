@@ -24,14 +24,20 @@ Pipeline overview
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import TYPE_CHECKING
 
 import numpy as np
+import scipy.fft as spfft
+
+# Number of subbands processed per batched IFFT call.
+# Smaller values reduce peak memory at the cost of more kernel launches.
+_CHUNK_SIZE = 4
 
 if TYPE_CHECKING:
     from .params import HilbertParams
-    
+
 from gin_bids_py_analysis.processing.utils.channels import build_montage
 
 
@@ -196,19 +202,22 @@ class FirBandPass:
         # ------------------------------------------------------------------
         # Step 3: IFFT → time-domain taps → apply Hamming window
         # ------------------------------------------------------------------
-        h_time = np.real(np.fft.ifft(h_full))
+        h_time = np.real(spfft.ifft(h_full))
         h_windowed = h_time * _hamming_window(n_points)
 
         # ------------------------------------------------------------------
-        # Step 4: FFT → FIR frequency-domain coefficients
+        # Step 4: FFT → FIR magnitude frequency response (real, float32).
+        # Using abs() gives a zero-phase bandpass, which halves downstream
+        # memory pressure vs complex128 coefficients.
         # ------------------------------------------------------------------
-        fir_coeff = np.fft.fft(h_windowed)
+        fir_coeff = np.abs(spfft.fft(h_windowed)).astype(np.float32)
 
         # ------------------------------------------------------------------
-        # Step 5: combine with Hilbert coefficients for one-shot multiply
+        # Step 5: combine with Hilbert coefficients (real float32 × float32).
+        # Values are in [0, 2] for pass-band frequencies, 0 elsewhere.
         # ------------------------------------------------------------------
-        hilbert = _hilbert_coeff(n_points)
-        self._combined: np.ndarray = fir_coeff * hilbert  # complex128
+        hilbert = _hilbert_coeff(n_points).astype(np.float32)
+        self._combined: np.ndarray = fir_coeff * hilbert  # float32
 
     def apply(self, signal: np.ndarray) -> np.ndarray:
         """Apply the band-pass + Hilbert transform to *signal*.
@@ -224,14 +233,19 @@ class FirBandPass:
             as *signal*.
         """
         n = len(signal)
-        # Zero-pad to FFT size
-        padded = np.zeros(self.n_points, dtype=np.float64)
+        # Zero-pad to FFT size (float32 input → complex64, 2× less data than float64)
+        padded = np.zeros(self.n_points, dtype=np.float32)
         padded[:n] = signal
 
-        spectrum = np.fft.fft(padded)
-        analytic = np.fft.ifft(spectrum * self._combined)
+        spectrum = spfft.fft(padded)                       # complex64
+        analytic = spfft.ifft(spectrum * self._combined)   # complex64
         envelope = np.abs(analytic[:n])
         return envelope.astype(np.float32)
+
+    @property
+    def combined(self) -> np.ndarray:
+        """Pre-computed frequency-domain coefficients (FIR x Hilbert, complex128)."""
+        return self._combined
 
 
 # ---------------------------------------------------------------------------
@@ -395,24 +409,20 @@ def moving_average(signal: np.ndarray, coefficient: int) -> np.ndarray:
     cs = np.zeros(n + 1, dtype=np.float64)
     cs[1:] = np.cumsum(signal.astype(np.float64))
 
-    output = np.empty(n, dtype=np.float32)
-    for i in range(n):
-        if i - index <= 0:
-            begin = 0
-            end = i + index
-        elif i >= n - index:
-            begin = i - index + 1
-            end = n - 1
-        else:
-            begin = i - (index - 1)
-            end = i + index
+    # Vectorised index computation
+    i = np.arange(n)
+    in_head = i - index <= 0
+    in_tail = i >= n - index
+    begin = np.where(in_head, 0,
+             np.where(in_tail, i - index + 1,
+                      i - (index - 1)))
+    end = np.where(in_head, i + index,
+           np.where(in_tail, n - 1,
+                    i + index))
+    end = np.minimum(end, n - 1)
 
-        # Clamp end to valid range
-        end = min(end, n - 1)
-        total = cs[end + 1] - cs[begin]
-        output[i] = float(total) * weight
-
-    return output
+    totals = cs[end + 1] - cs[begin]
+    return (totals * weight).astype(np.float32)
 
 
 # ---------------------------------------------------------------------------
@@ -425,6 +435,8 @@ def process_channel(
     fs: float,
     bins: list[float],
     params: "HilbertParams",
+    filters: list["FirBandPass"] | None = None,
+    combined_matrix: np.ndarray | None = None,
 ) -> dict[int, np.ndarray]:
     """Run the full Hilbert-band envelope pipeline on a single channel.
 
@@ -445,6 +457,15 @@ def process_channel(
         bins:      Frequency bin edges (already Shannon-clamped).
         params:    :class:`~.params.HilbertParams` instance controlling all
                    pipeline toggles and settings.
+        filters:   Optional list of pre-built :class:`FirBandPass` objects
+                   (one per subband).  Used to derive *combined_matrix* when
+                   that is not supplied directly.  Pass ``None`` to build
+                   filters on the fly from *bins*.
+        combined_matrix: Optional ``[n_subbands, n_points]`` real float32
+                   array of pre-stacked filter × Hilbert coefficients.
+                   When supplied (e.g. by :func:`process_all_channels`) the
+                   matrix is not rebuilt per channel.  Pass ``None`` to
+                   derive it from *filters*.
 
     Returns:
         ``{window_ms: envelope_array}`` where each array has length
@@ -453,34 +474,69 @@ def process_channel(
     n_samples = len(signal_1d)
     n_points = _number_of_points(n_samples)
 
-    # ------------------------------------------------------------------
-    # Step 1 & 2: compute + (optionally) downsample envelope per subband
-    # ------------------------------------------------------------------
-    sub_envelopes: list[np.ndarray] = []
-    for low, high in zip(bins[:-1], bins[1:]):
-        fir = FirBandPass(low, high, fs, n_points)
-        envelope = fir.apply(signal_1d)
+    # Resolve combined_matrix: accept pre-built, derive from filters,
+    # or build everything from bins.  The [n_sub, n_points] float32 matrix
+    # is the only thing needed for the hot path below.
+    if combined_matrix is None:
+        if filters is None:
+            filters = [FirBandPass(low, high, fs, n_points)
+                       for low, high in zip(bins[:-1], bins[1:])]
+        combined_matrix = np.stack([fir.combined for fir in filters], axis=0)
 
-        if params.do_downsample:
-            envelope = downsample(envelope, fs, params.downsampled_frequency_hz)
-
-        sub_envelopes.append(envelope)
-
-    if not sub_envelopes:
+    n_subbands = combined_matrix.shape[0]
+    if n_subbands == 0:
         raise ValueError(
             "No subbands produced — bins list must have at least 2 elements."
         )
 
     # ------------------------------------------------------------------
-    # Step 3: normalise each subband envelope
+    # Step 1a: FFT the signal once.
+    # float32 input → complex64 (2× less data than float64/complex128).
+    # The same spectrum is broadcast to all subbands.
     # ------------------------------------------------------------------
-    if params.do_normalize_percent:
-        sub_envelopes = [normalize_percent(e) for e in sub_envelopes]
+    padded = np.zeros(n_points, dtype=np.float32)
+    padded[:n_samples] = signal_1d
+    spectrum = spfft.fft(padded)  # complex64 [n_points]
 
     # ------------------------------------------------------------------
-    # Step 4: average across subbands
+    # Step 1b+c: chunked batched IFFT → amplitude envelope.
+    # _CHUNK_SIZE subbands per call caps transient memory to
+    # ~(_CHUNK_SIZE × n_points × 8 B) for the complex64 temporaries.
     # ------------------------------------------------------------------
-    mean_data = np.sum(sub_envelopes, axis=0, dtype=np.float32) / len(sub_envelopes)
+    row_chunks: list[np.ndarray] = []
+    for start in range(0, n_subbands, _CHUNK_SIZE):
+        chunk = combined_matrix[start : start + _CHUNK_SIZE]     # [c, n_points] float32
+        analytics = spfft.ifft(spectrum * chunk, axis=1)          # complex64 [c, n_points]
+        row_chunks.append(np.abs(analytics[:, :n_samples]).astype(np.float32))
+
+    envelopes_2d = np.concatenate(row_chunks, axis=0)  # [n_sub, n_samples] float32
+
+    # ------------------------------------------------------------------
+    # Step 2: vectorised downsample — one 2-D strided slice, no Python loop.
+    # ------------------------------------------------------------------
+    if params.do_downsample:
+        factor = int(fs) // int(params.downsampled_frequency_hz)
+        n_down = n_samples // factor
+        envelopes_2d = np.ascontiguousarray(
+            envelopes_2d[:, :n_down * factor:factor]
+        )  # [n_sub, n_down] float32
+
+    # ------------------------------------------------------------------
+    # Step 3: vectorised normalisation — axis-wise mean, no Python loop.
+    # ------------------------------------------------------------------
+    if params.do_normalize_percent:
+        n_len = envelopes_2d.shape[1]
+        value = round(n_len / 4)
+        mean_mid = np.mean(
+            envelopes_2d[:, value : 3 * value], axis=1, keepdims=True
+        )  # [n_sub, 1]
+        fmtab = np.where(mean_mid != 0.0, mean_mid, 1.0).astype(np.float32)
+        envelopes_2d = (100.0 * envelopes_2d / fmtab).astype(np.float32)
+
+    # ------------------------------------------------------------------
+    # Step 4: average across subbands → 1-D [n_samples_eff] float32
+    # ------------------------------------------------------------------
+    mean_data = np.sum(envelopes_2d, axis=0, dtype=np.float32) / n_subbands
 
     # ------------------------------------------------------------------
     # Step 5: smoothing windows
@@ -560,6 +616,17 @@ def process_all_channels(
         )
 
     # ------------------------------------------------------------------
+    # Pre-compute filter coefficients once for all channels.
+    # combined_matrix [n_sub, n_points] float32 is built here once so
+    # process_channel never rebuilds it per channel.
+    # ------------------------------------------------------------------
+    n_points = _number_of_points(montaged_data.shape[1])
+    filters = [FirBandPass(low, high, fs, n_points)
+               for low, high in zip(bins[:-1], bins[1:])]
+    combined_matrix = np.stack([fir.combined for fir in filters], axis=0)
+    n_channels = montaged_data.shape[0]
+
+    # ------------------------------------------------------------------
     # Process each channel and collect results per smoothing window
     # ------------------------------------------------------------------
     # Initialise the output dict with empty lists
@@ -567,9 +634,12 @@ def process_all_channels(
         w: [] for w in params.smoothing_windows_ms
     }
 
-    for ch_idx in range(montaged_data.shape[0]):
-        ch_result = process_channel(montaged_data[ch_idx], fs, bins, params)
-        print(f"Processed channel {ch_idx+1}/{montaged_data.shape[0]}")
+    for ch_idx in range(n_channels):
+        ch_result = process_channel(
+            montaged_data[ch_idx], fs, bins, params,
+            combined_matrix=combined_matrix,
+        )
+        print(f"Processed channel {ch_idx + 1}/{n_channels}")
         for window_ms, arr in ch_result.items():
             per_window[window_ms].append(arr)
 
