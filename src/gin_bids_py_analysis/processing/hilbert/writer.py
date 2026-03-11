@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from typing import Any
 
 import h5py
 import mne
 import numpy as np
 import pybv
 
-from gin_bids_py_analysis.bids.helpers import build_bids_path
+from gin_bids_py_analysis.bids.helpers import modify_entities
 from gin_bids_py_analysis.processing.base import (
     BaseProcessingResult,
     BaseProcessingWriter,
-    _PROVENANCE_ENTITIES,
 )
 
 from .result import HilbertProcessingResult
@@ -28,50 +28,23 @@ def _package_version() -> str:
         return "unknown"
 
 
-def _read_bv_events(
-    source_path: Path,
-    original_fs: float,
-    downsampled_fs: float,
-) -> list[dict] | None:
-    """Read annotations from a BrainVision source file and remap to the downsampled rate.
-
-    Markers are imported via MNE from the ``.vmrk`` file paired with the
-    source ``.vhdr`` header.  Sample indices are remapped from *original_fs*
-    to *downsampled_fs* so they match the envelope time axis.
-
-    MNE encodes BrainVision marker type and description as ``"type/description"``
-    (e.g. ``"Stimulus/S  1"``).  This function splits them back and converts the
-    numeric part to an ``int`` (required by pybv for ``Stimulus`` / ``Response``
-    markers).  Non-numeric descriptions are written as ``"Comment"`` type.
-    Structural ``New Segment`` annotations added by MNE are silently dropped.
+def _downsample_events(original_events: mne.Annotations | Any, downsampled_fs: float) -> list[dict] | None:
+    """Downsample MNE Annotations to match the envelope sampling rate.
 
     Args:
-        source_path:    Path to the source BIDS iEEG file.  Only ``.vhdr``
-                        files are processed; any other extension returns ``None``.
-        original_fs:    Sampling frequency of the raw recording in Hz.
-        downsampled_fs: Sampling frequency of the envelope output in Hz.
+        original_events: MNE Annotations object or any list of dicts with keys
+                         "onset" (in seconds) and "duration" (in seconds).
 
     Returns:
-        ``None`` if the source is not a BrainVision file or has no annotations.
-        Otherwise a **list of dicts** ready for :func:`pybv.write_brainvision`,
-        each containing keys ``onset``, ``duration``, ``type``, and
-        ``description``.
+        List of dicts with keys "onset" (in samples), "duration" (in samples),
+        "type", and "description", or ``None`` if no events are present.
     """
-    if source_path.suffix.lower() != ".vhdr":
+    if not original_events:
         return None
 
-    raw = mne.io.read_raw_brainvision(str(source_path), preload=False, verbose=False)
-
-    if len(raw.annotations) == 0:
-        return None
-
-    events_out: list[dict] = []
-    for ann in raw.annotations:
+    downsampled_events = []
+    for ann in original_events:
         full_desc: str = ann["description"]
-
-        # MNE adds a "New Segment" annotation at t=0; skip it.
-        if full_desc.startswith("New Segment"):
-            continue
 
         # MNE encodes BrainVision markers as "Type/Description" (e.g. "Stimulus/S  1").
         # Split on the first "/" to recover the BrainVision type and description fields.
@@ -96,7 +69,8 @@ def _read_bv_events(
 
         onset_samples = round(ann["onset"] * downsampled_fs)
         duration_samples = round(ann["duration"] * downsampled_fs)
-        events_out.append(
+
+        downsampled_events.append(
             {
                 "onset": onset_samples,
                 "duration": duration_samples,
@@ -105,7 +79,7 @@ def _read_bv_events(
             }
         )
 
-    return events_out if events_out else None
+    return downsampled_events if downsampled_events else None
 
 
 class HilbertProcessingWriter(BaseProcessingWriter):
@@ -164,23 +138,6 @@ class HilbertProcessingWriter(BaseProcessingWriter):
             /pipeline_version   str  — package version
     """
 
-    def write(self, result: BaseProcessingResult) -> Path:
-        """Write *result* to disk, dispatching on ``output_extension``.
-
-        BrainVision output is triggered when ``output_extension`` is
-        ``.vhdr`` or ``.eeg``; all other extensions fall through to the
-        base-class HDF5 path.
-
-        Returns:
-            For HDF5: path to the single ``.h5`` file.
-            For BrainVision: path to the ``.vhdr`` header of the
-            **smallest** smoothing window.
-        """
-        if self.params.output_extension.lower() in _BV_EXTENSIONS:
-            paths = self._write_brainvision_all_windows(result)
-            return paths[0]
-        return super().write(result)
-
     # ------------------------------------------------------------------
     # Abstract method implementation (required by BaseProcessingWriter)
     # ------------------------------------------------------------------
@@ -191,7 +148,11 @@ class HilbertProcessingWriter(BaseProcessingWriter):
             raise TypeError(
                 f"Expected HilbertProcessingResult, got {type(result).__name__!r}"
             )
-        self._write_hdf5(result, output_path)
+        
+        if self.params.output_extension.lower() in _BV_EXTENSIONS:
+            self._write_brainvision_all_windows(result, output_path)
+        else:
+            self._write_hdf5(result, output_path)
 
     # ------------------------------------------------------------------
     # HDF5 writer
@@ -297,7 +258,7 @@ class HilbertProcessingWriter(BaseProcessingWriter):
     # ------------------------------------------------------------------
 
     def _write_brainvision_all_windows(
-        self, result: BaseProcessingResult
+        self, result: BaseProcessingResult, output_path: Path
     ) -> list[Path]:
         """Write one BrainVision file triplet per smoothing window.
 
@@ -313,6 +274,7 @@ class HilbertProcessingWriter(BaseProcessingWriter):
 
         Args:
             result: A :class:`HilbertProcessingResult` to serialise.
+            output_path: Path to write the output files.
 
         Returns:
             List of ``.vhdr`` paths, one per smoothing window, sorted by
@@ -323,56 +285,24 @@ class HilbertProcessingWriter(BaseProcessingWriter):
                 f"Expected HilbertProcessingResult, got {type(result).__name__!r}"
             )
 
-        # Reconstruct BIDS path using the same logic as the base-class write().
-        output_root = (
-            self.params.bids_root / "derivatives" / self.params.pipeline_label
-        )
-        primary = result.source_group.primary
-        entities = {
-            k: v
-            for k, v in primary.entities.items()
-            if k not in _PROVENANCE_ENTITIES
-        }
-        entities["desc"] = self.params.pipeline_label
-
-        # Build canonical base path with .vhdr extension to obtain folder + stem.
-        base_path = build_bids_path(
-            entities=entities,
-            root=output_root,
-            suffix=self.params.output_suffix,
-            extension=".vhdr",
-        )
-        base_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Strip the trailing _{suffix} from the stem so we can inject _smwin-{N}ms
-        # before it.  rfind ensures we strip only the last (suffix) occurrence even
-        # if the suffix string appears elsewhere in the entity block.
-        suffix = self.params.output_suffix
-        entity_stem = base_path.stem[: base_path.stem.rfind(f"_{suffix}")]
-
-        # Import markers from the source file once; reused for every window.
-        events = _read_bv_events(
-            source_path=primary.path,
-            original_fs=result.original_fs,
-            downsampled_fs=result.downsampled_fs,
-        )
+        events = _downsample_events(result.original_events, result.downsampled_fs)
 
         sorted_windows = sorted(result.smoothed.keys())
         out_paths: list[Path] = []
 
         for w in sorted_windows:
-            fname_base = f"{entity_stem}_smwin-{w}ms_{suffix}"
+            fname_base = modify_entities(output_path.stem, desc=f"{self.params.pipeline_label}sm{w}")
             pybv.write_brainvision(
                 data=result.smoothed[w] * 1e-6,  # convert from µV to V for pybv
                 sfreq=result.downsampled_fs,
                 ch_names=result.channel_names,
                 fname_base=fname_base,
-                folder_out=str(base_path.parent),
+                folder_out=str(output_path.parent),
                 events=events,
                 unit="µV",
                 overwrite=True,
             )
-            out_paths.append(base_path.parent / f"{fname_base}.vhdr")
+            out_paths.append(output_path.parent / f"{fname_base}.vhdr")
 
         return out_paths
 

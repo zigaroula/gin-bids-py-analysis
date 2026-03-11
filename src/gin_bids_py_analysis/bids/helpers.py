@@ -40,22 +40,14 @@ def build_bids_path(
         Absolute :class:`~pathlib.Path` for the output file.
     """
     # Normalise subject/session aliases so both "sub"/"subject" and "ses"/"session" work
-    norm: dict[str, str] = {}
-    for k, v in entities.items():
-        if k == "subject":
-            norm["sub"] = v
-        elif k == "session":
-            norm["ses"] = v
-        else:
-            norm[k] = v
+    norm = normalize_entities(entities)
 
     # Build filename components in canonical BIDS entity order
-    parts: list[str] = []
-    for key in _ENTITY_ORDER:
-        if key in norm:
-            parts.append(f"{key}-{norm[key]}")
-
-    filename = "_".join(parts) + f"_{suffix}{extension}"
+    filename = build_bids_file_name(
+        entities=norm,
+        suffix=suffix,
+        extension=extension,
+    )
 
     # Folder: root / sub-<id> / [ses-<id> /] <datatype> /
     sub = norm.get("sub", "unknown")
@@ -69,6 +61,62 @@ def build_bids_path(
 
     return folder / filename
 
+def build_bids_file_name(
+    entities: dict[str, str],
+    suffix: str,
+    extension: str
+) -> str:
+    """
+    Construct a BIDS-compliant file name (without path) from entity key/value pairs.
+
+    Entities are written in canonical BIDS order; any extra entities not in the
+    canonical list are appended alphabetically at the end.
+
+    Args:
+        entities:   Mapping of BIDS entity keys to values
+                    (e.g. ``{"sub": "01", "run": "1"}``).
+                    ``"sub"``/``"subject"`` and ``"ses"``/``"session"`` are
+                    both accepted as aliases.
+        suffix:     BIDS suffix (e.g. ``"ieeg"``, ``"hilbert"``).
+        extension:  File extension **including** the leading dot (e.g. ``".npy"``).
+
+    Returns:
+        BIDS-compliant file name as a string.
+    """
+    # Normalise subject/session aliases so both "sub"/"subject" and "ses"/"session" work
+    norm = normalize_entities(entities)
+
+    # Build filename components in canonical BIDS entity order
+    parts: list[str] = []
+    for key in _ENTITY_ORDER:
+        if key in norm:
+            parts.append(f"{key}-{norm[key]}")
+
+    filename = "_".join(parts) + f"_{suffix}{extension}"
+    return filename
+
+def normalize_entities(entities: dict[str, str]) -> dict[str, str]:
+    """
+    Normalize BIDS entities by converting aliases to their canonical forms.
+
+    Specifically, ``"subject"`` is converted to ``"sub"``, and ``"session"`` is
+    converted to ``"ses"``.  All other entities are left unchanged.
+
+    Args:
+        entities: Mapping of BIDS entity keys to values (e.g. ``{"subject": "01", "session": "02"}``).
+
+    Returns:
+        New dict with normalized entity keys (e.g. ``{"sub": "01", "ses": "02"}``).
+    """
+    norm: dict[str, str] = {}
+    for k, v in entities.items():
+        if k == "subject":
+            norm["sub"] = v
+        elif k == "session":
+            norm["ses"] = v
+        else:
+            norm[k] = v
+    return norm
 
 def parse_entities(path: Path) -> dict[str, str]:
     """
@@ -87,3 +135,23 @@ def parse_entities(path: Path) -> dict[str, str]:
             key, _, value = part.partition("-")
             entities[key] = value
     return entities
+
+def modify_entities(file_name: str, **new_entities: str) -> str:
+    """
+    Return a new file name with modified BIDS entities.
+
+    Args:
+        file_name: Original file name.
+        new_entities: Key/value pairs of entities to modify or add.
+
+    Returns:
+        New file name as a string with updated entities.
+    """
+    path = Path(file_name)
+    entities = parse_entities(path)
+    entities.update(new_entities)
+    return build_bids_file_name(
+        entities=entities,
+        suffix=path.stem.split("_")[-1],
+        extension=path.suffix,
+    )

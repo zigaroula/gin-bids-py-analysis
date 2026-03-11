@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
+from mne import Annotations
 import numpy as np
 
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup  # noqa: F401 — re-exported for subclassers
 from gin_bids_py_analysis.processing.base import BaseProcessingResult
 
 
@@ -31,3 +32,4 @@ class HilbertProcessingResult(BaseProcessingResult):
     bins: list[float] = field(default_factory=list)
     downsampled_fs: float = 0.0
     original_fs: float = 0.0
+    original_events: Annotations | Any = field(default_factory=Annotations)

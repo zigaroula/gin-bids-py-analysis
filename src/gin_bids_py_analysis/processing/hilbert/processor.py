@@ -85,4 +85,5 @@ class HilbertProcessing(BaseProcessing):
                 "centered": self.params.centered,
                 "unit": "percent" if self.params.do_normalize_percent else "amplitude",
             },
+            original_events=raw.annotations,
         )
