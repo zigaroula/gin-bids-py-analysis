@@ -1,0 +1,188 @@
+"""
+Integration test for the Hilbert-band envelope pipeline.
+
+Uses synthetic numpy data only — no file I/O, no BIDS indexing, no MNE.
+Verifies that :func:`process_all_channels` produces outputs of the correct
+shape, dtype, and approximate range for a well-controlled input signal.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from gin_bids_py_analysis.processing.hilbert.dsp import process_all_channels
+from gin_bids_py_analysis.processing.hilbert.params import HilbertParams, MontageMode
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def default_params() -> HilbertParams:
+    """HilbertParams covering a small frequency range for fast tests."""
+    return HilbertParams(
+        f_min=50,
+        f_max=100,
+        f_step=10,
+        downsampled_frequency_hz=64.0,
+        montage_mode=MontageMode.MONO,
+        smoothing_windows_ms=[0, 250, 1000],
+        do_downsample=True,
+        do_normalize_percent=True,
+        do_smoothing=True,
+    )
+
+
+@pytest.fixture()
+def synthetic_data():
+    """
+    4-channel synthetic float32 iEEG signal at 1000 Hz.
+
+    Each channel is a mixture of band-limited noise designed to produce a
+    stable envelope so that normalization converges to values near 100.
+    """
+    rng = np.random.default_rng(seed=0)
+    fs = 1000.0
+    n_samples = 2000  # 2 seconds
+    n_channels = 4
+
+    # Broadband white noise — contains energy across all bands including 50-100 Hz
+    data = rng.standard_normal((n_channels, n_samples)).astype(np.float32)
+    return data, fs
+
+
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestProcessAllChannels:
+    def test_output_keys_match_smoothing_windows(self, synthetic_data, default_params):
+        data, fs = synthetic_data
+        ch_names = [f"A{i+1}" for i in range(data.shape[0])]
+        result, _, _ = process_all_channels(data, ch_names, fs, default_params)
+
+        assert set(result.keys()) == set(default_params.smoothing_windows_ms)
+
+    def test_output_shape(self, synthetic_data, default_params):
+        data, fs = synthetic_data
+        n_channels = data.shape[0]
+        ch_names = [f"A{i+1}" for i in range(n_channels)]
+        result, montaged_names, _ = process_all_channels(data, ch_names, fs, default_params)
+
+        # Expected n_down: factor = 1000//64 = 15; n_down = 2000//15 = 133
+        factor = int(fs) // int(default_params.downsampled_frequency_hz)
+        expected_n_down = data.shape[1] // factor
+
+        for window_ms, array in result.items():
+            assert array.shape == (n_channels, expected_n_down), (
+                f"Wrong shape for sm{window_ms}: {array.shape}"
+            )
+
+    def test_output_dtype_is_float32(self, synthetic_data, default_params):
+        data, fs = synthetic_data
+        ch_names = [f"A{i+1}" for i in range(data.shape[0])]
+        result, _, _ = process_all_channels(data, ch_names, fs, default_params)
+
+        for window_ms, array in result.items():
+            assert array.dtype == np.float32, f"sm{window_ms} dtype: {array.dtype}"
+
+    def test_output_is_finite(self, synthetic_data, default_params):
+        data, fs = synthetic_data
+        ch_names = [f"A{i+1}" for i in range(data.shape[0])]
+        result, _, _ = process_all_channels(data, ch_names, fs, default_params)
+
+        for window_ms, array in result.items():
+            assert np.all(np.isfinite(array)), (
+                f"sm{window_ms} contains non-finite values"
+            )
+
+    def test_normalized_values_near_100(self, synthetic_data, default_params):
+        """
+        After percent-normalization the mean of the middle portion of the
+        unsmoothed output (sm0) should be close to 100 for all channels.
+        The normalization is based on the middle half of the signal, so the
+        grand mean of the entire trace should also be reasonably close.
+        """
+        data, fs = synthetic_data
+        ch_names = [f"A{i+1}" for i in range(data.shape[0])]
+        result, _, _ = process_all_channels(data, ch_names, fs, default_params)
+
+        sm0 = result[0]  # unsmoothed, float32 [n_channels, n_down]
+        for ch_idx in range(sm0.shape[0]):
+            n = sm0.shape[1]
+            mid_mean = float(np.mean(sm0[ch_idx, n // 4 : 3 * n // 4]))
+            # The middle half average should be within 50% of 100
+            assert 50 < mid_mean < 200, (
+                f"Channel {ch_idx}: middle-half mean = {mid_mean:.1f}, expected ~100"
+            )
+
+    def test_montaged_names_returned(self, synthetic_data, default_params):
+        data, fs = synthetic_data
+        ch_names = [f"A{i+1}" for i in range(data.shape[0])]
+        _, names, _ = process_all_channels(data, ch_names, fs, default_params)
+        # Mono mode → names unchanged
+        assert names == ch_names
+
+    def test_centered_option_shifts_baseline(self, synthetic_data):
+        """Centered=True should shift the mean of sm0 from ~100 to ~0."""
+        params_centered = HilbertParams(
+            f_min=50, f_max=100, f_step=10,
+            montage_mode=MontageMode.MONO,
+            smoothing_windows_ms=[0],
+            do_downsample=True,
+            do_normalize_percent=True,
+            centered=True,
+        )
+        data, fs = synthetic_data
+        ch_names = [f"A{i+1}" for i in range(data.shape[0])]
+        result, _, _ = process_all_channels(data, ch_names, fs, params_centered)
+
+        sm0 = result[0]
+        for ch_idx in range(sm0.shape[0]):
+            n = sm0.shape[1]
+            mid_mean = float(np.mean(sm0[ch_idx, n // 4 : 3 * n // 4]))
+            # Centred: baseline should be near 0 (was ~100, minus 100)
+            assert -50 < mid_mean < 50, (
+                f"Channel {ch_idx}: centered mid-mean = {mid_mean:.1f}, expected ~0"
+            )
+
+    def test_no_downsample_returns_original_length(self, synthetic_data):
+        params_no_down = HilbertParams(
+            f_min=50, f_max=100, f_step=10,
+            montage_mode=MontageMode.MONO,
+            smoothing_windows_ms=[0],
+            do_downsample=False,
+            do_normalize_percent=True,
+        )
+        data, fs = synthetic_data
+        ch_names = [f"A{i+1}" for i in range(data.shape[0])]
+        result, _, _ = process_all_channels(data, ch_names, fs, params_no_down)
+
+        sm0 = result[0]
+        assert sm0.shape[1] == data.shape[1]
+
+    def test_shannon_clamp_applied_automatically(self):
+        """
+        If f_max exceeds Nyquist the pipeline should silently clamp and still
+        produce valid output (no exception).
+        """
+        fs = 200.0  # Nyquist = 100 Hz
+        # f_max=150 exceeds Nyquist → should be clamped to 100
+        params = HilbertParams(
+            f_min=50, f_max=150, f_step=10,
+            montage_mode=MontageMode.MONO,
+            smoothing_windows_ms=[0],
+            do_downsample=True,
+            do_normalize_percent=True,
+            downsampled_frequency_hz=16.0,
+        )
+        n_samples = 500
+        data = np.random.default_rng(7).standard_normal((2, n_samples)).astype(np.float32)
+        ch_names = ["A1", "A2"]
+        result, _, _ = process_all_channels(data, ch_names, fs, params)
+        assert 0 in result
+        assert np.all(np.isfinite(result[0]))

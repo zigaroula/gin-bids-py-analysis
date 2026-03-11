@@ -12,12 +12,17 @@ from gin_bids_py_analysis.processing.hilbert import (
     HilbertProcessingWriter,
     HilbertWriterParams,
 )
+from gin_bids_py_analysis.processing.utils.channels import (
+    BipolarDirection,
+    BipolarStorage,
+    MontageMode,
+)
 
 # ---------------------------------------------------------------------------
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\CBT\bids")
+BIDS_ROOT = Path(r"E:\CBT\bids")
 
 # BIDS entity filters: only files matching ALL of these will be processed.
 # Remove any key you don't want to filter on.
@@ -29,9 +34,20 @@ FILE_FILTERS = {
     # "task": "rest",
 }
 
+# Frequency grid: bins [f_min, f_min+f_step, ..., f_max]
+# Adjacent pairs form subbands: (50-60 Hz), (60-70 Hz), ..., (140-150 Hz)
 PARAMS = HilbertParams(
-    freq_bands=[(1, 4), (8, 12), (30, 80)],
-    sfreq=1000.0,
+    f_min=50,
+    f_max=150,
+    f_step=10,
+    downsampled_frequency_hz=64.0,
+    montage_mode=MontageMode.BIPOLAR,
+    bipolar_direction=BipolarDirection.NEXT_MINUS_PREVIOUS,
+    bipolar_storage=BipolarStorage.NEXT,
+    smoothing_windows_ms=[0, 250, 500, 1000, 2500, 5000],
+    do_downsample=True,
+    do_normalize_percent=True,
+    do_smoothing=True,
 )
 
 WRITER_PARAMS = HilbertWriterParams(

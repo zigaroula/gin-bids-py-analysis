@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+
+import numpy as np
 
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup  # noqa: F401 — re-exported for subclassers
 from gin_bids_py_analysis.processing.base import BaseProcessingResult
@@ -9,13 +10,24 @@ from gin_bids_py_analysis.processing.base import BaseProcessingResult
 
 @dataclass
 class HilbertProcessingResult(BaseProcessingResult):
-    """
-    Result of a Hilbert-transform analysis.
+    """Result of the Hilbert-band envelope pipeline for one iEEG file.
 
-    TODO: Replace the ``output`` placeholder with typed numpy arrays for
-          amplitude envelopes and/or instantaneous phase once the algorithm
-          and data loader interfaces are defined.
+    Attributes:
+        smoothed:        ``{window_ms: array}`` mapping each smoothing window
+                         (in milliseconds) to a float32 array of shape
+                         ``[n_channels, n_downsampled_samples]``.  Key ``0``
+                         is the unsmoothed result.
+        channel_names:   Ordered list of channel labels after montaging.
+        bins:            Frequency bin edges actually used (after Shannon
+                         clamping).  Adjacent pairs define the subbands, e.g.
+                         ``[50., 60., 70.]`` means subbands 50-60 Hz and
+                         60-70 Hz were processed.
+        downsampled_fs:  Effective sampling rate of the envelope output in Hz.
+        original_fs:     Sampling rate of the raw input signal in Hz.
     """
 
-    # Placeholder — replace with e.g. ``envelope: np.ndarray``
-    output: Any = field(default=None)
+    smoothed: dict[int, np.ndarray] = field(default_factory=dict)
+    channel_names: list[str] = field(default_factory=list)
+    bins: list[float] = field(default_factory=list)
+    downsampled_fs: float = 0.0
+    original_fs: float = 0.0

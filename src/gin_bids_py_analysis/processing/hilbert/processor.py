@@ -1,44 +1,88 @@
 from __future__ import annotations
 
+import numpy as np
+
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.base import BaseProcessing
 from gin_bids_py_analysis.data.loader import load_ieeg
 
+from .dsp import process_all_channels
 from .params import HilbertParams
 from .result import HilbertProcessingResult
 
 
 class HilbertProcessing(BaseProcessing):
-    """
-    Hilbert-transform-based analysis processor.
+    """Hilbert-band envelope processor.
 
-    Instantiate with a :class:`HilbertParams` object defining the frequency
-    bands and sampling frequency; then call :meth:`run` or :meth:`execute`
-    with a list of :class:`~gin_bids_py_analysis.bids.file_group.BIDSFileGroup`.
+    Instantiate with a :class:`HilbertParams` object; then call
+    :meth:`run` (process + write) or :meth:`execute` (process only) with a
+    list of BIDS files or file groups.
 
     Example::
 
-        params = HilbertParams(freq_bands=[(1, 4), (8, 12)], sfreq=1000.0)
+        from pathlib import Path
+        from gin_bids_py_analysis.processing.hilbert import (
+            HilbertParams, HilbertProcessing,
+            HilbertProcessingWriter, HilbertWriterParams,
+        )
+
+        params = HilbertParams(f_min=50, f_max=150, f_step=10)
         processor = HilbertProcessing(params)
-        groups = [BIDSFileGroup(primary=f) for f in ieeg_files]
-        out_paths = processor.run(groups, writer, output_root)
+        writer = HilbertProcessingWriter(HilbertWriterParams(bids_root=Path("/data")))
+        out_paths = processor.run(ieeg_files, writer)
     """
 
     def __init__(self, params: HilbertParams) -> None:
         self.params = params
 
     def process_group(self, group: BIDSFileGroup) -> HilbertProcessingResult:
+        """Run the Hilbert-band envelope pipeline on one file group.
+
+        Reads the iEEG file via MNE (format auto-detected from the extension),
+        extracts the sampling frequency and channel data, applies the full
+        pipeline defined in :mod:`.dsp`, and returns a
+        :class:`HilbertProcessingResult`.
+
+        For single-file analyses ``group.primary`` is the iEEG file.
+        ``group.secondaries`` is not used by this processor.
+
+        Args:
+            group: The file group to process.
+
+        Returns:
+            :class:`HilbertProcessingResult` with ``smoothed`` arrays,
+            channel names, and frequency metadata.
         """
-        Run the Hilbert analysis on one file group.
+        raw = load_ieeg(group.primary)
+        fs: float = raw.info["sfreq"]
 
-        For single-file analyses, ``group.primary`` is the iEEG file.
-        For multi-modal analyses, ``group.secondaries`` may carry companion
-        files (e.g. physio recordings).
+        # get_data() returns shape [n_channels, n_times] as float64
+        data: np.ndarray = raw.get_data().astype(np.float32)
+        ch_names: list[str] = list(raw.ch_names)
 
-        TODO: Implement once the data loader interface (``gin_bids_py_analysis.data``)
-              is available and the algorithm is defined.
-        """
+        smoothed, montaged_names, bins = process_all_channels(
+            data_2d=data,
+            channel_names=ch_names,
+            fs=fs,
+            params=self.params,
+        )
 
-        loaded_data = load_ieeg(group.primary)
-        
-        return HilbertProcessingResult(group)
+        if self.params.do_downsample:
+            factor = int(fs) // int(self.params.downsampled_frequency_hz)
+            downsampled_fs = fs / factor
+        else:
+            downsampled_fs = fs
+
+        return HilbertProcessingResult(
+            source_group=group,
+            smoothed=smoothed,
+            channel_names=montaged_names,
+            bins=bins,
+            downsampled_fs=downsampled_fs,
+            original_fs=fs,
+            metadata={
+                "montage_mode": self.params.montage_mode.value,
+                "centered": self.params.centered,
+                "unit": "percent" if self.params.do_normalize_percent else "amplitude",
+            },
+        )
