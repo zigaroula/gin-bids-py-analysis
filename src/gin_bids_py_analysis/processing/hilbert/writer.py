@@ -291,7 +291,7 @@ class HilbertProcessingWriter(BaseProcessingWriter):
         out_paths: list[Path] = []
 
         for w in sorted_windows:
-            fname_base = modify_entities(output_path.stem, desc=f"{self.params.pipeline_label}sm{w}")
+            fname_base = modify_entities(output_path.stem, desc=f"{self.params.output_description}sm{w}")
             pybv.write_brainvision(
                 data=result.smoothed[w] * 1e-6,  # convert from µV to V for pybv
                 sfreq=result.downsampled_fs,

@@ -46,13 +46,16 @@ class BaseWriterParams(BaseModel):
     - ``bids_root`` — root of the BIDS dataset; ``derivatives/<pipeline_label>``
       is created automatically.
     - ``pipeline_label`` — becomes ``desc-<label>`` in the output filename.
+    - ``output_modality`` — BIDS modality of the output file.
     - ``output_suffix`` — BIDS suffix of the output file.
     - ``output_extension`` — file extension including the leading dot.
     """
 
     bids_root: Path
     pipeline_label: str
+    output_modality: str
     output_suffix: str
+    output_description: str
     output_extension: str
 
 
@@ -108,7 +111,7 @@ class BaseProcessingWriter(ABC):
         Construct the BIDS output path, create directories, then write *result*.
 
         The output path is derived from ``result.source_group.primary``'s
-        entities plus ``desc-<PIPELINE_LABEL>``, rooted at
+        entities plus ``desc-<OUTPUT_DESCRIPTION>``, rooted at
         ``bids_root / "derivatives" / PIPELINE_LABEL``.  Subclasses never need
         to override this method - implement :meth:`_write_data` instead.
 
@@ -122,13 +125,14 @@ class BaseProcessingWriter(ABC):
             for k, v in primary.entities.items()
             if k not in _PROVENANCE_ENTITIES
         }
-        entities["desc"] = self.params.pipeline_label
+        entities["desc"] = self.params.output_description
 
         output_path = build_bids_path(
             entities=entities,
             root=output_root,
             suffix=self.params.output_suffix,
             extension=self.params.output_extension,
+            datatype=self.params.output_modality,
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
 

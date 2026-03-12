@@ -1,7 +1,15 @@
 from __future__ import annotations
 
+import os
+
 import numpy as np
 
+try:
+    import pyfftw
+    _PYFFTW_AVAILABLE = True
+except ImportError:
+    _PYFFTW_AVAILABLE = False
+    
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.base import BaseProcessing
 from gin_bids_py_analysis.data.loader import load_ieeg
@@ -9,6 +17,24 @@ from gin_bids_py_analysis.data.loader import load_ieeg
 from .dsp import process_all_channels
 from .params import HilbertParams
 from .result import HilbertProcessingResult
+
+
+def _fftw_threads_for_worker() -> int:
+    """Return how many pyfftw threads this worker should use.
+
+    When joblib spawns N worker processes each should use cpu_count/N threads
+    so the total thread count stays close to the number of physical cores.
+    joblib exposes the worker count via the LOKY_MAX_CPU_COUNT / joblib env
+    variables; if we can't determine it we default to all cores.
+    """
+    cpu = os.cpu_count() or 1
+    # joblib sets this env var in each worker process
+    n_workers_str = os.environ.get("LOKY_MAX_CPU_COUNT") or os.environ.get("JOBLIB_NPROCS")
+    try:
+        n_workers = int(n_workers_str) if n_workers_str else 1
+    except ValueError:
+        n_workers = 1
+    return max(1, cpu // n_workers)
 
 
 class HilbertProcessing(BaseProcessing):
@@ -56,9 +82,13 @@ class HilbertProcessing(BaseProcessing):
         raw = load_ieeg(group.primary)
         fs: float = raw.info["sfreq"]
 
+        if _PYFFTW_AVAILABLE:
+            pyfftw.config.NUM_THREADS = _fftw_threads_for_worker()
+
         # get_data() returns shape [n_channels, n_times] as float64
         data: np.ndarray = raw.get_data().astype(np.float32)
         ch_names: list[str] = list(raw.ch_names)
+        ch_names = [ch for ch in ch_names if ch in self.params.channels_for_montage] if self.params.channels_for_montage else ch_names
 
         smoothed, montaged_names, bins = process_all_channels(
             data_2d=data,

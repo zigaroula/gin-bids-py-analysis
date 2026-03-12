@@ -411,14 +411,14 @@ class TestFirBandPass:
     def test_apply_output_shape(self):
         n_samples = 500
         signal = np.random.default_rng(1).random(n_samples).astype(np.float32)
-        fir = FirBandPass(f_low=8.0, f_high=12.0, fs=1000.0, n_points=_number_of_points(n_samples))
+        fir = FirBandPass(f_low=8.0, f_high=12.0, fs=1000.0, signal_length=n_samples)
         envelope = fir.apply(signal)
         assert envelope.shape == (n_samples,)
 
     def test_apply_output_is_float32(self):
         n_samples = 200
         signal = np.random.default_rng(2).random(n_samples).astype(np.float32)
-        fir = FirBandPass(f_low=50.0, f_high=60.0, fs=1000.0, n_points=_number_of_points(n_samples))
+        fir = FirBandPass(f_low=50.0, f_high=60.0, fs=1000.0, signal_length=n_samples)
         envelope = fir.apply(signal)
         assert envelope.dtype == np.float32
 
@@ -426,14 +426,14 @@ class TestFirBandPass:
         # Envelope = |analytic signal| → always >= 0
         n_samples = 512
         signal = np.random.default_rng(3).random(n_samples).astype(np.float32)
-        fir = FirBandPass(f_low=50.0, f_high=60.0, fs=1000.0, n_points=_number_of_points(n_samples))
+        fir = FirBandPass(f_low=50.0, f_high=60.0, fs=1000.0, signal_length=n_samples)
         envelope = fir.apply(signal)
         assert np.all(envelope >= 0.0)
 
     def test_zero_signal_gives_zero_envelope(self):
         n_samples = 512
         signal = np.zeros(n_samples, dtype=np.float32)
-        fir = FirBandPass(f_low=50.0, f_high=60.0, fs=1000.0, n_points=_number_of_points(n_samples))
+        fir = FirBandPass(f_low=50.0, f_high=60.0, fs=1000.0, signal_length=n_samples)
         envelope = fir.apply(signal)
         np.testing.assert_allclose(envelope, 0.0, atol=1e-6)
 
@@ -453,7 +453,7 @@ class TestFirBandPass:
         t = np.arange(2000) / fs
         # 55 Hz is inside the 50-60 Hz band
         signal = np.sin(2 * np.pi * 55 * t).astype(np.float32)
-        fir = FirBandPass(f_low=50.0, f_high=60.0, fs=fs, n_points=_number_of_points(len(t)))
+        fir = FirBandPass(f_low=50.0, f_high=60.0, fs=fs, signal_length=len(t))
         envelope = fir.apply(signal)
         # Ignore transient at start; envelope should be well above 0 in steady state
         # Passband gain ≈ 0.08 (Hamming w[0]) for unit-amplitude input.
@@ -465,6 +465,6 @@ class TestFirBandPass:
         t = np.arange(2000) / fs
         # 200 Hz is far outside the 50-60 Hz band
         signal = np.sin(2 * np.pi * 200 * t).astype(np.float32)
-        fir = FirBandPass(f_low=50.0, f_high=60.0, fs=fs, n_points=_number_of_points(len(t)))
+        fir = FirBandPass(f_low=50.0, f_high=60.0, fs=fs, signal_length=len(t))
         envelope = fir.apply(signal)
         assert np.mean(envelope[200:]) < 0.1

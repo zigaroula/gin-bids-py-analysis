@@ -72,6 +72,13 @@ class HilbertParams(BaseProcessingParams):
             "Only used when ``montage_mode`` is ``BIPOLAR``."
         ),
     )
+    channels_for_montage: list[str] | None = Field(
+        default=None,
+        description=(
+            "Optional list of channel names to include in the montage.  "
+            "If ``None``, all channels are used."
+        ),
+    )
 
     # ------------------------------------------------------------------
     # Post-processing toggles
@@ -131,6 +138,8 @@ class HilbertWriterParams(BaseWriterParams):
     """
 
     pipeline_label: str = "hilbert"
-    output_suffix: str = "hilbert"
+    output_modality: str = "ieeg"
+    output_suffix: str = "ieeg"
+    output_description: str = "hilbert"
     output_extension: str = ".h5"
 

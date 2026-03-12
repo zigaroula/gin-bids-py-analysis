@@ -22,16 +22,15 @@ from gin_bids_py_analysis.processing.utils.channels import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"E:\CBT\bids")
+BIDS_ROOT = Path(r"D:\CBT\bids")
 
 # BIDS entity filters: only files matching ALL of these will be processed.
 # Remove any key you don't want to filter on.
 FILE_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    # "subject": "01",
-    # "session": "01",
-    # "task": "rest",
+    #"subject": "epi01",
+    #"run": "01",
 }
 
 # Frequency grid: bins [f_min, f_min+f_step, ..., f_max]
@@ -47,11 +46,12 @@ PARAMS = HilbertParams(
     smoothing_windows_ms=[0, 250, 500, 1000, 2500, 5000],
     do_downsample=True,
     do_normalize_percent=True,
-    do_smoothing=True,
+    do_smoothing=True
 )
 
 WRITER_PARAMS = HilbertWriterParams(
     bids_root=BIDS_ROOT,
+    output_description="gamma",
     output_extension=".vhdr"
 )
 
