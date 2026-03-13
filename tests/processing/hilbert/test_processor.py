@@ -11,8 +11,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.hilbert.dsp import process_all_channels
 from gin_bids_py_analysis.processing.hilbert.params import HilbertParams, MontageMode
+import gin_bids_py_analysis.processing.hilbert.processor as processor_module
 
 
 # ---------------------------------------------------------------------------
@@ -186,3 +188,101 @@ class TestProcessAllChannels:
         result, _, _ = process_all_channels(data, ch_names, fs, params)
         assert 0 in result
         assert np.all(np.isfinite(result[0]))
+
+
+class _FakeRaw:
+    def __init__(self, data: np.ndarray, ch_names: list[str], fs: float) -> None:
+        self._data = data
+        self.ch_names = ch_names
+        self.info = {"sfreq": fs}
+        self.annotations = []
+
+    def get_data(self) -> np.ndarray:
+        return self._data
+
+
+class TestHilbertProcessingChannelSelection:
+    def test_process_group_subsets_data_and_names_together(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        mock_bids_file,
+    ) -> None:
+        fs = 1000.0
+        n_samples = 32
+        data = np.vstack([
+            np.full(n_samples, fill_value=row_idx, dtype=np.float32)
+            for row_idx in range(5)
+        ])
+        ch_names = ["A1", "A2", "A3", "B1", "B2"]
+        raw = _FakeRaw(data, ch_names, fs)
+        captured: dict[str, np.ndarray | list[str] | float] = {}
+
+        def fake_load_ieeg(_):
+            return raw
+
+        def fake_process_all_channels(
+            data_2d: np.ndarray,
+            channel_names: list[str],
+            fs: float,
+            params: HilbertParams,
+        ):
+            captured["data"] = data_2d.copy()
+            captured["channel_names"] = list(channel_names)
+            captured["fs"] = fs
+            return (
+                {0: np.zeros((len(channel_names), data_2d.shape[1]), dtype=np.float32)},
+                list(channel_names),
+                [50.0, 60.0],
+            )
+
+        monkeypatch.setattr(processor_module, "load_ieeg", fake_load_ieeg)
+        monkeypatch.setattr(processor_module, "process_all_channels", fake_process_all_channels)
+
+        params = HilbertParams(
+            f_min=50,
+            f_max=60,
+            f_step=10,
+            montage_mode=MontageMode.MONO,
+            smoothing_windows_ms=[0],
+            do_downsample=False,
+            do_normalize_percent=False,
+            channels_for_montage=["B1", "B2"],
+        )
+
+        result = processor_module.HilbertProcessing(params).process_group(
+            BIDSFileGroup(primary=mock_bids_file)
+        )
+
+        np.testing.assert_array_equal(captured["data"], data[[3, 4], :])
+        assert captured["channel_names"] == ["B1", "B2"]
+        assert captured["fs"] == fs
+        assert result.channel_names == ["B1", "B2"]
+
+    def test_process_group_raises_when_no_requested_channel_matches(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        mock_bids_file,
+    ) -> None:
+        raw = _FakeRaw(
+            np.zeros((2, 16), dtype=np.float32),
+            ["A1", "A2"],
+            1000.0,
+        )
+
+        monkeypatch.setattr(processor_module, "load_ieeg", lambda _: raw)
+
+        params = HilbertParams(
+            f_min=50,
+            f_max=60,
+            f_step=10,
+            montage_mode=MontageMode.MONO,
+            smoothing_windows_ms=[0],
+            do_downsample=False,
+            do_normalize_percent=False,
+            channels_for_montage=["B1", "B2"],
+        )
+
+        with pytest.raises(ValueError, match="channels_for_montage did not match any input channels"):
+            processor_module.HilbertProcessing(params).process_group(
+                BIDSFileGroup(primary=mock_bids_file)
+            )

@@ -37,6 +37,36 @@ def _fftw_threads_for_worker() -> int:
     return max(1, cpu // n_workers)
 
 
+def _select_channels_for_montage(
+    data: np.ndarray,
+    channel_names: list[str],
+    selected_names: list[str] | None,
+) -> tuple[np.ndarray, list[str]]:
+    """Subset *data* and *channel_names* using the same row indices.
+
+    The selection preserves the original file order rather than the order of
+    *selected_names*.  This keeps channel adjacency intact for bipolar montage
+    construction and prevents name/data mismatches when only a subset of
+    channels should be processed.
+    """
+    if not selected_names:
+        return data, list(channel_names)
+
+    selected_lookup = set(selected_names)
+    keep_indices = [
+        idx for idx, name in enumerate(channel_names)
+        if name in selected_lookup
+    ]
+
+    if not keep_indices:
+        raise ValueError(
+            "channels_for_montage did not match any input channels: "
+            f"{selected_names!r}"
+        )
+
+    return data[keep_indices, :], [channel_names[idx] for idx in keep_indices]
+
+
 class HilbertProcessing(BaseProcessing):
     """Hilbert-band envelope processor.
 
@@ -88,7 +118,11 @@ class HilbertProcessing(BaseProcessing):
         # get_data() returns shape [n_channels, n_times] as float64
         data: np.ndarray = raw.get_data().astype(np.float32)
         ch_names: list[str] = list(raw.ch_names)
-        ch_names = [ch for ch in ch_names if ch in self.params.channels_for_montage] if self.params.channels_for_montage else ch_names
+        data, ch_names = _select_channels_for_montage(
+            data,
+            ch_names,
+            self.params.channels_for_montage,
+        )
 
         smoothed, montaged_names, bins = process_all_channels(
             data_2d=data,
