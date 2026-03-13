@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -140,6 +142,45 @@ class BaseProcessingWriter(ABC):
         self._write_data(result, output_path)
         return output_path
 
+    def write_dataset_description(self, processing_params: BaseProcessingParams | None = None) -> None:
+        """
+        Write (or overwrite) a BIDS-compliant ``dataset_description.json`` at
+        ``bids_root / "derivatives" / pipeline_label``.
+
+        Called once at the start of :meth:`BaseProcessing.run` before the
+        processing loop.  Subclasses never need to override this.
+
+        Args:
+            processing_params: The algorithm parameters used for this run
+                (a :class:`BaseProcessingParams` instance).  When provided,
+                the full parameter dict is written under
+                ``GeneratedBy[0]["Parameters"]``.  Pass ``None`` to omit it.
+        """
+        derivatives_root = self.params.bids_root / "derivatives" / self.params.pipeline_label
+        derivatives_root.mkdir(parents=True, exist_ok=True)
+
+        try:
+            pkg_version = version("gin-bids-py-analysis")
+        except PackageNotFoundError:
+            pkg_version = "unknown"
+
+        generated_by: dict[str, Any] = {
+            "Name": "gin-bids-py-analysis",
+            "Version": pkg_version,
+        }
+        if processing_params is not None:
+            generated_by["Parameters"] = processing_params.model_dump()
+
+        description = {
+            "Name": self.params.pipeline_label,
+            "BIDSVersion": "1.11.1",
+            "DatasetType": "derivative",
+            "GeneratedBy": [generated_by],
+        }
+
+        dest = derivatives_root / "dataset_description.json"
+        dest.write_text(json.dumps(description, indent=2), encoding="utf-8")
+
     @abstractmethod
     def _write_data(self, result: BaseProcessingResult, output_path: Path) -> None:
         """
@@ -267,6 +308,7 @@ class BaseProcessing(ABC):
         Returns:
             List of output :class:`~pathlib.Path` objects in group order.
         """
+        writer.write_dataset_description(getattr(self, "params", None))
         coerced = _coerce_to_groups(groups)
 
         # Set up a multiprocessing-safe queue to assign worker positions for progress tracking
