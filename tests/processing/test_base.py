@@ -48,6 +48,8 @@ def _dummy_writer(bids_root: Path) -> _DummyWriter:
     params = BaseWriterParams(
         bids_root=bids_root,
         pipeline_label="dummy",
+        output_modality="dummy",
+        output_description="dummy",
         output_suffix="dummy",
         output_extension=".npy",
     )

@@ -8,6 +8,7 @@ shape, dtype, and approximate range for a well-controlled input signal.
 
 from __future__ import annotations
 
+import math
 import numpy as np
 import pytest
 
@@ -75,9 +76,12 @@ class TestProcessAllChannels:
         ch_names = [f"A{i+1}" for i in range(n_channels)]
         result, montaged_names, _ = process_all_channels(data, ch_names, fs, default_params)
 
-        # Expected n_down: factor = 1000//64 = 15; n_down = 2000//15 = 133
-        factor = int(fs) // int(default_params.downsampled_frequency_hz)
-        expected_n_down = data.shape[1] // factor
+        # Expected n_down: resample_poly uses polyphase rational resampling.
+        # Output length = ceil(n_samples * up / down) where up/down = target_fs/fs.
+        g = math.gcd(int(default_params.downsampled_frequency_hz), int(fs))
+        up = int(default_params.downsampled_frequency_hz) // g
+        down = int(fs) // g
+        expected_n_down = math.ceil(data.shape[1] * up / down)
 
         for window_ms, array in result.items():
             assert array.shape == (n_channels, expected_n_down), (

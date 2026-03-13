@@ -32,4 +32,4 @@ class HilbertProcessingResult(BaseProcessingResult):
     bins: list[float] = field(default_factory=list)
     downsampled_fs: float = 0.0
     original_fs: float = 0.0
-    original_events: Annotations | Any = field(default_factory=Annotations)
+    original_events: Annotations | Any = field(default=None)

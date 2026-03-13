@@ -46,7 +46,8 @@ class HilbertParams(BaseProcessingParams):
         gt=0,
         description=(
             "Target sampling rate for the envelope output in Hz.  "
-            "The actual factor is ``int(fs) // int(downsampled_frequency_hz)``."
+            "``scipy.signal.resample_poly`` is used to achieve the exact target rate "
+            "with anti-aliasing."
         ),
     )
 

@@ -132,8 +132,7 @@ class HilbertProcessing(BaseProcessing):
         )
 
         if self.params.do_downsample:
-            factor = int(fs) // int(self.params.downsampled_frequency_hz)
-            downsampled_fs = fs / factor
+            downsampled_fs = self.params.downsampled_frequency_hz
         else:
             downsampled_fs = fs
 

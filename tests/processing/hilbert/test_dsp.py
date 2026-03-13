@@ -12,11 +12,13 @@ import math
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.processing.hilbert.dsp import (
+from gin_bids_py_analysis.processing.hilbert.fir import (
     FirBandPass,
     _hamming_window,
     _hilbert_coeff,
     _number_of_points,
+)
+from gin_bids_py_analysis.processing.hilbert.dsp import (
     apply_shannon_clamp,
     build_frequency_bins,
     downsample,

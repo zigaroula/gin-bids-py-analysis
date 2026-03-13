@@ -92,6 +92,11 @@ def build_bids_file_name(
         if key in norm:
             parts.append(f"{key}-{norm[key]}")
 
+    # Append any extra entities not in the canonical list, sorted alphabetically
+    extra = {k: v for k, v in norm.items() if k not in _ENTITY_ORDER}
+    for key in sorted(extra):
+        parts.append(f"{key}-{extra[key]}")
+
     filename = "_".join(parts) + f"_{suffix}{extension}"
     return filename
 
