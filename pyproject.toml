@@ -17,6 +17,7 @@ dependencies = [
     "pyfftw>=0.13",
     "h5py>=3.0",
     "pybv>=0.4",
+    "tqdm>=4.0",
 ]
 
 [project.optional-dependencies]

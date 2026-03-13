@@ -15,7 +15,7 @@ Pipeline overview
       - Apply a FIR band-pass filter in the frequency domain.
       - Compute the analytic signal via the Hilbert trick.
       - Take the magnitude → amplitude envelope (float32).
-   b. Optionally decimate the envelope by an integer factor.
+   b. Optionally resample the envelope to a target frequency.
    c. Optionally normalise to a percentage of the mid-recording baseline.
    d. Average normalised envelopes across all subbands.
    e. Optionally apply a causal moving-average smoother for each requested
@@ -28,6 +28,7 @@ import math
 from typing import TYPE_CHECKING
 
 import numpy as np
+from tqdm import tqdm
 
 from scipy.signal import resample_poly
 
@@ -38,10 +39,6 @@ try:
     pyfftw.interfaces.cache.set_keepalive_time(60)
 except ImportError:
     import numpy.fft as _fftmod  # fall back to numpy.fft
-
-# Number of subbands processed per batched IFFT call.
-# Smaller values reduce peak memory at the cost of more kernel launches.
-_CHUNK_SIZE = 4
 
 if TYPE_CHECKING:
     from .params import HilbertParams
@@ -298,17 +295,10 @@ def process_channel(
     spectrum = _fftmod.fft(signal_1d.astype(np.float32))  # complex64 [n_samples]
 
     # ------------------------------------------------------------------
-    # Step 1b+c: chunked batched IFFT → amplitude envelope.
-    # _CHUNK_SIZE subbands per call caps transient memory to
-    # ~(_CHUNK_SIZE x n_samples x 8 B) for the complex64 temporaries.
+    # Step 1b+c: batched IFFT → amplitude envelope.
     # ------------------------------------------------------------------
-    row_chunks: list[np.ndarray] = []
-    for start in range(0, n_subbands, _CHUNK_SIZE):
-        chunk = combined_matrix[start : start + _CHUNK_SIZE]     # [c, n_samples] float32
-        analytics = _fftmod.ifft(spectrum * chunk, axis=1)        # complex64 [c, n_samples]
-        row_chunks.append(np.abs(analytics).astype(np.float32))
-
-    envelopes_2d = np.concatenate(row_chunks, axis=0)  # [n_sub, n_samples] float32
+    analytics = _fftmod.ifft(spectrum * combined_matrix, axis=1)  # complex64 [n_sub, n_samples]
+    envelopes_2d = np.abs(analytics).astype(np.float32)           # [n_sub, n_samples] float32
 
     # ------------------------------------------------------------------
     # Step 2: polyphase resample to exact target frequency.
@@ -369,6 +359,9 @@ def process_all_channels(
     channel_names: list[str],
     fs: float,
     params: "HilbertParams",
+    verbose: bool = False,
+    desc: str | None = None,
+    progress_tracking_position: int = 0,
 ) -> tuple[dict[int, np.ndarray], list[str], list[float]]:
     """Run the Hilbert-band envelope pipeline on all channels.
 
@@ -434,7 +427,14 @@ def process_all_channels(
         w: [] for w in params.smoothing_windows_ms
     }
 
-    for ch_idx in range(n_channels):
+    for ch_idx in tqdm(
+        range(n_channels),
+        desc=desc or "Processing",
+        unit="ch",
+        disable=not verbose,
+        leave=True,
+        position=progress_tracking_position,
+    ):
         ch_result = process_channel(
             montaged_data[ch_idx], fs, bins, params,
             combined_matrix=combined_matrix,

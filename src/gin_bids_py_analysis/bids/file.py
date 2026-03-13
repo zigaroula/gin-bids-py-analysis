@@ -21,7 +21,11 @@ class BIDSFile:
     """
 
     def __init__(self, pybids_file: _layout.BIDSFile) -> None:
-        self._file = pybids_file
+        # Eagerly resolve all data from the SQLAlchemy-backed pybids object
+        # while we are in the main process and the session is alive.
+        # This makes BIDSFile fully pickle-safe for joblib multiprocessing.
+        self._path = Path(pybids_file.path)
+        self._entities: dict[str, Any] = dict(pybids_file.entities)
 
     # ------------------------------------------------------------------
     # Core properties
@@ -29,24 +33,24 @@ class BIDSFile:
 
     @property
     def path(self) -> Path:
-        return Path(self._file.path)
+        return self._path
 
     @property
     def entities(self) -> dict[str, Any]:
         """All parsed BIDS entities as a plain dict (e.g. ``{'subject': '01', 'suffix': 'ieeg', ...}``)."""
-        return dict(self._file.entities)
+        return self._entities
 
     @property
     def suffix(self) -> str | None:
-        return self._file.entities.get("suffix")
+        return self._entities.get("suffix")
 
     @property
     def extension(self) -> str | None:
-        return self._file.entities.get("extension")
+        return self._entities.get("extension")
 
     @property
     def datatype(self) -> str | None:
-        return self._file.entities.get("datatype")
+        return self._entities.get("datatype")
 
     # ------------------------------------------------------------------
     # Dynamic entity access
@@ -55,13 +59,13 @@ class BIDSFile:
     def __getitem__(self, entity: str) -> Any:
         """Allow ``file['subject']``, ``file['acq']``, ``file['run']`` etc."""
         try:
-            return self._file.entities[entity]
+            return self._entities[entity]
         except KeyError:
-            raise KeyError(f"Entity {entity!r} not found in {self.path.name!r}") from None
+            raise KeyError(f"Entity {entity!r} not found in {self._path.name!r}") from None
 
     def get(self, entity: str, default: Any = None) -> Any:
         """Return the value for *entity* or *default* if not present."""
-        return self._file.entities.get(entity, default)
+        return self._entities.get(entity, default)
 
     def __repr__(self) -> str:
         return f"BIDSFile({self.path.name!r})"

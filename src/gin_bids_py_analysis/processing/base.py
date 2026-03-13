@@ -7,6 +7,7 @@ from typing import Any
 
 from joblib import Parallel, delayed
 from pydantic import BaseModel
+import multiprocessing as mp
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
@@ -168,7 +169,7 @@ class BaseProcessing(ABC):
     """
 
     @abstractmethod
-    def process_group(self, group: BIDSFileGroup) -> BaseProcessingResult:
+    def process_group(self, group: BIDSFileGroup, progress_tracking_position: int = 0) -> BaseProcessingResult:
         """
         Process a single :class:`~gin_bids_py_analysis.bids.file_group.BIDSFileGroup`
         and return a result object.
@@ -180,12 +181,13 @@ class BaseProcessing(ABC):
 
         Args:
             group: The file group to process.
+            progress_tracking_position: Optional position index for progress tracking (e.g. with tqdm).
 
         Returns:
             An instance of a :class:`BaseProcessingResult` subclass.
         """
     
-    def process_file(self, file: BIDSFile) -> BaseProcessingResult:
+    def process_file(self, file: BIDSFile, progress_tracking_position: int = 0) -> BaseProcessingResult:
         """
         Convenience method to process a single :class:`~gin_bids_py_analysis.bids.file.BIDSFile`.
 
@@ -195,12 +197,13 @@ class BaseProcessing(ABC):
 
         Args:
             file: The file to process.
+            progress_tracking_position: Optional position index for progress tracking (passed to process_group).
         
         Returns:
             An instance of a :class:`BaseProcessingResult` subclass.
         """
         group = BIDSFileGroup(primary=file)
-        return self.process_group(group)
+        return self.process_group(group, progress_tracking_position=progress_tracking_position)
 
     def execute(
         self,
@@ -224,7 +227,20 @@ class BaseProcessing(ABC):
             one per input group, in the same order as *groups*.
         """
         coerced = _coerce_to_groups(groups)
-        return Parallel(n_jobs=n_jobs)(delayed(self.process_group)(g) for g in coerced)
+        
+        # Set up a multiprocessing-safe queue to assign worker positions for progress tracking
+        manager = mp.Manager()
+        position_queue = manager.Queue()
+        for pos in range(n_jobs):
+            position_queue.put(pos)
+
+        def _process(g: BIDSFileGroup) -> Path:
+            pos = position_queue.get()  # Get a position for this worker
+            result = self.process_group(g, progress_tracking_position=pos)
+            position_queue.put(pos)  # Return the position to the queue
+            return result
+        
+        return Parallel(n_jobs=n_jobs)(delayed(_process)(g) for g in coerced)
 
     def run(
         self,
@@ -253,8 +269,17 @@ class BaseProcessing(ABC):
         """
         coerced = _coerce_to_groups(groups)
 
+        # Set up a multiprocessing-safe queue to assign worker positions for progress tracking
+        manager = mp.Manager()
+        position_queue = manager.Queue()
+        for pos in range(n_jobs):
+            position_queue.put(pos)
+
         def _process_and_write(g: BIDSFileGroup) -> Path:
-            result = self.process_group(g)
-            return writer.write(result)
+            pos = position_queue.get()  # Get a position for this worker
+            result = self.process_group(g, progress_tracking_position=pos)
+            path = writer.write(result)
+            position_queue.put(pos)  # Return the position to the queue
+            return path
 
         return Parallel(n_jobs=n_jobs)(delayed(_process_and_write)(g) for g in coerced)

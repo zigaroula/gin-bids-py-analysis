@@ -88,10 +88,11 @@ class HilbertProcessing(BaseProcessing):
         out_paths = processor.run(ieeg_files, writer)
     """
 
-    def __init__(self, params: HilbertParams) -> None:
+    def __init__(self, params: HilbertParams, verbose: bool = True) -> None:
         self.params = params
+        self.verbose = verbose
 
-    def process_group(self, group: BIDSFileGroup) -> HilbertProcessingResult:
+    def process_group(self, group: BIDSFileGroup, progress_tracking_position: int = 0) -> HilbertProcessingResult:
         """Run the Hilbert-band envelope pipeline on one file group.
 
         Reads the iEEG file via MNE (format auto-detected from the extension),
@@ -104,6 +105,7 @@ class HilbertProcessing(BaseProcessing):
 
         Args:
             group: The file group to process.
+            progress_tracking_position: Optional position index for progress tracking (e.g. with tqdm).
 
         Returns:
             :class:`HilbertProcessingResult` with ``smoothed`` arrays,
@@ -129,6 +131,9 @@ class HilbertProcessing(BaseProcessing):
             channel_names=ch_names,
             fs=fs,
             params=self.params,
+            verbose=self.verbose,
+            desc=group.primary.path.name,
+            progress_tracking_position=progress_tracking_position,
         )
 
         if self.params.do_downsample:
