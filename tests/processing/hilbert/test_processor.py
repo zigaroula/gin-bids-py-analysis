@@ -229,6 +229,7 @@ class TestHilbertProcessingChannelSelection:
             channel_names: list[str],
             fs: float,
             params: HilbertParams,
+            **_: object,
         ):
             captured["data"] = data_2d.copy()
             captured["channel_names"] = list(channel_names)

@@ -38,7 +38,7 @@ class BIDSFile:
     @property
     def entities(self) -> dict[str, Any]:
         """All parsed BIDS entities as a plain dict (e.g. ``{'subject': '01', 'suffix': 'ieeg', ...}``)."""
-        return self._entities
+        return dict(self._entities)
 
     @property
     def suffix(self) -> str | None:

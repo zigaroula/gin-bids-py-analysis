@@ -76,8 +76,8 @@ class HilbertParams(BaseProcessingParams):
     channels_for_montage: list[str] | None = Field(
         default=None,
         description=(
-            "Optional list of channel names to include in the montage.  "
-            "If ``None``, all channels are used."
+            "Optional list of channel names to keep before montage and "
+            "processing. If ``None``, all channels are used."
         ),
     )
 
@@ -88,14 +88,16 @@ class HilbertParams(BaseProcessingParams):
     smoothing_windows_ms: list[int] = Field(
         default=[0, 250, 500, 1000, 2500, 5000],
         description=(
-            "Moving-average window durations in milliseconds.  "
-            "``0`` means no smoothing (identity); all other values apply the "
-            "causal moving average."
+            "Sliding-average window durations in milliseconds. ``0`` means no "
+            "smoothing (identity); all other values apply ``moving_average``."
         ),
     )
     do_downsample: bool = Field(
         default=True,
-        description="Decimate envelopes to ``downsampled_frequency_hz`` before normalization.",
+        description=(
+            "Resample envelopes to ``downsampled_frequency_hz`` before "
+            "normalization."
+        ),
     )
     do_normalize_percent: bool = Field(
         default=True,
@@ -108,8 +110,8 @@ class HilbertParams(BaseProcessingParams):
     centered: bool = Field(
         default=False,
         description=(
-            "If ``True``, subtract 100 from all outputs so the baseline is 0 "
-            "rather than 100.  Has no effect when ``do_normalize_percent`` is ``False``."
+            "If ``True``, subtract 100 from all outputs after smoothing. This "
+            "is paired with percent normalization."
         ),
     )
 
@@ -127,8 +129,10 @@ class HilbertWriterParams(BaseWriterParams):
     Writer parameters for the Hilbert analysis pipeline.
 
     Only ``bids_root`` must be supplied; all routing fields default to
-    Hilbert-appropriate values.  Output files are written as HDF5 (``.h5``),
-    with one dataset per smoothing window.
+    Hilbert-appropriate values. By default outputs are written as HDF5
+    (``.h5``). Setting ``output_extension`` to ``.vhdr`` or ``.eeg`` switches
+    the writer to BrainVision output, with one file triplet per smoothing
+    window.
 
     Example::
 

@@ -11,7 +11,7 @@ from gin_bids_py_analysis.processing.base import BaseProcessingResult
 
 @dataclass
 class HilbertProcessingResult(BaseProcessingResult):
-    """Result of the Hilbert-band envelope pipeline for one iEEG file.
+    """Result of the Hilbert-band envelope pipeline for one processed file group.
 
     Attributes:
         smoothed:        ``{window_ms: array}`` mapping each smoothing window
@@ -25,6 +25,8 @@ class HilbertProcessingResult(BaseProcessingResult):
                          60-70 Hz were processed.
         downsampled_fs:  Effective sampling rate of the envelope output in Hz.
         original_fs:     Sampling rate of the raw input signal in Hz.
+        original_events: Source annotations carried forward for optional
+                         BrainVision marker export.
     """
 
     smoothed: dict[int, np.ndarray] = field(default_factory=dict)

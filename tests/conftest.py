@@ -40,7 +40,7 @@ def bids_root(tmp_path: Path) -> Path:
 
     _write_json(root / "dataset_description.json", {
         "Name": "Test Dataset",
-        "BIDSVersion": "1.7.0",
+        "BIDSVersion": "1.11.1",
     })
     (root / "participants.tsv").write_text(
         "participant_id\n" + "\n".join(["sub-01", "sub-02"]),

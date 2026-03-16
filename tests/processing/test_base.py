@@ -171,7 +171,7 @@ def test_run_creates_dataset_description(mock_bids_file: BIDSFile, tmp_path: Pat
 
     desc = json.loads(desc_path.read_text(encoding="utf-8"))
     assert desc["Name"] == "dummy"
-    assert desc["BIDSVersion"] == "1.7.0"
+    assert desc["BIDSVersion"] == "1.11.1"
     assert desc["DatasetType"] == "derivative"
     assert desc["GeneratedBy"][0]["Name"] == "gin-bids-py-analysis"
     assert "Version" in desc["GeneratedBy"][0]

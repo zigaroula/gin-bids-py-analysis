@@ -29,7 +29,7 @@ def _package_version() -> str:
 
 
 def _downsample_events(original_events: mne.Annotations | Any, downsampled_fs: float) -> list[dict] | None:
-    """Downsample MNE Annotations to match the envelope sampling rate.
+    """Convert source annotations to sample indices at the envelope rate.
 
     Args:
         original_events: MNE Annotations object or any list of dicts with keys
@@ -92,10 +92,10 @@ class HilbertProcessingWriter(BaseProcessingWriter):
       windows stacked along the first axis.  See :meth:`_write_hdf5` for the
       full schema.
     * **BrainVision** (``.vhdr`` or ``.eeg``) — one file triplet
-      (``.vhdr`` / ``.vmrk`` / ``.eeg``) is written per smoothing window.
-      Files are named ``…_smwin-{N}ms_<suffix>.vhdr``.  If the source file is
-      itself a BrainVision file, its annotations are imported via MNE and
-      remapped to the envelope sampling rate.
+      (``.vhdr`` / ``.vmrk`` / ``.eeg``) is written per smoothing window using
+      a per-window ``desc-<output_description>sm{N}`` entity in the filename.
+      Annotations are taken from ``result.original_events`` and remapped to the
+      envelope sampling rate.
 
     Pass a :class:`~gin_bids_py_analysis.processing.hilbert.HilbertWriterParams`
     instance to the constructor — only ``bids_root`` is required.
@@ -112,7 +112,7 @@ class HilbertProcessingWriter(BaseProcessingWriter):
         writer = HilbertProcessingWriter(
             HilbertWriterParams(bids_root=Path("/data/my_study"), output_extension=".vhdr")
         )
-        out_path = writer.write(result)   # → …_smwin-0ms_hilbert.vhdr (smallest window)
+        writer.write(result)  # writes per-window files such as …desc-hilbertsm0_….vhdr
 
     HDF5 schema
     -----------
@@ -143,7 +143,7 @@ class HilbertProcessingWriter(BaseProcessingWriter):
     # ------------------------------------------------------------------
 
     def _write_data(self, result: BaseProcessingResult, output_path: Path) -> None:
-        """Serialize *result* as HDF5 (called by the base-class :meth:`write`)."""
+        """Serialize *result* using the format selected by ``output_extension``."""
         if not isinstance(result, HilbertProcessingResult):
             raise TypeError(
                 f"Expected HilbertProcessingResult, got {type(result).__name__!r}"
@@ -264,17 +264,17 @@ class HilbertProcessingWriter(BaseProcessingWriter):
 
         For each smoothing window *N* (sorted ascending) pybv writes three files:
 
-        * ``…_smwin-{N}ms_<suffix>.vhdr`` — text header
-        * ``…_smwin-{N}ms_<suffix>.vmrk`` — marker file
-        * ``…_smwin-{N}ms_<suffix>.eeg``  — binary float32 data
+        * ``…desc-<output_description>sm{N}_….vhdr`` — text header
+        * ``…desc-<output_description>sm{N}_….vmrk`` — marker file
+        * ``…desc-<output_description>sm{N}_….eeg``  — binary float32 data
 
-        Annotations are read from the source file (if it is a BrainVision
-        ``.vhdr``) via MNE and remapped to the envelope sampling rate using
-        :func:`_read_bv_events`.
+        Annotations are taken from ``result.original_events`` and remapped to
+        the envelope sampling rate via :func:`_downsample_events`.
 
         Args:
             result: A :class:`HilbertProcessingResult` to serialise.
-            output_path: Path to write the output files.
+            output_path: Base BIDS-derived path used to construct the per-window
+                filenames.
 
         Returns:
             List of ``.vhdr`` paths, one per smoothing window, sorted by

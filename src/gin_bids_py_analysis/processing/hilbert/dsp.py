@@ -13,12 +13,12 @@ Pipeline overview
 3. For each channel:
    a. For each adjacent pair of bins (subband):
       - Apply a FIR band-pass filter in the frequency domain.
-      - Compute the analytic signal via the Hilbert trick.
+      - Compute the analytic signal via Hilbert coefficients.
       - Take the magnitude → amplitude envelope (float32).
-   b. Optionally resample the envelope to a target frequency.
+   b. Optionally resample each envelope to a target frequency.
    c. Optionally normalise to a percentage of the mid-recording baseline.
-   d. Average normalised envelopes across all subbands.
-   e. Optionally apply a causal moving-average smoother for each requested
+   d. Average the resulting envelopes across all subbands.
+   e. Optionally apply a fixed-divisor sliding-average smoother for each requested
       window length.
 """
 
@@ -172,10 +172,12 @@ def normalize_percent(signal: np.ndarray) -> np.ndarray:
 
 
 def moving_average(signal: np.ndarray, coefficient: int) -> np.ndarray:
-    """Causal moving average.
+    """Fixed-divisor sliding average centred around each sample.
 
-    Unlike a standard moving average, the weight is always ``1 / coefficient``
-    regardless of how many samples are actually summed near the edges.
+    The implementation uses samples on both sides of the current index, so it
+    is not causal. Unlike a standard moving average, the divisor is always
+    ``coefficient`` regardless of how many samples are actually summed near
+    the edges.
 
     Edge logic (index = ``coefficient // 2``, weight = ``1 / coefficient``):
 
@@ -190,8 +192,8 @@ def moving_average(signal: np.ndarray, coefficient: int) -> np.ndarray:
 
     Args:
         signal:      1-D float array.
-        coefficient: Window length; must be ≥ 1.  If 1, the signal is
-                     returned unchanged (multiplied by 1.0/1 = identity).
+        coefficient: Window length; must be ≥ 1. If 1, the signal is returned
+                     unchanged.
 
     Returns:
         Smoothed float32 array of the same length.
@@ -244,11 +246,12 @@ def process_channel(
     1. For each adjacent bin pair (subband):
        a. Build (or retrieve from cache) a :class:`FirBandPass` filter.
        b. Apply the filter → amplitude envelope (float32).
-    2. Optionally decimate each envelope.
+    2. Optionally resample each envelope with
+       :func:`scipy.signal.resample_poly`.
     3. Optionally normalise to percentage of baseline.
-    4. Average the normalised envelopes across subbands.
+    4. Average the resulting envelopes across subbands.
     5. For each smoothing window: apply :func:`moving_average`
-       (or identity for window = 0), then optionally centre.
+       (or identity for ``window_ms = 0``), then optionally subtract 100.
 
     Args:
         signal_1d: 1-D array ``[n_samples]``.
@@ -341,7 +344,7 @@ def process_channel(
             coefficient = int((fs_eff * window_ms) / 1000)
             smoothed = moving_average(mean_data, coefficient)
 
-        if params.centered:
+        if params.do_normalize_percent and params.centered:
             smoothed = (smoothed - 100.0).astype(np.float32)
 
         result[window_ms] = smoothed

@@ -43,10 +43,11 @@ def _number_of_points(signal_length: int) -> int:
 
 
 def _hamming_window(n: int) -> np.ndarray:
-    """Compute the Hamming window of length *n*.
+    """Compute the periodic-form Hamming window of length *n*.
 
-    The denominator is ``n`` (not ``n - 1`` as in the standard definition),
-    which means the window is **not** exactly periodic.
+    The denominator is ``n`` (not ``n - 1`` as in the symmetric definition),
+    so the returned samples follow the periodic FFT-window convention rather
+    than the mirror-symmetric one.
 
     Formula: ``w[i] = 0.54 - 0.46 · cos(2π · i / n)``
 
