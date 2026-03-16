@@ -184,3 +184,43 @@ class TestHdf5Regression:
         out = writer.write(result)
         assert out.suffix == ".h5"
         assert out.is_file()
+
+
+# ---------------------------------------------------------------------------
+# Unit / scale tests (percent, dB, amplitude)
+# ---------------------------------------------------------------------------
+
+
+class TestBrainVisionUnit:
+    def _make_result_with_unit(self, tmp_path: Path, unit: str) -> HilbertProcessingResult:
+        rng = np.random.default_rng(seed=42)
+        smoothed = {0: rng.standard_normal((2, 50)).astype(np.float32)}
+        source_file = _make_bids_file(str(tmp_path / "dummy.nii"))
+        return HilbertProcessingResult(
+            source_group=BIDSFileGroup(primary=source_file),
+            smoothed=smoothed,
+            channel_names=["A1", "A2"],
+            bins=[50.0, 60.0],
+            downsampled_fs=64.0,
+            original_fs=1000.0,
+            original_events=None,
+            metadata={"unit": unit, "montage_mode": "mono", "centered": False},
+        )
+
+    def test_percent_unit_written_in_vhdr(self, tmp_path: Path) -> None:
+        result = self._make_result_with_unit(tmp_path, "percent")
+        _bv_writer(tmp_path).write(result)
+        vhdr = next((tmp_path / "derivatives" / "hilbert").rglob("*.vhdr"))
+        assert "%" in vhdr.read_text(encoding="utf-8")
+
+    def test_db_unit_written_in_vhdr(self, tmp_path: Path) -> None:
+        result = self._make_result_with_unit(tmp_path, "dB")
+        _bv_writer(tmp_path).write(result)
+        vhdr = next((tmp_path / "derivatives" / "hilbert").rglob("*.vhdr"))
+        assert "dB" in vhdr.read_text(encoding="utf-8")
+
+    def test_amplitude_unit_written_as_microvolt_in_vhdr(self, tmp_path: Path) -> None:
+        result = self._make_result_with_unit(tmp_path, "amplitude")
+        _bv_writer(tmp_path).write(result)
+        vhdr = next((tmp_path / "derivatives" / "hilbert").rglob("*.vhdr"))
+        assert "µV" in vhdr.read_text(encoding="utf-8")

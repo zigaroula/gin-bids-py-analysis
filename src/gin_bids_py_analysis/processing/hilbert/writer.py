@@ -283,19 +283,22 @@ class HilbertProcessingWriter(BaseProcessingWriter):
 
         events = _downsample_events(result.original_events, result.downsampled_fs)
 
+        unit = result.metadata.get("unit", "µV")
+        scale_factor = result.metadata.get("scale_factor", 1e-6)
+
         sorted_windows = sorted(result.smoothed.keys())
         out_paths: list[Path] = []
 
         for w in sorted_windows:
             fname_base = modify_entities(output_path.stem, desc=f"{self.params.output_description}sm{w}")
             pybv.write_brainvision(
-                data=result.smoothed[w] * 1e-6,  # convert from µV to V for pybv
+                data=result.smoothed[w] * scale_factor,
                 sfreq=result.downsampled_fs,
                 ch_names=result.channel_names,
                 fname_base=fname_base,
                 folder_out=str(output_path.parent),
                 events=events,
-                unit="µV",
+                unit=unit,
                 overwrite=True,
             )
             out_paths.append(output_path.parent / f"{fname_base}.vhdr")

@@ -14,7 +14,7 @@ import pytest
 
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.hilbert.dsp import process_all_channels
-from gin_bids_py_analysis.processing.hilbert.params import HilbertParams, MontageMode
+from gin_bids_py_analysis.processing.hilbert.params import HilbertParams, MontageMode, NormalizationMode
 import gin_bids_py_analysis.processing.hilbert.processor as processor_module
 
 
@@ -33,9 +33,7 @@ def default_params() -> HilbertParams:
         downsampled_frequency_hz=64.0,
         montage_mode=MontageMode.MONO,
         smoothing_windows_ms=[0, 250, 1000],
-        do_downsample=True,
-        do_normalize_percent=True,
-        do_smoothing=True,
+        normalization_mode=NormalizationMode.PERCENT,
     )
 
 
@@ -134,14 +132,12 @@ class TestProcessAllChannels:
         assert names == ch_names
 
     def test_centered_option_shifts_baseline(self, synthetic_data):
-        """Centered=True should shift the mean of sm0 from ~100 to ~0."""
+        """PERCENT_CENTERED should shift the mean of sm0 from ~100 to ~0."""
         params_centered = HilbertParams(
             f_min=50, f_max=100, f_step=10,
             montage_mode=MontageMode.MONO,
             smoothing_windows_ms=[0],
-            do_downsample=True,
-            do_normalize_percent=True,
-            centered=True,
+            normalization_mode=NormalizationMode.PERCENT_CENTERED,
         )
         data, fs = synthetic_data
         ch_names = [f"A{i+1}" for i in range(data.shape[0])]
@@ -161,8 +157,8 @@ class TestProcessAllChannels:
             f_min=50, f_max=100, f_step=10,
             montage_mode=MontageMode.MONO,
             smoothing_windows_ms=[0],
-            do_downsample=False,
-            do_normalize_percent=True,
+            downsampled_frequency_hz=None,
+            normalization_mode=NormalizationMode.PERCENT,
         )
         data, fs = synthetic_data
         ch_names = [f"A{i+1}" for i in range(data.shape[0])]
@@ -182,8 +178,7 @@ class TestProcessAllChannels:
             f_min=50, f_max=150, f_step=10,
             montage_mode=MontageMode.MONO,
             smoothing_windows_ms=[0],
-            do_downsample=True,
-            do_normalize_percent=True,
+            normalization_mode=NormalizationMode.PERCENT,
             downsampled_frequency_hz=16.0,
         )
         n_samples = 500
@@ -249,8 +244,8 @@ class TestHilbertProcessingChannelSelection:
             f_step=10,
             montage_mode=MontageMode.MONO,
             smoothing_windows_ms=[0],
-            do_downsample=False,
-            do_normalize_percent=False,
+            downsampled_frequency_hz=None,
+            normalization_mode=NormalizationMode.NONE,
             channels_for_montage=["B1", "B2"],
         )
 
@@ -282,8 +277,8 @@ class TestHilbertProcessingChannelSelection:
             f_step=10,
             montage_mode=MontageMode.MONO,
             smoothing_windows_ms=[0],
-            do_downsample=False,
-            do_normalize_percent=False,
+            downsampled_frequency_hz=None,
+            normalization_mode=NormalizationMode.NONE,
             channels_for_montage=["B1", "B2"],
         )
 
@@ -291,3 +286,59 @@ class TestHilbertProcessingChannelSelection:
             processor_module.HilbertProcessing(params).process_group(
                 BIDSFileGroup(primary=mock_bids_file)
             )
+
+
+# ---------------------------------------------------------------------------
+# NormalizationMode tests
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizationModes:
+    def test_db_mode_output_near_zero_at_baseline(self, synthetic_data):
+        """With DB normalization the middle portion of the unsmoothed output should be near 0 dB."""
+        data, fs = synthetic_data
+        ch_names = [f"A{i+1}" for i in range(data.shape[0])]
+        params = HilbertParams(
+            f_min=50, f_max=100, f_step=10,
+            montage_mode=MontageMode.MONO,
+            smoothing_windows_ms=[0],
+            normalization_mode=NormalizationMode.DB,
+        )
+        result, _, _ = process_all_channels(data, ch_names, fs, params)
+        sm0 = result[0]
+        for ch_idx in range(sm0.shape[0]):
+            n = sm0.shape[1]
+            mid_mean = float(np.mean(sm0[ch_idx, n // 4 : 3 * n // 4]))
+            # Middle-half mean should be near 0 dB
+            assert -10 < mid_mean < 10, (
+                f"Channel {ch_idx}: DB baseline mean = {mid_mean:.2f} dB, expected ~0"
+            )
+
+    def test_db_mode_output_is_finite(self, synthetic_data):
+        """DB normalization must never produce NaN or inf."""
+        data, fs = synthetic_data
+        ch_names = [f"A{i+1}" for i in range(data.shape[0])]
+        params = HilbertParams(
+            f_min=50, f_max=100, f_step=10,
+            montage_mode=MontageMode.MONO,
+            smoothing_windows_ms=[0],
+            normalization_mode=NormalizationMode.DB,
+        )
+        result, _, _ = process_all_channels(data, ch_names, fs, params)
+        for arr in result.values():
+            assert np.all(np.isfinite(arr))
+
+    def test_none_mode_output_is_amplitude(self, synthetic_data):
+        """NONE normalization should leave the envelope in raw amplitude units (>0, not ~100)."""
+        data, fs = synthetic_data
+        ch_names = [f"A{i+1}" for i in range(data.shape[0])]
+        params = HilbertParams(
+            f_min=50, f_max=100, f_step=10,
+            montage_mode=MontageMode.MONO,
+            smoothing_windows_ms=[0],
+            normalization_mode=NormalizationMode.NONE,
+        )
+        result, _, _ = process_all_channels(data, ch_names, fs, params)
+        sm0 = result[0]
+        # Raw amplitude from broadband noise at unit variance is small, not ~100
+        assert float(np.mean(sm0)) < 10.0

@@ -90,10 +90,7 @@ class HilbertProcessing(BaseProcessing):
             progress_tracking_position=progress_tracking_position,
         )
 
-        if self.params.do_downsample:
-            downsampled_fs = self.params.downsampled_frequency_hz
-        else:
-            downsampled_fs = fs
+        downsampled_fs = self.params.downsampled_frequency_hz if self.params.downsampled_frequency_hz is not None else fs
 
         return HilbertProcessingResult(
             source_group=group,
@@ -104,8 +101,10 @@ class HilbertProcessing(BaseProcessing):
             original_fs=fs,
             metadata={
                 "montage_mode": self.params.montage_mode.value,
-                "centered": self.params.centered,
-                "unit": "percent" if self.params.do_normalize_percent else "amplitude",
+                "centered": self.params.normalization_mode.is_centered,
+                "unit_label": self.params.normalization_mode.unit_label,
+                "unit": self.params.normalization_mode.unit,
+                "scale_factor": self.params.normalization_mode.scale_factor,
             },
             original_events=raw.annotations,
         )

@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 
 from gin_bids_py_analysis.processing.hilbert.fir import FirBandPass
 from gin_bids_py_analysis.processing.utils.channels import build_montage
+from gin_bids_py_analysis.processing.hilbert.params import NormalizationMode
 
 
 # ---------------------------------------------------------------------------
@@ -150,25 +151,59 @@ def downsample(
 def normalize_percent(signal: np.ndarray) -> np.ndarray:
     """Normalise *signal* to a percentage of its mid-recording baseline.
 
-    The baseline is computed as the mean of the middle half of the signal:
+    The baseline is computed as the mean of the middle half of the last axis:
 
-    * ``value = round(len(signal) / 4)``
-    * ``baseline = mean(signal[value : 3 * value])``
+    * ``value = round(signal.shape[-1] / 4)``
+    * ``baseline = mean(signal[..., value : 3 * value], axis=-1)``
 
-    If the baseline is zero it is replaced with 1 to avoid division by zero.
+    A zero baseline is replaced with 1 to avoid division by zero.
     The result is scaled so that the baseline region has a mean of 100.
 
+    Works on both 1-D ``[n_samples]`` and 2-D ``[n_subbands, n_samples]``
+    arrays; in the 2-D case each row is normalised independently.
+
     Args:
-        signal: 1-D float array (typically a downsampled envelope).
+        signal: Float array of shape ``[n_samples]`` or ``[n_subbands, n_samples]``.
 
     Returns:
-        Normalised float32 array (values in roughly the range [0, 200] for a
-        stationary signal, centred on 100).
+        Normalised float32 array of the same shape (baseline region ≈ 100).
     """
-    value = round(len(signal) / 4)
-    mean_mid = np.mean(signal[value : 3 * value])
-    fmtab = float(mean_mid) if float(mean_mid) != 0.0 else 1.0
+    n_len = signal.shape[-1]
+    value = round(n_len / 4)
+    mean_mid = np.mean(signal[..., value : 3 * value], axis=-1, keepdims=True)
+    fmtab = np.where(mean_mid != 0.0, mean_mid, 1.0)
     return (100.0 * signal / fmtab).astype(np.float32)
+
+
+def normalize_db(signal: np.ndarray) -> np.ndarray:
+    """Normalise *signal* to decibels relative to its mid-recording baseline.
+
+    The baseline is computed as the mean of the middle half of the last axis
+    (same window as :func:`normalize_percent`):
+
+    * ``value = round(signal.shape[-1] / 4)``
+    * ``baseline = mean(signal[..., value : 3 * value], axis=-1)``
+
+    Formula: ``20 * log10(max(signal, 1e-10) / max(baseline, 1e-10))``
+
+    Zero-valued samples or a zero baseline are guarded by the 1e-10 floor so
+    that the function never raises or produces ``-inf``.
+
+    Works on both 1-D ``[n_samples]`` and 2-D ``[n_subbands, n_samples]``
+    arrays; in the 2-D case each row is normalised independently.
+
+    Args:
+        signal: Float array of shape ``[n_samples]`` or ``[n_subbands, n_samples]``.
+
+    Returns:
+        Normalised float32 array in dB of the same shape (baseline ≈ 0 dB;
+        values above baseline are positive; values below are negative).
+    """
+    n_len = signal.shape[-1]
+    value = round(n_len / 4)
+    mean_mid = np.mean(signal[..., value : 3 * value], axis=-1, keepdims=True)
+    baseline = np.maximum(mean_mid, 1e-10)
+    return (20.0 * np.log10(np.maximum(signal, 1e-10) / baseline)).astype(np.float32)
 
 
 def moving_average(signal: np.ndarray, coefficient: int) -> np.ndarray:
@@ -308,23 +343,21 @@ def process_channel(
     # scipy.signal.resample_poly applies an anti-aliasing FIR filter
     # and produces exactly ceil(n_samples * up / down) output samples.
     # ------------------------------------------------------------------
-    if params.do_downsample:
+    if params.downsampled_frequency_hz is not None:
         _g = math.gcd(int(params.downsampled_frequency_hz), int(fs))
         _up = int(params.downsampled_frequency_hz) // _g
         _down = int(fs) // _g
         envelopes_2d = resample_poly(envelopes_2d, _up, _down, axis=1).astype(np.float32)
 
     # ------------------------------------------------------------------
-    # Step 3: vectorised normalisation — axis-wise mean, no Python loop.
+    # Step 3: normalisation — delegates to standalone functions which
+    # handle both 1-D and 2-D arrays via axis=-1 / keepdims.
     # ------------------------------------------------------------------
-    if params.do_normalize_percent:
-        n_len = envelopes_2d.shape[1]
-        value = round(n_len / 4)
-        mean_mid = np.mean(
-            envelopes_2d[:, value : 3 * value], axis=1, keepdims=True
-        )  # [n_sub, 1]
-        fmtab = np.where(mean_mid != 0.0, mean_mid, 1.0).astype(np.float32)
-        envelopes_2d = (100.0 * envelopes_2d / fmtab).astype(np.float32)
+    nm = params.normalization_mode
+    if nm.is_percent:
+        envelopes_2d = normalize_percent(envelopes_2d)
+    elif nm == NormalizationMode.DB:
+        envelopes_2d = normalize_db(envelopes_2d)
 
     # ------------------------------------------------------------------
     # Step 4: average across subbands → 1-D [n_samples_eff] float32
@@ -334,17 +367,17 @@ def process_channel(
     # ------------------------------------------------------------------
     # Step 5: smoothing windows
     # ------------------------------------------------------------------
-    fs_eff = params.downsampled_frequency_hz if params.do_downsample else fs
+    fs_eff = params.downsampled_frequency_hz if params.downsampled_frequency_hz is not None else fs
     result: dict[int, np.ndarray] = {}
 
     for window_ms in params.smoothing_windows_ms:
-        if not params.do_smoothing or window_ms == 0:
+        if window_ms == 0:
             smoothed = mean_data.copy()
         else:
             coefficient = int((fs_eff * window_ms) / 1000)
             smoothed = moving_average(mean_data, coefficient)
 
-        if params.do_normalize_percent and params.centered:
+        if params.normalization_mode.is_centered:
             smoothed = (smoothed - 100.0).astype(np.float32)
 
         result[window_ms] = smoothed

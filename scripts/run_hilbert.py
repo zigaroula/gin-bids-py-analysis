@@ -11,6 +11,7 @@ from gin_bids_py_analysis.processing.hilbert import (
     HilbertProcessing,
     HilbertProcessingWriter,
     HilbertWriterParams,
+    NormalizationMode,
 )
 from gin_bids_py_analysis.processing.utils.channels import (
     BipolarDirection,
@@ -44,9 +45,7 @@ PARAMS = HilbertParams(
     bipolar_direction=BipolarDirection.NEXT_MINUS_PREVIOUS,
     bipolar_storage=BipolarStorage.NEXT,
     smoothing_windows_ms=[0, 250, 500, 1000, 2500, 5000],
-    do_downsample=True,
-    do_normalize_percent=True,
-    do_smoothing=True,
+    normalization_mode=NormalizationMode.PERCENT,
     channels_for_montage=r'[A-Z]p?([0-1][0-9])'
 )
 

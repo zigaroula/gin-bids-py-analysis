@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -10,6 +11,64 @@ from gin_bids_py_analysis.processing.utils.channels import (
     BipolarStorage,
     MontageMode,
 )
+
+
+class NormalizationMode(str, Enum):
+    """Normalization applied to the Hilbert-band envelope after downsampling.
+
+    * ``NONE`` — no normalization; output unit is signal amplitude.
+    * ``PERCENT`` — express as percentage of mid-recording baseline
+      (baseline = mean of middle 50% of the signal; baseline region → 100).
+    * ``PERCENT_CENTERED`` — same as ``PERCENT``, then subtract 100 so the
+      baseline region is centred at 0 instead of 100.
+    * ``DB`` — express in decibels relative to mid-recording baseline:
+      ``20 * log10(amplitude / baseline)``; baseline region → 0 dB.
+    """
+
+    NONE = "none"
+    PERCENT = "percent"
+    PERCENT_CENTERED = "percent_centered"
+    DB = "db"
+
+    @property
+    def unit_label(self) -> str:
+        """Human-readable unit string stored in output file metadata."""
+        return {
+            NormalizationMode.NONE: "amplitude",
+            NormalizationMode.PERCENT: "percent",
+            NormalizationMode.PERCENT_CENTERED: "percent",
+            NormalizationMode.DB: "dB",
+        }[self]
+
+    @property
+    def unit(self) -> str:
+        """Unit string written into BrainVision ``.vhdr`` channel headers."""
+        return {
+            NormalizationMode.NONE: "µV",
+            NormalizationMode.PERCENT: "%",
+            NormalizationMode.PERCENT_CENTERED: "%",
+            NormalizationMode.DB: "dB",
+        }[self]
+
+    @property
+    def scale_factor(self) -> float:
+        """Multiplicative scale applied to data before BrainVision export.
+
+        BrainVision conventions expect µV; for amplitude data the raw MNE
+        values are in V so we multiply by 1e-6 to convert.  Normalized
+        outputs (percent, dB) are dimensionless and require no scaling.
+        """
+        return 1e-6 if self == NormalizationMode.NONE else 1.0
+
+    @property
+    def is_percent(self) -> bool:
+        """``True`` for both ``PERCENT`` and ``PERCENT_CENTERED`` modes."""
+        return self in (NormalizationMode.PERCENT, NormalizationMode.PERCENT_CENTERED)
+
+    @property
+    def is_centered(self) -> bool:
+        """``True`` only for ``PERCENT_CENTERED``; used to apply the -100 offset."""
+        return self == NormalizationMode.PERCENT_CENTERED
 
 
 class HilbertParams(BaseProcessingParams):
@@ -43,13 +102,14 @@ class HilbertParams(BaseProcessingParams):
     # Downsampling
     # ------------------------------------------------------------------
 
-    downsampled_frequency_hz: float = Field(
+    downsampled_frequency_hz: float | None = Field(
         default=64.0,
         gt=0,
         description=(
             "Target sampling rate for the envelope output in Hz.  "
             "``scipy.signal.resample_poly`` is used to achieve the exact target rate "
-            "with anti-aliasing."
+            "with anti-aliasing.  Set to ``None`` to skip downsampling and keep the "
+            "envelopes at the original recording sampling rate."
         ),
     )
 
@@ -94,31 +154,21 @@ class HilbertParams(BaseProcessingParams):
         default=[0, 250, 500, 1000, 2500, 5000],
         description=(
             "Sliding-average window durations in milliseconds. ``0`` means no "
-            "smoothing (identity); all other values apply ``moving_average``."
+            "smoothing (identity); all other values apply ``moving_average``. "
+            "Use ``[0]`` to disable smoothing entirely."
         ),
     )
-    do_downsample: bool = Field(
-        default=True,
+    normalization_mode: NormalizationMode = Field(
+        default=NormalizationMode.PERCENT,
         description=(
-            "Resample envelopes to ``downsampled_frequency_hz`` before "
-            "normalization."
+            "Normalization applied to the envelope after downsampling.  "
+            "``PERCENT`` expresses each subband as a percentage of its middle-50%% "
+            "baseline; ``PERCENT_CENTERED`` does the same and then subtracts 100 so "
+            "the baseline region sits at 0; ``DB`` uses "
+            "``20·log10(amplitude / baseline)``; ``NONE`` skips normalization."
         ),
     )
-    do_normalize_percent: bool = Field(
-        default=True,
-        description="Express each subband envelope as a percentage of its middle-50%% baseline.",
-    )
-    do_smoothing: bool = Field(
-        default=True,
-        description="Apply moving-average smoothing to the averaged envelope.",
-    )
-    centered: bool = Field(
-        default=False,
-        description=(
-            "If ``True``, subtract 100 from all outputs after smoothing. This "
-            "is paired with percent normalization."
-        ),
-    )
+
 
     @model_validator(mode="after")
     def _check_frequency_range(self) -> "HilbertParams":

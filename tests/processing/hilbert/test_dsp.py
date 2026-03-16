@@ -23,6 +23,7 @@ from gin_bids_py_analysis.processing.hilbert.dsp import (
     build_frequency_bins,
     downsample,
     moving_average,
+    normalize_db,
     normalize_percent,
 )
 from gin_bids_py_analysis.processing.utils.channels import build_montage
@@ -239,6 +240,67 @@ class TestNormalizePercent:
         # Middle half should be 100 * 4 / 4 = 100; elsewhere 0
         np.testing.assert_allclose(out[value : 3 * value], 100.0, atol=1e-3)
         np.testing.assert_allclose(out[:value], 0.0, atol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# normalize_db
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeDb:
+    def test_constant_signal_baseline_is_zero_db(self):
+        """A constant signal has baseline == signal, so output is 20*log10(1) = 0 dB."""
+        signal = np.full(100, 3.0, dtype=np.float32)
+        out = normalize_db(signal)
+        np.testing.assert_allclose(out, 0.0, atol=1e-5)
+
+    def test_output_is_float32(self):
+        signal = np.ones(100, dtype=np.float64)
+        out = normalize_db(signal)
+        assert out.dtype == np.float32
+
+    def test_values_above_baseline_are_positive(self):
+        """Samples with amplitude > baseline must be positive dB."""
+        n = 200
+        signal = np.ones(n, dtype=np.float32)
+        # Middle half has value 1 (baseline = 1); edges have value 10 > 1.
+        value = round(n / 4)  # 50
+        signal[:value] = 10.0
+        signal[3 * value :] = 10.0
+        out = normalize_db(signal)
+        # Edge samples: 20*log10(10/1) ≈ 20 dB
+        np.testing.assert_allclose(out[:value], 20.0, atol=0.5)
+
+    def test_values_below_baseline_are_negative(self):
+        """Samples with amplitude < baseline must be negative dB."""
+        n = 200
+        signal = np.ones(n, dtype=np.float32)
+        value = round(n / 4)  # 50
+        signal[:value] = 0.1
+        signal[3 * value :] = 0.1
+        out = normalize_db(signal)
+        # Edge samples: 20*log10(0.1/1) ≈ -20 dB
+        np.testing.assert_allclose(out[:value], -20.0, atol=0.5)
+
+    def test_zero_signal_does_not_crash(self):
+        """Zero-valued signal must not raise or produce -inf (guarded by 1e-10 floor)."""
+        signal = np.zeros(100, dtype=np.float32)
+        out = normalize_db(signal)
+        assert np.all(np.isfinite(out))
+
+    def test_baseline_uses_middle_50_percent(self):
+        """The baseline window is the same as normalize_percent: middle 50% of the signal."""
+        n = 100
+        signal = np.ones(n, dtype=np.float32)
+        value = round(n / 4)  # 25
+        # Middle half fixed at 2.0 → baseline = 2.0; outer quarters at 1.0
+        signal[value : 3 * value] = 2.0
+        out = normalize_db(signal)
+        # Middle half: 20*log10(2/2) = 0 dB
+        np.testing.assert_allclose(out[value : 3 * value], 0.0, atol=1e-4)
+        # Outer quarters: 20*log10(1/2) ≈ -6.02 dB
+        expected_outer = 20.0 * np.log10(1.0 / 2.0)
+        np.testing.assert_allclose(out[:value], expected_outer, atol=0.01)
 
 
 # ---------------------------------------------------------------------------
