@@ -17,10 +17,6 @@ from gin_bids_py_analysis.processing.base import (
 
 from .result import HilbertProcessingResult
 
-# Extensions that trigger BrainVision output instead of HDF5.
-_BV_EXTENSIONS = frozenset({".vhdr", ".eeg"})
-
-
 def _package_version() -> str:
     try:
         return version("gin-bids-py-analysis")
@@ -86,12 +82,12 @@ class HilbertProcessingWriter(BaseProcessingWriter):
     """Writes a :class:`HilbertProcessingResult` to BIDS derivatives.
 
     The output format is selected automatically from
-    :attr:`~gin_bids_py_analysis.processing.hilbert.HilbertWriterParams.output_extension`:
+    :attr:`~gin_bids_py_analysis.processing.hilbert.HilbertWriterParams.output_format`:
 
-    * **HDF5** (``.h5``, default) — a single file containing all smoothing
+    * **HDF5** (``"hdf5"``, default) — a single file containing all smoothing
       windows stacked along the first axis.  See :meth:`_write_hdf5` for the
       full schema.
-    * **BrainVision** (``.vhdr`` or ``.eeg``) — one file triplet
+    * **BrainVision** (``"brainvision"``) — one file triplet
       (``.vhdr`` / ``.vmrk`` / ``.eeg``) is written per smoothing window using
       a per-window ``desc-<output_description>sm{N}`` entity in the filename.
       Annotations are taken from ``result.original_events`` and remapped to the
@@ -110,7 +106,7 @@ class HilbertProcessingWriter(BaseProcessingWriter):
     Example — BrainVision::
 
         writer = HilbertProcessingWriter(
-            HilbertWriterParams(bids_root=Path("/data/my_study"), output_extension=".vhdr")
+            HilbertWriterParams(bids_root=Path("/data/my_study"), output_format="brainvision")
         )
         writer.write(result)  # writes per-window files such as …desc-hilbertsm0_….vhdr
 
@@ -143,13 +139,13 @@ class HilbertProcessingWriter(BaseProcessingWriter):
     # ------------------------------------------------------------------
 
     def _write_data(self, result: BaseProcessingResult, output_path: Path) -> None:
-        """Serialize *result* using the format selected by ``output_extension``."""
+        """Serialize *result* using the format selected by ``output_format``."""
         if not isinstance(result, HilbertProcessingResult):
             raise TypeError(
                 f"Expected HilbertProcessingResult, got {type(result).__name__!r}"
             )
         
-        if self.params.output_extension.lower() in _BV_EXTENSIONS:
+        if self.params.output_format == "brainvision":
             self._write_brainvision_all_windows(result, output_path)
         else:
             self._write_hdf5(result, output_path)

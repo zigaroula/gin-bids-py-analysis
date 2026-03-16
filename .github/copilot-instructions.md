@@ -1,6 +1,6 @@
-# GitHub Copilot Instructions — gin-bids-py-analysis
+# GitHub Copilot Instructions - gin-bids-py-analysis
 
-> **This is the live architecture document.**
+> This is the live architecture document.
 > Update it whenever a module's responsibilities, public API, or design rules change.
 
 ---
@@ -9,113 +9,191 @@
 
 `gin-bids-py-analysis` is a Python package for BIDS-based iEEG analysis.
 It wraps PyBIDS for file discovery, provides a typed query interface over an
-entire dataset (source + derivatives in one object), and implements a strict
-separation between **computation** and **file I/O** in the processing pipeline.
+entire dataset (source + derivatives in one object), and enforces a strict
+separation between numerical computation and file I/O in the processing layer.
 
 | Item | Value |
 |---|---|
-| **Pip name** | `gin-bids-py-analysis` |
-| **Import name** | `gin_bids_py_analysis` |
-| **Python** | ≥ 3.10 |
-| **Dep management** | plain `pip` + `setuptools`; install with `pip install -e ".[dev]"` |
-| **Virtual env** | `.venv` at the project root — always use `.venv\Scripts\pip` / `.venv\Scripts\python` / `.venv\Scripts\pytest` for all installs, runs, and tests |
-| **Test runner** | `pytest` |
+| Pip name | `gin-bids-py-analysis` |
+| Import name | `gin_bids_py_analysis` |
+| Python | >= 3.10 |
+| Dependency management | plain `pip` + `setuptools`; install with `pip install -e ".[dev]"` |
+| Virtual env | `.venv` at the project root - prefer `.venv\Scripts\pip`, `.venv\Scripts\python`, and `.venv\Scripts\pytest` |
+| Test runner | `pytest` |
 
 ---
 
 ## Module Map
 
-```
+```text
 src/gin_bids_py_analysis/
-├── bids/           BIDS file discovery & querying (wraps PyBIDS)
-├── data/           iEEG data loaders — PLACEHOLDER, see data/__init__.py
-└── processing/     Analysis pipeline (compute and I/O are separated)
-    └── hilbert/    Hilbert-transform analysis subpackage (stub)
-scripts/            Simple edit-and-run scripts (no argparse; edit params at top)
-tests/              pytest test suite (mirrors src/ structure)
+|- bids/                BIDS file discovery, wrapping, and querying
+|- data/
+|  `- loader.py         iEEG loading helpers; `load_ieeg()` wraps `mne.io.read_raw`
+`- processing/
+   |- base.py           shared processor / writer framework
+   |- utils/
+   |  `- channels.py    shared mono / bipolar montage enums and helpers
+   |- hilbert/          reference end-to-end processing subpackage
+   |  |- __init__.py    public re-exports
+   |  |- dsp.py         pure numerical pipeline, no file I/O
+   |  |- fir.py         reusable FIR / Hilbert DSP primitives
+   |  |- params.py      `HilbertParams` + `HilbertWriterParams`
+   |  |- processor.py   BIDS/MNE orchestration only
+   |  |- result.py      `HilbertProcessingResult`
+   |  `- writer.py      HDF5 + BrainVision output
+   `- delphos/          detector code not yet refactored to the full processing pattern
+scripts/                edit-and-run scripts for local workflows
+tests/                  pytest suite mirroring `src/`
 ```
 
 ---
 
-## Key Classes
+## Key Classes and Helpers
 
 ### `bids/`
 
-| Class | File | Responsibility |
+| Class / helper | File | Responsibility |
 |---|---|---|
-| `BIDSDataset` | `dataset.py` | Primary entry-point. Wraps `pybids.BIDSLayout`. **Derivatives are included by default** (`derivatives=True`). |
+| `BIDSDataset` | `dataset.py` | Primary entry-point. Wraps `pybids.BIDSLayout`. Derivatives are included by default (`derivatives=True`). |
 | `BIDSSubject` | `subject.py` | One participant; holds `list[BIDSFile]`; filterable via `.get_files(**entities)`. |
-| `BIDSFile` | `file.py` | Wraps a pybids `BIDSFile`. Exposes `.entities: dict`, `file['any_entity']`, `.suffix`, `.extension`, `.path`. |
-| `BIDSFileGroup` | `file_group.py` | Groups a `primary: BIDSFile` with optional `secondaries: list[BIDSFile]`. The unit passed to processors. |
-| helpers | `helpers.py` | `build_bids_path(entities, root, suffix, extension)` → `Path`; `parse_entities(path)` → `dict`. |
+| `BIDSFile` | `file.py` | Wraps a PyBIDS file. Exposes `.entities`, subscript access, `.suffix`, `.extension`, and `.path`. |
+| `BIDSFileGroup` | `file_group.py` | Groups a `primary: BIDSFile` with optional `secondaries: list[BIDSFile]`. This is the unit passed to processors. |
+| `build_bids_path` / `parse_entities` | `helpers.py` | Build derivative paths and recover entities from paths. |
+
+### `data/`
+
+| Function | File | Responsibility |
+|---|---|---|
+| `load_ieeg` | `loader.py` | Loads iEEG recordings from a `BIDSFile` via `mne.io.read_raw`, using extension-based autodetection. |
 
 ### `processing/`
 
-| Class | File | Responsibility |
+| Class / helper | File | Responsibility |
 |---|---|---|
-| `BaseProcessing` | `base.py` | Abstract. Concrete `execute(groups, n_jobs) -> list[BaseProcessingResult]` fans out to abstract `process_group(group) -> BaseProcessingResult`. **No file I/O allowed here.** |
-| `BaseProcessingParams` | `base.py` | Pydantic v2 base for algorithm parameters (frequency bands, filter settings, etc.). Subclassed per analysis as `<Name>Params`. |
-| `BaseProcessingResult` | `base.py` | Abstract dataclass. `source_group: BIDSFileGroup`, `metadata: dict`. Subclassed per analysis. |
-| `BaseProcessingWriter` | `base.py` | Abstract. `__init__(params: BaseWriterParams)`. Concrete `write(result) -> Path` builds BIDS output path; abstract `_write_data(result, path)` for subclasses. |
-| `BaseWriterParams` | `base.py` | Pydantic v2 base for writer options. Carries `bids_root`, `pipeline_label`, `output_suffix`, `output_extension` plus any format-specific options in subclasses. |
+| `BaseProcessing` | `base.py` | Abstract processor. Subclasses implement `process_group(group, progress_tracking_position=0)` only. `execute()` and `run()` are concrete and handle joblib parallelism. |
+| `BaseProcessingParams` | `base.py` | Pydantic v2 base for algorithm parameters. |
+| `BaseProcessingResult` | `base.py` | Abstract dataclass with `source_group` and `metadata`. Subclassed per analysis. |
+| `BaseProcessingWriter` | `base.py` | Abstract writer. `write(result)` builds the BIDS derivative path and delegates serialization to `_write_data(result, output_path)`. |
+| `BaseWriterParams` | `base.py` | Pydantic v2 base for writer configuration. Includes `bids_root`, `pipeline_label`, `output_modality`, `output_description`, `output_suffix`. Subclasses declare `output_format` (a `Literal` type) and override `output_extension` as a `@computed_field`. |
+| `MontageMode`, `BipolarDirection`, `BipolarStorage`, `build_montage` | `processing/utils/channels.py` | Shared channel re-referencing utilities for analyses that work on raw or derived channel montages. |
+
+### `processing/hilbert/` as the reference implementation
+
+Use `processing/hilbert/` as the model for new processings.
+
+| Module | Responsibility |
+|---|---|
+| `params.py` | Keeps both algorithm params and writer params in one place. |
+| `dsp.py` | Holds the main pure array-based pipeline for Hilbert. |
+| `fir.py` | Holds lower-level pure DSP primitives reused by the Hilbert pipeline. |
+| `processor.py` | Loads data, subsets channels, forwards pure arrays into pure-computation helpers, and assembles a result object. |
+| `result.py` | Carries processed arrays plus the metadata and source information writers need. |
+| `writer.py` | Dispatches on `output_format` (via the computed `output_extension`) and serializes one result into one or more derivative files. |
 
 ---
 
 ## Design Rules
 
-1. **No I/O in processors.**
-   `BaseProcessing.process_group()` is pure computation. All disk writes go through a
-   `BaseProcessingWriter` subclass. This keeps processors independently testable
-   and safe for parallel execution.
+1. No file I/O in processors.
+   `BaseProcessing.process_group()` may load source data and build in-memory results, but all output writes go through a `BaseProcessingWriter` subclass.
 
-2. **`execute()` is not overridable.**
-   `BaseProcessing.execute(groups, n_jobs)` is fully implemented in the base class:
-   it fans out to `process_group()` using joblib. Subclasses only override `process_group()`.
+2. Keep orchestration separate from numerical code.
+   Most heavy numpy/scipy logic should live in one or more dedicated pure-computation modules so it can be tested with synthetic arrays. `processor.py` should stay focused on dataset objects, loading, metadata, and result assembly. `dsp.py` is a common name for one of those modules, but it is not required.
 
-2. **All BIDS entities are queryable.**
-   `BIDSFile` exposes `.entities: dict` and `__getitem__`.
-   Never hard-code only the "standard" entities (`subject`, `session`, `task`).
+3. `process_group()` owns one `BIDSFileGroup`.
+   Its signature is `process_group(group, progress_tracking_position=0)`. Analyses should accept both bare `BIDSFile` objects and pre-built `BIDSFileGroup`s through the inherited `execute()` / `run()` methods.
 
-3. **No `BIDSDerivativesDataset` class.**
-   `BIDSDataset(root, derivatives=True)` (the default) includes derivative files.
-   There is no separate derivatives dataset class.
+4. Do not override `execute()` or `run()`.
+   These are implemented in `BaseProcessing`. `run()` also writes `dataset_description.json` once before processing and includes `processor.params` under `GeneratedBy[0]["Parameters"]` when available.
 
-4. **Per-analysis subclasses.**
-   Each analysis in `processing/<name>/` must define:
-   - `<Name>Params(BaseProcessingParams)` — Pydantic v2, algorithm parameters
-   - `<Name>WriterParams(BaseWriterParams)` — Pydantic v2, writer options; override `pipeline_label`, `output_suffix`, `output_extension` with defaults; caller only needs to supply `bids_root`
-   - `<Name>ProcessingResult(BaseProcessingResult)` — dataclass
-   - `<Name>ProcessingWriter(BaseProcessingWriter)` — only implements `_write_data()`; path construction is inherited
-   - `<Name>Processing(BaseProcessing)` — overrides `process_group(group)` only; receives params via constructor
+5. Per-analysis package layout is standardized.
+   New processing subpackages should usually contain:
+   - `__init__.py` for public re-exports
+   - `params.py` for both `<Name>Params` and `<Name>WriterParams`
+   - one or more pure-computation modules when the analysis has substantial numerical logic (for example `dsp.py`, `fir.py`, or other focused helpers)
+   - `processor.py` for orchestration
+   - `result.py` for the result dataclass
+   - `writer.py` for serialization
 
-5. **Pydantic v2 for all params.**
-   Processing params go to the processor constructor; writer params go to the writer constructor.
+6. Use Pydantic v2 for params and dataclasses for results.
+   Algorithm and writer config belong in Pydantic models. In-memory outputs belong in dataclasses derived from `BaseProcessingResult`.
 
-6. **Parallelism via joblib.**
-   `execute()` and `run()` both accept `n_jobs`. Processors must be stateless and
-   side-effect-free (no shared mutable state).
+7. Reuse shared montage helpers for channel re-referencing.
+   If an analysis supports mono / bipolar processing, use `processing.utils.channels` rather than reimplementing channel parsing or adjacency rules. If channels must be subset before montage, subset both the data matrix and channel names together and preserve original file order.
 
-7. **`data/` is a placeholder.**
-   Do not implement data loading until the source project module is available.
-   Refer to `data/__init__.py` for the expected interface stub.
+8. Result objects must carry writer-relevant metadata.
+   Follow the Hilbert pattern: include processed arrays, channel labels, sampling frequencies, algorithm metadata, and any source annotations or events needed for later export. Writers should not have to reload the raw recording to recover metadata they can receive in the result.
+
+9. Writers may support multiple output formats.
+   Each concrete `BaseWriterParams` subclass declares an `output_format` field (a `Literal` type enumerating valid format names) and overrides `output_extension` as a `@computed_field` that maps those names to file extensions. `_write_data()` may fan out into multiple files derived from the same `output_path`, but path construction itself remains the base writer's job.
+
+10. Prefer structured derivative outputs.
+   When writing HDF5-like outputs, store data plus explicit axes, metadata, and provenance rather than raw arrays alone. Deterministic axis ordering and sorted keys are preferred.
+
+11. Keep optional dependencies isolated.
+   If a writer backend depends on an optional package, prefer lazy imports or explicit runtime errors at write time so importing computation modules does not require every output dependency.
+
+12. Docstrings are part of the contract.
+   Keep module, class, and function docstrings aligned with actual behavior, especially for shapes, dtypes, units, optional steps, naming conventions, and file schemas. If behavior changes, update docstrings and tests in the same change.
+
+13. All BIDS entities are queryable.
+   `BIDSFile` exposes `.entities` and `__getitem__`. Do not assume only `subject`, `session`, and `task` matter.
+
+14. There is no separate derivatives dataset type.
+   `BIDSDataset(root, derivatives=True)` already includes derivative files.
+
+---
+
+## Reusable Patterns from Hilbert
+
+### Processor pattern
+
+- Load source signals with `load_ieeg()` in `processor.py`.
+- Convert data to the working dtype early if needed (`float32` in Hilbert).
+- Keep channel-name transformations explicit and synchronized with the data rows.
+- Pass plain arrays and plain metadata into pure-computation helpers.
+- Return one rich result object per input group.
+
+### Pure computation pattern
+
+- Put pure computation in standalone functions that accept numpy arrays and params.
+- Split that computation across as many focused files as needed.
+- `dsp.py` is a common top-level name, but the important rule is separation of concerns, not the filename.
+- In Hilbert, the pure computation is split between `dsp.py` and `fir.py`.
+- Precompute invariants once per file when they are reused across channels.
+- Keep pure-computation helpers free of file-system side effects so they are safe for unit tests and joblib workers.
+
+### Writer pattern
+
+- Let `BaseProcessingWriter.write()` construct the canonical output path.
+- Store provenance such as source path, pipeline name, and package version.
+- If source annotations are preserved in the result, remap them to the output sample rate during writing rather than recomputing them from disk.
+- If one result expands to multiple derivative files, derive those filenames from the base `output_path` rather than rebuilding BIDS paths from scratch.
+
+### Testing pattern
+
+- Add numpy-only tests for pure DSP and helper functions.
+- Add processor tests that mock `load_ieeg()` and verify shape, dtype, metadata, and channel-selection behavior.
+- Add writer tests that verify BIDS paths, file structure, and format-specific regressions.
+- Keep tests focused on contract-level behavior rather than implementation details.
 
 ---
 
 ## Adding a New Analysis
 
-1. Create `src/gin_bids_py_analysis/processing/<name>/` with:
-   ```
-   __init__.py         — re-export all classes below
-   params.py           — <Name>Params(BaseProcessingParams)
-   writer_params.py    — <Name>WriterParams(BaseWriterParams)
-   result.py           — <Name>ProcessingResult(BaseProcessingResult)
-   writer.py           — <Name>ProcessingWriter(BaseProcessingWriter)
-   processor.py        — <Name>Processing(BaseProcessing)
-   ```
-2. In `writer_params.py`, set defaults for `pipeline_label`, `output_suffix`, and
-   `output_extension`; leave `bids_root` without a default so callers must supply it.
-3. Add tests in `tests/processing/<name>/`.
-4. **Update this file**: add the new analysis to the module map and key classes tables.
+1. Create `src/gin_bids_py_analysis/processing/<name>/`.
+2. Add `__init__.py` that re-exports the public classes for the analysis.
+3. Add `params.py` with:
+   - `<Name>Params(BaseProcessingParams)`
+   - `<Name>WriterParams(BaseWriterParams)`
+4. Add one or more pure-computation modules if the analysis has non-trivial numerical logic.
+5. Add `result.py` with `<Name>ProcessingResult(BaseProcessingResult)`.
+6. Add `writer.py` with `<Name>ProcessingWriter(BaseProcessingWriter)`.
+7. Add `processor.py` with `<Name>Processing(BaseProcessing)`.
+8. If the analysis operates on iEEG recordings, prefer `load_ieeg()` rather than format-specific readers in the processor.
+9. Add tests under `tests/processing/<name>/`.
+10. Update this file whenever the new analysis changes the reusable architecture.
 
 ---
 
@@ -126,56 +204,67 @@ tests/              pytest test suite (mirrors src/ structure)
 ```python
 from gin_bids_py_analysis.bids import BIDSDataset
 
-ds = BIDSDataset("/path/to/bids")          # derivatives=True by default
+ds = BIDSDataset("/path/to/bids")  # derivatives=True by default
 files = ds.get_files(subject="01", suffix="ieeg", extension=".vhdr")
 subjects = ds.get_subjects()
 
-# Any BIDS entity is queryable
-print(files[0]["acq"])           # subscript — raises KeyError if missing
-print(files[0].get("run"))       # safe get — returns None if missing
-print(files[0].entities)         # full entity dict
+print(files[0]["acq"])      # raises KeyError if missing
+print(files[0].get("run"))  # safe get
+print(files[0].entities)    # full entity dict
 ```
 
-### Running a processing step
+### Running the Hilbert processing
 
 ```python
 from pathlib import Path
+
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup
 from gin_bids_py_analysis.processing.hilbert import (
-    HilbertParams, HilbertProcessing, HilbertProcessingWriter, HilbertWriterParams,
+    HilbertParams,
+    HilbertProcessing,
+    HilbertProcessingWriter,
+    HilbertWriterParams,
+    MontageMode,
 )
 
 ds = BIDSDataset("/path/to/bids")
 files = ds.get_files(subject="01", suffix="ieeg")
 
-params = HilbertParams(freq_bands=[(1, 4), (8, 12)], sfreq=1000.0)
+params = HilbertParams(
+    f_min=50,
+    f_max=150,
+    f_step=10,
+    downsampled_frequency_hz=64.0,
+    montage_mode=MontageMode.MONO,
+)
 processor = HilbertProcessing(params)
-writer = HilbertProcessingWriter(HilbertWriterParams(bids_root=Path("/path/to/bids")))
+writer = HilbertProcessingWriter(
+    HilbertWriterParams(bids_root=Path("/path/to/bids"))
+)
 
-# Simplest case — pass files directly (auto-wrapped into single-file groups)
 out_paths = processor.run(files, writer)
 out_paths = processor.run(files, writer, n_jobs=4)
 
-# Multi-modal groups — build BIDSFileGroup explicitly when you need secondaries
+results = processor.execute(files)
+results = processor.execute(files, n_jobs=4)
+
 physio_files = ds.get_files(subject="01", suffix="physio")
 groups = [
     BIDSFileGroup(primary=ieeg, secondaries=[physio])
     for ieeg, physio in zip(files, physio_files)
 ]
 out_paths = processor.run(groups, writer)
-
-# collect all results in memory (useful for testing / interactive use)
-results = processor.execute(files)              # sequential
-results = processor.execute(files, n_jobs=4)    # parallel
 ```
 
-### Multi-subject parallel run (in a script)
-
-Use `run()` — it processes and writes each file immediately, keeping only one result in memory at a time:
+### Switching writer format
 
 ```python
-files = ds.get_files(suffix="ieeg")
-out_paths = processor.run(files, writer, n_jobs=-1)  # all CPUs
+writer = HilbertProcessingWriter(
+    HilbertWriterParams(
+        bids_root=Path("/path/to/bids"),
+        output_format="brainvision",
+    )
+)
 ```
 
 ---
@@ -185,8 +274,9 @@ out_paths = processor.run(files, writer, n_jobs=-1)  # all CPUs
 ```bash
 .venv\Scripts\pip install -e ".[dev]"
 .venv\Scripts\pytest
+.venv\Scripts\pytest tests/processing/hilbert -q
 .venv\Scripts\pytest --cov=gin_bids_py_analysis --cov-report=term-missing
 ```
 
-Tests that require a real pybids-indexed dataset are marked `@pytest.mark.skip`
-and must be enabled explicitly once pybids installation is verified.
+Tests that require a real PyBIDS-indexed dataset may be skipped until the local
+environment is fully configured.

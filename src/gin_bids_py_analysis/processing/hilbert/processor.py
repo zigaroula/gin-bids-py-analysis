@@ -17,54 +17,8 @@ from gin_bids_py_analysis.data.loader import load_ieeg
 from .dsp import process_all_channels
 from .params import HilbertParams
 from .result import HilbertProcessingResult
-
-
-def _fftw_threads_for_worker() -> int:
-    """Return how many pyfftw threads this worker should use.
-
-    When joblib spawns N worker processes each should use cpu_count/N threads
-    so the total thread count stays close to the number of physical cores.
-    joblib exposes the worker count via the LOKY_MAX_CPU_COUNT / joblib env
-    variables; if we can't determine it we default to all cores.
-    """
-    cpu = os.cpu_count() or 1
-    # joblib sets this env var in each worker process
-    n_workers_str = os.environ.get("LOKY_MAX_CPU_COUNT") or os.environ.get("JOBLIB_NPROCS")
-    try:
-        n_workers = int(n_workers_str) if n_workers_str else 1
-    except ValueError:
-        n_workers = 1
-    return max(1, cpu // n_workers)
-
-
-def _select_channels_for_montage(
-    data: np.ndarray,
-    channel_names: list[str],
-    selected_names: list[str] | None,
-) -> tuple[np.ndarray, list[str]]:
-    """Subset *data* and *channel_names* using the same row indices.
-
-    The selection preserves the original file order rather than the order of
-    *selected_names*.  This keeps channel adjacency intact for bipolar montage
-    construction and prevents name/data mismatches when only a subset of
-    channels should be processed.
-    """
-    if not selected_names:
-        return data, list(channel_names)
-
-    selected_lookup = set(selected_names)
-    keep_indices = [
-        idx for idx, name in enumerate(channel_names)
-        if name in selected_lookup
-    ]
-
-    if not keep_indices:
-        raise ValueError(
-            "channels_for_montage did not match any input channels: "
-            f"{selected_names!r}"
-        )
-
-    return data[keep_indices, :], [channel_names[idx] for idx in keep_indices]
+from ..utils.channels import select_channels_for_montage
+from ..utils.multithreading import get_threads_for_worker
 
 
 class HilbertProcessing(BaseProcessing):
@@ -115,12 +69,12 @@ class HilbertProcessing(BaseProcessing):
         fs: float = raw.info["sfreq"]
 
         if _PYFFTW_AVAILABLE:
-            pyfftw.config.NUM_THREADS = _fftw_threads_for_worker()
+            pyfftw.config.NUM_THREADS = get_threads_for_worker()
 
         # get_data() returns shape [n_channels, n_times] as float64
         data: np.ndarray = raw.get_data().astype(np.float32)
         ch_names: list[str] = list(raw.ch_names)
-        data, ch_names = _select_channels_for_montage(
+        data, ch_names = select_channels_for_montage(
             data,
             ch_names,
             self.params.channels_for_montage,

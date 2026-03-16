@@ -34,3 +34,7 @@ Thumbs.db
 
 # PyBIDS index cache
 .bids_cache/
+
+# Temp
+.tmp/
+.temp/

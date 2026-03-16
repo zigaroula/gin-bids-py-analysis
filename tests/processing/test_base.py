@@ -14,6 +14,8 @@ from typing import Any
 
 import pytest
 
+from pydantic import computed_field
+
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.base import (
@@ -28,6 +30,19 @@ from gin_bids_py_analysis.processing.base import (
 # ---------------------------------------------------------------------------
 # Concrete stubs
 # ---------------------------------------------------------------------------
+
+class _DummyWriterParams(BaseWriterParams):
+    """Minimal concrete WriterParams for use in base-class tests."""
+
+    pipeline_label: str = "dummy"
+    output_modality: str = "dummy"
+    output_description: str = "dummy"
+    output_suffix: str = "dummy"
+
+    @computed_field
+    @property
+    def output_extension(self) -> str:
+        return ".npy"
 
 @dataclass
 class _DummyResult(BaseProcessingResult):
@@ -56,14 +71,7 @@ class _DummyWriter(BaseProcessingWriter):
 
 def _dummy_writer(bids_root: Path) -> _DummyWriter:
     """Helper: build a _DummyWriter with minimal BaseWriterParams."""
-    params = BaseWriterParams(
-        bids_root=bids_root,
-        pipeline_label="dummy",
-        output_modality="dummy",
-        output_description="dummy",
-        output_suffix="dummy",
-        output_extension=".npy",
-    )
+    params = _DummyWriterParams(bids_root=bids_root)
     return _DummyWriter(params)
 
 

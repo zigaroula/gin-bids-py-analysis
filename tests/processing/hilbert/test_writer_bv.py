@@ -85,7 +85,7 @@ def _make_result(
 
 def _bv_writer(bids_root: Path) -> HilbertProcessingWriter:
     return HilbertProcessingWriter(
-        HilbertWriterParams(bids_root=bids_root, output_extension=".vhdr")
+        HilbertWriterParams(bids_root=bids_root, output_format="brainvision")
     )
 
 
@@ -131,10 +131,10 @@ class TestBrainVisionWriter:
             assert name in text, f"Channel {name!r} not found in .vhdr header"
 
     def test_eeg_extension_alias_also_writes_bv_files(self, tmp_path: Path) -> None:
-        """.eeg extension should trigger BrainVision output (pybv writes .vhdr files)."""
+        """output_format='brainvision' should trigger BrainVision output."""
         result = _make_result(str(tmp_path / "dummy.nii"), windows=[0])
         writer = HilbertProcessingWriter(
-            HilbertWriterParams(bids_root=tmp_path, output_extension=".eeg")
+            HilbertWriterParams(bids_root=tmp_path, output_format="brainvision")
         )
         writer.write(result)
 

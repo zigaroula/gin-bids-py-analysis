@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from joblib import Parallel, delayed
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 import multiprocessing as mp
 
 from gin_bids_py_analysis.bids.file import BIDSFile
@@ -51,7 +51,10 @@ class BaseWriterParams(BaseModel):
     - ``pipeline_label`` — becomes ``desc-<label>`` in the output filename.
     - ``output_modality`` — BIDS modality of the output file.
     - ``output_suffix`` — BIDS suffix of the output file.
-    - ``output_extension`` — file extension including the leading dot.
+    - ``output_format`` — human-readable format name declared by each concrete
+      subclass (e.g. ``"hdf5"`` or ``"brainvision"``).  Concrete subclasses
+      can override :attr:`output_extension` as a ``@computed_field`` that
+      maps their allowed format names to file extensions.
     """
 
     bids_root: Path
@@ -59,7 +62,21 @@ class BaseWriterParams(BaseModel):
     output_modality: str
     output_suffix: str
     output_description: str
-    output_extension: str
+    output_format: str
+
+
+    @computed_field
+    @property
+    def output_extension(self) -> str:
+        """File extension derived from ``output_format``.  Can be overridden by subclasses."""
+        if self.output_format == "hdf5":
+            return ".h5"
+        elif self.output_format == "tsv":
+            return ".tsv"
+        elif self.output_format == "brainvision":
+            return ".vhdr"
+        else:
+            raise ValueError(f"Unsupported output_format: {self.output_format}")
 
 
 @dataclass

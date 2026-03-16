@@ -162,3 +162,34 @@ def build_montage(
 
     montaged_data = np.stack(out_rows, axis=0)
     return montaged_data, out_names
+
+
+def select_channels_for_montage(
+    data: np.ndarray,
+    channel_names: list[str],
+    selected_names: list[str] | None,
+) -> tuple[np.ndarray, list[str]]:
+    """Subset *data* and *channel_names* using the same row indices.
+
+    The selection preserves the original file order rather than the order of
+    *selected_names*.  This keeps channel adjacency intact for bipolar montage
+    construction and prevents name/data mismatches when only a subset of
+    channels should be processed.
+    """
+    if not selected_names:
+        return data, list(channel_names)
+
+    selected_lookup = set(selected_names)
+    keep_indices = [
+        idx for idx, name in enumerate(channel_names)
+        if name in selected_lookup
+    ]
+
+    if not keep_indices:
+        raise ValueError(
+            "channels_for_montage did not match any input channels: "
+            f"{selected_names!r}"
+        )
+
+    return data[keep_indices, :], [channel_names[idx] for idx in keep_indices]
+
