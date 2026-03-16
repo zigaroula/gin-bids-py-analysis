@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from enum import Enum
 
@@ -167,7 +168,7 @@ def build_montage(
 def select_channels_for_montage(
     data: np.ndarray,
     channel_names: list[str],
-    selected_names: list[str] | None,
+    selected_names: list[str] | str | re.Pattern[str] | None,
 ) -> tuple[np.ndarray, list[str]]:
     """Subset *data* and *channel_names* using the same row indices.
 
@@ -175,21 +176,62 @@ def select_channels_for_montage(
     *selected_names*.  This keeps channel adjacency intact for bipolar montage
     construction and prevents name/data mismatches when only a subset of
     channels should be processed.
+
+    Three selection modes are supported:
+
+    * ``None`` — no filtering; all channels are returned unchanged.
+    * ``list[str]`` — exact-name allowlist; only channels whose names appear
+      in the list are kept (existing behaviour).
+    * ``str`` or ``re.Pattern[str]`` — regular-expression filter; each channel
+      name is tested with :func:`re.fullmatch` against the pattern.  Use this
+      to select channels by convention, e.g. ``r"[A-Za-z]p?([1-9]|1[0-9])"``.
+
+    Args:
+        data:           2-D array of shape ``[n_channels, n_samples]``.
+        channel_names:  Channel names matching the rows of *data*.
+        selected_names: Allowlist, regex pattern, or ``None``.
+
+    Returns:
+        ``(subset_data, subset_names)`` in original file order.
+
+    Raises:
+        ValueError: If no channel matched the provided list or pattern.
     """
-    if not selected_names:
+    if selected_names is None:
         return data, list(channel_names)
 
-    selected_lookup = set(selected_names)
-    keep_indices = [
-        idx for idx, name in enumerate(channel_names)
-        if name in selected_lookup
-    ]
-
-    if not keep_indices:
-        raise ValueError(
-            "channels_for_montage did not match any input channels: "
-            f"{selected_names!r}"
+    if isinstance(selected_names, (str, re.Pattern)):
+        pattern = (
+            re.compile(selected_names)
+            if isinstance(selected_names, str)
+            else selected_names
         )
+        keep_indices = [
+            idx
+            for idx, name in enumerate(channel_names)
+            if pattern.fullmatch(name)
+        ]
+        if not keep_indices:
+            raise ValueError(
+                "channels_for_montage pattern did not match any input channels: "
+                f"{selected_names!r}"
+            )
+    else:
+        # list[str] — exact-match allowlist (original behaviour)
+        if not selected_names:
+            return data, list(channel_names)
+
+        selected_lookup = set(selected_names)
+        keep_indices = [
+            idx for idx, name in enumerate(channel_names)
+            if name in selected_lookup
+        ]
+
+        if not keep_indices:
+            raise ValueError(
+                "channels_for_montage did not match any input channels: "
+                f"{selected_names!r}"
+            )
 
     return data[keep_indices, :], [channel_names[idx] for idx in keep_indices]
 

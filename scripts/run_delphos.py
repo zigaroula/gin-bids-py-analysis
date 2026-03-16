@@ -35,7 +35,7 @@ FILE_FILTERS = {
 
 # Algorithm parameters for detection
 PARAMS = DelphosParams(
-
+    channels_for_montage=r'[A-Z]p?([0-1][0-9])'
 )
 
 # Writer configuration for output files

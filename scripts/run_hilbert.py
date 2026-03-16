@@ -46,7 +46,8 @@ PARAMS = HilbertParams(
     smoothing_windows_ms=[0, 250, 500, 1000, 2500, 5000],
     do_downsample=True,
     do_normalize_percent=True,
-    do_smoothing=True
+    do_smoothing=True,
+    channels_for_montage=r'[A-Z]p?([0-1][0-9])'
 )
 
 WRITER_PARAMS = HilbertWriterParams(
@@ -63,7 +64,7 @@ N_JOBS = 1  # parallelism across files; set to -1 to use all available CPUs
 
 if __name__ == "__main__":
     ds = BIDSDataset(BIDS_ROOT)
-    files = ds.get_files(**FILE_FILTERS)
+    files = ds.get_files(pipeline="raw", **FILE_FILTERS)
     print(f"Found {len(files)} file(s). Running with n_jobs={N_JOBS}.")
 
     processor = HilbertProcessing(PARAMS)

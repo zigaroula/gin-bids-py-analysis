@@ -38,6 +38,7 @@ class _DummyWriterParams(BaseWriterParams):
     output_modality: str = "dummy"
     output_description: str = "dummy"
     output_suffix: str = "dummy"
+    output_format: str = "dummy"
 
     @computed_field
     @property

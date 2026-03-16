@@ -140,11 +140,14 @@ class DelphosParams(BaseProcessingParams):
         ),
     )
 
-    channels_for_montage: list[str] | None = Field(
+    channels_for_montage: list[str] | str | None = Field(
         default=None,
         description=(
-            "Optional list of channel names to keep before montage and detection. "
-            "If None, all channels are used."
+            "Channel selector applied before montage and detection. "
+            "Pass a list of exact channel names to keep, or a regex string "
+            "matched via re.fullmatch against each channel name "
+            "(e.g. r'[A-Za-z]p?([1-9]|1[0-9])' for one-letter prefix, "
+            "optional 'p', index 1-19). If None, all channels are used."
         ),
     )
 
