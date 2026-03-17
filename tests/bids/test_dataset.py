@@ -29,6 +29,13 @@ def test_get_files_entity_filter(bids_root: Path) -> None:
     assert all(f["subject"] == "01" for f in files)
 
 
+def test_get_files_accepts_scope_keyword(bids_root: Path) -> None:
+    ds = BIDSDataset(bids_root, derivatives=False)
+    files = ds.get_files(scope="raw", subject="01", suffix="ieeg")
+    assert files
+    assert all(file["subject"] == "01" for file in files)
+
+
 def test_get_subject_by_id(bids_root: Path) -> None:
     ds = BIDSDataset(bids_root, derivatives=False)
     subject = ds.get_subject("01")

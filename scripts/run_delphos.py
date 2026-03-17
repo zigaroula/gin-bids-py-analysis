@@ -52,7 +52,7 @@ N_JOBS = 1  # parallelism across files; set to -1 to use all available CPUs
 
 if __name__ == "__main__":
     ds = BIDSDataset(BIDS_ROOT)
-    files = ds.get_files(pipeline="raw", **FILE_FILTERS)
+    files = ds.get_files(scope="raw", **FILE_FILTERS)
     print(f"Found {len(files)} file(s). Running with n_jobs={N_JOBS}.")
 
     processor = DelphosProcessing(PARAMS)

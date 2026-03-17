@@ -107,6 +107,19 @@ def test_writer_returns_path(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
     assert isinstance(out, Path)
 
 
+def test_writer_uses_output_entities_override(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
+    writer = _dummy_writer(tmp_path)
+    result = _DummyResult(
+        source_group=BIDSFileGroup(primary=mock_bids_file),
+        output_entities={"subject": "01", "task": "rest"},
+    )
+
+    out = writer.write(result)
+
+    assert "run-" not in out.name
+    assert "ses-" not in str(out.parent)
+
+
 def test_run_writes_and_returns_paths(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
     groups = [BIDSFileGroup(primary=mock_bids_file), BIDSFileGroup(primary=mock_bids_file)]
     paths = _DummyProcessor().run(groups, _dummy_writer(tmp_path))

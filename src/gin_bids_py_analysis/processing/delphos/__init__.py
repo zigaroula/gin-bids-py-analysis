@@ -10,6 +10,8 @@ Public API:
     - MontageMode, BipolarDirection, BipolarStorage: Montage configuration
 """
 
+__version__ = "0.1.0"
+
 from gin_bids_py_analysis.processing.utils.channels import (
     BipolarDirection,
     BipolarStorage,

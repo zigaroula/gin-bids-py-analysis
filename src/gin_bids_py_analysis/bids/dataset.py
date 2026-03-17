@@ -27,10 +27,10 @@ class BIDSDataset:
 
         ds = BIDSDataset("/data/my_study")  # includes derivatives by default
         files = ds.get_files(subject="01", suffix="ieeg")
-        raw_files = ds.get_files(pipeline="raw", subject="01", suffix="ieeg")
-        hilbert_files = ds.get_files(pipeline="hilbert", suffix="timeseries")
+        raw_files = ds.get_files(scope="raw", subject="01", suffix="ieeg")
+        hilbert_files = ds.get_files(scope="hilbert", suffix="timeseries")
         subjects = ds.get_subjects()
-        raw_subjects = ds.get_subjects(pipeline="raw")
+        raw_subjects = ds.get_subjects(scope="raw")
     """
 
     def __init__(
@@ -54,55 +54,57 @@ class BIDSDataset:
     def root(self) -> Path:
         return self._root
 
-    def get_files(self, pipeline: str | None = None, **entities: Any) -> list[BIDSFile]:
+    def get_files(self, **entities: Any) -> list[BIDSFile]:
         """
         Return all :class:`BIDSFile` objects matching the given entity filters.
 
-        Any BIDS entity key is valid.
+        Any BIDS entity key accepted by :meth:`pybids.BIDSLayout.get` is valid,
+        including ``scope``.
 
         Args:
-            pipeline:   Restrict results to a specific data source. Pass ``"raw"``
-                        for source data only, a derivative pipeline name (e.g.
-                        ``"hilbert"``) for a specific derivative, or ``None``
-                        (default) to query across all sources.
             **entities: BIDS entity filters (e.g. ``subject="01"``,
-                        ``suffix="ieeg"``).
+                        ``suffix="ieeg"``, ``scope="hilbert"``).
 
         Example::
 
             dataset.get_files(subject="01", suffix="ieeg", extension=".vhdr")
-            dataset.get_files(pipeline="raw", subject="01", suffix="ieeg")
-            dataset.get_files(pipeline="hilbert", suffix="timeseries")
+            dataset.get_files(scope="raw", subject="01", suffix="ieeg")
+            dataset.get_files(scope="hilbert", suffix="timeseries")
         """
-        scope_kwargs = {"scope": pipeline} if pipeline is not None else {}
-        raw = self._layout.get(**entities, return_type="object", **scope_kwargs)
+        raw = self._layout.get(return_type="object", **entities)
         return [BIDSFile(f) for f in raw]
 
-    def get_subjects(self, pipeline: str | None = None) -> list[BIDSSubject]:
+    def get_subjects(self, **entities: Any) -> list[BIDSSubject]:
         """
         Return one :class:`BIDSSubject` per participant found in the dataset.
 
         Args:
-            pipeline:   Restrict to subjects that have files in the given
-                        pipeline. See :meth:`get_files` for accepted values.
+            **entities: Filters forwarded to the subject lookup. This accepts the
+                        same query keys as :meth:`get_files`, including
+                        ``scope``.
         """
-        scope_kwargs = {"scope": pipeline} if pipeline is not None else {}
-        subject_ids = self._layout.get_subjects(**scope_kwargs)
+        subject_ids = self._layout.get(return_type="id", target="subject", **entities)
         return [
-            BIDSSubject(subject_id=sid, files=self.get_files(subject=sid, pipeline=pipeline))
+            BIDSSubject(
+                subject_id=sid,
+                files=self.get_files(**{**entities, "subject": sid}),
+            )
             for sid in subject_ids
         ]
 
-    def get_subject(self, subject_id: str, pipeline: str | None = None) -> BIDSSubject:
+    def get_subject(self, subject_id: str, **entities: Any) -> BIDSSubject:
         """
         Return a single :class:`BIDSSubject` by participant ID.
 
         Args:
             subject_id: Participant label (without ``sub-`` prefix).
-            pipeline:   Restrict the subject's files to the given pipeline.
-                        See :meth:`get_files` for accepted values.
+            **entities: Filters forwarded to :meth:`get_files`, including
+                        ``scope``.
         """
-        return BIDSSubject(subject_id=subject_id, files=self.get_files(subject=subject_id, pipeline=pipeline))
+        return BIDSSubject(
+            subject_id=subject_id,
+            files=self.get_files(**{**entities, "subject": subject_id}),
+        )
 
     # ------------------------------------------------------------------
     # Passthrough

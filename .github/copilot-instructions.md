@@ -33,7 +33,8 @@ src/gin_bids_py_analysis/
 `- processing/
    |- base.py           shared processor / writer framework
    |- utils/
-   |  `- channels.py    shared mono / bipolar montage enums and helpers
+   |  |- channels.py    shared mono / bipolar montage enums and helpers
+   |  `- events.py      shared BrainVision / annotation normalization helpers
    |- hilbert/          reference end-to-end processing subpackage
    |  |- __init__.py    public re-exports
    |  |- dsp.py         pure numerical pipeline, no file I/O
@@ -42,6 +43,14 @@ src/gin_bids_py_analysis/
    |  |- processor.py   BIDS/MNE orchestration only
    |  |- result.py      `HilbertProcessingResult`
    |  `- writer.py      HDF5 + BrainVision output
+   |- trial_stats/      subject-level trial comparison on Hilbert derivatives
+   |  |- __init__.py    public re-exports
+   |  |- params.py      `TrialStatsParams` + `TrialStatsWriterParams`
+   |  |- resolver.py    trial-label interface plus a table-based adapter
+   |  |- stats.py       pure epoch extraction + statistical helpers
+   |  |- processor.py   grouped Hilbert loading and subject-level orchestration
+   |  |- result.py      `TrialStatsProcessingResult`
+   |  `- writer.py      HDF5 stats output + TSV trial audit table
    `- delphos/          detector code not yet refactored to the full processing pattern
 scripts/                edit-and-run scripts for local workflows
 tests/                  pytest suite mirroring `src/`
@@ -77,6 +86,7 @@ tests/                  pytest suite mirroring `src/`
 | `BaseProcessingWriter` | `base.py` | Abstract writer. `write(result)` builds the BIDS derivative path and delegates serialization to `_write_data(result, output_path)`. |
 | `BaseWriterParams` | `base.py` | Pydantic v2 base for writer configuration. Includes `bids_root`, `pipeline_label`, `output_modality`, `output_description`, `output_suffix`. Subclasses declare `output_format` (a `Literal` type) and override `output_extension` as a `@computed_field`. |
 | `MontageMode`, `BipolarDirection`, `BipolarStorage`, `build_montage` | `processing/utils/channels.py` | Shared channel re-referencing utilities for analyses that work on raw or derived channel montages. |
+| `AnnotationEvent`, `coerce_annotation_events`, `parse_annotation_description` | `processing/utils/events.py` | Shared annotation normalization helpers used when BrainVision markers or MNE annotations need to be parsed once and reused across analyses. |
 
 ### `processing/hilbert/` as the reference implementation
 
@@ -90,6 +100,18 @@ Use `processing/hilbert/` as the model for new processings.
 | `processor.py` | Loads data, subsets channels, forwards pure arrays into pure-computation helpers, and assembles a result object. |
 | `result.py` | Carries processed arrays plus the metadata and source information writers need. |
 | `writer.py` | Dispatches on `output_format` (via the computed `output_extension`) and serializes one result into one or more derivative files. |
+
+### `processing/trial_stats/`
+
+This package is the reference pattern for grouped downstream analyses on derivatives.
+
+| Module | Responsibility |
+|---|---|
+| `params.py` | Defines statistical windowing, condition names, and writer routing. |
+| `resolver.py` | Declares the task-specific trial-label interface and a table-based adapter. |
+| `stats.py` | Holds pure epoch extraction and per-condition statistical helpers. |
+| `processor.py` | Loads grouped Hilbert derivatives, resolves trial labels, pools trials, and assembles one subject-level result. |
+| `writer.py` | Writes one HDF5 stats file plus a TSV audit table of resolved trials. |
 
 ---
 
@@ -124,6 +146,9 @@ Use `processing/hilbert/` as the model for new processings.
 
 8. Result objects must carry writer-relevant metadata.
    Follow the Hilbert pattern: include processed arrays, channel labels, sampling frequencies, algorithm metadata, and any source annotations or events needed for later export. Writers should not have to reload the raw recording to recover metadata they can receive in the result.
+
+8a. Grouped analyses may override output entities.
+   `BaseProcessingResult.output_entities` can be populated by processors that aggregate across multiple files. When present, the base writer uses these entities instead of the primary file entities when constructing the derivative output path.
 
 9. Writers may support multiple output formats.
    Each concrete `BaseWriterParams` subclass declares an `output_format` field (a `Literal` type enumerating valid format names) and overrides `output_extension` as a `@computed_field` that maps those names to file extensions. `_write_data()` may fan out into multiple files derived from the same `output_path`, but path construction itself remains the base writer's job.

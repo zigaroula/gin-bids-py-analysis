@@ -7,13 +7,13 @@ from typing import Any
 import h5py
 import mne
 import numpy as np
-import pybv
 
 from gin_bids_py_analysis.bids.helpers import modify_entities
 from gin_bids_py_analysis.processing.base import (
     BaseProcessingResult,
     BaseProcessingWriter,
 )
+from gin_bids_py_analysis.processing.utils.events import coerce_annotation_events
 
 from .result import HilbertProcessingResult
 
@@ -39,32 +39,18 @@ def _downsample_events(original_events: mne.Annotations | Any, downsampled_fs: f
         return None
 
     downsampled_events = []
-    for ann in original_events:
-        full_desc: str = ann["description"]
-
-        # MNE encodes BrainVision markers as "Type/Description" (e.g. "Stimulus/S  1").
-        # Split on the first "/" to recover the BrainVision type and description fields.
-        if "/" in full_desc:
-            ann_type, ann_desc = full_desc.split("/", 1)
-        else:
-            ann_type, ann_desc = "Stimulus", full_desc
-
-        # pybv requires description to be an int for Stimulus/Response markers.
-        # MNE formats them as "S  1" or "R  2" — strip the leading letter and whitespace.
+    for ann in coerce_annotation_events(original_events):
         description: int | str
-        if ann_type in ("Stimulus", "Response"):
-            numeric_part = ann_desc.lstrip("SRsr").strip()
-            try:
-                description = int(numeric_part)
-            except ValueError:
-                # Non-numeric: fall back to Comment type so pybv accepts a string.
-                ann_type = "Comment"
-                description = ann_desc
+        ann_type = ann.event_type
+        if ann_type in ("Stimulus", "Response") and ann.code is not None:
+            description = int(ann.code)
         else:
-            description = ann_desc  # Comment / unknown — string is fine
+            if ann_type in ("Stimulus", "Response"):
+                ann_type = "Comment"
+            description = ann.description
 
-        onset_samples = round(ann["onset"] * downsampled_fs)
-        duration_samples = round(ann["duration"] * downsampled_fs)
+        onset_samples = round(ann.onset_s * downsampled_fs)
+        duration_samples = round(ann.duration_s * downsampled_fs)
 
         downsampled_events.append(
             {
@@ -280,6 +266,13 @@ class HilbertProcessingWriter(BaseProcessingWriter):
             raise TypeError(
                 f"Expected HilbertProcessingResult, got {type(result).__name__!r}"
             )
+
+        try:
+            import pybv
+        except ImportError as exc:
+            raise ImportError(
+                "pybv is required for BrainVision output. Install it with: pip install pybv"
+            ) from exc
 
         events = _downsample_events(result.original_events, result.downsampled_fs)
 

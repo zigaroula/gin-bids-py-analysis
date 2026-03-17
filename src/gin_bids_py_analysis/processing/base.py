@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
+import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from joblib import Parallel, delayed
 from pydantic import BaseModel, computed_field
@@ -98,6 +102,7 @@ class BaseProcessingResult(ABC):
 
     source_group: BIDSFileGroup
     metadata: dict[str, Any] = field(default_factory=dict)
+    output_entities: dict[str, Any] | None = None
 
 
 class BaseProcessingWriter(ABC):
@@ -142,9 +147,15 @@ class BaseProcessingWriter(ABC):
         primary = result.source_group.primary
         entities = {
             k: v
-            for k, v in primary.entities.items()
+            for k, v in (
+                result.output_entities
+                if result.output_entities is not None
+                else primary.entities
+            ).items()
             if k not in _PROVENANCE_ENTITIES
         }
+        entities.pop("desc", None)
+        entities.pop("description", None)
         entities["desc"] = self.params.output_description
 
         output_path = build_bids_path(
@@ -177,12 +188,12 @@ class BaseProcessingWriter(ABC):
         derivatives_root.mkdir(parents=True, exist_ok=True)
 
         try:
-            pkg_version = version("gin-bids-py-analysis")
+            pkg_version = version(self.params.pipeline_label)
         except PackageNotFoundError:
             pkg_version = "unknown"
 
         generated_by: dict[str, Any] = {
-            "Name": "gin-bids-py-analysis",
+            "Name": self.params.pipeline_label,
             "Version": pkg_version,
         }
         if processing_params is not None:
@@ -292,13 +303,22 @@ class BaseProcessing(ABC):
         for pos in range(n_jobs):
             position_queue.put(pos)
 
-        def _process(g: BIDSFileGroup) -> Path:
+        def _process(g: BIDSFileGroup) -> BaseProcessingResult | None:
             pos = position_queue.get()  # Get a position for this worker
-            result = self.process_group(g, progress_tracking_position=pos)
-            position_queue.put(pos)  # Return the position to the queue
-            return result
-        
-        return Parallel(n_jobs=n_jobs)(delayed(_process)(g) for g in coerced)
+            try:
+                return self.process_group(g, progress_tracking_position=pos)
+            except Exception:
+                logger.error(
+                    "Error processing group %s — skipping.\n%s",
+                    g.primary.path,
+                    traceback.format_exc(),
+                )
+                return None
+            finally:
+                position_queue.put(pos)  # Return the position to the queue
+
+        results = Parallel(n_jobs=n_jobs)(delayed(_process)(g) for g in coerced)
+        return [r for r in results if r is not None]
 
     def run(
         self,
@@ -334,11 +354,20 @@ class BaseProcessing(ABC):
         for pos in range(n_jobs):
             position_queue.put(pos)
 
-        def _process_and_write(g: BIDSFileGroup) -> Path:
+        def _process_and_write(g: BIDSFileGroup) -> Path | None:
             pos = position_queue.get()  # Get a position for this worker
-            result = self.process_group(g, progress_tracking_position=pos)
-            path = writer.write(result)
-            position_queue.put(pos)  # Return the position to the queue
-            return path
+            try:
+                result = self.process_group(g, progress_tracking_position=pos)
+                return writer.write(result)
+            except Exception:
+                logger.error(
+                    "Error processing group %s — skipping.\n%s",
+                    g.primary.path,
+                    traceback.format_exc(),
+                )
+                return None
+            finally:
+                position_queue.put(pos)  # Return the position to the queue
 
-        return Parallel(n_jobs=n_jobs)(delayed(_process_and_write)(g) for g in coerced)
+        paths = Parallel(n_jobs=n_jobs)(delayed(_process_and_write)(g) for g in coerced)
+        return [p for p in paths if p is not None]
