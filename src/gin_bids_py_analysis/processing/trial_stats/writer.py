@@ -118,6 +118,25 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
                 "significance_alpha",
                 data=float(result.significance_alpha),
             )
+            meta_grp.create_dataset(
+                "analysis_level",
+                data=str(result.analysis_level),
+                dtype=str_dtype,
+            )
+            meta_grp.create_dataset(
+                "atlas_name",
+                data=str(result.atlas_name or ""),
+                dtype=str_dtype,
+            )
+            meta_grp.create_dataset(
+                "atlas_regions",
+                data=np.array(result.atlas_regions, dtype=object),
+                dtype=str_dtype,
+            )
+            meta_grp.create_dataset(
+                "temporal_window_ms",
+                data=float(result.temporal_window_ms),
+            )
             meta_grp.create_dataset("stats_valid", data=bool(result.stats_valid))
 
             trial_grp = fh.create_group("trials")
@@ -185,6 +204,11 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             prov_grp.create_dataset(
                 "source_table_files",
                 data=np.array(result.source_table_files, dtype=object),
+                dtype=str_dtype,
+            )
+            prov_grp.create_dataset(
+                "source_electrodes_files",
+                data=np.array(result.source_electrodes_files, dtype=object),
                 dtype=str_dtype,
             )
             prov_grp.create_dataset(

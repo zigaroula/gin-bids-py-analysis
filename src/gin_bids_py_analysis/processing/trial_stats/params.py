@@ -52,6 +52,28 @@ class TrialStatsParams(BaseProcessingParams):
             "the significance mask."
         ),
     )
+    atlas_name: str | None = Field(
+        default=None,
+        description=(
+            "Column name in *_electrodes.tsv used to group channels into ROI regions. "
+            "When unset, statistics are computed channel-by-channel."
+        ),
+    )
+    atlas_regions: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional subset of atlas region labels to include. "
+            "Used only when atlas_name is set."
+        ),
+    )
+    temporal_window_ms: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Temporal bin size in milliseconds. "
+            "0 keeps sample-by-sample testing; >0 averages non-overlapping bins before stats."
+        ),
+    )
 
     @field_validator("anchor_event_codes", mode="before")
     @classmethod
@@ -62,6 +84,16 @@ class TrialStatsParams(BaseProcessingParams):
             return [str(value)]
         return [str(item) for item in value]
 
+    @field_validator("atlas_regions", mode="before")
+    @classmethod
+    def _coerce_atlas_regions(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            cleaned = value.strip()
+            return [cleaned] if cleaned else []
+        return [str(item).strip() for item in value if str(item).strip()]
+
     @model_validator(mode="after")
     def _check_window_and_labels(self) -> "TrialStatsParams":
         if not self.anchor_event_codes:
@@ -70,6 +102,10 @@ class TrialStatsParams(BaseProcessingParams):
             raise ValueError("tmax_s must be greater than tmin_s.")
         if self.condition_a == self.condition_b:
             raise ValueError("condition_a and condition_b must be different.")
+        if self.atlas_name is not None:
+            self.atlas_name = self.atlas_name.strip() or None
+        if self.atlas_regions and not self.atlas_name:
+            raise ValueError("atlas_regions requires atlas_name to be set.")
         return self
 
 

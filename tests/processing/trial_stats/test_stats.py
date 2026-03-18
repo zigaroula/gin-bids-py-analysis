@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from gin_bids_py_analysis.processing.trial_stats.resolver import ResolvedTrial
+from gin_bids_py_analysis.processing.trial_stats.params import TrialStatsParams
 from gin_bids_py_analysis.processing.trial_stats.stats import (
     compute_condition_statistics,
     correct_p_values,
@@ -96,3 +97,13 @@ def test_correct_p_values_fdr_bh_and_bonferroni() -> None:
     )
     np.testing.assert_allclose(none[0, :4], raw[0, :4])
     assert np.isnan(fdr[0, 4])
+
+
+def test_trial_stats_params_rejects_atlas_regions_without_atlas_name() -> None:
+    with pytest.raises(ValueError, match="atlas_regions requires atlas_name"):
+        TrialStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.1,
+            atlas_regions=["R1"],
+        )

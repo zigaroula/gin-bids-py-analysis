@@ -26,13 +26,14 @@ BIDS_ROOT = Path(r"E:\CBT\bids")
 IEEG_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    "desc": "gammasm0",
+    "desc": "gammasm500",
 }
 
 # Optional secondary tables used by the task-specific resolver.
 # Adjust these filters to match where your events/behaviour tables live.
 SECONDARY_FILTERS = [
-    {"datatype": "beh", "suffix": "beh", "extension": ".tsv"},
+    {"scope": "raw", "datatype": "beh", "suffix": "beh", "extension": ".tsv"},
+    {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
 ]
 
 PARAMS = TrialStatsParams(
@@ -41,10 +42,9 @@ PARAMS = TrialStatsParams(
     tmax_s=6.0,
     condition_a="accepted",
     condition_b="rejected",
-    min_trials_per_condition=2,
-    drop_partial_epochs=True,
-    equal_var=False,
-    p_value_correction_method="fdr_bh",  # Set to "none" to disable correction
+    atlas_name="MarsAtlas",
+    temporal_window_ms=100.0,
+    p_value_correction_method="fdr_bh",
     significance_alpha=0.05,
 )
 

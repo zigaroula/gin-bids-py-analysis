@@ -70,6 +70,11 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         ],
         source_ieeg_files=[str(primary.path)],
         source_table_files=[str(tmp_path / "labels.tsv")],
+        source_electrodes_files=[str(tmp_path / "electrodes.tsv")],
+        analysis_level="roi",
+        atlas_name="atlasA",
+        atlas_regions=["R1", "R2"],
+        temporal_window_ms=100.0,
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
         stats_valid=True,
@@ -100,7 +105,12 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         assert list(fh["meta"]["trial_counts"][:]) == [4, 4]
         assert fh["meta"]["p_value_correction_method"].asstr()[()] == "fdr_bh"
         assert float(fh["meta"]["significance_alpha"][()]) == 0.05
+        assert fh["meta"]["analysis_level"].asstr()[()] == "roi"
+        assert fh["meta"]["atlas_name"].asstr()[()] == "atlasA"
+        assert list(fh["meta"]["atlas_regions"].asstr()[:]) == ["R1", "R2"]
+        assert float(fh["meta"]["temporal_window_ms"][()]) == 100.0
         assert list(fh["provenance"]["source_ieeg_files"].asstr()[:]) == [str(primary.path)]
+        assert list(fh["provenance"]["source_electrodes_files"].asstr()[:]) == [str(tmp_path / "electrodes.tsv")]
 
     lines = trial_table_path.read_text(encoding="utf-8").strip().splitlines()
     assert lines[0].startswith("source_file\tanchor_event_index")
