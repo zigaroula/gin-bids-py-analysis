@@ -43,7 +43,7 @@ class _FakeRaw:
 
 
 class _FixedResolver:
-    def resolve_trials(self, group, hilbert_file, anchor_events):
+    def resolve_trials(self, group, ieeg_file, anchor_events):
         del group
         label_lookup = {
             ("1", 0): "accepted",
@@ -53,18 +53,18 @@ class _FixedResolver:
         }
         return [
             ResolvedTrial(
-                source_file=hilbert_file,
+                source_file=ieeg_file,
                 anchor_event_index=index,
                 anchor_event_code=event.code,
                 anchor_onset_s=event.onset_s,
                 anchor_duration_s=event.duration_s,
-                label=label_lookup[(hilbert_file.get("run"), index)],
+                label=label_lookup[(ieeg_file.get("run"), index)],
             )
             for index, event in enumerate(anchor_events)
         ]
 
 
-def test_process_group_pools_multiple_hilbert_files_and_sets_shared_output_entities(
+def test_process_group_pools_multiple_ieeg_files_and_sets_shared_output_entities(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -136,4 +136,4 @@ def test_process_group_pools_multiple_hilbert_files_and_sets_shared_output_entit
     }
     assert result.stats_valid is True
     assert np.all(result.mean_difference > 0)
-    assert len(result.source_hilbert_files) == 2
+    assert len(result.source_ieeg_files) == 2

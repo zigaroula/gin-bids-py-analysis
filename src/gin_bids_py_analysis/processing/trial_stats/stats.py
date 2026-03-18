@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import Literal
 
 import numpy as np
 from scipy.stats import ttest_ind
@@ -119,6 +120,41 @@ def compute_condition_statistics(
     t_values = np.asarray(stats.statistic, dtype=np.float64)
     p_values = np.asarray(stats.pvalue, dtype=np.float64)
     return t_values, p_values, mean_a, mean_b, mean_difference
+
+
+def correct_p_values(
+    p_values: np.ndarray,
+    *,
+    method: Literal["none", "fdr_bh", "bonferroni"] = "fdr_bh",
+) -> np.ndarray:
+    """Apply a multiple-comparisons correction to p-values."""
+    corrected = np.asarray(p_values, dtype=np.float64).copy()
+    finite_mask = np.isfinite(corrected)
+    if not finite_mask.any() or method == "none":
+        return corrected
+
+    flat = corrected[finite_mask]
+    n_tests = flat.size
+
+    if method == "bonferroni":
+        corrected[finite_mask] = np.minimum(flat * n_tests, 1.0)
+        return corrected
+
+    if method == "fdr_bh":
+        order = np.argsort(flat)
+        ranked = flat[order]
+        ranks = np.arange(1, n_tests + 1, dtype=np.float64)
+
+        adjusted = ranked * (n_tests / ranks)
+        adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
+        adjusted = np.clip(adjusted, 0.0, 1.0)
+
+        flat_corrected = np.empty_like(flat)
+        flat_corrected[order] = adjusted
+        corrected[finite_mask] = flat_corrected
+        return corrected
+
+    raise ValueError(f"Unsupported p-value correction method: {method!r}")
 
 
 def _sample_offsets(sfreq: float, tmin_s: float, tmax_s: float) -> np.ndarray:

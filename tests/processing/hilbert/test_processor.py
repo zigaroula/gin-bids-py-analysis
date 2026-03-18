@@ -258,6 +258,64 @@ class TestHilbertProcessingChannelSelection:
         assert captured["fs"] == fs
         assert result.channel_names == ["B1", "B2"]
 
+    def test_process_group_applies_exclusion_after_inclusion(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        mock_bids_file,
+    ) -> None:
+        fs = 1000.0
+        n_samples = 32
+        data = np.vstack([
+            np.full(n_samples, fill_value=row_idx, dtype=np.float32)
+            for row_idx in range(5)
+        ])
+        ch_names = ["A1", "A2", "A3", "B1", "B2"]
+        raw = _FakeRaw(data, ch_names, fs)
+        captured: dict[str, np.ndarray | list[str] | float] = {}
+
+        def fake_load_ieeg(_):
+            return raw
+
+        def fake_process_all_channels(
+            data_2d: np.ndarray,
+            channel_names: list[str],
+            fs: float,
+            params: HilbertParams,
+            **_: object,
+        ):
+            captured["data"] = data_2d.copy()
+            captured["channel_names"] = list(channel_names)
+            captured["fs"] = fs
+            return (
+                {0: np.zeros((len(channel_names), data_2d.shape[1]), dtype=np.float32)},
+                list(channel_names),
+                [50.0, 60.0],
+            )
+
+        monkeypatch.setattr(processor_module, "load_ieeg", fake_load_ieeg)
+        monkeypatch.setattr(processor_module, "process_all_channels", fake_process_all_channels)
+
+        params = HilbertParams(
+            f_min=50,
+            f_max=60,
+            f_step=10,
+            montage_mode=MontageMode.MONO,
+            smoothing_windows_ms=[0],
+            downsampled_frequency_hz=None,
+            normalization_mode=NormalizationMode.NONE,
+            channels_for_montage=["A1", "A2", "A3", "B1"],
+            channels_to_exclude_for_montage=["A2", "B1"],
+        )
+
+        result = processor_module.HilbertProcessing(params).process_group(
+            BIDSFileGroup(primary=mock_bids_file)
+        )
+
+        np.testing.assert_array_equal(captured["data"], data[[0, 2], :])
+        assert captured["channel_names"] == ["A1", "A3"]
+        assert captured["fs"] == fs
+        assert result.channel_names == ["A1", "A3"]
+
     def test_process_group_raises_when_no_requested_channel_matches(
         self,
         monkeypatch: pytest.MonkeyPatch,

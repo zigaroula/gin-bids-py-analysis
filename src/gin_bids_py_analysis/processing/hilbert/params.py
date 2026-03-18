@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from enum import Enum
 from typing import Literal
@@ -16,13 +16,13 @@ from gin_bids_py_analysis.processing.utils.channels import (
 class NormalizationMode(str, Enum):
     """Normalization applied to the Hilbert-band envelope after downsampling.
 
-    * ``NONE`` — no normalization; output unit is signal amplitude.
-    * ``PERCENT`` — express as percentage of mid-recording baseline
-      (baseline = mean of middle 50% of the signal; baseline region → 100).
-    * ``PERCENT_CENTERED`` — same as ``PERCENT``, then subtract 100 so the
-      baseline region is centred at 0 instead of 100.
-    * ``DB`` — express in decibels relative to mid-recording baseline:
-      ``20 * log10(amplitude / baseline)``; baseline region → 0 dB.
+    * ``NONE`` - no normalization; output unit is signal amplitude.
+    * ``PERCENT`` - express as percentage of mid-recording baseline
+      (baseline = mean of middle 50% of the signal; baseline region -> 100).
+    * ``PERCENT_CENTERED`` - same as ``PERCENT``, then subtract 100 so the
+      baseline region is centered at 0 instead of 100.
+    * ``DB`` - express in decibels relative to mid-recording baseline:
+      ``20 * log10(amplitude / baseline)``; baseline region -> 0 dB.
     """
 
     NONE = "none"
@@ -55,7 +55,7 @@ class NormalizationMode(str, Enum):
         """Multiplicative scale applied to data before BrainVision export.
 
         BrainVision conventions expect µV; for amplitude data the raw MNE
-        values are in V so we multiply by 1e-6 to convert.  Normalized
+        values are in V so we multiply by 1e-6 to convert. Normalized
         outputs (percent, dB) are dimensionless and require no scaling.
         """
         return 1e-6 if self == NormalizationMode.NONE else 1.0
@@ -72,22 +72,21 @@ class NormalizationMode(str, Enum):
 
 
 class HilbertParams(BaseProcessingParams):
-    """
-    Parameters for the Hilbert-band envelope pipeline.
+    """Parameters for the Hilbert-band envelope pipeline.
 
     Frequency bands are defined implicitly by a uniform grid of bin edges:
-    ``[f_min, f_min+f_step, f_min+2·f_step, …, f_max]``.  Adjacent bin
+    ``[f_min, f_min+f_step, f_min+2*f_step, ..., f_max]``. Adjacent bin
     pairs form the subbands that are band-pass filtered, e.g. bins
     ``[50, 60, 70]`` produce two subbands: 50-60 Hz and 60-70 Hz.
 
-    If the highest bin exceeds the Nyquist frequency (``fs/2``) the grid is
+    If the highest bin exceeds the Nyquist frequency (``fs/2``), the grid is
     silently clamped (Shannon clamp) before processing.
 
     Example::
 
         params = HilbertParams(f_min=50, f_max=150, f_step=10)
-        # → bins [50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]
-        # → subbands 50-60, 60-70, …, 140-150
+        # -> bins [50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]
+        # -> subbands 50-60, 60-70, ..., 140-150
     """
 
     # ------------------------------------------------------------------
@@ -106,9 +105,9 @@ class HilbertParams(BaseProcessingParams):
         default=64.0,
         gt=0,
         description=(
-            "Target sampling rate for the envelope output in Hz.  "
+            "Target sampling rate for the envelope output in Hz. "
             "``scipy.signal.resample_poly`` is used to achieve the exact target rate "
-            "with anti-aliasing.  Set to ``None`` to skip downsampling and keep the "
+            "with anti-aliasing. Set to ``None`` to skip downsampling and keep the "
             "envelopes at the original recording sampling rate."
         ),
     )
@@ -124,14 +123,14 @@ class HilbertParams(BaseProcessingParams):
     bipolar_direction: BipolarDirection = Field(
         default=BipolarDirection.NEXT_MINUS_PREVIOUS,
         description=(
-            "Which contact is subtracted from which.  "
+            "Which contact is subtracted from which. "
             "Only used when ``montage_mode`` is ``BIPOLAR``."
         ),
     )
     bipolar_storage: BipolarStorage = Field(
         default=BipolarStorage.PREVIOUS,
         description=(
-            "Naming convention for the derived bipolar channel.  "
+            "Naming convention for the derived bipolar channel. "
             "Only used when ``montage_mode`` is ``BIPOLAR``."
         ),
     )
@@ -142,7 +141,16 @@ class HilbertParams(BaseProcessingParams):
             "Pass a list of exact channel names to keep, or a regex string "
             "matched via ``re.fullmatch`` against each channel name "
             "(e.g. ``r'[A-Za-z]p?([1-9]|1[0-9])'`` for one-letter prefix, "
-            "optional 'p', index 1–19). If ``None``, all channels are used."
+            "optional 'p', index 1-19). If ``None``, all channels are used."
+        ),
+    )
+    channels_to_exclude_for_montage: list[str] | str | None = Field(
+        default=None,
+        description=(
+            "Channel selector applied after ``channels_for_montage`` and "
+            "before montage/processing. Pass a list of exact channel names "
+            "to remove, or a regex string matched via ``re.fullmatch`` "
+            "against each channel name. If ``None``, no channels are excluded."
         ),
     )
 
@@ -151,7 +159,7 @@ class HilbertParams(BaseProcessingParams):
     # ------------------------------------------------------------------
 
     smoothing_windows_ms: list[int] = Field(
-        default=[0, 250, 500, 1000, 2500, 5000],
+        default=[0],
         description=(
             "Sliding-average window durations in milliseconds. ``0`` means no "
             "smoothing (identity); all other values apply ``moving_average``. "
@@ -161,14 +169,13 @@ class HilbertParams(BaseProcessingParams):
     normalization_mode: NormalizationMode = Field(
         default=NormalizationMode.PERCENT,
         description=(
-            "Normalization applied to the envelope after downsampling.  "
+            "Normalization applied to the envelope after downsampling. "
             "``PERCENT`` expresses each subband as a percentage of its middle-50%% "
             "baseline; ``PERCENT_CENTERED`` does the same and then subtracts 100 so "
             "the baseline region sits at 0; ``DB`` uses "
-            "``20·log10(amplitude / baseline)``; ``NONE`` skips normalization."
+            "``20*log10(amplitude / baseline)``; ``NONE`` skips normalization."
         ),
     )
-
 
     @model_validator(mode="after")
     def _check_frequency_range(self) -> "HilbertParams":
@@ -180,15 +187,14 @@ class HilbertParams(BaseProcessingParams):
 
 
 class HilbertWriterParams(BaseWriterParams):
-    """
-    Writer parameters for the Hilbert analysis pipeline.
+    """Writer parameters for the Hilbert analysis pipeline.
 
     Only ``bids_root`` must be supplied; all routing fields default to
-    Hilbert-appropriate values.  Use ``output_format`` to choose the output
+    Hilbert-appropriate values. Use ``output_format`` to choose the output
     backend:
 
-    * ``"hdf5"`` (default) — writes a single ``.h5`` file per recording.
-    * ``"brainvision"`` — writes one ``.vhdr`` / ``.vmrk`` / ``.eeg`` triplet
+    * ``"hdf5"`` (default) - writes a single ``.h5`` file per recording.
+    * ``"brainvision"`` - writes one ``.vhdr`` / ``.vmrk`` / ``.eeg`` triplet
       per smoothing window.
 
     Example::
@@ -207,4 +213,3 @@ class HilbertWriterParams(BaseWriterParams):
         default="hdf5",
         description="Output backend: 'hdf5' writes a single .h5 file; 'brainvision' writes a .vhdr/.vmrk/.eeg triplet per smoothing window.",
     )
-

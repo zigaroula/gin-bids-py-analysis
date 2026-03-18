@@ -1,5 +1,5 @@
 """
-Trial statistics on Hilbert derivatives — run script.
+Trial statistics on iEEG recordings - run script.
 Edit the parameters below and run: python scripts/run_trial_stats.py
 """
 
@@ -20,14 +20,13 @@ from gin_bids_py_analysis.processing.trial_stats import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\CBT\bids")
+BIDS_ROOT = Path(r"E:\CBT\bids")
 
-# Hilbert derivative files to analyse. These are grouped per subject.
-HILBERT_FILTERS = {
-    "scope": "hilbert",
+# iEEG files to analyse. These are grouped per subject.
+IEEG_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    "desc": "gammasm0"
+    "desc": "gammasm0",
 }
 
 # Optional secondary tables used by the task-specific resolver.
@@ -38,13 +37,15 @@ SECONDARY_FILTERS = [
 
 PARAMS = TrialStatsParams(
     anchor_event_codes=["10"],
-    tmin_s=-1.0,
-    tmax_s=1.0,
+    tmin_s=-6.0,
+    tmax_s=6.0,
     condition_a="accepted",
     condition_b="rejected",
-    min_trials_per_condition=1,
+    min_trials_per_condition=2,
     drop_partial_epochs=True,
     equal_var=False,
+    p_value_correction_method="fdr_bh",  # Set to "none" to disable correction
+    significance_alpha=0.05,
 )
 
 # This resolver is the task-specific layer for accepted vs rejected.
@@ -65,16 +66,16 @@ N_JOBS = 1
 
 
 def _build_subject_groups(dataset: BIDSDataset) -> list[BIDSFileGroup]:
-    hilbert_files = sorted(
-        dataset.get_files(**HILBERT_FILTERS),
+    ieeg_files = sorted(
+        dataset.get_files(**IEEG_FILTERS),
         key=lambda file: str(file.path),
     )
     secondary_files = _secondary_files(dataset)
 
     groups: list[BIDSFileGroup] = []
-    for subject_id in sorted({file.get("subject") for file in hilbert_files}):
-        subject_hilbert = [file for file in hilbert_files if file.get("subject") == subject_id]
-        if not subject_hilbert:
+    for subject_id in sorted({file.get("subject") for file in ieeg_files}):
+        subject_ieeg = [file for file in ieeg_files if file.get("subject") == subject_id]
+        if not subject_ieeg:
             continue
         subject_secondaries = [
             file
@@ -83,8 +84,8 @@ def _build_subject_groups(dataset: BIDSDataset) -> list[BIDSFileGroup]:
         ]
         groups.append(
             BIDSFileGroup(
-                primary=subject_hilbert[0],
-                secondaries=subject_hilbert[1:] + subject_secondaries,
+                primary=subject_ieeg[0],
+                secondaries=subject_ieeg[1:] + subject_secondaries,
             )
         )
 

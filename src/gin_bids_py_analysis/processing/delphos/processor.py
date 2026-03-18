@@ -104,11 +104,13 @@ class DelphosProcessing(BaseProcessing):
         channel_names = raw.ch_names
         data = raw.get_data()  # (n_channels, n_samples)
 
-        # Optional channel selection before montage
-        if self.params.channels_for_montage:
-            data, channel_names = select_channels_for_montage(
-                data, channel_names, self.params.channels_for_montage
-            )
+        # Optional channel include/exclude selection before montage
+        data, channel_names = select_channels_for_montage(
+            data,
+            channel_names,
+            self.params.channels_for_montage,
+            self.params.channels_to_exclude_for_montage,
+        )
 
         # Apply montage (mono or bipolar)
         data, channel_names = build_montage(

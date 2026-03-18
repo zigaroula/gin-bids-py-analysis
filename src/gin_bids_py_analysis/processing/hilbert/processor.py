@@ -78,6 +78,7 @@ class HilbertProcessing(BaseProcessing):
             data,
             ch_names,
             self.params.channels_for_montage,
+            self.params.channels_to_exclude_for_montage,
         )
 
         smoothed, montaged_names, bins = process_all_channels(

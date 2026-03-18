@@ -111,3 +111,53 @@ class TestCompiledPattern:
         pattern = re.compile(r"Z\d+")
         with pytest.raises(ValueError, match="pattern did not match"):
             select_channels_for_montage(DATA, NAMES, pattern)
+
+
+# ---------------------------------------------------------------------------
+# Exclusion selector (new behaviour)
+# ---------------------------------------------------------------------------
+
+class TestExcludeSelector:
+    def test_excludes_named_channels(self) -> None:
+        out_data, out_names = select_channels_for_montage(
+            DATA,
+            NAMES,
+            None,
+            ["A2", "X20"],
+        )
+        assert out_names == ["A1", "Bp1", "Bp2", "X10"]
+        np.testing.assert_array_equal(out_data, DATA[[0, 2, 3, 4], :])
+
+    def test_excludes_channels_with_regex(self) -> None:
+        out_data, out_names = select_channels_for_montage(
+            DATA,
+            NAMES,
+            None,
+            r"A\d+",
+        )
+        assert out_names == ["Bp1", "Bp2", "X10", "X20"]
+        np.testing.assert_array_equal(out_data, DATA[[2, 3, 4, 5], :])
+
+    def test_include_and_exclude_combined(self) -> None:
+        out_data, out_names = select_channels_for_montage(
+            DATA,
+            NAMES,
+            r"[ABX].+",
+            ["Bp2", "X10"],
+        )
+        assert out_names == ["A1", "A2", "Bp1", "X20"]
+        np.testing.assert_array_equal(out_data, DATA[[0, 1, 2, 5], :])
+
+    def test_raises_when_exclusion_selector_matches_nothing(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match="channels_to_exclude_for_montage did not match any input channels",
+        ):
+            select_channels_for_montage(DATA, NAMES, None, ["Z99"])
+
+    def test_raises_when_everything_is_excluded(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match="No channels remain after applying channels_for_montage",
+        ):
+            select_channels_for_montage(DATA, NAMES, r"A[12]", ["A1", "A2"])

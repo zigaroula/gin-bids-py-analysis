@@ -401,6 +401,7 @@ def _matches_entities(
         "subject": ("subject", "sub"),
         "session": ("session", "ses"),
         "run": ("run",),
+        "task": ("task",),
     }.items():
         target_value = _normalize_entity_value(target_entities.get(canonical_name))
         if target_value is None:

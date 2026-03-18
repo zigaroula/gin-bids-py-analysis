@@ -18,7 +18,7 @@ src/gin_bids_py_analysis/
 ├── data/         iEEG data loaders (placeholder — see data/__init__.py)
 └── processing/   Analysis pipeline (compute and I/O separated)
     └── hilbert/  Hilbert-transform analysis (stub)
-    └── trial_stats/ Subject-level trial statistics on Hilbert derivatives
+    └── trial_stats/ Subject-level trial statistics on iEEG recordings
 scripts/          Runnable analysis scripts (argparse + joblib)
 tests/            pytest test suite
 ```

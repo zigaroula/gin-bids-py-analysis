@@ -15,9 +15,11 @@ class TrialStatsProcessingResult(BaseProcessingResult):
 
     t_values: np.ndarray = field(default_factory=lambda: np.array([]))
     p_values: np.ndarray = field(default_factory=lambda: np.array([]))
+    p_values_uncorrected: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_a_mean: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_mean: np.ndarray = field(default_factory=lambda: np.array([]))
     mean_difference: np.ndarray = field(default_factory=lambda: np.array([]))
+    significant_mask: np.ndarray = field(default_factory=lambda: np.array([]))
     time_axis_s: np.ndarray = field(default_factory=lambda: np.array([]))
     channel_names: list[str] = field(default_factory=list)
     condition_a: str = "accepted"
@@ -28,4 +30,6 @@ class TrialStatsProcessingResult(BaseProcessingResult):
     resolved_trials: list[ResolvedTrial] = field(default_factory=list)
     source_ieeg_files: list[str] = field(default_factory=list)
     source_table_files: list[str] = field(default_factory=list)
+    p_value_correction_method: str = "fdr_bh"
+    significance_alpha: float = 0.05
     stats_valid: bool = False

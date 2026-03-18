@@ -21,7 +21,7 @@ def _make_bids_file(path: Path, entities: dict[str, str]) -> BIDSFile:
 def test_table_trial_label_resolver_joins_event_and_label_tables_by_trial_id(
     tmp_path: Path,
 ) -> None:
-    hilbert_file = _make_bids_file(
+    ieeg_file = _make_bids_file(
         tmp_path / "sub-01_ses-01_task-decid_run-1_ieeg.vhdr",
         {
             "subject": "01",
@@ -85,8 +85,8 @@ def test_table_trial_label_resolver_joins_event_and_label_tables_by_trial_id(
     ]
 
     resolved = resolver.resolve_trials(
-        BIDSFileGroup(primary=hilbert_file, secondaries=[events_file, beh_file]),
-        hilbert_file,
+        BIDSFileGroup(primary=ieeg_file, secondaries=[events_file, beh_file]),
+        ieeg_file,
         anchor_events,
     )
 
@@ -98,7 +98,7 @@ def test_table_trial_label_resolver_joins_event_and_label_tables_by_trial_id(
 def test_table_trial_label_resolver_falls_back_to_anchor_order(
     tmp_path: Path,
 ) -> None:
-    hilbert_file = _make_bids_file(
+    ieeg_file = _make_bids_file(
         tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
         {
             "subject": "01",
@@ -138,10 +138,58 @@ def test_table_trial_label_resolver_falls_back_to_anchor_order(
     ]
 
     resolved = resolver.resolve_trials(
-        BIDSFileGroup(primary=hilbert_file, secondaries=[trial_table_file]),
-        hilbert_file,
+        BIDSFileGroup(primary=ieeg_file, secondaries=[trial_table_file]),
+        ieeg_file,
         anchor_events,
     )
 
     assert [trial.label for trial in resolved] == ["accepted", "rejected"]
     assert all(trial.keep for trial in resolved)
+
+
+def test_table_trial_label_resolver_rejects_rows_with_task_mismatch(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    trial_table_path = tmp_path / "sub-01_task-other_run-1_trials.tsv"
+    trial_table_path.write_text(
+        "subject\ttask\trun\tdecision\n"
+        "01\tother\t1\taccept\n",
+        encoding="utf-8",
+    )
+    trial_table_file = _make_bids_file(
+        trial_table_path,
+        {
+            "subject": "01",
+            "task": "other",
+            "run": "1",
+            "suffix": "events",
+            "extension": ".tsv",
+            "datatype": "ieeg",
+        },
+    )
+    resolver = TableTrialLabelResolver(
+        label_column="decision",
+        label_map={"accept": "accepted"},
+    )
+    anchor_events = [AnnotationEvent(1.0, 0.0, "Stimulus", "S  10", "10")]
+
+    resolved = resolver.resolve_trials(
+        BIDSFileGroup(primary=ieeg_file, secondaries=[trial_table_file]),
+        ieeg_file,
+        anchor_events,
+    )
+
+    assert len(resolved) == 1
+    assert resolved[0].keep is False
+    assert resolved[0].exclusion_reason == "no_matching_table_row"

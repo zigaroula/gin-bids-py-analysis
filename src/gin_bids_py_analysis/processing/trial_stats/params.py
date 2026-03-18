@@ -24,8 +24,8 @@ class TrialStatsParams(BaseProcessingParams):
         description="Canonical label for the second trial condition.",
     )
     min_trials_per_condition: int = Field(
-        default=1,
-        ge=1,
+        default=2,
+        ge=2,
         description="Minimum number of kept trials required in each condition to report non-NaN statistics.",
     )
     drop_partial_epochs: bool = Field(
@@ -35,6 +35,22 @@ class TrialStatsParams(BaseProcessingParams):
     equal_var: bool = Field(
         default=False,
         description="Forwarded to scipy.stats.ttest_ind; False selects Welch's t-test.",
+    )
+    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni"] = Field(
+        default="fdr_bh",
+        description=(
+            "Multiple-comparisons correction for p-values across all channel x time tests. "
+            "Use 'none' to disable correction."
+        ),
+    )
+    significance_alpha: float = Field(
+        default=0.05,
+        gt=0.0,
+        lt=1.0,
+        description=(
+            "Significance threshold applied to (possibly corrected) p-values when building "
+            "the significance mask."
+        ),
     )
 
     @field_validator("anchor_event_codes", mode="before")

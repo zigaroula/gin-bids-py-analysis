@@ -1,4 +1,4 @@
-"""Channel-montage utilities shared across processing subpackages."""
+﻿"""Channel-montage utilities shared across processing subpackages."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ class BipolarStorage(str, Enum):
 def _parse_channel_name(name: str) -> tuple[str, int] | None:
     """Split a channel name into (electrode_prefix, contact_index).
 
-    Assumes the convention ``<letters><digits>`` (e.g. ``"A1"`` → ``("A", 1)``).
+    Assumes the convention ``<letters><digits>`` (e.g. ``"A1"`` -> ``("A", 1)``).
     Returns ``None`` if the name does not end with digits.
 
     Args:
@@ -63,7 +63,7 @@ def _parse_channel_name(name: str) -> tuple[str, int] | None:
     while split > 0 and name[split - 1].isdigit():
         split -= 1
     if split == len(name) or split == 0:
-        # No trailing digits or all digits → cannot parse
+        # No trailing digits or all digits -> cannot parse
         return None
     prefix = name[:split]
     index = int(name[split:])
@@ -86,8 +86,8 @@ def build_montage(
     Bipolar mode
     ~~~~~~~~~~~~
     Channels are grouped by electrode prefix (letters before the trailing
-    number, e.g. ``"A"`` for ``"A1"``, ``"A2"``).  Within each group,
-    adjacent contacts (consecutive integers) form a pair.  The subtraction
+    number, e.g. ``"A"`` for ``"A1"``, ``"A2"``). Within each group,
+    adjacent contacts (consecutive integers) form a pair. The subtraction
     direction and output label are controlled by *direction* and *storage*.
 
     Channels whose names cannot be parsed or that have no adjacent neighbour
@@ -96,9 +96,9 @@ def build_montage(
     Args:
         data:          2-D array of shape ``[n_channels, n_samples]``.
         channel_names: List of channel name strings, same order as *data* rows.
-        mode:          :class:`MontageMode` — mono or bipolar.
-        direction:     :class:`BipolarDirection` — which contact is subtracted.
-        storage:       :class:`BipolarStorage` — naming convention for the output.
+        mode:          :class:`MontageMode` - mono or bipolar.
+        direction:     :class:`BipolarDirection` - which contact is subtracted.
+        storage:       :class:`BipolarStorage` - naming convention for the output.
 
     Returns:
         ``(montaged_data, montaged_names)`` where *montaged_data* has shape
@@ -110,7 +110,7 @@ def build_montage(
     # ------------------------------------------------------------------
     # Bipolar: group channels by electrode prefix, sort by contact index
     # ------------------------------------------------------------------
-    # Map from electrode prefix → sorted list of (contact_index, row_index)
+    # Map from electrode prefix -> sorted list of (contact_index, row_index)
     electrode_groups: dict[str, list[tuple[int, int]]] = defaultdict(list)
     for row_idx, name in enumerate(channel_names):
         parsed = _parse_channel_name(name)
@@ -157,7 +157,7 @@ def build_montage(
 
     if not out_rows:
         raise ValueError(
-            "Bipolar montage produced no channels — check that channel names "
+            "Bipolar montage produced no channels - check that channel names "
             "follow the '<letters><digits>' convention (e.g. 'A1', 'A2')."
         )
 
@@ -169,69 +169,97 @@ def select_channels_for_montage(
     data: np.ndarray,
     channel_names: list[str],
     selected_names: list[str] | str | re.Pattern[str] | None,
+    excluded_names: list[str] | str | re.Pattern[str] | None = None,
 ) -> tuple[np.ndarray, list[str]]:
     """Subset *data* and *channel_names* using the same row indices.
 
     The selection preserves the original file order rather than the order of
-    *selected_names*.  This keeps channel adjacency intact for bipolar montage
+    *selected_names*. This keeps channel adjacency intact for bipolar montage
     construction and prevents name/data mismatches when only a subset of
     channels should be processed.
 
-    Three selection modes are supported:
+    Inclusion selector modes (``selected_names``):
 
-    * ``None`` — no filtering; all channels are returned unchanged.
-    * ``list[str]`` — exact-name allowlist; only channels whose names appear
-      in the list are kept (existing behaviour).
-    * ``str`` or ``re.Pattern[str]`` — regular-expression filter; each channel
-      name is tested with :func:`re.fullmatch` against the pattern.  Use this
-      to select channels by convention, e.g. ``r"[A-Za-z]p?([1-9]|1[0-9])"``.
+    * ``None`` - no filtering; all channels are returned unchanged.
+    * ``list[str]`` - exact-name allowlist; only channels whose names appear
+      in the list are kept.
+    * ``str`` or ``re.Pattern[str]`` - regular-expression filter; each channel
+      name is tested with :func:`re.fullmatch` against the pattern.
+
+    Exclusion selector modes (``excluded_names``):
+
+    * ``None`` - no exclusion.
+    * ``list[str]`` - exact-name denylist; matched channels are removed.
+    * ``str`` or ``re.Pattern[str]`` - regex denylist using
+      :func:`re.fullmatch`.
 
     Args:
-        data:           2-D array of shape ``[n_channels, n_samples]``.
-        channel_names:  Channel names matching the rows of *data*.
-        selected_names: Allowlist, regex pattern, or ``None``.
+        data: 2-D array of shape ``[n_channels, n_samples]``.
+        channel_names: Channel names matching the rows of *data*.
+        selected_names: Inclusion allowlist, regex pattern, or ``None``.
+        excluded_names: Exclusion denylist, regex pattern, or ``None``.
 
     Returns:
         ``(subset_data, subset_names)`` in original file order.
 
     Raises:
-        ValueError: If no channel matched the provided list or pattern.
+        ValueError: If an include/exclude selector matches nothing, or if no
+            channels remain after applying include + exclude selectors.
     """
-    if selected_names is None:
-        return data, list(channel_names)
 
-    if isinstance(selected_names, (str, re.Pattern)):
-        pattern = (
-            re.compile(selected_names)
-            if isinstance(selected_names, str)
-            else selected_names
-        )
-        keep_indices = [
-            idx
-            for idx, name in enumerate(channel_names)
-            if pattern.fullmatch(name)
-        ]
-        if not keep_indices:
-            raise ValueError(
-                "channels_for_montage pattern did not match any input channels: "
-                f"{selected_names!r}"
-            )
-    else:
-        # list[str] — exact-match allowlist (original behaviour)
-        if not selected_names:
-            return data, list(channel_names)
+    def _resolve_indices(
+        selector: list[str] | str | re.Pattern[str] | None,
+        selector_name: str,
+    ) -> list[int]:
+        if selector is None:
+            return []
 
-        selected_lookup = set(selected_names)
-        keep_indices = [
+        if isinstance(selector, (str, re.Pattern)):
+            pattern = re.compile(selector) if isinstance(selector, str) else selector
+            indices = [
+                idx
+                for idx, name in enumerate(channel_names)
+                if pattern.fullmatch(name)
+            ]
+            return indices
+
+        if not selector:
+            return []
+
+        selected_lookup = set(selector)
+        indices = [
             idx for idx, name in enumerate(channel_names)
             if name in selected_lookup
         ]
-
-        if not keep_indices:
+        if not indices:
             raise ValueError(
-                "channels_for_montage did not match any input channels: "
-                f"{selected_names!r}"
+                f"{selector_name} did not match any input channels: "
+                f"{selector!r}"
             )
+        return indices
 
-    return data[keep_indices, :], [channel_names[idx] for idx in keep_indices]
+    all_indices = list(range(len(channel_names)))
 
+    if selected_names is None or selected_names == []:
+        keep_indices = all_indices
+    else:
+        keep_indices = _resolve_indices(selected_names, "channels_for_montage")
+
+    if excluded_names is None or excluded_names == []:
+        excluded_indices: set[int] = set()
+    else:
+        excluded_indices = set(
+            _resolve_indices(
+                excluded_names,
+                "channels_to_exclude_for_montage",
+            )
+        )
+
+    final_indices = [idx for idx in keep_indices if idx not in excluded_indices]
+    if not final_indices:
+        raise ValueError(
+            "No channels remain after applying channels_for_montage and "
+            "channels_to_exclude_for_montage selectors."
+        )
+
+    return data[final_indices, :], [channel_names[idx] for idx in final_indices]

@@ -1,4 +1,4 @@
-"""Subject-level trial statistics on Hilbert derivatives."""
+"""Subject-level trial statistics on iEEG recordings."""
 
 __version__ = "0.1.0"
 

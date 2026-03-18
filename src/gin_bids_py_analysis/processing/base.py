@@ -7,9 +7,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 logger = logging.getLogger(__name__)
+_LOGGER_FALLBACK_SETUP_LOCK = Lock()
 
 from joblib import Parallel, delayed
 from pydantic import BaseModel, computed_field
@@ -20,6 +22,34 @@ from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.bids.helpers import build_bids_path
 
 _PROVENANCE_ENTITIES = frozenset({"suffix", "extension", "datatype"})
+
+
+def _has_non_null_handler(candidate: logging.Logger) -> bool:
+    """Return True when candidate or an ancestor has a real output handler."""
+    current = candidate
+    while current is not None:
+        for handler in current.handlers:
+            if not isinstance(handler, logging.NullHandler):
+                return True
+        if not current.propagate:
+            break
+        current = current.parent
+    return False
+
+
+def _ensure_logger_output() -> None:
+    """Install a fallback stderr handler when no logging output is configured."""
+    with _LOGGER_FALLBACK_SETUP_LOCK:
+        if _has_non_null_handler(logger):
+            return
+        if any(h.get_name() == "gin_bids_py_analysis_fallback" for h in logger.handlers):
+            return
+        handler = logging.StreamHandler()
+        handler.set_name("gin_bids_py_analysis_fallback")
+        handler.setFormatter(
+            logging.Formatter("%(levelname)s:%(name)s:%(message)s")
+        )
+        logger.addHandler(handler)
 
 def _coerce_to_groups(items: list[BIDSFile | BIDSFileGroup]) -> list[BIDSFileGroup]:
     """Wrap bare BIDSFile objects into single-file BIDSFileGroups."""
@@ -295,6 +325,7 @@ class BaseProcessing(ABC):
             A list of :class:`BaseProcessingResult` subclass instances,
             one per input group, in the same order as *groups*.
         """
+        _ensure_logger_output()
         coerced = _coerce_to_groups(groups)
         
         # Set up a multiprocessing-safe queue to assign worker positions for progress tracking
@@ -345,6 +376,7 @@ class BaseProcessing(ABC):
         Returns:
             List of output :class:`~pathlib.Path` objects in group order.
         """
+        _ensure_logger_output()
         writer.write_dataset_description(getattr(self, "params", None))
         coerced = _coerce_to_groups(groups)
 

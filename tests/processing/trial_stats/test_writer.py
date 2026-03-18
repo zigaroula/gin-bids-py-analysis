@@ -45,9 +45,11 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         output_entities={"subject": "01", "task": "decid"},
         t_values=np.ones((2, 3), dtype=np.float64),
         p_values=np.full((2, 3), 0.05, dtype=np.float64),
+        p_values_uncorrected=np.full((2, 3), 0.01, dtype=np.float64),
         condition_a_mean=np.full((2, 3), 5.0, dtype=np.float64),
         condition_b_mean=np.full((2, 3), 1.0, dtype=np.float64),
         mean_difference=np.full((2, 3), 4.0, dtype=np.float64),
+        significant_mask=np.ones((2, 3), dtype=bool),
         time_axis_s=np.array([0.0, 0.1, 0.2], dtype=np.float64),
         channel_names=["A1", "A2"],
         condition_a="accepted",
@@ -66,8 +68,10 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
                 keep=True,
             )
         ],
-        source_hilbert_files=[str(primary.path)],
+        source_ieeg_files=[str(primary.path)],
         source_table_files=[str(tmp_path / "labels.tsv")],
+        p_value_correction_method="fdr_bh",
+        significance_alpha=0.05,
         stats_valid=True,
     )
     writer = TrialStatsProcessingWriter(
@@ -89,10 +93,14 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
 
     with h5py.File(output_path, "r") as fh:
         assert fh["stats"]["t_values"].shape == (2, 3)
+        assert fh["stats"]["p_values_uncorrected"].shape == (2, 3)
+        assert fh["stats"]["significant_mask"].shape == (2, 3)
         assert fh["means"]["difference"].shape == (2, 3)
         assert list(fh["axes"]["channel"].asstr()[:]) == ["A1", "A2"]
         assert list(fh["meta"]["trial_counts"][:]) == [4, 4]
-        assert list(fh["provenance"]["source_hilbert_files"].asstr()[:]) == [str(primary.path)]
+        assert fh["meta"]["p_value_correction_method"].asstr()[()] == "fdr_bh"
+        assert float(fh["meta"]["significance_alpha"][()]) == 0.05
+        assert list(fh["provenance"]["source_ieeg_files"].asstr()[:]) == [str(primary.path)]
 
     lines = trial_table_path.read_text(encoding="utf-8").strip().splitlines()
     assert lines[0].startswith("source_file\tanchor_event_index")

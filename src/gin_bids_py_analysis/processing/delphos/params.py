@@ -150,6 +150,15 @@ class DelphosParams(BaseProcessingParams):
             "optional 'p', index 1-19). If None, all channels are used."
         ),
     )
+    channels_to_exclude_for_montage: list[str] | str | None = Field(
+        default=None,
+        description=(
+            "Channel selector applied after channels_for_montage and before "
+            "montage/detection. Pass a list of exact channel names to remove, "
+            "or a regex string matched via re.fullmatch against each channel "
+            "name. If None, no channels are excluded."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_params(self) -> "DelphosParams":

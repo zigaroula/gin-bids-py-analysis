@@ -37,6 +37,16 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
         output_path: Path,
     ) -> None:
         str_dtype = h5py.string_dtype(encoding="utf-8")
+        p_values_uncorrected = (
+            result.p_values_uncorrected
+            if result.p_values_uncorrected.size
+            else result.p_values
+        )
+        significant_mask = (
+            result.significant_mask
+            if result.significant_mask.size
+            else (np.isfinite(result.p_values) & (result.p_values < result.significance_alpha))
+        )
 
         with h5py.File(output_path, "w") as fh:
             stats_grp = fh.create_group("stats")
@@ -47,6 +57,14 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             stats_grp.create_dataset(
                 "p_values",
                 data=result.p_values.astype(np.float64),
+            )
+            stats_grp.create_dataset(
+                "p_values_uncorrected",
+                data=p_values_uncorrected.astype(np.float64),
+            )
+            stats_grp.create_dataset(
+                "significant_mask",
+                data=significant_mask.astype(bool),
             )
 
             means_grp = fh.create_group("means")
@@ -90,6 +108,15 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             meta_grp.create_dataset(
                 "sampling_frequency_hz",
                 data=float(result.sfreq),
+            )
+            meta_grp.create_dataset(
+                "p_value_correction_method",
+                data=str(result.p_value_correction_method),
+                dtype=str_dtype,
+            )
+            meta_grp.create_dataset(
+                "significance_alpha",
+                data=float(result.significance_alpha),
             )
             meta_grp.create_dataset("stats_valid", data=bool(result.stats_valid))
 

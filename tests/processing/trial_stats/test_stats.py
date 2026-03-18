@@ -6,6 +6,7 @@ import pytest
 from gin_bids_py_analysis.processing.trial_stats.resolver import ResolvedTrial
 from gin_bids_py_analysis.processing.trial_stats.stats import (
     compute_condition_statistics,
+    correct_p_values,
     extract_epochs,
 )
 
@@ -76,3 +77,22 @@ def test_compute_condition_statistics_detects_known_difference() -> None:
     assert np.all(mean_b == 1.0)
     assert np.all(mean_difference == 4.0)
     assert np.all(t_values > 0)
+
+
+def test_correct_p_values_fdr_bh_and_bonferroni() -> None:
+    raw = np.array([[0.001, 0.01, 0.02, 0.2, np.nan]], dtype=np.float64)
+
+    fdr = correct_p_values(raw, method="fdr_bh")
+    bonf = correct_p_values(raw, method="bonferroni")
+    none = correct_p_values(raw, method="none")
+
+    np.testing.assert_allclose(
+        fdr[0, :4],
+        np.array([0.004, 0.02, 0.02666666666666667, 0.2], dtype=np.float64),
+    )
+    np.testing.assert_allclose(
+        bonf[0, :4],
+        np.array([0.004, 0.04, 0.08, 0.8], dtype=np.float64),
+    )
+    np.testing.assert_allclose(none[0, :4], raw[0, :4])
+    assert np.isnan(fdr[0, 4])

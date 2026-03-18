@@ -13,7 +13,12 @@ from gin_bids_py_analysis.processing.utils.events import coerce_annotation_event
 from .params import TrialStatsParams
 from .resolver import ResolvedTrial, TrialLabelResolver
 from .result import TrialStatsProcessingResult
-from .stats import build_time_axis_s, compute_condition_statistics, extract_epochs
+from .stats import (
+    build_time_axis_s,
+    compute_condition_statistics,
+    correct_p_values,
+    extract_epochs,
+)
 
 
 class TrialStatsProcessing(BaseProcessing):
@@ -134,7 +139,7 @@ class TrialStatsProcessing(BaseProcessing):
             epochs_a_array.shape[0] >= self.params.min_trials_per_condition
             and epochs_b_array.shape[0] >= self.params.min_trials_per_condition
         )
-        t_values, p_values, mean_a, mean_b, mean_difference = (
+        t_values, p_values_raw, mean_a, mean_b, mean_difference = (
             compute_condition_statistics(
                 epochs_a_array if stats_valid else np.empty_like(epochs_a_array[:0]),
                 epochs_b_array if stats_valid else np.empty_like(epochs_b_array[:0]),
@@ -148,6 +153,11 @@ class TrialStatsProcessing(BaseProcessing):
         if epochs_b_array.size:
             mean_b = np.nanmean(epochs_b_array, axis=0, dtype=np.float64)
         mean_difference = mean_a - mean_b
+        p_values = correct_p_values(
+            p_values_raw,
+            method=self.params.p_value_correction_method,
+        )
+        significant_mask = np.isfinite(p_values) & (p_values < self.params.significance_alpha)
 
         return TrialStatsProcessingResult(
             source_group=group,
@@ -159,12 +169,16 @@ class TrialStatsProcessing(BaseProcessing):
                 "min_trials_per_condition": self.params.min_trials_per_condition,
                 "drop_partial_epochs": self.params.drop_partial_epochs,
                 "equal_var": self.params.equal_var,
+                "p_value_correction_method": self.params.p_value_correction_method,
+                "significance_alpha": self.params.significance_alpha,
             },
             t_values=t_values,
             p_values=p_values,
+            p_values_uncorrected=p_values_raw,
             condition_a_mean=mean_a,
             condition_b_mean=mean_b,
             mean_difference=mean_difference,
+            significant_mask=significant_mask,
             time_axis_s=time_axis_ref,
             channel_names=channel_names_ref,
             condition_a=self.params.condition_a,
@@ -175,6 +189,8 @@ class TrialStatsProcessing(BaseProcessing):
             resolved_trials=all_resolved_trials,
             source_ieeg_files=[str(file.path) for file in ieeg_files],
             source_table_files=source_table_files,
+            p_value_correction_method=self.params.p_value_correction_method,
+            significance_alpha=self.params.significance_alpha,
             stats_valid=stats_valid,
         )
 
