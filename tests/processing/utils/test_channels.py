@@ -7,7 +7,10 @@ import re
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.processing.utils.channels import select_channels_for_montage
+from gin_bids_py_analysis.processing.utils.channels import (
+    normalize_channel_name,
+    select_channels_for_montage,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -20,6 +23,10 @@ def _data(n_ch: int = 4, n_samples: int = 8) -> np.ndarray:
 
 NAMES = ["A1", "A2", "Bp1", "Bp2", "X10", "X20"]
 DATA = _data(len(NAMES))
+
+
+def test_normalize_channel_name_trims_and_casefolds() -> None:
+    assert normalize_channel_name("  A1  ") == "a1"
 
 
 # ---------------------------------------------------------------------------

@@ -46,6 +46,11 @@ class BipolarStorage(str, Enum):
     """Label as ``A2-A1`` (higher - lower convention.)"""
 
 
+def normalize_channel_name(name: str) -> str:
+    """Normalize channel labels for case-insensitive matching."""
+    return str(name).strip().casefold()
+
+
 def _parse_channel_name(name: str) -> tuple[str, int] | None:
     """Split a channel name into (electrode_prefix, contact_index).
 

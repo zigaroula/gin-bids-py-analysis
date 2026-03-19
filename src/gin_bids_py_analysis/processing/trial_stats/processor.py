@@ -1,16 +1,28 @@
+"""Processor for per-subject condition-A vs condition-B statistics on iEEG derivatives.
+
+Orchestrates file loading, trial resolution, epoch extraction, optional atlas-region
+aggregation, temporal binning, and statistical testing across all iEEG files in one
+``BIDSFileGroup``.  Heavy numerical work is delegated to ``stats.py``.
+"""
 from __future__ import annotations
 
-import csv
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Sequence
 
 import numpy as np
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
+from gin_bids_py_analysis.bids.matching import (
+    files_matching_entities,
+    find_best_entity_match,
+    shared_entities,
+)
 from gin_bids_py_analysis.data.loader import load_ieeg
 from gin_bids_py_analysis.processing.base import BaseProcessing
+from gin_bids_py_analysis.processing.utils.channels import normalize_channel_name
 from gin_bids_py_analysis.processing.utils.events import coerce_annotation_events
+from gin_bids_py_analysis.processing.utils.tables import read_table_rows, select_column
 
 from .params import TrialStatsParams
 from .resolver import ResolvedTrial, TrialLabelResolver
@@ -25,10 +37,12 @@ from .stats import (
 
 @dataclass(frozen=True)
 class _AtlasGrouping:
-    source_file: BIDSFile
-    feature_names: list[str]
-    feature_channel_indices: list[np.ndarray]
-    missing_regions: list[str]
+    """Intermediate result of mapping iEEG channels to atlas regions for one file."""
+
+    source_file: BIDSFile              # Electrodes TSV/CSV the mapping was built from.
+    feature_names: list[str]           # Ordered list of atlas region names.
+    feature_channel_indices: list[np.ndarray]  # Per-region channel row indices into the data matrix.
+    missing_regions: list[str]         # Requested regions absent from the electrodes table.
 
 
 class TrialStatsProcessing(BaseProcessing):
@@ -47,24 +61,47 @@ class TrialStatsProcessing(BaseProcessing):
         group: BIDSFileGroup,
         progress_tracking_position: int = 0,
     ) -> TrialStatsProcessingResult:
+        """Run the full pipeline for one subject group and return a result object.
+
+        Steps:
+        1. Partition the group's files into iEEG recordings, table files, and electrodes tables.
+        2. For each iEEG file: load data, validate cross-file consistency, optionally resolve
+           atlas grouping, extract anchor events, resolve trial labels, and extract epochs.
+        3. Stack per-condition epoch lists, apply optional temporal binning.
+        4. Compute t-tests, correct p-values, and build the result.
+        """
         del progress_tracking_position
 
-        ieeg_files = _ieeg_files(group)
+        # --- Step 1: partition files in the group ---
+        ieeg_files = files_matching_entities(
+            group.all_files,
+            extension=".vhdr",
+            suffix="ieeg",
+        )
         if not ieeg_files:
             raise ValueError(
                 "TrialStatsProcessing requires at least one ieeg BrainVision file."
             )
 
+        table_files = files_matching_entities(
+            group.all_files,
+            extension={".tsv", ".csv"},
+        )
+        # Non-electrodes table files are recorded for provenance only.
         source_table_files = sorted(
             {
                 str(file.path)
-                for file in group.all_files
-                if file.extension in {".tsv", ".csv"} and file.suffix != "electrodes"
+                for file in table_files
+                if file.suffix != "electrodes"
             }
         )
-        electrodes_files = _electrodes_files(group)
+        electrodes_files = files_matching_entities(
+            group.all_files,
+            extension={".tsv", ".csv"},
+            suffix="electrodes",
+        )
 
-        atlas_mode = bool(self.params.atlas_name)
+        atlas_mode = bool(self.params.atlas_name)  # True when an atlas column name is provided.
         used_electrodes_paths: set[str] = set()
         missing_atlas_regions: set[str] = set()
 
@@ -79,12 +116,14 @@ class TrialStatsProcessing(BaseProcessing):
         feature_indices_ref: list[np.ndarray] | None = None
         time_axis_ref: np.ndarray | None = None
 
+        # --- Step 2: iterate over iEEG files ---
         for ieeg_file in ieeg_files:
             raw = load_ieeg(ieeg_file)
             sfreq = float(raw.info["sfreq"])
             data = raw.get_data().astype(np.float32)
             channel_names = list(raw.ch_names)
 
+            # Capture reference values from the first file; validate consistency for the rest.
             if sfreq_ref is None:
                 sfreq_ref = sfreq
                 channel_names_ref = channel_names
@@ -105,6 +144,7 @@ class TrialStatsProcessing(BaseProcessing):
                         "channel ordering."
                     )
 
+            # Atlas mode: map channels to brain regions, replacing channel-level features.
             if atlas_mode:
                 assert self.params.atlas_name is not None
                 grouping = _resolve_atlas_grouping(
@@ -127,6 +167,7 @@ class TrialStatsProcessing(BaseProcessing):
                         f"{ieeg_file.path.name} but expected {feature_names_ref}."
                     )
 
+            # Extract only the annotations whose codes mark trial onsets.
             anchor_events = [
                 event
                 for event in coerce_annotation_events(raw.annotations)
@@ -143,6 +184,7 @@ class TrialStatsProcessing(BaseProcessing):
                     f"{len(anchor_events)} anchor events in {ieeg_file.path.name}."
                 )
 
+            # Cut the continuous recording into per-trial windows.
             extraction = extract_epochs(
                 data,
                 sfreq,
@@ -153,9 +195,11 @@ class TrialStatsProcessing(BaseProcessing):
             )
             all_resolved_trials.extend(extraction.updated_trials)
 
+            # Route each kept epoch to the appropriate condition list.
             for epoch, trial in zip(extraction.epochs, extraction.kept_trials):
                 epoch_for_stats = epoch
                 if atlas_mode:
+                    # Collapse channel dimension into atlas-region means.
                     assert feature_indices_ref is not None
                     epoch_for_stats = _aggregate_channels(epoch, feature_indices_ref)
 
@@ -168,6 +212,7 @@ class TrialStatsProcessing(BaseProcessing):
         assert channel_names_ref is not None
         assert time_axis_ref is not None
 
+        # --- Step 3: stack epochs and apply optional temporal binning ---
         if atlas_mode:
             assert feature_names_ref is not None
             feature_names = feature_names_ref
@@ -188,6 +233,7 @@ class TrialStatsProcessing(BaseProcessing):
         time_axis_eval = time_axis_ref
         temporal_window_samples = 1
         if self.params.temporal_window_ms > 0:
+            # Reduce temporal resolution by averaging consecutive sample bins.
             temporal_window_samples = _window_samples(
                 sfreq_ref,
                 self.params.temporal_window_ms,
@@ -203,6 +249,8 @@ class TrialStatsProcessing(BaseProcessing):
                 temporal_window_samples,
             )
 
+        # --- Step 4: compute statistics ---
+        # Only run the t-test when both conditions have enough trials.
         stats_valid = (
             epochs_a_array.shape[0] >= self.params.min_trials_per_condition
             and epochs_b_array.shape[0] >= self.params.min_trials_per_condition
@@ -216,6 +264,7 @@ class TrialStatsProcessing(BaseProcessing):
                 equal_var=self.params.equal_var,
             )
         )
+        # Recompute per-condition means over all trials (stats may have used empty arrays).
         if epochs_a_array.size:
             mean_a = np.nanmean(epochs_a_array, axis=0, dtype=np.float64)
         if epochs_b_array.size:
@@ -234,7 +283,7 @@ class TrialStatsProcessing(BaseProcessing):
 
         return TrialStatsProcessingResult(
             source_group=group,
-            output_entities=_shared_entities(ieeg_files),
+            output_entities=shared_entities(ieeg_files),
             metadata={
                 "anchor_event_codes": list(self.params.anchor_event_codes),
                 "tmin_s": self.params.tmin_s,
@@ -283,6 +332,7 @@ class TrialStatsProcessing(BaseProcessing):
         self,
         trials: Sequence[ResolvedTrial],
     ) -> list[ResolvedTrial]:
+        """Mark trials whose label is not condition_a or condition_b as excluded."""
         normalized: list[ResolvedTrial] = []
         supported_labels = {self.params.condition_a, self.params.condition_b}
         for trial in trials:
@@ -308,53 +358,22 @@ class TrialStatsProcessing(BaseProcessing):
                 normalized.append(trial)
         return normalized
 
-
-def _ieeg_files(group: BIDSFileGroup) -> list[BIDSFile]:
-    return sorted(
-        [
-            file
-            for file in group.all_files
-            if file.extension == ".vhdr" and file.suffix == "ieeg"
-        ],
-        key=lambda file: str(file.path),
-    )
-
-
-def _electrodes_files(group: BIDSFileGroup) -> list[BIDSFile]:
-    return sorted(
-        [
-            file
-            for file in group.all_files
-            if file.extension in {".tsv", ".csv"} and file.suffix == "electrodes"
-        ],
-        key=lambda file: str(file.path),
-    )
-
-
-def _shared_entities(files: Sequence[BIDSFile]) -> dict[str, str]:
-    shared = dict(files[0].entities)
-    for file in files[1:]:
-        shared = {
-            key: value
-            for key, value in shared.items()
-            if file.get(key) == value
-        }
-    for removable in ("suffix", "extension", "datatype", "desc", "description"):
-        shared.pop(removable, None)
-    return {str(key): str(value) for key, value in shared.items()}
-
-
 def _stack_epochs(
     epochs: Sequence[np.ndarray],
     n_channels: int,
     n_times: int,
 ) -> np.ndarray:
+    """Stack a list of (n_channels, n_times) epoch arrays into a (n_epochs, n_channels, n_times) array.
+
+    Returns an empty array of the correct shape when *epochs* is empty.
+    """
     if not epochs:
         return np.empty((0, n_channels, n_times), dtype=np.float32)
     return np.stack(epochs, axis=0).astype(np.float32)
 
 
 def _window_samples(sfreq: float, temporal_window_ms: float) -> int:
+    """Convert a temporal window duration (ms) to the nearest sample count (minimum 1)."""
     return max(1, int(round((temporal_window_ms / 1000.0) * sfreq)))
 
 
@@ -363,6 +382,11 @@ def _temporal_bin_epochs(
     time_axis_s: np.ndarray,
     window_samples: int,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Average non-overlapping temporal windows, returning downsampled epochs and time axis.
+
+    Input shape:  (n_epochs, n_channels, n_times)
+    Output shape: (n_epochs, n_channels, n_bins)
+    """
     if window_samples <= 1:
         return epochs, time_axis_s
 
@@ -395,6 +419,11 @@ def _aggregate_channels(
     epoch: np.ndarray,
     channel_indices_by_feature: Sequence[np.ndarray],
 ) -> np.ndarray:
+    """Replace channel rows with per-region means.
+
+    Input shape:  (n_channels, n_times)
+    Output shape: (n_regions, n_times)
+    """
     aggregated = [
         np.nanmean(epoch[channel_indices, :], axis=0, dtype=np.float64)
         for channel_indices in channel_indices_by_feature
@@ -410,20 +439,36 @@ def _resolve_atlas_grouping(
     atlas_name: str,
     atlas_regions: Sequence[str],
 ) -> _AtlasGrouping:
-    electrodes_file = _find_matching_electrodes_file(ieeg_file, electrodes_files)
+    """Build an ``_AtlasGrouping`` for *ieeg_file* from the best-matching electrodes table.
+
+    Steps:
+    1. Find the electrodes file whose entities best match the iEEG file.
+    2. Parse the table to build a channel→region mapping using the *atlas_name* column.
+    3. Group iEEG channel indices by region; optionally filter to *atlas_regions*.
+    """
+    # Step 1: find the best-matching electrodes file.
+    electrodes_file = find_best_entity_match(
+        ieeg_file,
+        electrodes_files,
+        ambiguity_label="electrodes table",
+        ambiguity_hint=(
+            "Please disambiguate entities (e.g. run/task) in *_electrodes.tsv."
+        ),
+    )
     if electrodes_file is None:
         raise ValueError(
             f"atlas_name={atlas_name!r} requires a matching *_electrodes.tsv/csv file "
             f"for {ieeg_file.path.name}."
         )
 
-    rows = _read_table_rows(electrodes_file)
+    # Step 2: parse the electrodes table and build the channel→region mapping.
+    rows = read_table_rows(electrodes_file)
     if not rows:
         raise ValueError(f"Electrodes table {electrodes_file.path.name} is empty.")
 
     columns = list(rows[0].keys())
-    channel_col = _select_column(columns, preferred=["name", "channel", "label"])
-    atlas_col = _select_column(columns, preferred=[atlas_name])
+    channel_col = select_column(columns, preferred=["name", "channel", "label"])
+    atlas_col = select_column(columns, preferred=[atlas_name])
     if channel_col is None:
         raise ValueError(
             f"Electrodes table {electrodes_file.path.name} must contain a channel name "
@@ -441,7 +486,7 @@ def _resolve_atlas_grouping(
         raw_region = (row.get(atlas_col) or "").strip()
         if not raw_channel or not raw_region:
             continue
-        channel_key = _normalize_channel_name(raw_channel)
+        channel_key = normalize_channel_name(raw_channel)
         previous = channel_to_region.get(channel_key)
         if previous is not None and previous != raw_region:
             raise ValueError(
@@ -456,9 +501,10 @@ def _resolve_atlas_grouping(
             f"{electrodes_file.path.name}."
         )
 
+    # Step 3: group iEEG channel row indices by atlas region.
     region_to_indices: dict[str, list[int]] = {}
     for idx, channel_name in enumerate(channel_names):
-        channel_key = _normalize_channel_name(channel_name)
+        channel_key = normalize_channel_name(channel_name)
         region = channel_to_region.get(channel_key)
         if region is None:
             continue
@@ -470,6 +516,7 @@ def _resolve_atlas_grouping(
             f"{electrodes_file.path.name}."
         )
 
+    # Filter to the requested subset of regions (if any), collecting missing ones.
     missing_regions: list[str] = []
     if atlas_regions:
         available_by_norm = {
@@ -503,124 +550,3 @@ def _resolve_atlas_grouping(
         feature_channel_indices=feature_indices,
         missing_regions=missing_regions,
     )
-
-
-def _find_matching_electrodes_file(
-    ieeg_file: BIDSFile,
-    electrodes_files: Sequence[BIDSFile],
-) -> BIDSFile | None:
-    scored: list[tuple[int, int, str, BIDSFile]] = []
-    for electrodes_file in electrodes_files:
-        score = _entity_match_score(ieeg_file.entities, electrodes_file.entities)
-        if score is None:
-            continue
-        specificity = _entity_specificity(electrodes_file.entities)
-        scored.append((score, specificity, str(electrodes_file.path), electrodes_file))
-
-    if not scored:
-        return None
-
-    best_score = max(score for score, _, _, _ in scored)
-    best = [
-        (specificity, path, file)
-        for score, specificity, path, file in scored
-        if score == best_score
-    ]
-    if len(best) > 1:
-        min_specificity = min(specificity for specificity, _, _ in best)
-        best = [
-            (specificity, path, file)
-            for specificity, path, file in best
-            if specificity == min_specificity
-        ]
-    if len(best) > 1:
-        names = ", ".join(sorted(file.path.name for _, _, file in best))
-        raise ValueError(
-            f"Ambiguous electrodes table match for {ieeg_file.path.name}: {names}. "
-            "Please disambiguate entities (e.g. run/task) in *_electrodes.tsv."
-        )
-    return best[0][2]
-
-
-def _entity_match_score(
-    target_entities: dict[str, Any],
-    candidate_entities: dict[str, Any],
-) -> int | None:
-    score = 0
-    for aliases in (
-        ("subject", "sub"),
-        ("session", "ses"),
-        ("task",),
-        ("run",),
-    ):
-        target = _entity_value(target_entities, aliases)
-        if target is None:
-            continue
-
-        candidate = _entity_value(candidate_entities, aliases)
-        if candidate is None:
-            continue
-        if candidate != target:
-            return None
-        score += 1
-
-    return score
-
-
-def _entity_value(entities: dict[str, Any], aliases: Sequence[str]) -> str | None:
-    for alias in aliases:
-        value = _normalize_entity_value(entities.get(alias))
-        if value is not None:
-            return value
-    return None
-
-
-def _normalize_entity_value(value: Any) -> str | None:
-    if value in (None, ""):
-        return None
-    text = str(value).strip()
-    if text.startswith("sub-"):
-        return text[4:]
-    if text.startswith("ses-"):
-        return text[4:]
-    return text
-
-
-def _normalize_channel_name(name: str) -> str:
-    return str(name).strip().casefold()
-
-
-def _entity_specificity(entities: dict[str, Any]) -> int:
-    """
-    Return an entity specificity score for tie-breaking file matches.
-
-    Lower values mean the file is more generic (fewer explicit BIDS entities).
-    """
-    ignored = {"suffix", "extension", "datatype", "scope"}
-    return sum(
-        1
-        for key, value in entities.items()
-        if key not in ignored and _normalize_entity_value(value) is not None
-    )
-
-
-def _read_table_rows(file: BIDSFile) -> list[dict[str, str]]:
-    delimiter = "\t" if file.extension == ".tsv" else ","
-    with open(file.path, "r", encoding="utf-8", newline="") as fh:
-        reader = csv.DictReader(fh, delimiter=delimiter)
-        return [
-            {
-                str(key).strip(): "" if value is None else str(value).strip()
-                for key, value in row.items()
-            }
-            for row in reader
-        ]
-
-
-def _select_column(columns: Sequence[str], preferred: Sequence[str]) -> str | None:
-    by_norm = {column.casefold(): column for column in columns}
-    for wanted in preferred:
-        match = by_norm.get(wanted.casefold())
-        if match is not None:
-            return match
-    return None
