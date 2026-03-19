@@ -21,7 +21,7 @@ from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.bids.helpers import build_bids_path
 
-_PROVENANCE_ENTITIES = frozenset({"suffix", "extension", "datatype"})
+_PROVENANCE_ENTITIES = frozenset({"suffix", "extension", "datatype", "desc", "description"})
 
 
 def _has_non_null_handler(candidate: logging.Logger) -> bool:
@@ -184,8 +184,6 @@ class BaseProcessingWriter(ABC):
             ).items()
             if k not in _PROVENANCE_ENTITIES
         }
-        entities.pop("desc", None)
-        entities.pop("description", None)
         entities["desc"] = self.params.output_description
 
         output_path = build_bids_path(

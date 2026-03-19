@@ -98,8 +98,9 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             )
 
             axes_grp = fh.create_group("axes")
+            primary_axis_name = "region" if result.analysis_level == "roi" else "channel"
             axes_grp.create_dataset(
-                "channel",
+                primary_axis_name,
                 data=np.array(result.channel_names, dtype=object),
                 dtype=str_dtype,
             )

@@ -102,7 +102,8 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         assert fh["stats"]["p_values_uncorrected"].shape == (2, 3)
         assert fh["stats"]["significant_mask"].shape == (2, 3)
         assert fh["means"]["difference"].shape == (2, 3)
-        assert list(fh["axes"]["channel"].asstr()[:]) == ["A1", "A2"]
+        assert list(fh["axes"]["region"].asstr()[:]) == ["A1", "A2"]
+        assert "channel" not in fh["axes"]
         assert list(fh["meta"]["trial_counts"][:]) == [4, 4]
         assert fh["meta"]["p_value_correction_method"].asstr()[()] == "fdr_bh"
         assert float(fh["meta"]["significance_alpha"][()]) == 0.05
@@ -119,4 +120,5 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
     lines = trial_table_path.read_text(encoding="utf-8").strip().splitlines()
     assert lines[0].startswith("source_file\tanchor_event_index")
     assert "accepted" in lines[1]
+
 

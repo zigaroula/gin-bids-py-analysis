@@ -230,7 +230,78 @@ def test_process_group_aggregates_channels_by_atlas_region(
     assert result.mean_difference.shape == (2, 3)
     assert np.all(result.mean_difference > 0.0)
     assert result.source_electrodes_files == [str(electrodes_path)]
+    assert result.output_entities == {
+        "subject": "01",
+        "task": "decid",
+    }
 
+def test_process_group_drops_na_like_regions_when_atlas_regions_not_set(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    electrodes_path = tmp_path / "sub-01_task-decid_run-1_electrodes.tsv"
+    _write_text(
+        electrodes_path,
+        "name\tatlasA\nA1\tR1\nA2\tN/A\nB1\tn.a.\n",
+    )
+    electrodes_file = _make_bids_file(
+        electrodes_path,
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "electrodes",
+            "extension": ".tsv",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1", "A2", "B1"]
+    data = np.zeros((3, 60), dtype=np.float32)
+    data[:, 10:13] = np.array([[6.0], [4.0], [8.0]], dtype=np.float32)
+    data[:, 20:23] = np.array([[2.0], [0.0], [4.0]], dtype=np.float32)
+    data[:, 30:33] = np.array([[6.0], [4.0], [8.0]], dtype=np.float32)
+    data[:, 40:43] = np.array([[2.0], [0.0], [4.0]], dtype=np.float32)
+    annotations = Annotations(
+        onset=[1.0, 2.0, 3.0, 4.0],
+        duration=[0.0, 0.0, 0.0, 0.0],
+        description=["Stimulus/S  10"] * 4,
+    )
+    monkeypatch.setattr(
+        processor_module,
+        "load_ieeg",
+        lambda _: _FakeRaw(data, ch_names, sfreq, annotations),
+    )
+
+    processor = TrialStatsProcessing(
+        TrialStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            atlas_name="atlasA",
+        ),
+        resolver=_AlternatingResolver(),
+    )
+    result = processor.process_group(
+        BIDSFileGroup(primary=ieeg_file, secondaries=[electrodes_file])
+    )
+
+    assert result.analysis_level == "roi"
+    assert result.channel_names == ["R1"]
+    assert result.mean_difference.shape == (1, 3)
+    assert np.all(result.mean_difference > 0.0)
 
 def test_process_group_window_ms_binning(
     monkeypatch,
@@ -566,4 +637,5 @@ def test_process_group_raises_when_electrodes_ambiguity_persists_after_tiebreak(
         assert False, "Expected ValueError for persistent electrodes ambiguity."
     except ValueError as exc:
         assert "Ambiguous electrodes table match" in str(exc)
+
 

@@ -38,11 +38,11 @@ SECONDARY_FILTERS = [
 
 PARAMS = TrialStatsParams(
     anchor_event_codes=["10"],
-    tmin_s=-6.0,
-    tmax_s=6.0,
+    tmin_s=-1.0,
+    tmax_s=5.0,
     condition_a="accepted",
     condition_b="rejected",
-    #atlas_name="MarsAtlas",
+    atlas_name="MarsAtlas",
     n_bins=1,
     p_value_correction_method="fdr_bh",
     significance_alpha=0.05,

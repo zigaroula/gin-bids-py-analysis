@@ -305,7 +305,12 @@ class TrialStatsProcessing(BaseProcessing):
 
         return TrialStatsProcessingResult(
             source_group=group,
-            output_entities=shared_entities(ieeg_files),
+            output_entities=shared_entities(
+                ieeg_files,
+                excluded_entities=frozenset(
+                    {"suffix", "extension", "datatype", "desc", "description", "run"}
+                ),
+            ),
             metadata={
                 "anchor_event_codes": list(self.params.anchor_event_codes),
                 "tmin_s": self.params.tmin_s,
@@ -512,6 +517,12 @@ def _aggregate_channels(
     return np.stack(aggregated, axis=0).astype(np.float32)
 
 
+def _is_na_like_region_label(label: str) -> bool:
+    """Return True for common ``n/a`` placeholder variants."""
+    normalized = "".join(ch for ch in label.strip().casefold() if ch.isalnum())
+    return normalized in {"na", "notavailable", "notapplicable"}
+
+
 def _resolve_atlas_grouping(
     *,
     ieeg_file: BIDSFile,
@@ -618,7 +629,17 @@ def _resolve_atlas_grouping(
                 f"{electrodes_file.path.name}. Available regions: {available}"
             )
     else:
-        selected_regions = list(region_to_indices.keys())
+        selected_regions = [
+            region
+            for region in region_to_indices
+            if not _is_na_like_region_label(region)
+        ]
+        if not selected_regions:
+            available = ", ".join(sorted(region_to_indices.keys()))
+            raise ValueError(
+                "No usable atlas regions remained after removing n/a-like labels in "
+                f"{electrodes_file.path.name}. Available regions: {available}"
+            )
 
     feature_indices = [
         np.asarray(region_to_indices[region], dtype=np.int64)

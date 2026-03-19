@@ -125,7 +125,9 @@ def _load_snapshot(stats_path: Path) -> TrialStatsSnapshot:
         meta_grp = fh["meta"]
         means_grp = fh["means"]
 
-        channels = _decode_str_array(np.asarray(axes_grp["channel"][:]))
+        analysis_level = _str_scalar(meta_grp.get("analysis_level"), default="channel")
+        axis_name = "region" if analysis_level == "roi" else "channel"
+        channels = _decode_str_array(np.asarray(axes_grp[axis_name][:]))
         time_s = np.asarray(axes_grp["time_s"][:], dtype=np.float64)
 
         t_values = np.asarray(stats_grp["t_values"][:], dtype=np.float64)
@@ -168,7 +170,6 @@ def _load_snapshot(stats_path: Path) -> TrialStatsSnapshot:
             trial_counts = (0, 0)
 
         stats_valid = _bool_scalar(meta_grp.get("stats_valid"), default=False)
-        analysis_level = _str_scalar(meta_grp.get("analysis_level"), default="channel")
         atlas_name = _str_scalar(meta_grp.get("atlas_name"), default="")
         atlas_regions = (
             _decode_str_array(np.asarray(meta_grp["atlas_regions"][:]))
@@ -349,7 +350,8 @@ def _inspect_file(stats_path: Path, top_k: int, save_channel_summary: bool) -> N
             "atlas: "
             f"name={snapshot.atlas_name or 'n/a'}, regions={len(snapshot.atlas_regions)}"
         )
-    print(f"shape: channels={n_channels}, times={n_times}")
+    axis_label = "regions" if snapshot.analysis_level == "roi" else "channels"
+    print(f"shape: {axis_label}={n_channels}, times={n_times}")
 
     if trial_rows:
         n_kept = sum(str(row.get("keep", "")).strip().lower() == "true" for row in trial_rows)
