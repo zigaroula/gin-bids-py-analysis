@@ -232,7 +232,7 @@ def test_process_group_aggregates_channels_by_atlas_region(
     assert result.source_electrodes_files == [str(electrodes_path)]
 
 
-def test_process_group_temporal_window_binning(
+def test_process_group_window_ms_binning(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -270,7 +270,7 @@ def test_process_group_temporal_window_binning(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.5,
-            temporal_window_ms=200.0,
+            window_ms=200.0,
         ),
         resolver=_AlternatingResolver(),
     )
@@ -278,11 +278,103 @@ def test_process_group_temporal_window_binning(
 
     assert result.analysis_level == "channel"
     assert result.channel_names == ["A1"]
-    assert result.temporal_window_ms == 200.0
+    assert result.window_ms == 200.0
+    assert result.n_bins == 0
     assert result.time_axis_s.shape == (3,)
     assert result.mean_difference.shape == (1, 3)
     assert np.all(result.mean_difference > 0.0)
 
+
+def test_process_group_n_bins_binning(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 60), dtype=np.float32)
+    data[:, 10:16] = np.array([[2, 4, 6, 8, 10, 12]], dtype=np.float32)
+    data[:, 20:26] = np.array([[1, 1, 1, 1, 1, 1]], dtype=np.float32)
+    data[:, 30:36] = np.array([[4, 6, 8, 10, 12, 14]], dtype=np.float32)
+    data[:, 40:46] = np.array([[2, 2, 2, 2, 2, 2]], dtype=np.float32)
+    annotations = Annotations(
+        onset=[1.0, 2.0, 3.0, 4.0],
+        duration=[0.0, 0.0, 0.0, 0.0],
+        description=["Stimulus/S  10"] * 4,
+    )
+    monkeypatch.setattr(
+        processor_module,
+        "load_ieeg",
+        lambda _: _FakeRaw(data, ch_names, sfreq, annotations),
+    )
+
+    processor = TrialStatsProcessing(
+        TrialStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.5,
+            n_bins=2,
+        ),
+        resolver=_AlternatingResolver(),
+    )
+    result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
+
+    assert result.analysis_level == "channel"
+    assert result.channel_names == ["A1"]
+    assert result.window_ms == 0.0
+    assert result.n_bins == 2
+    assert result.time_axis_s.shape == (2,)
+    assert result.mean_difference.shape == (1, 2)
+    assert np.all(result.mean_difference > 0.0)
+
+def test_temporal_bin_epochs_merges_single_sample_tail() -> None:
+    epochs = np.array([[[1.0, 2.0, 3.0, 4.0, 5.0]]], dtype=np.float32)
+    time_axis_s = np.array([-1.0, -0.5, 0.0, 0.5, 1.0], dtype=np.float64)
+
+    binned, binned_time = processor_module._temporal_bin_epochs(
+        epochs,
+        time_axis_s,
+        window_samples=2,
+    )
+
+    assert binned.shape == (1, 1, 2)
+    assert binned_time.shape == (2,)
+    np.testing.assert_allclose(
+        binned[0, 0, :],
+        np.array([1.5, 4.0], dtype=np.float32),
+    )
+    np.testing.assert_allclose(
+        binned_time,
+        np.array([-0.75, 0.5], dtype=np.float64),
+    )
+
+
+def test_temporal_bin_epochs_by_n_bins_respects_requested_count() -> None:
+    epochs = np.array([[[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]]], dtype=np.float32)
+    time_axis_s = np.array([-0.5, -0.3, -0.1, 0.1, 0.3, 0.5], dtype=np.float64)
+
+    binned, binned_time = processor_module._temporal_bin_epochs_by_n_bins(
+        epochs,
+        time_axis_s,
+        n_bins=2,
+    )
+
+    assert binned.shape == (1, 1, 2)
+    assert binned_time.shape == (2,)
+    np.testing.assert_allclose(
+        binned[0, 0, :],
+        np.array([2.0, 5.0], dtype=np.float32),
+    )
 
 def test_process_group_raises_when_atlas_name_without_matching_electrodes(
     monkeypatch,
@@ -474,3 +566,4 @@ def test_process_group_raises_when_electrodes_ambiguity_persists_after_tiebreak(
         assert False, "Expected ValueError for persistent electrodes ambiguity."
     except ValueError as exc:
         assert "Ambiguous electrodes table match" in str(exc)
+

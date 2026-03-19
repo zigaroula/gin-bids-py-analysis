@@ -107,3 +107,14 @@ def test_trial_stats_params_rejects_atlas_regions_without_atlas_name() -> None:
             tmax_s=0.1,
             atlas_regions=["R1"],
         )
+
+def test_trial_stats_params_rejects_window_ms_and_n_bins_together() -> None:
+    with pytest.raises(ValueError, match="window_ms and n_bins are mutually exclusive"):
+        TrialStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.1,
+            window_ms=100.0,
+            n_bins=2,
+        )
+

@@ -19,7 +19,7 @@ import h5py
 import numpy as np
 
 
-DEFAULT_BIDS_ROOT = Path(r"E:\CBT\bids")
+DEFAULT_BIDS_ROOT = Path(r"D:\CBT\bids")
 DEFAULT_STATS_GLOB = "derivatives/trial_stats/**/*_stats.h5"
 
 
@@ -41,7 +41,10 @@ class TrialStatsSnapshot:
     analysis_level: str
     atlas_name: str
     atlas_regions: list[str]
-    temporal_window_ms: float
+    window_ms: float
+    n_bins: int
+    effective_n_bins: int
+    binning_mode: str
 
 
 def _parse_args() -> argparse.Namespace:
@@ -172,7 +175,27 @@ def _load_snapshot(stats_path: Path) -> TrialStatsSnapshot:
             if "atlas_regions" in meta_grp
             else []
         )
-        temporal_window_ms = _float_scalar(meta_grp.get("temporal_window_ms"), default=0.0)
+        if "window_ms" in meta_grp:
+            window_ms = _float_scalar(meta_grp.get("window_ms"), default=0.0)
+        else:
+            # Backward compatibility with older trial-stats outputs.
+            window_ms = _float_scalar(meta_grp.get("temporal_window_ms"), default=0.0)
+        if "n_bins" in meta_grp:
+            n_bins = int(np.asarray(meta_grp["n_bins"][()], dtype=np.int64))
+        else:
+            n_bins = 0
+        if "effective_n_bins" in meta_grp:
+            effective_n_bins = int(np.asarray(meta_grp["effective_n_bins"][()], dtype=np.int64))
+        else:
+            effective_n_bins = int(len(time_s))
+        binning_mode = _str_scalar(meta_grp.get("binning_mode"), default="")
+        if not binning_mode:
+            if window_ms > 0:
+                binning_mode = "window_ms"
+            elif n_bins > 0:
+                binning_mode = "n_bins"
+            else:
+                binning_mode = "none"
 
     return TrialStatsSnapshot(
         stats_path=stats_path,
@@ -191,7 +214,10 @@ def _load_snapshot(stats_path: Path) -> TrialStatsSnapshot:
         analysis_level=analysis_level,
         atlas_name=atlas_name,
         atlas_regions=atlas_regions,
-        temporal_window_ms=temporal_window_ms,
+        window_ms=window_ms,
+        n_bins=n_bins,
+        effective_n_bins=effective_n_bins,
+        binning_mode=binning_mode,
     )
 
 
@@ -305,10 +331,19 @@ def _inspect_file(stats_path: Path, top_k: int, save_channel_summary: bool) -> N
         f"{snapshot.correction_method}, alpha={snapshot.significance_alpha:.4g}, "
         f"finite={finite_p}/{total_tests}, significant={significant}/{total_tests}"
     )
-    print(
-        "analysis: "
-        f"level={snapshot.analysis_level}, temporal_window_ms={snapshot.temporal_window_ms:.3f}"
-    )
+    if snapshot.binning_mode == "window_ms":
+        binning_info = (
+            f"mode=window_ms, window_ms={snapshot.window_ms:.3f}, "
+            f"effective_n_bins={snapshot.effective_n_bins}"
+        )
+    elif snapshot.binning_mode == "n_bins":
+        binning_info = (
+            f"mode=n_bins, n_bins={snapshot.n_bins}, "
+            f"effective_n_bins={snapshot.effective_n_bins}"
+        )
+    else:
+        binning_info = f"mode=none, effective_n_bins={snapshot.effective_n_bins}"
+    print("analysis: " f"level={snapshot.analysis_level}, {binning_info}")
     if snapshot.analysis_level == "roi":
         print(
             "atlas: "

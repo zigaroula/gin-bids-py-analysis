@@ -49,6 +49,22 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
         )
 
         with h5py.File(output_path, "w") as fh:
+            binning_mode = str(
+                result.metadata.get(
+                    "binning_mode",
+                    "window_ms"
+                    if result.window_ms > 0
+                    else ("n_bins" if result.n_bins > 0 else "none"),
+                )
+            )
+            effective_n_bins = int(
+                result.metadata.get(
+                    "effective_n_bins",
+                    len(result.time_axis_s),
+                )
+            )
+            window_samples = int(result.metadata.get("window_samples", 0))
+
             stats_grp = fh.create_group("stats")
             stats_grp.create_dataset(
                 "t_values",
@@ -134,8 +150,25 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
                 dtype=str_dtype,
             )
             meta_grp.create_dataset(
-                "temporal_window_ms",
-                data=float(result.temporal_window_ms),
+                "window_ms",
+                data=float(result.window_ms),
+            )
+            meta_grp.create_dataset(
+                "n_bins",
+                data=int(result.n_bins),
+            )
+            meta_grp.create_dataset(
+                "window_samples",
+                data=window_samples,
+            )
+            meta_grp.create_dataset(
+                "effective_n_bins",
+                data=effective_n_bins,
+            )
+            meta_grp.create_dataset(
+                "binning_mode",
+                data=binning_mode,
+                dtype=str_dtype,
             )
             meta_grp.create_dataset("stats_valid", data=bool(result.stats_valid))
 

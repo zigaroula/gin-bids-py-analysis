@@ -66,12 +66,24 @@ class TrialStatsParams(BaseProcessingParams):
             "Used only when atlas_name is set."
         ),
     )
-    temporal_window_ms: float = Field(
+    window_ms: float = Field(
         default=0.0,
         ge=0.0,
         description=(
             "Temporal bin size in milliseconds. "
-            "0 keeps sample-by-sample testing; >0 averages non-overlapping bins before stats."
+            "0 disables window-based binning; >0 averages non-overlapping bins before stats. "
+            "If binning would leave a trailing 1-sample tail (common with inclusive epoch bounds), "
+            "that sample is merged into the previous bin. "
+            "Cannot be combined with n_bins > 0."
+        ),
+    )
+    n_bins: int = Field(
+        default=0,
+        ge=-1,
+        description=(
+            "Number of contiguous non-overlapping temporal bins. "
+            "0 or -1 disables count-based binning (sample-by-sample unless window_ms is used). "
+            "Cannot be combined with window_ms > 0."
         ),
     )
 
@@ -106,6 +118,12 @@ class TrialStatsParams(BaseProcessingParams):
             self.atlas_name = self.atlas_name.strip() or None
         if self.atlas_regions and not self.atlas_name:
             raise ValueError("atlas_regions requires atlas_name to be set.")
+        if self.n_bins < 0:
+            self.n_bins = 0
+        if self.window_ms > 0 and self.n_bins > 0:
+            raise ValueError(
+                "window_ms and n_bins are mutually exclusive; define only one."
+            )
         return self
 
 

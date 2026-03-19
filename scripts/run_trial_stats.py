@@ -20,13 +20,13 @@ from gin_bids_py_analysis.processing.trial_stats import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"E:\CBT\bids")
+BIDS_ROOT = Path(r"D:\CBT\bids")
 
 # iEEG files to analyse. These are grouped per subject.
 IEEG_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    "desc": "gammasm500",
+    "desc": "gammasm0",
 }
 
 # Optional secondary tables used by the task-specific resolver.
@@ -42,8 +42,8 @@ PARAMS = TrialStatsParams(
     tmax_s=6.0,
     condition_a="accepted",
     condition_b="rejected",
-    atlas_name="MarsAtlas",
-    temporal_window_ms=100.0,
+    #atlas_name="MarsAtlas",
+    n_bins=1,
     p_value_correction_method="fdr_bh",
     significance_alpha=0.05,
 )

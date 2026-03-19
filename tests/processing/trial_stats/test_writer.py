@@ -74,7 +74,8 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         analysis_level="roi",
         atlas_name="atlasA",
         atlas_regions=["R1", "R2"],
-        temporal_window_ms=100.0,
+        window_ms=100.0,
+        n_bins=0,
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
         stats_valid=True,
@@ -108,10 +109,14 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         assert fh["meta"]["analysis_level"].asstr()[()] == "roi"
         assert fh["meta"]["atlas_name"].asstr()[()] == "atlasA"
         assert list(fh["meta"]["atlas_regions"].asstr()[:]) == ["R1", "R2"]
-        assert float(fh["meta"]["temporal_window_ms"][()]) == 100.0
+        assert float(fh["meta"]["window_ms"][()]) == 100.0
+        assert int(fh["meta"]["n_bins"][()]) == 0
+        assert int(fh["meta"]["effective_n_bins"][()]) == 3
+        assert fh["meta"]["binning_mode"].asstr()[()] == "window_ms"
         assert list(fh["provenance"]["source_ieeg_files"].asstr()[:]) == [str(primary.path)]
         assert list(fh["provenance"]["source_electrodes_files"].asstr()[:]) == [str(tmp_path / "electrodes.tsv")]
 
     lines = trial_table_path.read_text(encoding="utf-8").strip().splitlines()
     assert lines[0].startswith("source_file\tanchor_event_index")
     assert "accepted" in lines[1]
+

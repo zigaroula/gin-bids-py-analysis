@@ -34,7 +34,8 @@ class TrialStatsProcessingResult(BaseProcessingResult):
     analysis_level: str = "channel"
     atlas_name: str | None = None
     atlas_regions: list[str] = field(default_factory=list)
-    temporal_window_ms: float = 0.0
+    window_ms: float = 0.0
+    n_bins: int = 0
     p_value_correction_method: str = "fdr_bh"
     significance_alpha: float = 0.05
     stats_valid: bool = False

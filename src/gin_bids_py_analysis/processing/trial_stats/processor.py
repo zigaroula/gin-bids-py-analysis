@@ -231,23 +231,45 @@ class TrialStatsProcessing(BaseProcessing):
         )
 
         time_axis_eval = time_axis_ref
-        temporal_window_samples = 1
-        if self.params.temporal_window_ms > 0:
-            # Reduce temporal resolution by averaging consecutive sample bins.
-            temporal_window_samples = _window_samples(
+        binning_mode = "none"
+        window_samples = 0
+        effective_n_bins = int(len(time_axis_ref))
+        if self.params.window_ms > 0:
+            # Reduce temporal resolution by averaging consecutive time windows.
+            binning_mode = "window_ms"
+            window_samples = _window_samples(
                 sfreq_ref,
-                self.params.temporal_window_ms,
+                self.params.window_ms,
             )
             epochs_a_array, time_axis_eval = _temporal_bin_epochs(
                 epochs_a_array,
                 time_axis_ref,
-                temporal_window_samples,
+                window_samples,
             )
             epochs_b_array, _ = _temporal_bin_epochs(
                 epochs_b_array,
                 time_axis_ref,
-                temporal_window_samples,
+                window_samples,
             )
+            effective_n_bins = int(len(time_axis_eval))
+        elif self.params.n_bins > 0:
+            if self.params.n_bins > len(time_axis_ref):
+                raise ValueError(
+                    "n_bins cannot be greater than the number of epoch samples "
+                    f"({len(time_axis_ref)})."
+                )
+            binning_mode = "n_bins"
+            epochs_a_array, time_axis_eval = _temporal_bin_epochs_by_n_bins(
+                epochs_a_array,
+                time_axis_ref,
+                self.params.n_bins,
+            )
+            epochs_b_array, _ = _temporal_bin_epochs_by_n_bins(
+                epochs_b_array,
+                time_axis_ref,
+                self.params.n_bins,
+            )
+            effective_n_bins = int(len(time_axis_eval))
 
         # --- Step 4: compute statistics ---
         # Only run the t-test when both conditions have enough trials.
@@ -298,8 +320,11 @@ class TrialStatsProcessing(BaseProcessing):
                 "atlas_regions": feature_names if atlas_mode else [],
                 "atlas_regions_requested": list(self.params.atlas_regions),
                 "atlas_regions_missing": sorted(missing_atlas_regions),
-                "temporal_window_ms": self.params.temporal_window_ms,
-                "temporal_window_samples": temporal_window_samples,
+                "window_ms": self.params.window_ms,
+                "n_bins": self.params.n_bins,
+                "window_samples": window_samples,
+                "effective_n_bins": effective_n_bins,
+                "binning_mode": binning_mode,
             },
             t_values=t_values,
             p_values=p_values,
@@ -322,7 +347,8 @@ class TrialStatsProcessing(BaseProcessing):
             analysis_level="roi" if atlas_mode else "channel",
             atlas_name=self.params.atlas_name,
             atlas_regions=feature_names if atlas_mode else [],
-            temporal_window_ms=self.params.temporal_window_ms,
+            window_ms=self.params.window_ms,
+            n_bins=self.params.n_bins,
             p_value_correction_method=self.params.p_value_correction_method,
             significance_alpha=self.params.significance_alpha,
             stats_valid=stats_valid,
@@ -372,9 +398,9 @@ def _stack_epochs(
     return np.stack(epochs, axis=0).astype(np.float32)
 
 
-def _window_samples(sfreq: float, temporal_window_ms: float) -> int:
+def _window_samples(sfreq: float, window_ms: float) -> int:
     """Convert a temporal window duration (ms) to the nearest sample count (minimum 1)."""
-    return max(1, int(round((temporal_window_ms / 1000.0) * sfreq)))
+    return max(1, int(round((window_ms / 1000.0) * sfreq)))
 
 
 def _temporal_bin_epochs(
@@ -392,26 +418,81 @@ def _temporal_bin_epochs(
 
     n_epochs, n_channels, n_times = epochs.shape
     starts = list(range(0, n_times, window_samples))
+    # Epoch extraction is inclusive on both bounds, which commonly leaves a
+    # trailing 1-sample tail for otherwise exact-duration windows. Merge that
+    # sample into the previous bin to avoid a visually confusing tiny final bin.
+    if len(starts) >= 2 and (n_times - starts[-1]) == 1:
+        starts = starts[:-1]
+
+    stops = [min(start + window_samples, n_times) for start in starts]
+    if stops and stops[-1] < n_times:
+        stops[-1] = n_times
+
+    return _aggregate_time_bins(epochs, time_axis_s, starts, stops)
+
+
+def _temporal_bin_epochs_by_n_bins(
+    epochs: np.ndarray,
+    time_axis_s: np.ndarray,
+    n_bins: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Average into exactly ``n_bins`` contiguous non-overlapping temporal bins."""
+    if n_bins <= 0:
+        return epochs, time_axis_s
+
+    n_times = int(epochs.shape[2])
+    if n_bins == n_times:
+        return epochs, time_axis_s
+    if n_bins > n_times:
+        raise ValueError(
+            f"n_bins={n_bins} cannot exceed n_times={n_times}."
+        )
+
+    starts = [
+        (idx * n_times) // n_bins
+        for idx in range(n_bins)
+    ]
+    stops = [
+        ((idx + 1) * n_times) // n_bins
+        for idx in range(n_bins)
+    ]
+    return _aggregate_time_bins(epochs, time_axis_s, starts, stops)
+
+
+def _aggregate_time_bins(
+    epochs: np.ndarray,
+    time_axis_s: np.ndarray,
+    starts: Sequence[int],
+    stops: Sequence[int],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Aggregate epochs over explicit ``[start, stop)`` temporal slices."""
+    if len(starts) != len(stops):
+        raise ValueError("starts and stops must have the same length.")
+    if not starts:
+        n_epochs, n_channels, _ = epochs.shape
+        return np.empty((n_epochs, n_channels, 0), dtype=np.float32), np.empty((0,), dtype=np.float64)
+
+    for start, stop in zip(starts, stops):
+        if start < 0 or stop <= start or stop > len(time_axis_s):
+            raise ValueError(
+                f"Invalid temporal slice [{start}, {stop}) for n_times={len(time_axis_s)}."
+            )
+
+    n_epochs, n_channels, _ = epochs.shape
     binned_time_axis = np.array(
-        [
-            float(np.nanmean(time_axis_s[start:min(start + window_samples, n_times)]))
-            for start in starts
-        ],
+        [float(np.nanmean(time_axis_s[start:stop])) for start, stop in zip(starts, stops)],
         dtype=np.float64,
     )
-
     if n_epochs == 0:
         return np.empty((0, n_channels, len(starts)), dtype=np.float32), binned_time_axis
 
     binned = np.empty((n_epochs, n_channels, len(starts)), dtype=np.float32)
-    for bin_idx, start in enumerate(starts):
-        stop = min(start + window_samples, n_times)
+    for bin_idx, (start, stop) in enumerate(zip(starts, stops)):
         binned[:, :, bin_idx] = np.nanmean(
             epochs[:, :, start:stop],
             axis=2,
             dtype=np.float64,
         ).astype(np.float32)
-
     return binned, binned_time_axis
 
 
