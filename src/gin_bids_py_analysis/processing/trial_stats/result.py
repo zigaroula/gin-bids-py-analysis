@@ -19,6 +19,11 @@ class TrialStatsProcessingResult(BaseProcessingResult):
     condition_a_mean: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_mean: np.ndarray = field(default_factory=lambda: np.array([]))
     mean_difference: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_a_sem: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_b_sem: np.ndarray = field(default_factory=lambda: np.array([]))
+    difference_sem: np.ndarray = field(default_factory=lambda: np.array([]))
+    difference_ci95_low: np.ndarray = field(default_factory=lambda: np.array([]))
+    difference_ci95_high: np.ndarray = field(default_factory=lambda: np.array([]))
     significant_mask: np.ndarray = field(default_factory=lambda: np.array([]))
     time_axis_s: np.ndarray = field(default_factory=lambda: np.array([]))
     channel_names: list[str] = field(default_factory=list)
@@ -34,6 +39,7 @@ class TrialStatsProcessingResult(BaseProcessingResult):
     analysis_level: str = "channel"
     atlas_name: str | None = None
     atlas_regions: list[str] = field(default_factory=list)
+    region_channels: dict[str, list[str]] = field(default_factory=dict)
     window_ms: float = 0.0
     n_bins: int = 0
     p_value_correction_method: str = "fdr_bh"

@@ -47,6 +47,7 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             if result.significant_mask.size
             else (np.isfinite(result.p_values) & (result.p_values < result.significance_alpha))
         )
+        _validate_uncertainty_shapes(result)
 
         with h5py.File(output_path, "w") as fh:
             binning_mode = str(
@@ -95,6 +96,28 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             means_grp.create_dataset(
                 "difference",
                 data=result.mean_difference.astype(np.float64),
+            )
+
+            uncertainty_grp = fh.create_group("uncertainty")
+            uncertainty_grp.create_dataset(
+                result.condition_a + "_sem",
+                data=result.condition_a_sem.astype(np.float64),
+            )
+            uncertainty_grp.create_dataset(
+                result.condition_b + "_sem",
+                data=result.condition_b_sem.astype(np.float64),
+            )
+            uncertainty_grp.create_dataset(
+                "difference_sem",
+                data=result.difference_sem.astype(np.float64),
+            )
+            uncertainty_grp.create_dataset(
+                "difference_ci95_low",
+                data=result.difference_ci95_low.astype(np.float64),
+            )
+            uncertainty_grp.create_dataset(
+                "difference_ci95_high",
+                data=result.difference_ci95_high.astype(np.float64),
             )
 
             axes_grp = fh.create_group("axes")
@@ -148,6 +171,37 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             meta_grp.create_dataset(
                 "atlas_regions",
                 data=np.array(result.atlas_regions, dtype=object),
+                dtype=str_dtype,
+            )
+            atlas_map_grp = meta_grp.create_group("atlas_region_channel_map")
+            region_order = (
+                result.channel_names
+                if result.analysis_level == "roi"
+                else []
+            )
+            atlas_map_grp.create_dataset(
+                "region_order",
+                data=np.array(region_order, dtype=object),
+                dtype=str_dtype,
+            )
+            region_pairs: list[str] = []
+            channel_pairs: list[str] = []
+            ordered_regions = list(region_order)
+            for region in result.region_channels:
+                if region not in ordered_regions:
+                    ordered_regions.append(region)
+            for region in ordered_regions:
+                for channel in result.region_channels.get(region, []):
+                    region_pairs.append(str(region))
+                    channel_pairs.append(str(channel))
+            atlas_map_grp.create_dataset(
+                "region",
+                data=np.array(region_pairs, dtype=object),
+                dtype=str_dtype,
+            )
+            atlas_map_grp.create_dataset(
+                "channel",
+                data=np.array(channel_pairs, dtype=object),
                 dtype=str_dtype,
             )
             meta_grp.create_dataset(
@@ -293,3 +347,21 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
 def _trial_table_path(output_path: Path) -> Path:
     tsv_path = output_path.with_suffix(".tsv")
     return tsv_path.with_name(tsv_path.name.replace("_stats.tsv", "_trials.tsv"))
+
+
+def _validate_uncertainty_shapes(result: TrialStatsProcessingResult) -> None:
+    expected = result.mean_difference.shape
+    shapes = {
+        "condition_a_sem": result.condition_a_sem.shape,
+        "condition_b_sem": result.condition_b_sem.shape,
+        "difference_sem": result.difference_sem.shape,
+        "difference_ci95_low": result.difference_ci95_low.shape,
+        "difference_ci95_high": result.difference_ci95_high.shape,
+    }
+    mismatched = [name for name, shape in shapes.items() if shape != expected]
+    if mismatched:
+        details = ", ".join(f"{name}={shapes[name]!r}" for name in mismatched)
+        raise ValueError(
+            "Uncertainty arrays must match mean_difference shape "
+            f"{expected!r}; got {details}."
+        )

@@ -49,6 +49,11 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         condition_a_mean=np.full((2, 3), 5.0, dtype=np.float64),
         condition_b_mean=np.full((2, 3), 1.0, dtype=np.float64),
         mean_difference=np.full((2, 3), 4.0, dtype=np.float64),
+        condition_a_sem=np.full((2, 3), 0.5, dtype=np.float64),
+        condition_b_sem=np.full((2, 3), 0.4, dtype=np.float64),
+        difference_sem=np.full((2, 3), 0.64, dtype=np.float64),
+        difference_ci95_low=np.full((2, 3), 2.7, dtype=np.float64),
+        difference_ci95_high=np.full((2, 3), 5.3, dtype=np.float64),
         significant_mask=np.ones((2, 3), dtype=bool),
         time_axis_s=np.array([0.0, 0.1, 0.2], dtype=np.float64),
         channel_names=["A1", "A2"],
@@ -74,6 +79,10 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         analysis_level="roi",
         atlas_name="atlasA",
         atlas_regions=["R1", "R2"],
+        region_channels={
+            "A1": ["CH01", "CH02"],
+            "A2": ["CH03"],
+        },
         window_ms=100.0,
         n_bins=0,
         p_value_correction_method="fdr_bh",
@@ -102,6 +111,11 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         assert fh["stats"]["p_values_uncorrected"].shape == (2, 3)
         assert fh["stats"]["significant_mask"].shape == (2, 3)
         assert fh["means"]["difference"].shape == (2, 3)
+        assert fh["uncertainty"]["accepted_sem"].shape == (2, 3)
+        assert fh["uncertainty"]["rejected_sem"].shape == (2, 3)
+        assert fh["uncertainty"]["difference_sem"].shape == (2, 3)
+        assert fh["uncertainty"]["difference_ci95_low"].shape == (2, 3)
+        assert fh["uncertainty"]["difference_ci95_high"].shape == (2, 3)
         assert list(fh["axes"]["region"].asstr()[:]) == ["A1", "A2"]
         assert "channel" not in fh["axes"]
         assert list(fh["meta"]["trial_counts"][:]) == [4, 4]
@@ -110,6 +124,9 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         assert fh["meta"]["analysis_level"].asstr()[()] == "roi"
         assert fh["meta"]["atlas_name"].asstr()[()] == "atlasA"
         assert list(fh["meta"]["atlas_regions"].asstr()[:]) == ["R1", "R2"]
+        assert list(fh["meta"]["atlas_region_channel_map"]["region_order"].asstr()[:]) == ["A1", "A2"]
+        assert list(fh["meta"]["atlas_region_channel_map"]["region"].asstr()[:]) == ["A1", "A1", "A2"]
+        assert list(fh["meta"]["atlas_region_channel_map"]["channel"].asstr()[:]) == ["CH01", "CH02", "CH03"]
         assert float(fh["meta"]["window_ms"][()]) == 100.0
         assert int(fh["meta"]["n_bins"][()]) == 0
         assert int(fh["meta"]["effective_n_bins"][()]) == 3
@@ -120,5 +137,3 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
     lines = trial_table_path.read_text(encoding="utf-8").strip().splitlines()
     assert lines[0].startswith("source_file\tanchor_event_index")
     assert "accepted" in lines[1]
-
-

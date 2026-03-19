@@ -292,6 +292,22 @@ class TrialStatsProcessing(BaseProcessing):
         if epochs_b_array.size:
             mean_b = np.nanmean(epochs_b_array, axis=0, dtype=np.float64)
         mean_difference = mean_a - mean_b
+        condition_a_sem = _compute_condition_sem(
+            epochs_a_array,
+            n_channels=len(feature_names),
+            n_times=len(time_axis_eval),
+        )
+        condition_b_sem = _compute_condition_sem(
+            epochs_b_array,
+            n_channels=len(feature_names),
+            n_times=len(time_axis_eval),
+        )
+        difference_sem = np.sqrt(
+            np.square(condition_a_sem, dtype=np.float64)
+            + np.square(condition_b_sem, dtype=np.float64)
+        )
+        difference_ci95_low = mean_difference - (1.96 * difference_sem)
+        difference_ci95_high = mean_difference + (1.96 * difference_sem)
 
         p_values = correct_p_values(
             p_values_raw,
@@ -302,6 +318,13 @@ class TrialStatsProcessing(BaseProcessing):
         source_electrodes_files = sorted(used_electrodes_paths)
         if not source_electrodes_files and electrodes_files:
             source_electrodes_files = sorted({str(file.path) for file in electrodes_files})
+        region_channels: dict[str, list[str]] = {}
+        if atlas_mode:
+            assert feature_indices_ref is not None
+            region_channels = {
+                region: [channel_names_ref[int(index)] for index in indices]
+                for region, indices in zip(feature_names, feature_indices_ref)
+            }
 
         return TrialStatsProcessingResult(
             source_group=group,
@@ -337,6 +360,11 @@ class TrialStatsProcessing(BaseProcessing):
             condition_a_mean=mean_a,
             condition_b_mean=mean_b,
             mean_difference=mean_difference,
+            condition_a_sem=condition_a_sem,
+            condition_b_sem=condition_b_sem,
+            difference_sem=difference_sem,
+            difference_ci95_low=difference_ci95_low,
+            difference_ci95_high=difference_ci95_high,
             significant_mask=significant_mask,
             time_axis_s=time_axis_eval,
             channel_names=feature_names,
@@ -352,6 +380,7 @@ class TrialStatsProcessing(BaseProcessing):
             analysis_level="roi" if atlas_mode else "channel",
             atlas_name=self.params.atlas_name,
             atlas_regions=feature_names if atlas_mode else [],
+            region_channels=region_channels,
             window_ms=self.params.window_ms,
             n_bins=self.params.n_bins,
             p_value_correction_method=self.params.p_value_correction_method,
@@ -401,6 +430,25 @@ def _stack_epochs(
     if not epochs:
         return np.empty((0, n_channels, n_times), dtype=np.float32)
     return np.stack(epochs, axis=0).astype(np.float32)
+
+
+def _compute_condition_sem(
+    epochs: np.ndarray,
+    *,
+    n_channels: int,
+    n_times: int,
+) -> np.ndarray:
+    """Return per-feature SEM across trials, or NaN when fewer than 2 trials."""
+    if epochs.shape[0] < 2:
+        return np.full((n_channels, n_times), np.nan, dtype=np.float64)
+
+    std = np.nanstd(
+        epochs,
+        axis=0,
+        ddof=1,
+        dtype=np.float64,
+    )
+    return std / np.sqrt(float(epochs.shape[0]))
 
 
 def _window_samples(sfreq: float, window_ms: float) -> int:
