@@ -30,7 +30,7 @@ BIDS_ROOT = Path(r"E:\CBT\bids")
 FILE_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    #"subject": "epi01",
+    "subject": "epi18",
     #"run": "01",
 }
 

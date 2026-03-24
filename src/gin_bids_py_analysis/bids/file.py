@@ -27,6 +27,33 @@ class BIDSFile:
         self._path = Path(pybids_file.path)
         self._entities: dict[str, Any] = dict(pybids_file.entities)
 
+    @classmethod
+    def from_path(
+        cls,
+        path: Path | str,
+    ) -> "BIDSFile":
+        """
+        Alternate constructor for non-pybids contexts.
+
+        Use this when only a path is available (outside a BIDSDataset query).
+        """
+        from .helpers import parse_entities
+
+        resolved_path = Path(path)
+        entities = parse_entities(resolved_path)
+        if "sub" in entities and "subject" not in entities:
+            entities["subject"] = entities["sub"]
+        if "ses" in entities and "session" not in entities:
+            entities["session"] = entities["ses"]
+        entities["suffix"] = resolved_path.stem.split("_")[-1]
+        entities["extension"] = resolved_path.suffix
+        entities["datatype"] = resolved_path.parent.name
+
+        instance = cls.__new__(cls)
+        instance._path = resolved_path
+        instance._entities = dict(entities)
+        return instance
+
     # ------------------------------------------------------------------
     # Core properties
     # ------------------------------------------------------------------

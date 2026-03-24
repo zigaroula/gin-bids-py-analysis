@@ -1,6 +1,7 @@
 """
-Inspect trial-stats outputs (.h5 + companion _trials.tsv) and generate a
-per-subject visual summary.
+Inspect trial-stats outputs (.h5 + optional companion _trials.tsv) and generate a
+visual summary. Supports both subject-level trial_stats and group-level
+trial_stats_group outputs.
 
 Examples:
   python scripts/inspect_trial_stats.py --input E:\\CBT\\bids\\derivatives\\trial_stats\\sub-01\\ieeg\\sub-01_desc-trialstats_stats.h5
@@ -12,7 +13,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import textwrap
 from typing import Iterable
@@ -21,8 +22,8 @@ import h5py
 import numpy as np
 
 
-DEFAULT_BIDS_ROOT = Path(r"D:\CBT\bids")
-DEFAULT_STATS_GLOB = "derivatives/trial_stats/**/*_stats.h5"
+DEFAULT_BIDS_ROOT = Path(r"E:\CBT\bids")
+DEFAULT_STATS_GLOB = "derivatives/**/*_stats.h5"
 
 
 @dataclass
@@ -55,6 +56,11 @@ class TrialStatsSnapshot:
     n_bins: int
     effective_n_bins: int
     binning_mode: str
+    source_metric: str = ""
+    roi_mode: str = ""
+    pipeline_name: str = "trial_stats"
+    roi_channel_counts: np.ndarray = field(default_factory=lambda: np.array([]))
+    roi_subject_counts: np.ndarray = field(default_factory=lambda: np.array([]))
 
 
 @dataclass(frozen=True)
@@ -82,7 +88,7 @@ class RegionMetric:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Inspect trial-stats outputs and render a per-subject summary figure.",
+        description="Inspect trial-stats outputs and render a summary figure.",
     )
     parser.add_argument(
         "--bids-root",
@@ -251,6 +257,41 @@ def _coerce_bool_feature_time(
     return out
 
 
+def _is_region_level(analysis_level: str) -> bool:
+    return analysis_level in {"roi", "roi_group"}
+
+
+def _load_group_region_channels(
+    fh: h5py.File,
+    channels: list[str],
+) -> dict[str, list[str]]:
+    region_channels: dict[str, list[str]] = {region: [] for region in channels}
+    if "contributions" not in fh:
+        return region_channels
+
+    contrib_grp = fh["contributions"]
+    if (
+        "region" not in contrib_grp
+        or "channel" not in contrib_grp
+        or "subject" not in contrib_grp
+    ):
+        return region_channels
+
+    regions = _decode_str_array(np.asarray(contrib_grp["region"][:]))
+    channel_names = _decode_str_array(np.asarray(contrib_grp["channel"][:]))
+    subjects = _decode_str_array(np.asarray(contrib_grp["subject"][:]))
+    if not (len(regions) == len(channel_names) == len(subjects)):
+        return region_channels
+
+    for region, subject, channel in zip(regions, subjects, channel_names):
+        key = f"sub-{subject}:{channel}"
+        region_list = region_channels.setdefault(region, [])
+        if key not in region_list:
+            region_list.append(key)
+
+    return region_channels
+
+
 def _load_snapshot(stats_path: Path) -> TrialStatsSnapshot:
     with h5py.File(stats_path, "r") as fh:
         stats_grp = fh["stats"]
@@ -260,7 +301,7 @@ def _load_snapshot(stats_path: Path) -> TrialStatsSnapshot:
         uncertainty_grp = fh["uncertainty"]
 
         analysis_level = _str_scalar(meta_grp.get("analysis_level"), default="channel")
-        axis_name = "region" if analysis_level == "roi" else "channel"
+        axis_name = "region" if _is_region_level(analysis_level) else "channel"
         channels = _decode_str_array(np.asarray(axes_grp[axis_name][:]))
         time_s = np.asarray(axes_grp["time_s"][:], dtype=np.float64)
         n_features = len(channels)
@@ -298,106 +339,179 @@ def _load_snapshot(stats_path: Path) -> TrialStatsSnapshot:
         else:
             significant_mask = np.isfinite(p_values) & (p_values < significance_alpha)
 
-        if "trial_count_labels" in meta_grp:
-            raw_labels = _decode_str_array(np.asarray(meta_grp["trial_count_labels"][:]))
-            if len(raw_labels) >= 2:
-                condition_labels = (raw_labels[0], raw_labels[1])
-            else:
-                condition_labels = ("condition_a", "condition_b")
+        prov_grp = fh["provenance"] if "provenance" in fh else None
+        pipeline_name = (
+            _str_scalar(prov_grp.get("pipeline_name"), default="trial_stats")
+            if prov_grp is not None
+            else "trial_stats"
+        )
+        source_metric = _str_scalar(meta_grp.get("source_metric"), default="")
+        roi_mode = _str_scalar(meta_grp.get("roi_mode"), default="")
+        is_group_level = analysis_level == "roi_group" or (
+            "metric_mean" in means_grp and "difference" not in means_grp
+        )
+
+        if is_group_level:
+            if not source_metric:
+                source_metric = "metric_mean"
+            condition_labels = (source_metric, "zero")
+            metric_mean_raw = _load_optional_float_dataset(means_grp, "metric_mean")
+            condition_a_mean = _coerce_float_feature_time(metric_mean_raw, n_features, n_times)
+            condition_b_mean = np.zeros((n_features, n_times), dtype=np.float64)
+            mean_difference = condition_a_mean.copy()
+
+            metric_sem_raw = _load_optional_float_dataset(uncertainty_grp, "metric_sem")
+            difference_sem = _coerce_float_feature_time(metric_sem_raw, n_features, n_times)
+            condition_a_sem = difference_sem.copy()
+            condition_b_sem = np.zeros((n_features, n_times), dtype=np.float64)
+            difference_ci95_low = condition_a_mean - (1.96 * difference_sem)
+            difference_ci95_high = condition_a_mean + (1.96 * difference_sem)
+            trial_counts = (0, 0)
+            stats_valid = bool(n_features > 0)
         else:
-            non_difference_keys = [name for name in means_grp.keys() if name != "difference"]
-            if len(non_difference_keys) >= 2:
-                condition_labels = (non_difference_keys[0], non_difference_keys[1])
+            if "trial_count_labels" in meta_grp:
+                raw_labels = _decode_str_array(np.asarray(meta_grp["trial_count_labels"][:]))
+                if len(raw_labels) >= 2:
+                    condition_labels = (raw_labels[0], raw_labels[1])
+                else:
+                    condition_labels = ("condition_a", "condition_b")
             else:
-                condition_labels = ("condition_a", "condition_b")
+                non_difference_keys = [name for name in means_grp.keys() if name != "difference"]
+                if len(non_difference_keys) >= 2:
+                    condition_labels = (non_difference_keys[0], non_difference_keys[1])
+                else:
+                    condition_labels = ("condition_a", "condition_b")
 
-        mean_a_raw = _load_optional_float_dataset(means_grp, condition_labels[0])
-        mean_b_raw = _load_optional_float_dataset(means_grp, condition_labels[1])
-        if mean_a_raw is None:
-            mean_a_raw = _load_optional_float_dataset(means_grp, "condition_a")
-        if mean_b_raw is None:
-            mean_b_raw = _load_optional_float_dataset(means_grp, "condition_b")
+            mean_a_raw = _load_optional_float_dataset(means_grp, condition_labels[0])
+            mean_b_raw = _load_optional_float_dataset(means_grp, condition_labels[1])
+            if mean_a_raw is None:
+                mean_a_raw = _load_optional_float_dataset(means_grp, "condition_a")
+            if mean_b_raw is None:
+                mean_b_raw = _load_optional_float_dataset(means_grp, "condition_b")
 
-        non_difference_keys = [name for name in means_grp.keys() if name != "difference"]
-        if mean_a_raw is None and non_difference_keys:
-            mean_a_raw = _load_optional_float_dataset(means_grp, non_difference_keys[0])
-            condition_labels = (non_difference_keys[0], condition_labels[1])
-        if mean_b_raw is None:
-            for key in non_difference_keys:
-                if key == condition_labels[0]:
-                    continue
-                candidate = _load_optional_float_dataset(means_grp, key)
-                if candidate is not None:
-                    mean_b_raw = candidate
-                    condition_labels = (condition_labels[0], key)
-                    break
+            non_difference_keys = [name for name in means_grp.keys() if name != "difference"]
+            if mean_a_raw is None and non_difference_keys:
+                mean_a_raw = _load_optional_float_dataset(means_grp, non_difference_keys[0])
+                condition_labels = (non_difference_keys[0], condition_labels[1])
+            if mean_b_raw is None:
+                for key in non_difference_keys:
+                    if key == condition_labels[0]:
+                        continue
+                    candidate = _load_optional_float_dataset(means_grp, key)
+                    if candidate is not None:
+                        mean_b_raw = candidate
+                        condition_labels = (condition_labels[0], key)
+                        break
 
-        condition_a_mean = _coerce_float_feature_time(mean_a_raw, n_features, n_times)
-        condition_b_mean = _coerce_float_feature_time(mean_b_raw, n_features, n_times)
+            condition_a_mean = _coerce_float_feature_time(mean_a_raw, n_features, n_times)
+            condition_b_mean = _coerce_float_feature_time(mean_b_raw, n_features, n_times)
 
-        mean_difference_raw = _load_optional_float_dataset(means_grp, "difference")
-        if mean_difference_raw is None:
-            mean_difference_raw = condition_a_mean - condition_b_mean
-        mean_difference = _coerce_float_feature_time(mean_difference_raw, n_features, n_times)
-        condition_a_sem = _coerce_float_feature_time(
-            np.asarray(uncertainty_grp[condition_labels[0] + "_sem"][:], dtype=np.float64),
-            n_features,
-            n_times,
-        )
-        condition_b_sem = _coerce_float_feature_time(
-            np.asarray(uncertainty_grp[condition_labels[1] + "_sem"][:], dtype=np.float64),
-            n_features,
-            n_times,
-        )
-        difference_sem = _coerce_float_feature_time(
-            np.asarray(uncertainty_grp["difference_sem"][:], dtype=np.float64),
-            n_features,
-            n_times,
-        )
-        difference_ci95_low = _coerce_float_feature_time(
-            np.asarray(uncertainty_grp["difference_ci95_low"][:], dtype=np.float64),
-            n_features,
-            n_times,
-        )
-        difference_ci95_high = _coerce_float_feature_time(
-            np.asarray(uncertainty_grp["difference_ci95_high"][:], dtype=np.float64),
-            n_features,
-            n_times,
-        )
+            mean_difference_raw = _load_optional_float_dataset(means_grp, "difference")
+            if mean_difference_raw is None:
+                mean_difference_raw = condition_a_mean - condition_b_mean
+            mean_difference = _coerce_float_feature_time(mean_difference_raw, n_features, n_times)
 
-        if "trial_counts" in meta_grp:
-            raw_counts = np.asarray(meta_grp["trial_counts"][:], dtype=np.int64)
-            if raw_counts.size >= 2:
-                trial_counts = (int(raw_counts[0]), int(raw_counts[1]))
+            cond_a_sem_raw = _load_optional_float_dataset(
+                uncertainty_grp, condition_labels[0] + "_sem"
+            )
+            if cond_a_sem_raw is None:
+                cond_a_sem_raw = _load_optional_float_dataset(uncertainty_grp, "condition_a_sem")
+            cond_b_sem_raw = _load_optional_float_dataset(
+                uncertainty_grp, condition_labels[1] + "_sem"
+            )
+            if cond_b_sem_raw is None:
+                cond_b_sem_raw = _load_optional_float_dataset(uncertainty_grp, "condition_b_sem")
+            condition_a_sem = _coerce_float_feature_time(cond_a_sem_raw, n_features, n_times)
+            condition_b_sem = _coerce_float_feature_time(cond_b_sem_raw, n_features, n_times)
+
+            difference_sem_raw = _load_optional_float_dataset(uncertainty_grp, "difference_sem")
+            if difference_sem_raw is None:
+                difference_sem_raw = np.sqrt(
+                    np.square(condition_a_sem, dtype=np.float64)
+                    + np.square(condition_b_sem, dtype=np.float64)
+                )
+            difference_sem = _coerce_float_feature_time(
+                difference_sem_raw, n_features, n_times
+            )
+
+            difference_ci95_low_raw = _load_optional_float_dataset(
+                uncertainty_grp, "difference_ci95_low"
+            )
+            difference_ci95_high_raw = _load_optional_float_dataset(
+                uncertainty_grp, "difference_ci95_high"
+            )
+            if difference_ci95_low_raw is None or difference_ci95_high_raw is None:
+                difference_ci95_low = mean_difference - (1.96 * difference_sem)
+                difference_ci95_high = mean_difference + (1.96 * difference_sem)
+            else:
+                difference_ci95_low = _coerce_float_feature_time(
+                    difference_ci95_low_raw, n_features, n_times
+                )
+                difference_ci95_high = _coerce_float_feature_time(
+                    difference_ci95_high_raw, n_features, n_times
+                )
+
+            if "trial_counts" in meta_grp:
+                raw_counts = np.asarray(meta_grp["trial_counts"][:], dtype=np.int64)
+                if raw_counts.size >= 2:
+                    trial_counts = (int(raw_counts[0]), int(raw_counts[1]))
+                else:
+                    trial_counts = (0, 0)
             else:
                 trial_counts = (0, 0)
-        else:
-            trial_counts = (0, 0)
 
-        stats_valid = _bool_scalar(meta_grp.get("stats_valid"), default=False)
+            stats_valid = _bool_scalar(meta_grp.get("stats_valid"), default=False)
+
         atlas_name = _str_scalar(meta_grp.get("atlas_name"), default="")
-        atlas_regions = (
-            _decode_str_array(np.asarray(meta_grp["atlas_regions"][:]))
-            if "atlas_regions" in meta_grp
-            else []
-        )
-        atlas_map_grp = meta_grp["atlas_region_channel_map"]
-        map_region_order = _decode_str_array(np.asarray(atlas_map_grp["region_order"][:]))
-        map_regions = _decode_str_array(np.asarray(atlas_map_grp["region"][:]))
-        map_channels = _decode_str_array(np.asarray(atlas_map_grp["channel"][:]))
-        if len(map_regions) != len(map_channels):
-            raise ValueError(
-                "meta/atlas_region_channel_map/region and /channel must have "
-                f"the same length in {stats_path.name}."
+        if is_group_level:
+            atlas_regions = channels if _is_region_level(analysis_level) else []
+            region_channels = _load_group_region_channels(fh, channels)
+        else:
+            atlas_regions = (
+                _decode_str_array(np.asarray(meta_grp["atlas_regions"][:]))
+                if "atlas_regions" in meta_grp
+                else []
             )
-        region_channels: dict[str, list[str]] = {region: [] for region in map_region_order}
-        for region, channel in zip(map_regions, map_channels):
-            region_list = region_channels.setdefault(region, [])
-            if channel not in region_list:
-                region_list.append(channel)
-        if analysis_level == "roi":
-            for region in channels:
-                region_channels.setdefault(region, [])
+            region_channels = {}
+            if "atlas_region_channel_map" in meta_grp:
+                atlas_map_grp = meta_grp["atlas_region_channel_map"]
+                map_region_order = _decode_str_array(
+                    np.asarray(atlas_map_grp["region_order"][:], dtype=object)
+                ) if "region_order" in atlas_map_grp else []
+                map_regions = _decode_str_array(
+                    np.asarray(atlas_map_grp["region"][:], dtype=object)
+                ) if "region" in atlas_map_grp else []
+                map_channels = _decode_str_array(
+                    np.asarray(atlas_map_grp["channel"][:], dtype=object)
+                ) if "channel" in atlas_map_grp else []
+                if len(map_regions) != len(map_channels):
+                    raise ValueError(
+                        "meta/atlas_region_channel_map/region and /channel must have "
+                        f"the same length in {stats_path.name}."
+                    )
+                region_channels = {region: [] for region in map_region_order}
+                for region, channel in zip(map_regions, map_channels):
+                    region_list = region_channels.setdefault(region, [])
+                    if channel not in region_list:
+                        region_list.append(channel)
+            if _is_region_level(analysis_level):
+                for region in channels:
+                    region_channels.setdefault(region, [])
+
+        summary_grp = fh["summary_epoch"] if "summary_epoch" in fh else None
+        if summary_grp is not None and "roi_channel_counts" in summary_grp:
+            roi_channel_counts = np.asarray(
+                summary_grp["roi_channel_counts"][:], dtype=np.int64
+            )
+        else:
+            roi_channel_counts = np.asarray([], dtype=np.int64)
+        if summary_grp is not None and "roi_subject_counts" in summary_grp:
+            roi_subject_counts = np.asarray(
+                summary_grp["roi_subject_counts"][:], dtype=np.int64
+            )
+        else:
+            roi_subject_counts = np.asarray([], dtype=np.int64)
+
         if "window_ms" in meta_grp:
             window_ms = _float_scalar(meta_grp.get("window_ms"), default=0.0)
         else:
@@ -449,6 +563,11 @@ def _load_snapshot(stats_path: Path) -> TrialStatsSnapshot:
         n_bins=n_bins,
         effective_n_bins=effective_n_bins,
         binning_mode=binning_mode,
+        source_metric=source_metric,
+        roi_mode=roi_mode,
+        pipeline_name=pipeline_name,
+        roi_channel_counts=roi_channel_counts,
+        roi_subject_counts=roi_subject_counts,
     )
 
 
@@ -680,11 +799,11 @@ def _format_float(value: float, precision: int = 3) -> str:
 
 
 def _item_label(snapshot: TrialStatsSnapshot) -> str:
-    return "Region" if snapshot.analysis_level == "roi" else "Channel"
+    return "Region" if _is_region_level(snapshot.analysis_level) else "Channel"
 
 
 def _region_channel_panel_lines(snapshot: TrialStatsSnapshot) -> list[str]:
-    if snapshot.analysis_level != "roi":
+    if not _is_region_level(snapshot.analysis_level):
         return ["region_channels: n/a (analysis_level=channel)"]
 
     ordered_regions = snapshot.channels if snapshot.channels else list(snapshot.region_channels.keys())
@@ -965,6 +1084,24 @@ def _write_summary_figure(
         f"analysis_level: {snapshot.analysis_level}",
         f"atlas_name: {snapshot.atlas_name or 'n/a'}",
     ]
+    if snapshot.pipeline_name:
+        params_lines.append(f"pipeline: {snapshot.pipeline_name}")
+    if snapshot.source_metric:
+        params_lines.append(f"source_metric: {snapshot.source_metric}")
+    if snapshot.roi_mode:
+        params_lines.append(f"roi_mode: {snapshot.roi_mode}")
+    if (
+        snapshot.roi_channel_counts.size == len(snapshot.channels)
+        and snapshot.roi_subject_counts.size == len(snapshot.channels)
+        and len(snapshot.channels) > 0
+    ):
+        params_lines.append(
+            "roi_counts: "
+            f"channels[min={int(np.min(snapshot.roi_channel_counts))}, "
+            f"max={int(np.max(snapshot.roi_channel_counts))}], "
+            f"subjects[min={int(np.min(snapshot.roi_subject_counts))}, "
+            f"max={int(np.max(snapshot.roi_subject_counts))}]"
+        )
     params_lines.extend(_region_channel_panel_lines(snapshot))
 
     fig.suptitle(
@@ -1039,7 +1176,7 @@ def _inspect_file(
         n_kept = sum(str(row.get("keep", "")).strip().lower() == "true" for row in trial_rows)
         kept_fragment = f", kept_trials={n_kept}/{len(trial_rows)}"
 
-    axis_label = "regions" if snapshot.analysis_level == "roi" else "channels"
+    axis_label = "regions" if _is_region_level(snapshot.analysis_level) else "channels"
     print(
         f"{stats_path.name}: "
         f"stats_valid={snapshot.stats_valid}, "
@@ -1051,7 +1188,7 @@ def _inspect_file(
     )
     if top_ranking:
         best = top_ranking[0]
-        item_label = "region" if snapshot.analysis_level == "roi" else "channel"
+        item_label = "region" if _is_region_level(snapshot.analysis_level) else "channel"
         print(
             f"  best_{item_label}: {best['channel']} "
             f"(sig_fraction={float(best['sig_fraction']):.3f})"

@@ -6,6 +6,8 @@ These tests use the ``mock_bids_file`` fixture (no pybids indexing required).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from gin_bids_py_analysis.bids.file import BIDSFile
@@ -53,3 +55,19 @@ def test_missing_entity_raises_key_error(mock_bids_file: BIDSFile) -> None:
 
 def test_repr(mock_bids_file: BIDSFile) -> None:
     assert "BIDSFile" in repr(mock_bids_file)
+
+
+def test_from_path_alternate_constructor() -> None:
+    file = BIDSFile.from_path(
+        Path("sub-01/ses-02/ieeg/sub-01_ses-02_task-rest_run-1_ieeg.vhdr"),
+    )
+
+    assert file.path == Path("sub-01/ses-02/ieeg/sub-01_ses-02_task-rest_run-1_ieeg.vhdr")
+    assert file["sub"] == "01"
+    assert file["subject"] == "01"
+    assert file["ses"] == "02"
+    assert file["session"] == "02"
+    assert file["task"] == "rest"
+    assert file.extension == ".vhdr"
+    assert file.datatype == "ieeg"
+    assert file.suffix == "ieeg"

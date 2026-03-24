@@ -118,6 +118,22 @@ def normalize_entities(entities: dict[str, str]) -> dict[str, str]:
             norm[k] = v
     return norm
 
+
+def normalize_subject_value(subject: str) -> str:
+    """
+    Normalize a subject label value by stripping surrounding spaces and an
+    optional ``sub-`` prefix.
+
+    Examples:
+        ``"sub-01" -> "01"``
+        ``"01" -> "01"``
+    """
+    label = str(subject).strip()
+    if label[:4].casefold() == "sub-":
+        return label[4:].strip()
+    return label
+
+
 def parse_entities(path: Path) -> dict[str, str]:
     """
     Parse BIDS entities from a filename stem.

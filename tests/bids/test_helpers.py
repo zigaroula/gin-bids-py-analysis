@@ -6,7 +6,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gin_bids_py_analysis.bids.helpers import build_bids_path, parse_entities
+from gin_bids_py_analysis.bids.helpers import (
+    build_bids_path,
+    normalize_subject_value,
+    parse_entities,
+)
 
 
 def test_build_bids_path_filename_order(tmp_path: Path) -> None:
@@ -70,3 +74,11 @@ def test_parse_entities_ignores_suffix_component() -> None:
 
 def test_parse_entities_empty_for_no_entities() -> None:
     assert parse_entities(Path("ieeg.vhdr")) == {}
+
+
+def test_normalize_subject_value_strips_sub_prefix() -> None:
+    assert normalize_subject_value("sub-01") == "01"
+
+
+def test_normalize_subject_value_handles_whitespace_and_case() -> None:
+    assert normalize_subject_value("  SuB-XYZ  ") == "XYZ"
