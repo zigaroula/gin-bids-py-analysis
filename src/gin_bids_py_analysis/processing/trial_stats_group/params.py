@@ -136,7 +136,10 @@ class TrialStatsGroupWriterParams(BaseWriterParams):
     output_modality: str = "ieeg"
     output_suffix: str = "stats"
     output_description: str = "trialstatsgroup"
-    output_format: Literal["hdf5"] = Field(
+    output_format: Literal["hdf5", "matlab"] = Field(
         default="hdf5",
-        description="The trial_stats_group writer currently emits HDF5 outputs.",
+        description=(
+            "Output format for group-level trial-stats results. "
+            "'hdf5' writes an HDF5 file (.h5); 'matlab' writes a MATLAB file (.mat)."
+        ),
     )

@@ -25,6 +25,16 @@ import numpy as np
 DEFAULT_BIDS_ROOT = Path(r"E:\CBT\bids")
 DEFAULT_STATS_GLOB = "derivatives/**/*_stats.h5"
 
+# ---------------------------------------------------------------------------
+# Display options — toggle these to control which figure panels are rendered.
+# ---------------------------------------------------------------------------
+SHOW_HEATMAP = True        # difference heatmap (multi-bin mode)
+SHOW_BAR_CHART = False     # condition-means bar chart (single-bin mode)
+SHOW_TABLE = False         # per-channel/region statistics table
+SHOW_PARAMS_PANEL = False  # metadata text box (right side of figure)
+HEATMAP_ROW_HEIGHT_PX = 20  # pixel height per channel/region row in the heatmap
+HEATMAP_METRIC = "t_value"  # heatmap data: "difference" (mean_difference) or "t_value"
+
 
 @dataclass
 class TrialStatsSnapshot:
@@ -854,7 +864,12 @@ def _write_summary_figure(
     snapshot: TrialStatsSnapshot,
     *,
     dpi: int,
-) -> Path:
+    show_heatmap: bool = True,
+    show_bar_chart: bool = True,
+    show_table: bool = True,
+    show_params_panel: bool = True,
+    heatmap_metric: str = "difference",
+) -> Path | None:
     plt = _load_pyplot()
 
     metrics, has_multi_bin = _prepare_region_metrics(snapshot)
@@ -869,30 +884,51 @@ def _write_summary_figure(
 
     fig_width = float(np.clip(0.55 * n_regions + 6.5, 10.0, 30.0))
     table_height = float(np.clip(0.18 * n_regions + 1.4, 2.2, 8.8))
-    if has_multi_bin:
-        # In multibin mode the table carries more columns; give it extra height.
-        figure_height = float(np.clip(4.8 + table_height, 8.2, 18.5))
-    else:
-        figure_height = float(np.clip(4.2 + table_height, 7.2, 17.0))
 
-    if has_multi_bin:
-        fig, axes = plt.subplots(
-            2,
-            1,
-            figsize=(fig_width, figure_height),
-            gridspec_kw={"height_ratios": [2.8, max(2.9, table_height * 1.05)]},
+    top_panel_wanted = (has_multi_bin and show_heatmap) or (not has_multi_bin and show_bar_chart)
+    if not top_panel_wanted and not show_table:
+        return None
+
+    # For the heatmap panel, derive height from a fixed per-row pixel budget so
+    # every channel row has the same apparent height regardless of channel count.
+    heatmap_panel_h_in = max(1.5, n_regions * HEATMAP_ROW_HEIGHT_PX / dpi)
+
+    panel_names: list[str] = []
+    height_ratios: list[float] = []
+    if top_panel_wanted:
+        panel_names.append("top")
+        height_ratios.append(heatmap_panel_h_in if has_multi_bin else 3.5)
+    if show_table:
+        panel_names.append("table")
+        height_ratios.append(
+            max(2.9, table_height * 1.05) if has_multi_bin else max(1.8, table_height / 2.0)
         )
-        ax_heat, ax_table = axes
-        ax_bar = None
-    else:
-        fig, axes = plt.subplots(
-            2,
-            1,
-            figsize=(fig_width, figure_height),
-            gridspec_kw={"height_ratios": [3.5, max(1.8, table_height / 2.0)]},
-        )
-        ax_bar, ax_table = axes
-        ax_heat = None
+
+    # Build total figure height so each panel gets approximately its requested
+    # height. The subplot area is ~85 % of the figure (top=0.92, bottom=0.07).
+    figure_height = max(3.5, sum(height_ratios) / 0.85)
+
+    fig, raw_axes = plt.subplots(
+        len(panel_names),
+        1,
+        figsize=(fig_width, figure_height),
+        gridspec_kw={"height_ratios": height_ratios},
+        squeeze=False,
+    )
+    flat_axes = raw_axes.ravel()
+
+    ax_idx = 0
+    ax_heat = None
+    ax_bar = None
+    ax_table = None
+    if top_panel_wanted:
+        if has_multi_bin:
+            ax_heat = flat_axes[ax_idx]
+        else:
+            ax_bar = flat_axes[ax_idx]
+        ax_idx += 1
+    if show_table:
+        ax_table = flat_axes[ax_idx]
 
     if ax_bar is not None:
         if metrics:
@@ -934,14 +970,19 @@ def _write_summary_figure(
         ax_bar.legend(loc="upper left")
 
     if has_multi_bin and ax_heat is not None:
-        diff = snapshot.mean_difference
-        finite = diff[np.isfinite(diff)]
+        if heatmap_metric == "t_value":
+            heat_data = snapshot.t_values
+            colorbar_label = f"t-value ({cond_a} vs {cond_b})"
+        else:
+            heat_data = snapshot.mean_difference
+            colorbar_label = f"{cond_a} - {cond_b}"
+        finite = heat_data[np.isfinite(heat_data)]
         vmax = float(np.nanmax(np.abs(finite))) if finite.size else 1.0
         if vmax == 0.0:
             vmax = 1.0
 
         heat = ax_heat.imshow(
-            diff,
+            heat_data,
             aspect="auto",
             cmap="coolwarm",
             interpolation="nearest",
@@ -949,9 +990,9 @@ def _write_summary_figure(
             vmax=vmax,
         )
         colorbar = fig.colorbar(heat, ax=ax_heat, fraction=0.03, pad=0.01)
-        colorbar.set_label(f"{cond_a} - {cond_b}", fontsize=9, labelpad=2)
+        colorbar.set_label(colorbar_label, fontsize=9, labelpad=2)
 
-        n_time_points = diff.shape[1]
+        n_time_points = heat_data.shape[1]
         if n_time_points > 0:
             tick_count = min(8, n_time_points)
             tick_indices = np.unique(
@@ -961,13 +1002,11 @@ def _write_summary_figure(
             ax_heat.set_xticklabels([f"{snapshot.time_s[idx]:.2f}" for idx in tick_indices])
         ax_heat.set_xlabel("Time (s)")
 
-        if len(region_labels) <= 24:
-            region_tick_indices = np.arange(len(region_labels), dtype=int)
-        else:
-            step = int(np.ceil(len(region_labels) / 24.0))
-            region_tick_indices = np.arange(0, len(region_labels), step, dtype=int)
+        region_tick_indices = np.arange(len(region_labels), dtype=int)
+        # Scale font so labels fit within the fixed per-row pixel budget.
+        ytick_fontsize = max(3, min(7, HEATMAP_ROW_HEIGHT_PX * dpi / 72.0 * 0.85))
         ax_heat.set_yticks(region_tick_indices)
-        ax_heat.set_yticklabels([region_labels[idx] for idx in region_tick_indices], fontsize=7)
+        ax_heat.set_yticklabels(region_labels, fontsize=ytick_fontsize)
         ax_heat.set_ylabel(item_label)
 
         sig_y, sig_x = np.where(snapshot.significant_mask)
@@ -983,82 +1022,84 @@ def _write_summary_figure(
                 label="significant bin",
             )
             ax_heat.legend(loc="upper right", fontsize=7)
-        ax_heat.set_title("Difference heatmap with significant-bin markers")
+        metric_label = "t-value" if heatmap_metric == "t_value" else "mean difference"
+        ax_heat.set_title(f"{metric_label.capitalize()} heatmap with significant-bin markers")
 
-    ax_table.axis("off")
-    if has_multi_bin:
-        col_labels = [
-            item_label,
-            f"{cond_a}_mean",
-            f"{cond_b}_mean",
-            "delta_mean",
-            "p_min_corr",
-            "p_min_raw",
-            "t@p_min",
-            "sem_diff@pmin",
-            "ci95_diff@pmin",
-            f"sig_bins/{snapshot.effective_n_bins}",
-            "sig_any",
-        ]
-        cell_text = [
-            [
-                row.label,
-                _format_float(row.mean_a_global),
-                _format_float(row.mean_b_global),
-                _format_float(row.delta_mean_global),
-                _format_float(row.p_min),
-                _format_float(row.p_raw_min),
-                _format_float(row.t_at_p_min),
-                _format_float(row.sem_diff_at_p_min),
-                f"[{_format_float(row.ci95_low_at_p_min)}, {_format_float(row.ci95_high_at_p_min)}]",
-                str(row.sig_bins),
-                "yes" if row.sig_any else "no",
+    if ax_table is not None:
+        ax_table.axis("off")
+        if has_multi_bin:
+            col_labels = [
+                item_label,
+                f"{cond_a}_mean",
+                f"{cond_b}_mean",
+                "delta_mean",
+                "p_min_corr",
+                "p_min_raw",
+                "t@p_min",
+                "sem_diff@pmin",
+                "ci95_diff@pmin",
+                f"sig_bins/{snapshot.effective_n_bins}",
+                "sig_any",
             ]
-            for row in metrics
-        ]
-    else:
-        col_labels = [
-            item_label,
-            f"{cond_a}_mean",
-            f"{cond_b}_mean",
-            "delta_mean",
-            "p_corr",
-            "p_raw",
-            "t",
-            "sem_diff",
-            "ci95_diff",
-            "significant",
-        ]
-        cell_text = [
-            [
-                row.label,
-                _format_float(row.mean_a_global),
-                _format_float(row.mean_b_global),
-                _format_float(row.delta_mean_global),
-                _format_float(row.p_value),
-                _format_float(row.p_raw),
-                _format_float(row.t_value),
-                _format_float(row.sem_diff),
-                f"[{_format_float(row.ci95_low)}, {_format_float(row.ci95_high)}]",
-                "yes" if row.significant else "no",
+            cell_text = [
+                [
+                    row.label,
+                    _format_float(row.mean_a_global),
+                    _format_float(row.mean_b_global),
+                    _format_float(row.delta_mean_global),
+                    _format_float(row.p_min),
+                    _format_float(row.p_raw_min),
+                    _format_float(row.t_at_p_min),
+                    _format_float(row.sem_diff_at_p_min),
+                    f"[{_format_float(row.ci95_low_at_p_min)}, {_format_float(row.ci95_high_at_p_min)}]",
+                    str(row.sig_bins),
+                    "yes" if row.sig_any else "no",
+                ]
+                for row in metrics
             ]
-            for row in metrics
-        ]
+        else:
+            col_labels = [
+                item_label,
+                f"{cond_a}_mean",
+                f"{cond_b}_mean",
+                "delta_mean",
+                "p_corr",
+                "p_raw",
+                "t",
+                "sem_diff",
+                "ci95_diff",
+                "significant",
+            ]
+            cell_text = [
+                [
+                    row.label,
+                    _format_float(row.mean_a_global),
+                    _format_float(row.mean_b_global),
+                    _format_float(row.delta_mean_global),
+                    _format_float(row.p_value),
+                    _format_float(row.p_raw),
+                    _format_float(row.t_value),
+                    _format_float(row.sem_diff),
+                    f"[{_format_float(row.ci95_low)}, {_format_float(row.ci95_high)}]",
+                    "yes" if row.significant else "no",
+                ]
+                for row in metrics
+            ]
 
-    if not cell_text:
-        cell_text = [["n/a"] + [""] * (len(col_labels) - 1)]
+        if not cell_text:
+            cell_text = [["n/a"] + [""] * (len(col_labels) - 1)]
 
-    table = ax_table.table(
-        cellText=cell_text,
-        colLabels=col_labels,
-        loc="lower center",
-        cellLoc="center",
-        bbox=[0.0, 0.0, 1.0, 0.92],
-    )
-    table.auto_set_font_size(False)
-    table_font_size = 7 if len(metrics) <= 16 else (6 if len(metrics) <= 30 else 5)
-    table.set_fontsize(table_font_size)
-    table.scale(1.0, 1.0)
+        table = ax_table.table(
+            cellText=cell_text,
+            colLabels=col_labels,
+            loc="lower center",
+            cellLoc="center",
+            bbox=[0.0, 0.0, 1.0, 0.92],
+        )
+        table.auto_set_font_size(False)
+        table_font_size = 7 if len(metrics) <= 16 else (6 if len(metrics) <= 30 else 5)
+        table.set_fontsize(table_font_size)
+        table.scale(1.0, 1.0)
 
     if snapshot.binning_mode == "window_ms":
         binning_line = (
@@ -1104,37 +1145,41 @@ def _write_summary_figure(
         )
     params_lines.extend(_region_channel_panel_lines(snapshot))
 
+    right_margin = 0.65 if show_params_panel else 0.97
+    suptitle_x = 0.38 if show_params_panel else 0.5
     fig.suptitle(
         f"Trial-Stats Summary | {snapshot.stats_path.stem}",
         fontsize=12,
-        x=0.38,
+        x=suptitle_x,
     )
-    fig.subplots_adjust(left=0.06, right=0.65, top=0.92, bottom=0.07, hspace=0.6)
-    ax_table.text(
-        0.5,
-        0.94,
-        f"Per-{item_label.lower()} statistics",
-        transform=ax_table.transAxes,
-        ha="center",
-        va="bottom",
-        fontsize=10,
-        clip_on=False,
-    )
-    fig.text(
-        0.71,
-        0.92,
-        "\n".join(params_lines),
-        ha="left",
-        va="top",
-        fontsize=8,
-        family="monospace",
-        bbox={
-            "boxstyle": "round",
-            "facecolor": "#f7f7f7",
-            "edgecolor": "#cfcfcf",
-            "alpha": 0.95,
-        },
-    )
+    fig.subplots_adjust(left=0.06, right=right_margin, top=0.92, bottom=0.07, hspace=0.6)
+    if ax_table is not None:
+        ax_table.text(
+            0.5,
+            0.94,
+            f"Per-{item_label.lower()} statistics",
+            transform=ax_table.transAxes,
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            clip_on=False,
+        )
+    if show_params_panel:
+        fig.text(
+            0.71,
+            0.92,
+            "\n".join(params_lines),
+            ha="left",
+            va="top",
+            fontsize=8,
+            family="monospace",
+            bbox={
+                "boxstyle": "round",
+                "facecolor": "#f7f7f7",
+                "edgecolor": "#cfcfcf",
+                "alpha": 0.95,
+            },
+        )
 
     out_path = _figure_output_path(snapshot.stats_path)
     fig.savefig(out_path, dpi=dpi)
@@ -1148,6 +1193,11 @@ def _inspect_file(
     save_channel_summary: bool,
     save_figure: bool,
     figure_dpi: int,
+    show_heatmap: bool = True,
+    show_bar_chart: bool = True,
+    show_table: bool = True,
+    show_params_panel: bool = True,
+    heatmap_metric: str = "difference",
 ) -> None:
     snapshot = _load_snapshot(stats_path)
     trials_path = _trial_table_path(stats_path)
@@ -1169,7 +1219,15 @@ def _inspect_file(
 
     out_figure: Path | None = None
     if save_figure:
-        out_figure = _write_summary_figure(snapshot, dpi=figure_dpi)
+        out_figure = _write_summary_figure(
+            snapshot,
+            dpi=figure_dpi,
+            show_heatmap=show_heatmap,
+            show_bar_chart=show_bar_chart,
+            show_table=show_table,
+            show_params_panel=show_params_panel,
+            heatmap_metric=heatmap_metric,
+        )
 
     kept_fragment = ""
     if trial_rows:
@@ -1232,6 +1290,11 @@ def main() -> None:
             save_channel_summary=args.save_channel_summary,
             save_figure=args.save_figure,
             figure_dpi=args.figure_dpi,
+            show_heatmap=SHOW_HEATMAP,
+            show_bar_chart=SHOW_BAR_CHART,
+            show_table=SHOW_TABLE,
+            show_params_panel=SHOW_PARAMS_PANEL,
+            heatmap_metric=HEATMAP_METRIC,
         )
 
 

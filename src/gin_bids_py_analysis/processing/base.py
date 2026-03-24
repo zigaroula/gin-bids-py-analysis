@@ -109,6 +109,8 @@ class BaseWriterParams(BaseModel):
             return ".tsv"
         elif self.output_format == "brainvision":
             return ".vhdr"
+        elif self.output_format == "matlab":
+            return ".mat"
         else:
             raise ValueError(f"Unsupported output_format: {self.output_format}")
 

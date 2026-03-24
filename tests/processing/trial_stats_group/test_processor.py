@@ -7,6 +7,9 @@ from pathlib import Path
 import h5py
 import numpy as np
 import pytest
+import scipy.io
+
+from gin_bids_py_analysis.processing.utils.matlab import make_struct
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
@@ -255,5 +258,166 @@ def test_process_group_atlas_mode_uses_electrodes_mapping() -> None:
         assert result.region_names == ["ROI_A", "ROI_B"]
         assert list(result.roi_channel_counts) == [1, 1]
         assert result.source_electrodes_files == [str(electrodes_path)]
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Helpers and tests for .mat input files
+# ---------------------------------------------------------------------------
+
+def _write_trial_stats_mat(
+    path: Path,
+    *,
+    analysis_level: str = "channel",
+    channels: list[str],
+    time_s: np.ndarray,
+    mean_difference: np.ndarray,
+    t_values: np.ndarray | None = None,
+    condition_labels: tuple[str, str] = ("accepted", "rejected"),
+    source_ieeg_files: list[str] | None = None,
+    source_electrodes_files: list[str] | None = None,
+) -> None:
+    """Write a minimal trial-stats .mat fixture matching the TrialStatsProcessingWriter schema."""
+    t_arr = t_values if t_values is not None else np.full_like(mean_difference, 1.0, dtype=np.float64)
+    p_arr = np.full_like(mean_difference, 0.1, dtype=np.float64)
+    sig_arr = np.zeros_like(mean_difference, dtype=np.uint8)
+
+    stats_struct = make_struct(
+        t_values=t_arr.astype(np.float64),
+        p_values=p_arr.astype(np.float64),
+        p_values_uncorrected=p_arr.astype(np.float64),
+        significant_mask=sig_arr,
+    )
+    means_struct = make_struct(
+        **{
+            condition_labels[0]: (mean_difference + 1.0).astype(np.float64),
+            condition_labels[1]: np.ones_like(mean_difference, dtype=np.float64),
+            "difference": mean_difference.astype(np.float64),
+        }
+    )
+
+    primary_axis_name = "region" if analysis_level == "roi" else "channel"
+    axes_struct = make_struct(
+        **{
+            primary_axis_name: np.array(channels, dtype=object),
+            "time_s": time_s.astype(np.float64),
+        }
+    )
+    meta_struct = make_struct(
+        trial_counts=np.array([12, 11], dtype=np.int64),
+        trial_count_labels=np.array(list(condition_labels), dtype=object),
+        sampling_frequency_hz=512.0,
+        p_value_correction_method=np.str_("none"),
+        significance_alpha=0.05,
+        analysis_level=np.str_(analysis_level),
+        atlas_name=np.str_(""),
+        atlas_regions=np.array([], dtype=object),
+        window_ms=0.0,
+        n_bins=0,
+        effective_n_bins=int(len(time_s)),
+        binning_mode=np.str_("none"),
+        stats_valid=np.uint8(1),
+    )
+    prov_struct = make_struct(
+        source_ieeg_files=np.array(source_ieeg_files or [], dtype=object),
+        source_electrodes_files=np.array(source_electrodes_files or [], dtype=object),
+        pipeline_name=np.str_("trialstats"),
+        pipeline_version=np.str_("test"),
+    )
+    data = make_struct(
+        stats=stats_struct,
+        means=means_struct,
+        axes=axes_struct,
+        meta=meta_struct,
+        provenance=prov_struct,
+    )
+    scipy.io.savemat(str(path), {"data": data}, do_compression=True)
+
+
+def test_process_group_manual_mode_mat_input() -> None:
+    """Group processor should produce the same result from .mat as from .h5 fixtures."""
+    case_dir = _make_case_dir("manual_mode_mat")
+    try:
+        time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
+
+        path_01 = case_dir / "sub-01_task-decid_desc-trialstats_stats.mat"
+        data_01 = np.array(
+            [
+                [2.0, 2.0, 2.0],
+                [1.0, 1.0, 1.0],
+                [-1.0, -1.0, -1.0],
+            ],
+            dtype=np.float64,
+        )
+        _write_trial_stats_mat(path_01, channels=["A1", "A2", "B1"], time_s=time_s, mean_difference=data_01)
+
+        path_02 = case_dir / "sub-02_task-decid_desc-trialstats_stats.mat"
+        data_02 = np.array(
+            [
+                [1.5, 1.5, 1.5],
+                [-0.5, -0.5, -0.5],
+            ],
+            dtype=np.float64,
+        )
+        _write_trial_stats_mat(path_02, channels=["A1", "B1"], time_s=time_s, mean_difference=data_02)
+
+        file_01 = _make_bids_file(
+            path_01,
+            {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"},
+        )
+        file_02 = _make_bids_file(
+            path_02,
+            {"subject": "02", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"},
+        )
+
+        processor = TrialStatsGroupProcessing(
+            TrialStatsGroupParams(
+                roi_mode="manual",
+                manual_region_channels={
+                    "ROI_POS": {"01": ["A1", "A2"], "02": ["A1"]},
+                    "ROI_NEG": {"01": ["B1"], "02": ["B1"]},
+                    "ROI_DROP": {"01": ["A2"]},
+                },
+                min_subjects_per_roi=2,
+            )
+        )
+
+        result = processor.process_group(BIDSFileGroup(primary=file_01, secondaries=[file_02]))
+
+        assert result.region_names == ["ROI_POS", "ROI_NEG"]
+        assert result.output_entities == {"subject": "group", "task": "decid"}
+        assert result.t_values.shape == (2, 3)
+        assert np.all(result.metric_mean[0] > 0.0)
+        assert np.all(result.metric_mean[1] < 0.0)
+        assert "ROI_DROP" in result.excluded_rois
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+
+
+def test_build_compatible_groups_mat_files() -> None:
+    """build_trial_stats_compatible_groups should split heterogeneous .mat inputs correctly."""
+    case_dir = _make_case_dir("group_split_mat")
+    try:
+        time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
+        data = np.ones((2, 3), dtype=np.float64)
+
+        path_a = case_dir / "sub-01_task-decid_desc-trialstats_stats.mat"
+        path_b = case_dir / "sub-02_task-decid_desc-trialstats_stats.mat"
+        path_c = case_dir / "sub-03_task-other_desc-trialstats_stats.mat"
+
+        _write_trial_stats_mat(path_a, channels=["A1", "A2"], time_s=time_s, mean_difference=data)
+        _write_trial_stats_mat(path_b, channels=["A1", "A2"], time_s=time_s, mean_difference=data)
+        _write_trial_stats_mat(path_c, channels=["A1", "A2"], time_s=time_s, mean_difference=data)
+
+        files = [
+            _make_bids_file(path_a, {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"}),
+            _make_bids_file(path_b, {"subject": "02", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"}),
+            _make_bids_file(path_c, {"subject": "03", "task": "other", "desc": "trialstats", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"}),
+        ]
+
+        groups = build_trial_stats_compatible_groups(files, source_metric="mean_difference")
+        assert len(groups) == 2
+        assert sorted(len(group.all_files) for group in groups) == [1, 2]
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)

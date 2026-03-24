@@ -7,6 +7,7 @@ from typing import Any, Sequence
 
 import h5py
 import numpy as np
+from scipy.io import loadmat
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
@@ -24,6 +25,13 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
     int_scalar,
     str_scalar,
 )
+from gin_bids_py_analysis.processing.utils.matlab import (
+    mat_float,
+    mat_int,
+    mat_str,
+    mat_str_list,
+    matlab_safe_name,
+)
 from gin_bids_py_analysis.processing.utils.tables import read_table_rows, select_column
 
 from .params import TrialStatsGroupParams
@@ -33,6 +41,23 @@ from .stats import (
     compute_one_sample_timecourse,
     correct_p_values,
 )
+
+
+@dataclass(frozen=True)
+class _RawTrialStatsData:
+    """Format-agnostic in-memory representation of one trial-stats file."""
+
+    analysis_level: str
+    channels: list[str]
+    time_axis_s: np.ndarray
+    metric_values: np.ndarray  # shape (n_channels, n_times)
+    condition_labels: tuple[str, str]
+    binning_mode: str
+    window_ms: float
+    n_bins: int
+    effective_n_bins: int
+    source_ieeg_files: list[str]
+    source_electrodes_files: list[str]
 
 
 @dataclass(frozen=True)
@@ -286,152 +311,6 @@ class TrialStatsGroupProcessing(BaseProcessing):
         )
 
 
-def _read_snapshot_signature(
-    stats_file: BIDSFile,
-    *,
-    source_metric: str,
-) -> _SnapshotSignature:
-    with h5py.File(stats_file.path, "r") as fh:
-        analysis_level = str_scalar(dataset_or_none(fh, "meta/analysis_level"), default="channel")
-        axis_name = "channel" if analysis_level == "channel" else "region"
-        if axis_name not in fh["axes"]:
-            raise ValueError(
-                f"{stats_file.path.name}: axes/{axis_name} dataset is required."
-            )
-        channels = decode_str_array(np.asarray(fh["axes"][axis_name][:]))
-        time_axis_s = np.asarray(fh["axes"]["time_s"][:], dtype=np.float64)
-        _load_metric_matrix(
-            fh,
-            source_metric=source_metric,
-            n_channels=len(channels),
-            n_times=len(time_axis_s),
-        )
-        condition_labels = _read_condition_labels(fh)
-        signature = _build_signature(
-            stats_file=stats_file,
-            condition_labels=condition_labels,
-            time_axis_s=time_axis_s,
-            analysis_level=analysis_level,
-            binning_mode=str_scalar(dataset_or_none(fh, "meta/binning_mode"), default="none"),
-            window_ms=float_scalar(dataset_or_none(fh, "meta/window_ms"), default=0.0),
-            n_bins=int_scalar(dataset_or_none(fh, "meta/n_bins"), default=0),
-            effective_n_bins=int_scalar(
-                dataset_or_none(fh, "meta/effective_n_bins"),
-                default=len(time_axis_s),
-            ),
-        )
-    return signature
-
-
-def _load_trial_stats_snapshot(
-    stats_file: BIDSFile,
-    *,
-    source_metric: str,
-) -> _TrialStatsSnapshot:
-    with h5py.File(stats_file.path, "r") as fh:
-        analysis_level = str_scalar(dataset_or_none(fh, "meta/analysis_level"), default="channel")
-        axis_name = "channel" if analysis_level == "channel" else "region"
-        if axis_name not in fh["axes"]:
-            raise ValueError(
-                f"{stats_file.path.name}: axes/{axis_name} dataset is required."
-            )
-        channels = decode_str_array(np.asarray(fh["axes"][axis_name][:]))
-        time_axis_s = np.asarray(fh["axes"]["time_s"][:], dtype=np.float64)
-
-        metric_values = _load_metric_matrix(
-            fh,
-            source_metric=source_metric,
-            n_channels=len(channels),
-            n_times=len(time_axis_s),
-        )
-        condition_labels = _read_condition_labels(fh)
-        binning_mode = str_scalar(dataset_or_none(fh, "meta/binning_mode"), default="none")
-        window_ms = float_scalar(dataset_or_none(fh, "meta/window_ms"), default=0.0)
-        n_bins = int_scalar(dataset_or_none(fh, "meta/n_bins"), default=0)
-        effective_n_bins = int_scalar(
-            dataset_or_none(fh, "meta/effective_n_bins"),
-            default=len(time_axis_s),
-        )
-
-        source_ieeg_files = decode_str_array(
-            np.asarray(fh["provenance"]["source_ieeg_files"][:], dtype=object)
-        ) if "provenance" in fh and "source_ieeg_files" in fh["provenance"] else []
-        source_electrodes_files = decode_str_array(
-            np.asarray(fh["provenance"]["source_electrodes_files"][:], dtype=object)
-        ) if "provenance" in fh and "source_electrodes_files" in fh["provenance"] else []
-
-    signature = _build_signature(
-        stats_file=stats_file,
-        condition_labels=condition_labels,
-        time_axis_s=time_axis_s,
-        analysis_level=analysis_level,
-        binning_mode=binning_mode,
-        window_ms=window_ms,
-        n_bins=n_bins,
-        effective_n_bins=effective_n_bins,
-    )
-    raw_subject = str(stats_file.get("subject") or stats_file.get("sub") or "").strip()
-    subject = normalize_subject_value(raw_subject)
-
-    channel_index_by_norm: dict[str, int] = {}
-    for idx, name in enumerate(channels):
-        key = normalize_channel_name(name)
-        channel_index_by_norm.setdefault(key, idx)
-
-    return _TrialStatsSnapshot(
-        stats_file=stats_file,
-        subject=subject,
-        task=str(stats_file.get("task") or ""),
-        source_desc=str(stats_file.get("desc") or ""),
-        condition_labels=condition_labels,
-        channel_names=channels,
-        channel_index_by_norm=channel_index_by_norm,
-        time_axis_s=time_axis_s,
-        metric_values=metric_values,
-        analysis_level=analysis_level,
-        binning_mode=binning_mode,
-        window_ms=window_ms,
-        n_bins=n_bins,
-        effective_n_bins=effective_n_bins,
-        source_ieeg_files=source_ieeg_files,
-        source_electrodes_files=source_electrodes_files,
-        signature=signature,
-    )
-
-
-def _load_metric_matrix(
-    fh: h5py.File,
-    *,
-    source_metric: str,
-    n_channels: int,
-    n_times: int,
-) -> np.ndarray:
-    if source_metric == "mean_difference":
-        dataset = dataset_or_none(fh, "means/difference")
-        if dataset is None:
-            raise ValueError(f"{fh.filename}: means/difference dataset is required.")
-        raw = np.asarray(dataset[:], dtype=np.float64)
-        return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
-
-    if source_metric == "t_values":
-        dataset = dataset_or_none(fh, "stats/t_values")
-        if dataset is None:
-            raise ValueError(f"{fh.filename}: stats/t_values dataset is required.")
-        raw = np.asarray(dataset[:], dtype=np.float64)
-        return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
-
-    condition_labels = _read_condition_labels(fh)
-    metric_name = condition_labels[0] if source_metric == "condition_a_mean" else condition_labels[1]
-    dataset = dataset_or_none(fh, f"means/{metric_name}")
-    if dataset is None:
-        raise ValueError(
-            f"{fh.filename}: means/{metric_name!r} dataset is required "
-            f"for source_metric={source_metric!r}."
-        )
-    raw = np.asarray(dataset[:], dtype=np.float64)
-    return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
-
-
 def _collect_manual_roi_records(
     *,
     snapshots: Sequence[_TrialStatsSnapshot],
@@ -642,7 +521,133 @@ def _build_signature(
     )
 
 
-def _read_condition_labels(fh: h5py.File) -> tuple[str, str]:
+def _read_snapshot_signature(
+    stats_file: BIDSFile,
+    *,
+    source_metric: str,
+) -> _SnapshotSignature:
+    raw = _load_raw_trial_stats(stats_file, source_metric=source_metric)
+    return _build_signature(
+        stats_file=stats_file,
+        condition_labels=raw.condition_labels,
+        time_axis_s=raw.time_axis_s,
+        analysis_level=raw.analysis_level,
+        binning_mode=raw.binning_mode,
+        window_ms=raw.window_ms,
+        n_bins=raw.n_bins,
+        effective_n_bins=raw.effective_n_bins,
+    )
+
+
+def _load_trial_stats_snapshot(
+    stats_file: BIDSFile,
+    *,
+    source_metric: str,
+) -> _TrialStatsSnapshot:
+    raw = _load_raw_trial_stats(stats_file, source_metric=source_metric)
+    raw_subject = str(stats_file.get("subject") or stats_file.get("sub") or "").strip()
+    subject = normalize_subject_value(raw_subject)
+
+    channel_index_by_norm: dict[str, int] = {}
+    for idx, name in enumerate(raw.channels):
+        key = normalize_channel_name(name)
+        channel_index_by_norm.setdefault(key, idx)
+
+    signature = _build_signature(
+        stats_file=stats_file,
+        condition_labels=raw.condition_labels,
+        time_axis_s=raw.time_axis_s,
+        analysis_level=raw.analysis_level,
+        binning_mode=raw.binning_mode,
+        window_ms=raw.window_ms,
+        n_bins=raw.n_bins,
+        effective_n_bins=raw.effective_n_bins,
+    )
+    return _TrialStatsSnapshot(
+        stats_file=stats_file,
+        subject=subject,
+        task=str(stats_file.get("task") or ""),
+        source_desc=str(stats_file.get("desc") or ""),
+        condition_labels=raw.condition_labels,
+        channel_names=raw.channels,
+        channel_index_by_norm=channel_index_by_norm,
+        time_axis_s=raw.time_axis_s,
+        metric_values=raw.metric_values,
+        analysis_level=raw.analysis_level,
+        binning_mode=raw.binning_mode,
+        window_ms=raw.window_ms,
+        n_bins=raw.n_bins,
+        effective_n_bins=raw.effective_n_bins,
+        source_ieeg_files=raw.source_ieeg_files,
+        source_electrodes_files=raw.source_electrodes_files,
+        signature=signature,
+    )
+
+
+def _load_raw_trial_stats(
+    stats_file: BIDSFile,
+    *,
+    source_metric: str,
+) -> _RawTrialStatsData:
+    """Dispatch to the appropriate format-specific loader based on file extension."""
+    extension = (stats_file.extension or "").lower()
+    if extension == ".mat":
+        return _load_raw_from_matlab(stats_file, source_metric=source_metric)
+    return _load_raw_from_hdf5(stats_file, source_metric=source_metric)
+
+
+def _load_raw_from_hdf5(
+    stats_file: BIDSFile,
+    *,
+    source_metric: str,
+) -> _RawTrialStatsData:
+    with h5py.File(stats_file.path, "r") as fh:
+        analysis_level = str_scalar(dataset_or_none(fh, "meta/analysis_level"), default="channel")
+        axis_name = "channel" if analysis_level == "channel" else "region"
+        if axis_name not in fh["axes"]:
+            raise ValueError(
+                f"{stats_file.path.name}: axes/{axis_name} dataset is required."
+            )
+        channels = decode_str_array(np.asarray(fh["axes"][axis_name][:]))
+        time_axis_s = np.asarray(fh["axes"]["time_s"][:], dtype=np.float64)
+        condition_labels = _read_condition_labels_hdf5(fh)
+        metric_values = _load_metric_matrix_hdf5(
+            fh,
+            source_metric=source_metric,
+            condition_labels=condition_labels,
+            n_channels=len(channels),
+            n_times=len(time_axis_s),
+        )
+        binning_mode = str_scalar(dataset_or_none(fh, "meta/binning_mode"), default="none")
+        window_ms = float_scalar(dataset_or_none(fh, "meta/window_ms"), default=0.0)
+        n_bins = int_scalar(dataset_or_none(fh, "meta/n_bins"), default=0)
+        effective_n_bins = int_scalar(
+            dataset_or_none(fh, "meta/effective_n_bins"),
+            default=len(time_axis_s),
+        )
+        source_ieeg_files = decode_str_array(
+            np.asarray(fh["provenance"]["source_ieeg_files"][:], dtype=object)
+        ) if "provenance" in fh and "source_ieeg_files" in fh["provenance"] else []
+        source_electrodes_files = decode_str_array(
+            np.asarray(fh["provenance"]["source_electrodes_files"][:], dtype=object)
+        ) if "provenance" in fh and "source_electrodes_files" in fh["provenance"] else []
+
+    return _RawTrialStatsData(
+        analysis_level=analysis_level,
+        channels=channels,
+        time_axis_s=time_axis_s,
+        metric_values=metric_values,
+        condition_labels=condition_labels,
+        binning_mode=binning_mode,
+        window_ms=window_ms,
+        n_bins=n_bins,
+        effective_n_bins=effective_n_bins,
+        source_ieeg_files=source_ieeg_files,
+        source_electrodes_files=source_electrodes_files,
+    )
+
+
+def _read_condition_labels_hdf5(fh: h5py.File) -> tuple[str, str]:
     labels_dataset = dataset_or_none(fh, "meta/trial_count_labels")
     if labels_dataset is not None:
         labels = decode_str_array(np.asarray(labels_dataset[:], dtype=object))
@@ -654,6 +659,135 @@ def _read_condition_labels(fh: h5py.File) -> tuple[str, str]:
     if len(mean_keys) >= 2:
         return mean_keys[0], mean_keys[1]
     return "condition_a", "condition_b"
+
+
+def _load_metric_matrix_hdf5(
+    fh: h5py.File,
+    *,
+    source_metric: str,
+    condition_labels: tuple[str, str],
+    n_channels: int,
+    n_times: int,
+) -> np.ndarray:
+    if source_metric == "mean_difference":
+        dataset = dataset_or_none(fh, "means/difference")
+        if dataset is None:
+            raise ValueError(f"{fh.filename}: means/difference dataset is required.")
+        raw = np.asarray(dataset[:], dtype=np.float64)
+        return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
+
+    if source_metric == "t_values":
+        dataset = dataset_or_none(fh, "stats/t_values")
+        if dataset is None:
+            raise ValueError(f"{fh.filename}: stats/t_values dataset is required.")
+        raw = np.asarray(dataset[:], dtype=np.float64)
+        return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
+
+    metric_name = condition_labels[0] if source_metric == "condition_a_mean" else condition_labels[1]
+    dataset = dataset_or_none(fh, f"means/{metric_name}")
+    if dataset is None:
+        raise ValueError(
+            f"{fh.filename}: means/{metric_name!r} dataset is required "
+            f"for source_metric={source_metric!r}."
+        )
+    raw = np.asarray(dataset[:], dtype=np.float64)
+    return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
+
+
+def _load_raw_from_matlab(
+    stats_file: BIDSFile,
+    *,
+    source_metric: str,
+) -> _RawTrialStatsData:
+    mat = loadmat(str(stats_file.path), squeeze_me=True, struct_as_record=False)
+    data = mat["data"]
+    meta = data.meta
+    axes = data.axes
+    prov = getattr(data, "provenance", None)
+
+    analysis_level = mat_str(meta.analysis_level, default="channel")
+    axis_attr = "channel" if analysis_level == "channel" else "region"
+    channels = mat_str_list(getattr(axes, axis_attr, None))
+    if not channels:
+        raise ValueError(
+            f"{stats_file.path.name}: axes.{axis_attr} array is required in .mat file."
+        )
+
+    time_axis_s = np.asarray(axes.time_s, dtype=np.float64).ravel()
+    condition_labels = _mat_condition_labels(meta)
+    metric_values = _load_metric_matrix_mat(
+        data,
+        source_metric=source_metric,
+        condition_labels=condition_labels,
+        n_channels=len(channels),
+        n_times=len(time_axis_s),
+        filename=stats_file.path.name,
+    )
+    binning_mode = mat_str(getattr(meta, "binning_mode", None), default="none")
+    window_ms = mat_float(getattr(meta, "window_ms", None), default=0.0)
+    n_bins = mat_int(getattr(meta, "n_bins", None), default=0)
+    effective_n_bins = mat_int(
+        getattr(meta, "effective_n_bins", None), default=len(time_axis_s)
+    )
+    source_ieeg_files: list[str] = []
+    source_electrodes_files: list[str] = []
+    if prov is not None:
+        source_ieeg_files = mat_str_list(getattr(prov, "source_ieeg_files", None))
+        source_electrodes_files = mat_str_list(getattr(prov, "source_electrodes_files", None))
+
+    return _RawTrialStatsData(
+        analysis_level=analysis_level,
+        channels=channels,
+        time_axis_s=time_axis_s,
+        metric_values=metric_values,
+        condition_labels=condition_labels,
+        binning_mode=binning_mode,
+        window_ms=window_ms,
+        n_bins=n_bins,
+        effective_n_bins=effective_n_bins,
+        source_ieeg_files=source_ieeg_files,
+        source_electrodes_files=source_electrodes_files,
+    )
+
+
+def _mat_condition_labels(meta: Any) -> tuple[str, str]:
+    labels = mat_str_list(getattr(meta, "trial_count_labels", None))
+    if len(labels) >= 2:
+        return labels[0], labels[1]
+    return "condition_a", "condition_b"
+
+
+def _load_metric_matrix_mat(
+    data: Any,
+    *,
+    source_metric: str,
+    condition_labels: tuple[str, str],
+    n_channels: int,
+    n_times: int,
+    filename: str,
+) -> np.ndarray:
+    means = data.means
+    stats = data.stats
+
+    if source_metric == "mean_difference":
+        raw = np.asarray(means.difference, dtype=np.float64)
+        return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
+
+    if source_metric == "t_values":
+        raw = np.asarray(stats.t_values, dtype=np.float64)
+        return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
+
+    safe_a = matlab_safe_name(condition_labels[0])
+    safe_b = matlab_safe_name(condition_labels[1])
+    attr_name = safe_a if source_metric == "condition_a_mean" else safe_b
+    metric_array = getattr(means, attr_name, None)
+    if metric_array is None:
+        raise ValueError(
+            f"{filename}: means.{attr_name!r} field is required "
+            f"for source_metric={source_metric!r}."
+        )
+    raw = np.asarray(metric_array, dtype=np.float64)
+    return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
 
 
 def _is_na_like_region_label(label: str) -> bool:

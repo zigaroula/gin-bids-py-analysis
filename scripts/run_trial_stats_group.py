@@ -66,6 +66,7 @@ PARAMS = TrialStatsGroupParams(
 
 WRITER_PARAMS = TrialStatsGroupWriterParams(
     bids_root=BIDS_ROOT,
+    output_format="hdf5"
 )
 
 N_JOBS = 1

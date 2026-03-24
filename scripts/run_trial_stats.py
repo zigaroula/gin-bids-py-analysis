@@ -60,6 +60,7 @@ RESOLVER = TableTrialLabelResolver(
 
 WRITER_PARAMS = TrialStatsWriterParams(
     bids_root=BIDS_ROOT,
+    output_format="hdf5"
 )
 
 N_JOBS = 1

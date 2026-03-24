@@ -6,8 +6,10 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+from scipy.io import savemat
 
 from gin_bids_py_analysis.processing.base import BaseProcessingResult, BaseProcessingWriter
+from gin_bids_py_analysis.processing.utils.matlab import make_struct, matlab_safe_name
 
 from .result import TrialStatsProcessingResult
 
@@ -28,8 +30,164 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
                 f"Expected TrialStatsProcessingResult, got {type(result).__name__!r}"
             )
 
-        self._write_hdf5(result, output_path)
+        if self.params.output_format == "matlab":
+            self._write_matlab(result, output_path)
+        else:
+            self._write_hdf5(result, output_path)
         self._write_trial_table_tsv(result, _trial_table_path(output_path))
+
+    def _write_matlab(
+        self,
+        result: TrialStatsProcessingResult,
+        output_path: Path,
+    ) -> None:
+        p_values_uncorrected = (
+            result.p_values_uncorrected
+            if result.p_values_uncorrected.size
+            else result.p_values
+        )
+        significant_mask = (
+            result.significant_mask
+            if result.significant_mask.size
+            else (np.isfinite(result.p_values) & (result.p_values < result.significance_alpha))
+        )
+        _validate_uncertainty_shapes(result)
+
+        binning_mode = str(
+            result.metadata.get(
+                "binning_mode",
+                "window_ms"
+                if result.window_ms > 0
+                else ("n_bins" if result.n_bins > 0 else "none"),
+            )
+        )
+        effective_n_bins = int(
+            result.metadata.get("effective_n_bins", len(result.time_axis_s))
+        )
+
+        cond_a = matlab_safe_name(result.condition_a)
+        cond_b = matlab_safe_name(result.condition_b)
+
+        stats_struct = make_struct(
+            t_values=result.t_values.astype(np.float64),
+            p_values=result.p_values.astype(np.float64),
+            p_values_uncorrected=p_values_uncorrected.astype(np.float64),
+            significant_mask=significant_mask.astype(np.uint8),
+        )
+
+        means_struct = make_struct(
+            **{
+                cond_a: result.condition_a_mean.astype(np.float64),
+                cond_b: result.condition_b_mean.astype(np.float64),
+                "difference": result.mean_difference.astype(np.float64),
+            }
+        )
+
+        uncertainty_struct = make_struct(
+            **{
+                cond_a + "_sem": result.condition_a_sem.astype(np.float64),
+                cond_b + "_sem": result.condition_b_sem.astype(np.float64),
+                "difference_sem": result.difference_sem.astype(np.float64),
+                "difference_ci95_low": result.difference_ci95_low.astype(np.float64),
+                "difference_ci95_high": result.difference_ci95_high.astype(np.float64),
+            }
+        )
+
+        primary_axis_name = "region" if result.analysis_level == "roi" else "channel"
+        axes_struct = make_struct(
+            **{
+                primary_axis_name: np.array(result.channel_names, dtype=object),
+                "time_s": result.time_axis_s.astype(np.float64),
+            }
+        )
+
+        region_order = result.channel_names if result.analysis_level == "roi" else []
+        ordered_regions = list(region_order)
+        region_pairs: list[str] = []
+        channel_pairs: list[str] = []
+        for region in result.region_channels:
+            if region not in ordered_regions:
+                ordered_regions.append(region)
+        for region in ordered_regions:
+            for channel in result.region_channels.get(region, []):
+                region_pairs.append(str(region))
+                channel_pairs.append(str(channel))
+        atlas_map_struct = make_struct(
+            region_order=np.array(region_order, dtype=object),
+            region=np.array(region_pairs, dtype=object),
+            channel=np.array(channel_pairs, dtype=object),
+        )
+
+        meta_struct = make_struct(
+            trial_counts=np.array(
+                [result.condition_a_trial_count, result.condition_b_trial_count],
+                dtype=np.int64,
+            ),
+            trial_count_labels=np.array([result.condition_a, result.condition_b], dtype=object),
+            sampling_frequency_hz=float(result.sfreq),
+            p_value_correction_method=str(result.p_value_correction_method),
+            significance_alpha=float(result.significance_alpha),
+            analysis_level=str(result.analysis_level),
+            atlas_name=str(result.atlas_name or ""),
+            atlas_regions=np.array(result.atlas_regions, dtype=object),
+            atlas_region_channel_map=atlas_map_struct,
+            window_ms=float(result.window_ms),
+            n_bins=int(result.n_bins),
+            window_samples=int(result.metadata.get("window_samples", 0)),
+            effective_n_bins=effective_n_bins,
+            binning_mode=binning_mode,
+            stats_valid=bool(result.stats_valid),
+        )
+
+        trials_struct = make_struct(
+            source_file=np.array(
+                [str(trial.source_file.path) for trial in result.resolved_trials],
+                dtype=object,
+            ),
+            anchor_event_code=np.array(
+                [trial.anchor_event_code or "" for trial in result.resolved_trials],
+                dtype=object,
+            ),
+            anchor_onset_s=np.array(
+                [trial.anchor_onset_s for trial in result.resolved_trials],
+                dtype=np.float64,
+            ),
+            resolved_label=np.array(
+                [trial.label or "" for trial in result.resolved_trials],
+                dtype=object,
+            ),
+            keep=np.array(
+                [trial.keep for trial in result.resolved_trials],
+                dtype=np.uint8,
+            ),
+            exclusion_reason=np.array(
+                [trial.exclusion_reason or "" for trial in result.resolved_trials],
+                dtype=object,
+            ),
+            trial_id=np.array(
+                [trial.trial_id or "" for trial in result.resolved_trials],
+                dtype=object,
+            ),
+        )
+
+        prov_struct = make_struct(
+            source_ieeg_files=np.array(result.source_ieeg_files, dtype=object),
+            source_table_files=np.array(result.source_table_files, dtype=object),
+            source_electrodes_files=np.array(result.source_electrodes_files, dtype=object),
+            pipeline_name=np.str_("trialstats"),
+            pipeline_version=np.str_(_package_version()),
+        )
+
+        data = make_struct(
+            stats=stats_struct,
+            means=means_struct,
+            uncertainty=uncertainty_struct,
+            axes=axes_struct,
+            meta=meta_struct,
+            trials=trials_struct,
+            provenance=prov_struct,
+        )
+        savemat(str(output_path), {"data": data}, do_compression=True)
 
     def _write_hdf5(
         self,

@@ -5,8 +5,10 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+from scipy.io import savemat
 
 from gin_bids_py_analysis.processing.base import BaseProcessingResult, BaseProcessingWriter
+from gin_bids_py_analysis.processing.utils.matlab import make_struct
 
 from .result import TrialStatsGroupProcessingResult
 
@@ -27,6 +29,102 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
                 f"Expected TrialStatsGroupProcessingResult, got {type(result).__name__!r}"
             )
 
+        if self.params.output_format == "matlab":
+            self._write_matlab(result, output_path)
+        else:
+            self._write_hdf5(result, output_path)
+
+    def _write_matlab(
+        self,
+        result: TrialStatsGroupProcessingResult,
+        output_path: Path,
+    ) -> None:
+        stats_struct = make_struct(
+            t_values=result.t_values.astype(np.float64),
+            p_values=result.p_values.astype(np.float64),
+            p_values_uncorrected=result.p_values_uncorrected.astype(np.float64),
+            significant_mask=result.significant_mask.astype(np.uint8),
+        )
+
+        means_struct = make_struct(
+            metric_mean=result.metric_mean.astype(np.float64),
+        )
+
+        uncertainty_struct = make_struct(
+            metric_sem=result.metric_sem.astype(np.float64),
+        )
+
+        summary_struct = make_struct(
+            t_values=result.epoch_mean_t_values.astype(np.float64),
+            p_values=result.epoch_mean_p_values.astype(np.float64),
+            df=result.epoch_mean_df.astype(np.float64),
+            metric_mean=result.epoch_mean_metric_mean.astype(np.float64),
+            metric_sem=result.epoch_mean_metric_sem.astype(np.float64),
+            roi_channel_counts=result.roi_channel_counts.astype(np.int64),
+            roi_subject_counts=result.roi_subject_counts.astype(np.int64),
+        )
+
+        axes_struct = make_struct(
+            region=np.array(result.region_names, dtype=object),
+            time_s=result.time_axis_s.astype(np.float64),
+        )
+
+        excluded_rois_struct = make_struct(
+            region=np.array(list(result.excluded_rois.keys()), dtype=object),
+            reason=np.array(list(result.excluded_rois.values()), dtype=object),
+        )
+
+        meta_kwargs: dict[str, object] = dict(
+            analysis_level=np.str_("roi_group"),
+            source_metric=np.str_(result.source_metric),
+            condition_labels=np.array(list(result.condition_labels), dtype=object),
+            p_value_correction_method=np.str_(result.p_value_correction_method),
+            significance_alpha=float(result.significance_alpha),
+            roi_mode=np.str_(result.roi_mode),
+            atlas_name=np.str_(result.atlas_name or ""),
+            included_roi_count=int(len(result.region_names)),
+            excluded_roi_count=int(len(result.excluded_rois)),
+            excluded_rois=excluded_rois_struct,
+        )
+        if "binning_mode" in result.metadata:
+            meta_kwargs["binning_mode"] = np.str_(str(result.metadata["binning_mode"]))
+        if "window_ms" in result.metadata:
+            meta_kwargs["window_ms"] = float(result.metadata["window_ms"])
+        if "n_bins" in result.metadata:
+            meta_kwargs["n_bins"] = int(result.metadata["n_bins"])
+        if "effective_n_bins" in result.metadata:
+            meta_kwargs["effective_n_bins"] = int(result.metadata["effective_n_bins"])
+        meta_struct = make_struct(**meta_kwargs)
+
+        contributions_struct = make_struct(
+            region=np.array([item.roi for item in result.contributions], dtype=object),
+            subject=np.array([item.subject for item in result.contributions], dtype=object),
+            channel=np.array([item.channel for item in result.contributions], dtype=object),
+            source_stats_file=np.array(
+                [item.source_stats_file for item in result.contributions], dtype=object
+            ),
+        )
+
+        prov_struct = make_struct(
+            source_trial_stats_files=np.array(result.source_trial_stats_files, dtype=object),
+            source_electrodes_files=np.array(result.source_electrodes_files, dtype=object),
+            pipeline_name=np.str_("trial_stats_group"),
+            pipeline_version=np.str_(_package_version()),
+        )
+
+        data = make_struct(
+            stats=stats_struct,
+            means=means_struct,
+            uncertainty=uncertainty_struct,
+            summary_epoch=summary_struct,
+            axes=axes_struct,
+            meta=meta_struct,
+            contributions=contributions_struct,
+            provenance=prov_struct,
+        )
+        savemat(str(output_path), {"data": data}, do_compression=True)
+
+    def _write_hdf5(self, result: TrialStatsGroupProcessingResult, output_path: Path) -> None:
         str_dtype = h5py.string_dtype(encoding="utf-8")
         with h5py.File(output_path, "w") as fh:
             stats_grp = fh.create_group("stats")

@@ -134,7 +134,11 @@ class TrialStatsWriterParams(BaseWriterParams):
     output_modality: str = "ieeg"
     output_suffix: str = "stats"
     output_description: str = "trialstats"
-    output_format: Literal["hdf5"] = Field(
+    output_format: Literal["hdf5", "matlab"] = Field(
         default="hdf5",
-        description="The trial-stats writer always emits an HDF5 file plus a TSV companion trial table.",
+        description=(
+            "Output format for trial-stats results. "
+            "'hdf5' writes an HDF5 file (.h5); 'matlab' writes a MATLAB file (.mat). "
+            "A TSV companion trial table is written in both cases."
+        ),
     )
