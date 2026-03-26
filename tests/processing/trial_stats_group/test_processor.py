@@ -262,6 +262,64 @@ def test_process_group_atlas_mode_uses_electrodes_mapping() -> None:
         shutil.rmtree(case_dir, ignore_errors=True)
 
 
+def test_process_group_atlas_mode_with_nonexistent_ieeg_path() -> None:
+    """Atlas mode works when source_ieeg_files paths no longer exist on disk.
+
+    In visualization flows the iEEG files are preloaded into memory and the
+    group processor only ever sees them as string paths in provenance.
+    Entity extraction for the electrode lookup is pure filename parsing and
+    must not require the physical file to be present.
+    """
+    case_dir = _make_case_dir("atlas_mode_no_ieeg_on_disk")
+    try:
+        # The iEEG path is intentionally NOT created on disk.
+        ieeg_path = case_dir / "sub-01_task-decid_run-1_ieeg.vhdr"
+
+        electrodes_path = case_dir / "sub-01_task-decid_run-1_electrodes.tsv"
+        electrodes_path.write_text(
+            "name\tMarsAtlas\nA1\tROI_A\nB1\tROI_B\n",
+            encoding="utf-8",
+        )
+
+        stats_path = case_dir / "sub-01_task-decid_desc-trialstats_stats.h5"
+        _write_trial_stats_h5(
+            stats_path,
+            channels=["A1", "B1"],
+            time_s=np.array([0.0, 0.1], dtype=np.float64),
+            mean_difference=np.array([[1.0, 1.0], [2.0, 2.0]], dtype=np.float64),
+            source_ieeg_files=[str(ieeg_path)],
+            source_electrodes_files=[str(electrodes_path)],
+        )
+
+        stats_file = _make_bids_file(
+            stats_path,
+            {
+                "subject": "01",
+                "task": "decid",
+                "desc": "trialstats",
+                "suffix": "stats",
+                "extension": ".h5",
+                "datatype": "ieeg",
+            },
+        )
+
+        assert not ieeg_path.exists(), "precondition: iEEG file must not exist"
+
+        processor = TrialStatsGroupProcessing(
+            TrialStatsGroupParams(
+                roi_mode="atlas",
+                atlas_name="MarsAtlas",
+            )
+        )
+
+        result = processor.process_group(BIDSFileGroup(primary=stats_file))
+
+        assert result.region_names == ["ROI_A", "ROI_B"]
+        assert list(result.roi_channel_counts) == [1, 1]
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+
+
 # ---------------------------------------------------------------------------
 # Helpers and tests for .mat input files
 # ---------------------------------------------------------------------------

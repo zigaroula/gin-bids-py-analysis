@@ -10,12 +10,16 @@ if TYPE_CHECKING:
         TrialLabelResolver,
         TrialStatsParams,
     )
+    from gin_bids_py_analysis.processing.trial_stats_group.params import (
+        TrialStatsGroupParams,
+    )
 
 
 def launch(
     subject_groups: dict[str, "BIDSFileGroup"],
     params: "TrialStatsParams",
     resolver: "TrialLabelResolver",
+    group_params: "TrialStatsGroupParams | None" = None,
 ) -> None:
     """Launch the trial statistics visualization window.
 
@@ -27,6 +31,9 @@ def launch(
         Default ``TrialStatsParams`` to pre-populate the parameters panel.
     resolver:
         The ``TrialLabelResolver`` configured for this dataset.
+    group_params:
+        Optional ``TrialStatsGroupParams``.  When provided the Group tab is
+        enabled after all subjects have been computed.
     """
     try:
         import sys
@@ -42,6 +49,6 @@ def launch(
 
     from .window import TrialStatsWindow
 
-    window = TrialStatsWindow(subject_groups, params, resolver)
+    window = TrialStatsWindow(subject_groups, params, resolver, group_params=group_params)
     window.show()
     app.exec()
