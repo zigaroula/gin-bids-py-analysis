@@ -173,6 +173,72 @@ class TestEnsureLoadedOnDemand:
         assert mock_bids_file.is_loaded is False
 
 
+class TestPreload:
+    """preload() loads data permanently so ensure_loaded() returns it without re-reading."""
+
+    def test_preload_attaches_data(self, mock_bids_file: BIDSFile) -> None:
+        fake_data = MagicMock()
+        mock_bids_file.set_loader(MagicMock(return_value=fake_data))
+        mock_bids_file.preload()
+        assert mock_bids_file.is_loaded is True
+        assert mock_bids_file.data is fake_data
+
+    def test_preload_is_chainable(self, mock_bids_file: BIDSFile) -> None:
+        mock_bids_file.set_loader(MagicMock(return_value=MagicMock()))
+        result = mock_bids_file.preload()
+        assert result is mock_bids_file
+
+    def test_ensure_loaded_reuses_preloaded_data(self, mock_bids_file: BIDSFile) -> None:
+        fake_data = MagicMock()
+        fake_loader = MagicMock(return_value=fake_data)
+        mock_bids_file.set_loader(fake_loader)
+        mock_bids_file.preload()
+
+        with mock_bids_file.ensure_loaded() as data:
+            assert data is fake_data
+
+        # Loader only called once (during preload, not during ensure_loaded)
+        fake_loader.assert_called_once()
+
+    def test_data_persists_after_ensure_loaded_exits(self, mock_bids_file: BIDSFile) -> None:
+        mock_bids_file.set_loader(MagicMock(return_value=MagicMock()))
+        mock_bids_file.preload()
+
+        with mock_bids_file.ensure_loaded():
+            pass
+
+        # Data must still be attached — not cleared by ensure_loaded's finally
+        assert mock_bids_file.is_loaded is True
+
+    def test_preload_is_noop_when_already_loaded(self, mock_bids_file: BIDSFile) -> None:
+        fake_loader = MagicMock(return_value=MagicMock())
+        mock_bids_file.set_loader(fake_loader)
+        mock_bids_file.preload()
+        mock_bids_file.preload()  # second call
+        fake_loader.assert_called_once()
+
+    def test_preload_forwards_kwargs(self, mock_bids_file: BIDSFile) -> None:
+        fake_loader = MagicMock(return_value=MagicMock())
+        mock_bids_file.set_loader(fake_loader, verbose=False)
+        mock_bids_file.preload(extra_kwarg=True)
+        fake_loader.assert_called_once_with(
+            mock_bids_file.path, verbose=False, extra_kwarg=True
+        )
+
+    def test_multiple_ensure_loaded_calls_do_not_reload(
+        self, mock_bids_file: BIDSFile
+    ) -> None:
+        fake_loader = MagicMock(return_value=MagicMock())
+        mock_bids_file.set_loader(fake_loader)
+        mock_bids_file.preload()
+
+        for _ in range(5):
+            with mock_bids_file.ensure_loaded():
+                pass
+
+        fake_loader.assert_called_once()
+
+
 class TestAutoDetection:
     """Auto-detection of loader from file extension."""
 

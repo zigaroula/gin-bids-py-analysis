@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .file_group import build_subject_groups as build_subject_groups  # re-export
+
 # Canonical BIDS entity ordering (determines the order of components in a filename).
 # See: https://bids-specification.readthedocs.io/en/stable/appendices/entity-table.html
 _ENTITY_ORDER = [
@@ -171,3 +173,6 @@ def modify_entities(file_name: str, **new_entities: str) -> str:
         suffix=path.stem.split("_")[-1],
         extension=path.suffix,
     )
+
+
+

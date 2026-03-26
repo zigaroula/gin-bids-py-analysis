@@ -1,7 +1,7 @@
 from .dataset import BIDSDataset
 from .file import BIDSFile
 from .file_group import BIDSFileGroup
-from .helpers import build_bids_path, parse_entities
+from .helpers import build_bids_path, build_subject_groups, parse_entities
 from .subject import BIDSSubject
 
 __all__ = [
@@ -10,5 +10,6 @@ __all__ = [
     "BIDSFileGroup",
     "BIDSSubject",
     "build_bids_path",
+    "build_subject_groups",
     "parse_entities",
 ]

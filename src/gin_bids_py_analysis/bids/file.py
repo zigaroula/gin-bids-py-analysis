@@ -152,6 +152,32 @@ class BIDSFile:
         self._externally_loaded = True
         return self
 
+    def preload(self, **kwargs: Any) -> "BIDSFile":
+        """Load data from disk and attach it permanently.
+
+        After calling this method, :meth:`ensure_loaded` will return the
+        pre-loaded data without re-reading from disk on subsequent calls.
+        The data persists because :meth:`ensure_loaded` takes its early-return
+        path (``if self._data is not None``) and never reaches the ``finally``
+        block that would otherwise clear it.
+
+        Calling this method when data is already attached is a no-op.
+
+        Args:
+            **kwargs: Forwarded to the loader, merged with any defaults
+                      registered via :meth:`set_loader`.
+
+        Returns:
+            ``self`` for method chaining.
+        """
+        if self._data is not None:
+            return self
+        loader = self._resolve_loader()
+        merged_kwargs = {**self._load_kwargs, **kwargs}
+        data = loader(self._path, **merged_kwargs)
+        self.attach_data(data)
+        return self
+
     def set_loader(self, fn: Callable[..., Any], **defaults: Any) -> "BIDSFile":
         """Override the automatic loader for this file.
 
