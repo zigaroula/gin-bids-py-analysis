@@ -18,6 +18,9 @@ _AUTO_DETECT_EXT_TO_LOADER: dict[str, str] = {
     ".tsv": "load_table",
     ".csv": "load_table",
     ".json": "load_json",
+    ".h5": "load_hdf5",
+    ".hdf5": "load_hdf5",
+    ".mat": "load_mat",
 }
 
 
@@ -228,6 +231,10 @@ class BIDSFile:
         +---------------------------+-------------+
         | ``.json``                 | load_json   |
         +---------------------------+-------------+
+        | ``.h5``, ``.hdf5``        | load_hdf5   |
+        +---------------------------+-------------+
+        | ``.mat``                  | load_mat    |
+        +---------------------------+-------------+
 
         Args:
             **kwargs: Forwarded to the loader, merged with any defaults
@@ -258,6 +265,8 @@ class BIDSFile:
         try:
             yield data
         finally:
+            if hasattr(data, "close") and callable(data.close):
+                data.close()
             self._data = None
 
     def _resolve_loader(self) -> Callable[..., Any]:
@@ -275,8 +284,10 @@ class BIDSFile:
             )
         # Lazy import: keeps bids/ independent of data/ at module-load time.
         from gin_bids_py_analysis.data.loader import (  # noqa: PLC0415
+            load_hdf5,
             load_ieeg,
             load_json,
+            load_mat,
             load_table,
         )
 
@@ -284,6 +295,8 @@ class BIDSFile:
             "load_ieeg": load_ieeg,
             "load_table": load_table,
             "load_json": load_json,
+            "load_hdf5": load_hdf5,
+            "load_mat": load_mat,
         }
         return _map[loader_name]
 

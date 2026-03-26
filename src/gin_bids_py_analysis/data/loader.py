@@ -103,3 +103,47 @@ def load_json(path: Path | str, **kwargs: Any) -> dict:
     """
     with open(Path(path), "r", encoding="utf-8") as fh:
         return json.load(fh)
+
+
+def load_hdf5(path: Path | str, **kwargs: Any) -> "h5py.File":
+    """Open an HDF5 file in read mode and return the file handle.
+
+    The caller is responsible for closing the handle.  When used via
+    :meth:`BIDSFile.ensure_loaded()`, the handle is closed automatically
+    when the context exits.
+
+    Args:
+        path:     Path to the ``.h5`` or ``.hdf5`` file.
+        **kwargs: Forwarded verbatim to :func:`h5py.File` (e.g. ``driver``,
+                  ``swmr``).
+
+    Returns:
+        An open :class:`h5py.File` handle in read mode.
+    """
+    import h5py  # noqa: PLC0415
+
+    return h5py.File(str(path), "r", **kwargs)
+
+
+def load_mat(path: Path | str, **kwargs: Any) -> dict:
+    """Load a MATLAB ``.mat`` file and return its top-level contents.
+
+    Loads via :func:`scipy.io.loadmat` with ``squeeze_me=True`` and
+    ``struct_as_record=False`` by default so that MATLAB structs are
+    accessible as objects with attribute-style field access, which is
+    the convention used throughout this codebase.
+
+    Args:
+        path:     Path to the ``.mat`` file.
+        **kwargs: Merged into the :func:`~scipy.io.loadmat` call, overriding
+                  the defaults above if provided.
+
+    Returns:
+        A :class:`dict` mapping top-level variable names to their values
+        (numpy arrays or struct objects, depending on the MATLAB type).
+    """
+    from scipy.io import loadmat  # noqa: PLC0415
+
+    defaults: dict[str, Any] = {"squeeze_me": True, "struct_as_record": False}
+    defaults.update(kwargs)
+    return loadmat(str(path), **defaults)

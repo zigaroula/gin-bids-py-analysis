@@ -7,8 +7,6 @@ from typing import Any, Sequence
 
 import h5py
 import numpy as np
-from scipy.io import loadmat
-
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.bids.helpers import (
@@ -601,7 +599,7 @@ def _load_raw_from_hdf5(
     *,
     source_metric: str,
 ) -> _RawTrialStatsData:
-    with h5py.File(stats_file.path, "r") as fh:
+    with stats_file.ensure_loaded() as fh:
         analysis_level = str_scalar(dataset_or_none(fh, "meta/analysis_level"), default="channel")
         axis_name = "channel" if analysis_level == "channel" else "region"
         if axis_name not in fh["axes"]:
@@ -699,41 +697,41 @@ def _load_raw_from_matlab(
     *,
     source_metric: str,
 ) -> _RawTrialStatsData:
-    mat = loadmat(str(stats_file.path), squeeze_me=True, struct_as_record=False)
-    data = mat["data"]
-    meta = data.meta
-    axes = data.axes
-    prov = getattr(data, "provenance", None)
+    with stats_file.ensure_loaded() as mat:
+        data = mat["data"]
+        meta = data.meta
+        axes = data.axes
+        prov = getattr(data, "provenance", None)
 
-    analysis_level = mat_str(meta.analysis_level, default="channel")
-    axis_attr = "channel" if analysis_level == "channel" else "region"
-    channels = mat_str_list(getattr(axes, axis_attr, None))
-    if not channels:
-        raise ValueError(
-            f"{stats_file.path.name}: axes.{axis_attr} array is required in .mat file."
+        analysis_level = mat_str(meta.analysis_level, default="channel")
+        axis_attr = "channel" if analysis_level == "channel" else "region"
+        channels = mat_str_list(getattr(axes, axis_attr, None))
+        if not channels:
+            raise ValueError(
+                f"{stats_file.path.name}: axes.{axis_attr} array is required in .mat file."
+            )
+
+        time_axis_s = np.asarray(axes.time_s, dtype=np.float64).ravel()
+        condition_labels = _mat_condition_labels(meta)
+        metric_values = _load_metric_matrix_mat(
+            data,
+            source_metric=source_metric,
+            condition_labels=condition_labels,
+            n_channels=len(channels),
+            n_times=len(time_axis_s),
+            filename=stats_file.path.name,
         )
-
-    time_axis_s = np.asarray(axes.time_s, dtype=np.float64).ravel()
-    condition_labels = _mat_condition_labels(meta)
-    metric_values = _load_metric_matrix_mat(
-        data,
-        source_metric=source_metric,
-        condition_labels=condition_labels,
-        n_channels=len(channels),
-        n_times=len(time_axis_s),
-        filename=stats_file.path.name,
-    )
-    binning_mode = mat_str(getattr(meta, "binning_mode", None), default="none")
-    window_ms = mat_float(getattr(meta, "window_ms", None), default=0.0)
-    n_bins = mat_int(getattr(meta, "n_bins", None), default=0)
-    effective_n_bins = mat_int(
-        getattr(meta, "effective_n_bins", None), default=len(time_axis_s)
-    )
-    source_ieeg_files: list[str] = []
-    source_electrodes_files: list[str] = []
-    if prov is not None:
-        source_ieeg_files = mat_str_list(getattr(prov, "source_ieeg_files", None))
-        source_electrodes_files = mat_str_list(getattr(prov, "source_electrodes_files", None))
+        binning_mode = mat_str(getattr(meta, "binning_mode", None), default="none")
+        window_ms = mat_float(getattr(meta, "window_ms", None), default=0.0)
+        n_bins = mat_int(getattr(meta, "n_bins", None), default=0)
+        effective_n_bins = mat_int(
+            getattr(meta, "effective_n_bins", None), default=len(time_axis_s)
+        )
+        source_ieeg_files: list[str] = []
+        source_electrodes_files: list[str] = []
+        if prov is not None:
+            source_ieeg_files = mat_str_list(getattr(prov, "source_ieeg_files", None))
+            source_electrodes_files = mat_str_list(getattr(prov, "source_electrodes_files", None))
 
     return _RawTrialStatsData(
         analysis_level=analysis_level,
