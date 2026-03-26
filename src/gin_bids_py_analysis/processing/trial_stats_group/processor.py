@@ -32,7 +32,7 @@ from gin_bids_py_analysis.processing.utils.matlab import (
     mat_str_list,
     matlab_safe_name,
 )
-from gin_bids_py_analysis.processing.utils.tables import read_table_rows, select_column
+from gin_bids_py_analysis.processing.utils.tables import select_column
 
 from .params import TrialStatsGroupParams
 from .result import ROIChannelContribution, TrialStatsGroupProcessingResult
@@ -417,34 +417,34 @@ def _resolve_snapshot_atlas_regions(
             )
         used_electrodes.add(str(matched_electrodes.path))
 
-        rows = read_table_rows(matched_electrodes)
-        if not rows:
-            continue
-        columns = list(rows[0].keys())
-        channel_col = select_column(columns, preferred=["name", "channel", "label"])
-        atlas_col = select_column(columns, preferred=[atlas_name])
-        if channel_col is None:
-            raise ValueError(
-                f"Electrodes table {matched_electrodes.path.name} must contain a channel column."
-            )
-        if atlas_col is None:
-            raise ValueError(
-                f"Electrodes table {matched_electrodes.path.name} has no column matching atlas_name={atlas_name!r}."
-            )
-
-        per_file_map: dict[str, str] = {}
-        for row in rows:
-            channel = (row.get(channel_col) or "").strip()
-            region = (row.get(atlas_col) or "").strip()
-            if not channel or not region or _is_na_like_region_label(region):
+        with matched_electrodes.ensure_loaded() as rows:
+            if not rows:
                 continue
-            channel_key = normalize_channel_name(channel)
-            previous_region = per_file_map.get(channel_key)
-            if previous_region is not None and previous_region != region:
+            columns = list(rows[0].keys())
+            channel_col = select_column(columns, preferred=["name", "channel", "label"])
+            atlas_col = select_column(columns, preferred=[atlas_name])
+            if channel_col is None:
                 raise ValueError(
-                    f"Channel {channel!r} has multiple atlas labels in {matched_electrodes.path.name}."
+                    f"Electrodes table {matched_electrodes.path.name} must contain a channel column."
                 )
-            per_file_map[channel_key] = region
+            if atlas_col is None:
+                raise ValueError(
+                    f"Electrodes table {matched_electrodes.path.name} has no column matching atlas_name={atlas_name!r}."
+                )
+
+            per_file_map: dict[str, str] = {}
+            for row in rows:
+                channel = (row.get(channel_col) or "").strip()
+                region = (row.get(atlas_col) or "").strip()
+                if not channel or not region or _is_na_like_region_label(region):
+                    continue
+                channel_key = normalize_channel_name(channel)
+                previous_region = per_file_map.get(channel_key)
+                if previous_region is not None and previous_region != region:
+                    raise ValueError(
+                        f"Channel {channel!r} has multiple atlas labels in {matched_electrodes.path.name}."
+                    )
+                per_file_map[channel_key] = region
 
         for channel in snapshot.channel_names:
             channel_key = normalize_channel_name(channel)

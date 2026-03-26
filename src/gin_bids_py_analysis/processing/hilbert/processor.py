@@ -12,7 +12,6 @@ except ImportError:
     
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.base import BaseProcessing
-from gin_bids_py_analysis.data.loader import load_ieeg
 
 from .dsp import process_all_channels
 from .params import HilbertParams
@@ -65,15 +64,16 @@ class HilbertProcessing(BaseProcessing):
             :class:`HilbertProcessingResult` with ``smoothed`` arrays,
             channel names, and frequency metadata.
         """
-        raw = load_ieeg(group.primary)
-        fs: float = raw.info["sfreq"]
+        with group.primary.ensure_loaded() as raw:
+            fs: float = raw.info["sfreq"]
+            # get_data() returns shape [n_channels, n_times] as float64
+            data: np.ndarray = raw.get_data().astype(np.float32)
+            ch_names: list[str] = list(raw.ch_names)
+            original_events = raw.annotations
 
         if _PYFFTW_AVAILABLE:
             pyfftw.config.NUM_THREADS = get_threads_for_worker()
 
-        # get_data() returns shape [n_channels, n_times] as float64
-        data: np.ndarray = raw.get_data().astype(np.float32)
-        ch_names: list[str] = list(raw.ch_names)
         data, ch_names = select_channels_for_montage(
             data,
             ch_names,
@@ -107,5 +107,5 @@ class HilbertProcessing(BaseProcessing):
                 "unit": self.params.normalization_mode.unit,
                 "scale_factor": self.params.normalization_mode.scale_factor,
             },
-            original_events=raw.annotations,
+            original_events=original_events,
         )

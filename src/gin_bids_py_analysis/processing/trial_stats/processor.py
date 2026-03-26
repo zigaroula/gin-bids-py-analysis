@@ -18,11 +18,10 @@ from gin_bids_py_analysis.bids.matching import (
     find_best_entity_match,
     shared_entities,
 )
-from gin_bids_py_analysis.data.loader import load_ieeg
 from gin_bids_py_analysis.processing.base import BaseProcessing
 from gin_bids_py_analysis.processing.utils.channels import normalize_channel_name
 from gin_bids_py_analysis.processing.utils.events import coerce_annotation_events
-from gin_bids_py_analysis.processing.utils.tables import read_table_rows, select_column
+from gin_bids_py_analysis.processing.utils.tables import select_column
 
 from .params import TrialStatsParams
 from .resolver import ResolvedTrial, TrialLabelResolver
@@ -118,10 +117,11 @@ class TrialStatsProcessing(BaseProcessing):
 
         # --- Step 2: iterate over iEEG files ---
         for ieeg_file in ieeg_files:
-            raw = load_ieeg(ieeg_file)
-            sfreq = float(raw.info["sfreq"])
-            data = raw.get_data().astype(np.float32)
-            channel_names = list(raw.ch_names)
+            with ieeg_file.ensure_loaded() as raw:
+                sfreq = float(raw.info["sfreq"])
+                data = raw.get_data().astype(np.float32)
+                channel_names = list(raw.ch_names)
+                annotations = raw.annotations
 
             # Capture reference values from the first file; validate consistency for the rest.
             if sfreq_ref is None:
@@ -170,7 +170,7 @@ class TrialStatsProcessing(BaseProcessing):
             # Extract only the annotations whose codes mark trial onsets.
             anchor_events = [
                 event
-                for event in coerce_annotation_events(raw.annotations)
+                for event in coerce_annotation_events(annotations)
                 if event.code in anchor_codes
             ]
             resolved_trials = self.resolver.resolve_trials(
@@ -602,44 +602,44 @@ def _resolve_atlas_grouping(
         )
 
     # Step 2: parse the electrodes table and build the channel→region mapping.
-    rows = read_table_rows(electrodes_file)
-    if not rows:
-        raise ValueError(f"Electrodes table {electrodes_file.path.name} is empty.")
+    with electrodes_file.ensure_loaded() as rows:
+        if not rows:
+            raise ValueError(f"Electrodes table {electrodes_file.path.name} is empty.")
 
-    columns = list(rows[0].keys())
-    channel_col = select_column(columns, preferred=["name", "channel", "label"])
-    atlas_col = select_column(columns, preferred=[atlas_name])
-    if channel_col is None:
-        raise ValueError(
-            f"Electrodes table {electrodes_file.path.name} must contain a channel name "
-            "column (e.g. 'name')."
-        )
-    if atlas_col is None:
-        raise ValueError(
-            f"Electrodes table {electrodes_file.path.name} has no column matching "
-            f"atlas_name={atlas_name!r}."
-        )
-
-    channel_to_region: dict[str, str] = {}
-    for row in rows:
-        raw_channel = (row.get(channel_col) or "").strip()
-        raw_region = (row.get(atlas_col) or "").strip()
-        if not raw_channel or not raw_region:
-            continue
-        channel_key = normalize_channel_name(raw_channel)
-        previous = channel_to_region.get(channel_key)
-        if previous is not None and previous != raw_region:
+        columns = list(rows[0].keys())
+        channel_col = select_column(columns, preferred=["name", "channel", "label"])
+        atlas_col = select_column(columns, preferred=[atlas_name])
+        if channel_col is None:
             raise ValueError(
-                f"Channel {raw_channel!r} has multiple atlas labels in "
-                f"{electrodes_file.path.name}: {previous!r} and {raw_region!r}."
+                f"Electrodes table {electrodes_file.path.name} must contain a channel name "
+                "column (e.g. 'name')."
             )
-        channel_to_region[channel_key] = raw_region
+        if atlas_col is None:
+            raise ValueError(
+                f"Electrodes table {electrodes_file.path.name} has no column matching "
+                f"atlas_name={atlas_name!r}."
+            )
 
-    if not channel_to_region:
-        raise ValueError(
-            f"No non-empty atlas labels found in column {atlas_col!r} of "
-            f"{electrodes_file.path.name}."
-        )
+        channel_to_region: dict[str, str] = {}
+        for row in rows:
+            raw_channel = (row.get(channel_col) or "").strip()
+            raw_region = (row.get(atlas_col) or "").strip()
+            if not raw_channel or not raw_region:
+                continue
+            channel_key = normalize_channel_name(raw_channel)
+            previous = channel_to_region.get(channel_key)
+            if previous is not None and previous != raw_region:
+                raise ValueError(
+                    f"Channel {raw_channel!r} has multiple atlas labels in "
+                    f"{electrodes_file.path.name}: {previous!r} and {raw_region!r}."
+                )
+            channel_to_region[channel_key] = raw_region
+
+        if not channel_to_region:
+            raise ValueError(
+                f"No non-empty atlas labels found in column {atlas_col!r} of "
+                f"{electrodes_file.path.name}."
+            )
 
     # Step 3: group iEEG channel row indices by atlas region.
     region_to_indices: dict[str, list[int]] = {}

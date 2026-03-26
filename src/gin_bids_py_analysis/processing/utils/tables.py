@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -25,31 +24,14 @@ def is_supported_table(file: BIDSFile) -> bool:
     return file.extension in _TABLE_DELIMITERS
 
 
-def read_table_rows(file: BIDSFile) -> list[dict[str, str]]:
-    delimiter = _TABLE_DELIMITERS.get(file.extension)
-    if delimiter is None:
-        raise ValueError(
-            f"Unsupported table extension for {file.path.name!r}: {file.extension!r}"
-        )
-
-    with open(file.path, "r", encoding="utf-8", newline="") as fh:
-        reader = csv.DictReader(fh, delimiter=delimiter)
-        return [
-            {
-                str(key).strip(): "" if value is None else str(value).strip()
-                for key, value in row.items()
-            }
-            for row in reader
-        ]
-
-
 def load_table_rows(files: Sequence[BIDSFile]) -> list[LoadedTableRow]:
     rows: list[LoadedTableRow] = []
     for file in files:
         if not is_supported_table(file):
             continue
-        for idx, values in enumerate(read_table_rows(file)):
-            rows.append(LoadedTableRow(values=values, file=file, row_index=idx))
+        with file.ensure_loaded() as row_dicts:
+            for idx, values in enumerate(row_dicts):
+                rows.append(LoadedTableRow(values=values, file=file, row_index=idx))
     return rows
 
 

@@ -86,7 +86,6 @@ class _AlternatingResolver:
 
 
 def test_process_group_pools_multiple_ieeg_files_and_sets_shared_output_entities(
-    monkeypatch,
     tmp_path: Path,
 ) -> None:
     file_run1 = _make_bids_file(
@@ -127,17 +126,16 @@ def test_process_group_pools_multiple_ieeg_files_and_sets_shared_output_entities
         duration=[0.0, 0.0],
         description=["Stimulus/S  10", "Stimulus/S  10"],
     )
-    raw_lookup = {
-        str(file_run1.path): _FakeRaw(data_run1, ch_names, sfreq, annotations),
-        str(file_run2.path): _FakeRaw(data_run2, ch_names, sfreq, annotations),
-    }
-    monkeypatch.setattr(processor_module, "load_ieeg", lambda file: raw_lookup[str(file.path)])
+    file_run1.attach_data(_FakeRaw(data_run1, ch_names, sfreq, annotations))
+    file_run2.attach_data(_FakeRaw(data_run2, ch_names, sfreq, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
             min_trials_per_condition=2,
         ),
         resolver=_FixedResolver(),
@@ -161,7 +159,6 @@ def test_process_group_pools_multiple_ieeg_files_and_sets_shared_output_entities
 
 
 def test_process_group_aggregates_channels_by_atlas_region(
-    monkeypatch,
     tmp_path: Path,
 ) -> None:
     ieeg_file = _make_bids_file(
@@ -204,17 +201,15 @@ def test_process_group_aggregates_channels_by_atlas_region(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    monkeypatch.setattr(
-        processor_module,
-        "load_ieeg",
-        lambda _: _FakeRaw(data, ch_names, sfreq, annotations),
-    )
+    ieeg_file.attach_data(_FakeRaw(data, ch_names, sfreq, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
             atlas_name="atlasA",
         ),
         resolver=_AlternatingResolver(),
@@ -236,7 +231,6 @@ def test_process_group_aggregates_channels_by_atlas_region(
     }
 
 def test_process_group_drops_na_like_regions_when_atlas_regions_not_set(
-    monkeypatch,
     tmp_path: Path,
 ) -> None:
     ieeg_file = _make_bids_file(
@@ -279,17 +273,15 @@ def test_process_group_drops_na_like_regions_when_atlas_regions_not_set(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    monkeypatch.setattr(
-        processor_module,
-        "load_ieeg",
-        lambda _: _FakeRaw(data, ch_names, sfreq, annotations),
-    )
+    ieeg_file.attach_data(_FakeRaw(data, ch_names, sfreq, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
             atlas_name="atlasA",
         ),
         resolver=_AlternatingResolver(),
@@ -304,7 +296,6 @@ def test_process_group_drops_na_like_regions_when_atlas_regions_not_set(
     assert np.all(result.mean_difference > 0.0)
 
 def test_process_group_window_ms_binning(
-    monkeypatch,
     tmp_path: Path,
 ) -> None:
     ieeg_file = _make_bids_file(
@@ -330,17 +321,15 @@ def test_process_group_window_ms_binning(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    monkeypatch.setattr(
-        processor_module,
-        "load_ieeg",
-        lambda _: _FakeRaw(data, ch_names, sfreq, annotations),
-    )
+    ieeg_file.attach_data(_FakeRaw(data, ch_names, sfreq, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.5,
+            condition_a="accepted",
+            condition_b="rejected",
             window_ms=200.0,
         ),
         resolver=_AlternatingResolver(),
@@ -357,7 +346,6 @@ def test_process_group_window_ms_binning(
 
 
 def test_process_group_n_bins_binning(
-    monkeypatch,
     tmp_path: Path,
 ) -> None:
     ieeg_file = _make_bids_file(
@@ -383,17 +371,15 @@ def test_process_group_n_bins_binning(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    monkeypatch.setattr(
-        processor_module,
-        "load_ieeg",
-        lambda _: _FakeRaw(data, ch_names, sfreq, annotations),
-    )
+    ieeg_file.attach_data(_FakeRaw(data, ch_names, sfreq, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.5,
+            condition_a="accepted",
+            condition_b="rejected",
             n_bins=2,
         ),
         resolver=_AlternatingResolver(),
@@ -448,7 +434,6 @@ def test_temporal_bin_epochs_by_n_bins_respects_requested_count() -> None:
     )
 
 def test_process_group_raises_when_atlas_name_without_matching_electrodes(
-    monkeypatch,
     tmp_path: Path,
 ) -> None:
     ieeg_file = _make_bids_file(
@@ -467,11 +452,7 @@ def test_process_group_raises_when_atlas_name_without_matching_electrodes(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    monkeypatch.setattr(
-        processor_module,
-        "load_ieeg",
-        lambda _: _FakeRaw(np.zeros((1, 60), dtype=np.float32), ["A1"], 10.0, annotations),
-    )
+    ieeg_file.attach_data(_FakeRaw(np.zeros((1, 60), dtype=np.float32), ["A1"], 10.0, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
@@ -491,7 +472,6 @@ def test_process_group_raises_when_atlas_name_without_matching_electrodes(
 
 
 def test_process_group_prefers_least_specific_electrodes_file_on_tie(
-    monkeypatch,
     tmp_path: Path,
 ) -> None:
     ieeg_file = _make_bids_file(
@@ -540,11 +520,7 @@ def test_process_group_prefers_least_specific_electrodes_file_on_tie(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    monkeypatch.setattr(
-        processor_module,
-        "load_ieeg",
-        lambda _: _FakeRaw(np.zeros((1, 60), dtype=np.float32), ["A1"], 10.0, annotations),
-    )
+    ieeg_file.attach_data(_FakeRaw(np.zeros((1, 60), dtype=np.float32), ["A1"], 10.0, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
@@ -564,7 +540,6 @@ def test_process_group_prefers_least_specific_electrodes_file_on_tie(
 
 
 def test_process_group_raises_when_electrodes_ambiguity_persists_after_tiebreak(
-    monkeypatch,
     tmp_path: Path,
 ) -> None:
     ieeg_file = _make_bids_file(
@@ -614,11 +589,7 @@ def test_process_group_raises_when_electrodes_ambiguity_persists_after_tiebreak(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    monkeypatch.setattr(
-        processor_module,
-        "load_ieeg",
-        lambda _: _FakeRaw(np.zeros((1, 60), dtype=np.float32), ["A1"], 10.0, annotations),
-    )
+    ieeg_file.attach_data(_FakeRaw(np.zeros((1, 60), dtype=np.float32), ["A1"], 10.0, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(

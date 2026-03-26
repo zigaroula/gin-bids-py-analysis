@@ -2,13 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.processing.utils.tables import (
     LoadedTableRow,
     load_table_rows,
-    read_table_rows,
     row_float_value,
     row_int_value,
     row_value,
@@ -26,7 +23,7 @@ def _make_bids_file(path: Path, entities: dict[str, str]) -> BIDSFile:
     return BIDSFile(_MockPyBIDSFile(str(path), entities))
 
 
-def test_read_table_rows_trims_headers_and_values(tmp_path: Path) -> None:
+def test_load_table_rows_trims_headers_and_values(tmp_path: Path) -> None:
     table_path = tmp_path / "sub-01_events.tsv"
     table_path.write_text(" trial_id \t onset \n trial-1 \t 1.0 \n", encoding="utf-8")
     table_file = _make_bids_file(
@@ -34,7 +31,9 @@ def test_read_table_rows_trims_headers_and_values(tmp_path: Path) -> None:
         {"extension": ".tsv", "suffix": "events"},
     )
 
-    assert read_table_rows(table_file) == [{"trial_id": "trial-1", "onset": "1.0"}]
+    rows = load_table_rows([table_file])
+    assert len(rows) == 1
+    assert rows[0].values == {"trial_id": "trial-1", "onset": "1.0"}
 
 
 def test_load_table_rows_skips_unsupported_extensions(tmp_path: Path) -> None:
@@ -79,12 +78,4 @@ def test_select_column_is_case_insensitive() -> None:
     assert select_column(columns, preferred=["marsatlas"]) == "MarsAtlas"
     assert select_column(columns, preferred=["missing"]) is None
 
-
-def test_read_table_rows_raises_on_unsupported_extension(tmp_path: Path) -> None:
-    text_path = tmp_path / "notes.txt"
-    text_path.write_text("a,b\n1,2\n", encoding="utf-8")
-    text_file = _make_bids_file(text_path, {"extension": ".txt", "suffix": "notes"})
-
-    with pytest.raises(ValueError, match="Unsupported table extension"):
-        read_table_rows(text_file)
 

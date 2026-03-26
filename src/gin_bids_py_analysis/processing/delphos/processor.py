@@ -17,7 +17,6 @@ except ImportError:
     _PYFFTW_AVAILABLE = False
 
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.data.loader import load_ieeg
 from gin_bids_py_analysis.processing.base import BaseProcessing
 from gin_bids_py_analysis.processing.utils.channels import build_montage
 
@@ -95,14 +94,13 @@ class DelphosProcessing(BaseProcessing):
             DelphosProcessingResult containing detected events and metadata
         """
         # Load iEEG data
-        raw = load_ieeg(group.primary)
-        original_fs = raw.info["sfreq"]
+        with group.primary.ensure_loaded() as raw:
+            original_fs = raw.info["sfreq"]
+            channel_names = list(raw.ch_names)
+            data = raw.get_data()  # (n_channels, n_samples)
 
         if _PYFFTW_AVAILABLE:
             pyfftw.config.NUM_THREADS = get_threads_for_worker()
-
-        channel_names = raw.ch_names
-        data = raw.get_data()  # (n_channels, n_samples)
 
         # Optional channel include/exclude selection before montage
         data, channel_names = select_channels_for_montage(

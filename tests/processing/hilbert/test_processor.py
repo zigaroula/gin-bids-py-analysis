@@ -216,9 +216,6 @@ class TestHilbertProcessingChannelSelection:
         raw = _FakeRaw(data, ch_names, fs)
         captured: dict[str, np.ndarray | list[str] | float] = {}
 
-        def fake_load_ieeg(_):
-            return raw
-
         def fake_process_all_channels(
             data_2d: np.ndarray,
             channel_names: list[str],
@@ -235,7 +232,7 @@ class TestHilbertProcessingChannelSelection:
                 [50.0, 60.0],
             )
 
-        monkeypatch.setattr(processor_module, "load_ieeg", fake_load_ieeg)
+        mock_bids_file.attach_data(raw)
         monkeypatch.setattr(processor_module, "process_all_channels", fake_process_all_channels)
 
         params = HilbertParams(
@@ -273,9 +270,6 @@ class TestHilbertProcessingChannelSelection:
         raw = _FakeRaw(data, ch_names, fs)
         captured: dict[str, np.ndarray | list[str] | float] = {}
 
-        def fake_load_ieeg(_):
-            return raw
-
         def fake_process_all_channels(
             data_2d: np.ndarray,
             channel_names: list[str],
@@ -292,7 +286,7 @@ class TestHilbertProcessingChannelSelection:
                 [50.0, 60.0],
             )
 
-        monkeypatch.setattr(processor_module, "load_ieeg", fake_load_ieeg)
+        mock_bids_file.attach_data(raw)
         monkeypatch.setattr(processor_module, "process_all_channels", fake_process_all_channels)
 
         params = HilbertParams(
@@ -318,7 +312,6 @@ class TestHilbertProcessingChannelSelection:
 
     def test_process_group_raises_when_no_requested_channel_matches(
         self,
-        monkeypatch: pytest.MonkeyPatch,
         mock_bids_file,
     ) -> None:
         raw = _FakeRaw(
@@ -327,7 +320,7 @@ class TestHilbertProcessingChannelSelection:
             1000.0,
         )
 
-        monkeypatch.setattr(processor_module, "load_ieeg", lambda _: raw)
+        mock_bids_file.attach_data(raw)
 
         params = HilbertParams(
             f_min=50,
