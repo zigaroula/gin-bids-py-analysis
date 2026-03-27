@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -20,6 +21,7 @@ def launch(
     params: "TrialStatsParams",
     resolver: "TrialLabelResolver",
     group_params: "TrialStatsGroupParams | None" = None,
+    bids_root: Path | None = None,
 ) -> None:
     """Launch the trial statistics visualization window.
 
@@ -34,6 +36,10 @@ def launch(
     group_params:
         Optional ``TrialStatsGroupParams``.  When provided the Group tab is
         enabled after all subjects have been computed.
+    bids_root:
+        Path to the BIDS dataset root.  When provided the *Save results* buttons
+        in both the Subject and Group tabs become functional after a successful
+        compute, allowing results to be written to the BIDS derivatives folder.
     """
     try:
         import sys
@@ -49,6 +55,6 @@ def launch(
 
     from .window import TrialStatsWindow
 
-    window = TrialStatsWindow(subject_groups, params, resolver, group_params=group_params)
+    window = TrialStatsWindow(subject_groups, params, resolver, group_params=group_params, bids_root=bids_root)
     window.show()
     app.exec()

@@ -29,9 +29,11 @@ class ParamsPanel(QWidget):
     Signals
     -------
     compute_requested : emitted when the user clicks *Compute*.
+    save_requested    : emitted when the user clicks *Save results*.
     """
 
     compute_requested = Signal()
+    save_requested = Signal()
 
     def __init__(
         self,
@@ -146,6 +148,11 @@ class ParamsPanel(QWidget):
         self._compute_btn.setFixedHeight(34)
         bottom_layout.addWidget(self._compute_btn)
 
+        self._save_btn = QPushButton("Save results")
+        self._save_btn.setFixedHeight(34)
+        self._save_btn.setEnabled(False)
+        bottom_layout.addWidget(self._save_btn)
+
         self._status_label = QLabel("Ready")
         self._status_label.setWordWrap(True)
         bottom_layout.addWidget(self._status_label)
@@ -153,6 +160,7 @@ class ParamsPanel(QWidget):
         outer.addWidget(bottom)
 
         self._compute_btn.clicked.connect(self.compute_requested)
+        self._save_btn.clicked.connect(self.save_requested)
 
         # Populate initial values
         self.set_params(params)
@@ -230,6 +238,10 @@ class ParamsPanel(QWidget):
         self._compute_btn.setEnabled(not is_computing)
         if is_computing:
             self._status_label.setText("Computing…")
+
+    def set_save_enabled(self, enabled: bool) -> None:
+        """Enable or disable the Save results button."""
+        self._save_btn.setEnabled(enabled)
 
     # ------------------------------------------------------------------
     # Private helpers

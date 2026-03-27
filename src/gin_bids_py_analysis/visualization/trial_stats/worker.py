@@ -16,8 +16,17 @@ if TYPE_CHECKING:
     from gin_bids_py_analysis.processing.trial_stats.result import (
         TrialStatsProcessingResult,
     )
+    from gin_bids_py_analysis.processing.trial_stats.writer import (
+        TrialStatsProcessingWriter,
+    )
     from gin_bids_py_analysis.processing.trial_stats_group.params import (
         TrialStatsGroupParams,
+    )
+    from gin_bids_py_analysis.processing.trial_stats_group.result import (
+        TrialStatsGroupProcessingResult,
+    )
+    from gin_bids_py_analysis.processing.trial_stats_group.writer import (
+        TrialStatsGroupProcessingWriter,
     )
 
 
@@ -202,5 +211,84 @@ class GroupComputeWorker(QThread):
             ) as group:
                 result = processor.process_group(group)
             self.result_ready.emit(result)
+        except Exception as exc:  # noqa: BLE001
+            self.error.emit(str(exc))
+
+
+class WriteAllWorker(QThread):
+    """Write all per-subject ``TrialStatsProcessingResult`` objects in a background thread.
+
+    Parameters
+    ----------
+    results:
+        Mapping of subject id to ``TrialStatsProcessingResult``.
+    writer:
+        A fully configured ``TrialStatsProcessingWriter`` instance.
+
+    Signals
+    -------
+    progress : str  — human-readable progress message after each subject is written.
+    finished : int  — emitted with the total number of subjects written on success.
+    error    : str  — emitted with the exception message on failure.
+    """
+
+    progress = Signal(str)
+    finished = Signal(int)
+    error = Signal(str)
+
+    def __init__(
+        self,
+        results: "dict[str, TrialStatsProcessingResult]",
+        writer: "TrialStatsProcessingWriter",
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self._results = results
+        self._writer = writer
+
+    def run(self) -> None:
+        total = len(self._results)
+        try:
+            for i, (subject_id, result) in enumerate(self._results.items(), start=1):
+                self.progress.emit(f"Saving subject {subject_id}  ({i}/{total})…")
+                self._writer.write(result)
+            self.finished.emit(total)
+        except Exception as exc:  # noqa: BLE001
+            self.error.emit(str(exc))
+
+
+class WriteGroupWorker(QThread):
+    """Write a single ``TrialStatsGroupProcessingResult`` in a background thread.
+
+    Parameters
+    ----------
+    result:
+        The group-level result to write.
+    writer:
+        A fully configured ``TrialStatsGroupProcessingWriter`` instance.
+
+    Signals
+    -------
+    finished : emitted on success.
+    error    : str  — emitted with the exception message on failure.
+    """
+
+    finished = Signal()
+    error = Signal(str)
+
+    def __init__(
+        self,
+        result: "TrialStatsGroupProcessingResult",
+        writer: "TrialStatsGroupProcessingWriter",
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self._result = result
+        self._writer = writer
+
+    def run(self) -> None:
+        try:
+            self._writer.write(self._result)
+            self.finished.emit()
         except Exception as exc:  # noqa: BLE001
             self.error.emit(str(exc))

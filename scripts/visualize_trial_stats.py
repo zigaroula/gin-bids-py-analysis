@@ -112,4 +112,4 @@ if __name__ == "__main__":
     ds = BIDSDataset(BIDS_ROOT)
     subject_groups = _build_subject_groups(ds)
     print(f"Found {len(subject_groups)} subject(s).")
-    launch(subject_groups, PARAMS, RESOLVER, group_params=GROUP_PARAMS)
+    launch(subject_groups, PARAMS, RESOLVER, group_params=GROUP_PARAMS, bids_root=BIDS_ROOT)

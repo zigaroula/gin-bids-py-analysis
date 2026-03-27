@@ -33,10 +33,12 @@ class GroupParamsPanel(QWidget):
 
     Signals
     -------
-    compute_requested : emitted when the user clicks *Compute*.
+    compute_requested : emitted when the user clicks *Compute group stats*.
+    save_requested    : emitted when the user clicks *Save results*.
     """
 
     compute_requested = Signal()
+    save_requested = Signal()
 
     def __init__(
         self,
@@ -124,6 +126,11 @@ class GroupParamsPanel(QWidget):
         self._compute_btn.setFixedHeight(34)
         bottom_layout.addWidget(self._compute_btn)
 
+        self._save_btn = QPushButton("Save results")
+        self._save_btn.setFixedHeight(34)
+        self._save_btn.setEnabled(False)
+        bottom_layout.addWidget(self._save_btn)
+
         self._status_label = QLabel("Waiting for all subjects…")
         self._status_label.setWordWrap(True)
         bottom_layout.addWidget(self._status_label)
@@ -131,6 +138,7 @@ class GroupParamsPanel(QWidget):
         outer.addWidget(bottom)
 
         self._compute_btn.clicked.connect(self.compute_requested)
+        self._save_btn.clicked.connect(self.save_requested)
         self._edit_regions_btn.clicked.connect(self._open_regions_dialog)
 
         # Store initial params so get_params() can round-trip manual_region_channels
@@ -183,6 +191,10 @@ class GroupParamsPanel(QWidget):
         self._compute_btn.setText(
             "Computing…" if computing else "Compute group stats"
         )
+
+    def set_save_enabled(self, enabled: bool) -> None:
+        """Enable or disable the Save results button."""
+        self._save_btn.setEnabled(enabled)
 
     def set_status(self, message: str) -> None:
         """Update the status label below the Compute button."""

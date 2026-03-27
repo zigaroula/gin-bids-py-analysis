@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QMainWindow,
+    QMessageBox,
     QSplitter,
     QTabWidget,
     QWidget,
@@ -19,14 +21,17 @@ from gin_bids_py_analysis.processing.trial_stats import (
     TrialStatsParams,
     TrialStatsProcessing,
     TrialStatsProcessingResult,
+    TrialStatsProcessingWriter,
 )
 
 from .panels.group_params_panel import GroupParamsPanel
 from .panels.group_plot_panel import GroupPlotPanel
 from .panels.params_panel import ParamsPanel
 from .panels.plot_panel import PlotPanel
+from .panels.save_dialog import SaveTrialStatsDialog
+from .panels.save_group_dialog import SaveTrialStatsGroupDialog
 from .panels.subject_panel import SubjectChannelPanel
-from .worker import ComputeAllWorker, GroupComputeWorker, PreloadWorker
+from .worker import ComputeAllWorker, GroupComputeWorker, PreloadWorker, WriteAllWorker, WriteGroupWorker
 
 if TYPE_CHECKING:
     from gin_bids_py_analysis.processing.trial_stats_group.params import (
@@ -34,6 +39,9 @@ if TYPE_CHECKING:
     )
     from gin_bids_py_analysis.processing.trial_stats_group.result import (
         TrialStatsGroupProcessingResult,
+    )
+    from gin_bids_py_analysis.processing.trial_stats_group.writer import (
+        TrialStatsGroupProcessingWriter,
     )
 
 
@@ -63,6 +71,9 @@ class TrialStatsWindow(QMainWindow):
     group_params:
         Optional ``TrialStatsGroupParams``.  When ``None`` the Group tab is
         visible but permanently disabled.
+    bids_root:
+        Optional path to the BIDS dataset root.  When provided the *Save results*
+        buttons in both panels become functional after a successful compute.
     """
 
     def __init__(
@@ -71,6 +82,7 @@ class TrialStatsWindow(QMainWindow):
         default_params: TrialStatsParams,
         resolver: TrialLabelResolver,
         group_params: "TrialStatsGroupParams | None" = None,
+        bids_root: Path | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -79,6 +91,7 @@ class TrialStatsWindow(QMainWindow):
 
         self._subject_groups = subject_groups
         self._resolver = resolver
+        self._bids_root = bids_root
         self._current_result: TrialStatsProcessingResult | None = None
         self._current_worker: ComputeAllWorker | None = None
         # Guard variable: only accept results whose generation matches this value
@@ -87,6 +100,8 @@ class TrialStatsWindow(QMainWindow):
         self._group_params = group_params
         self._group_result: TrialStatsGroupProcessingResult | None = None
         self._group_worker: GroupComputeWorker | None = None
+        self._write_worker: WriteAllWorker | None = None
+        self._write_group_worker: WriteGroupWorker | None = None
         # Accumulated per-subject results; unlocks Group tab when all are done
         self._all_results: dict[str, TrialStatsProcessingResult] = {}
 
@@ -157,6 +172,10 @@ class TrialStatsWindow(QMainWindow):
         # Wire signals — Group tab
         self._group_params_panel.compute_requested.connect(self._on_group_compute_requested)
 
+        # Wire save signals
+        self._params_panel.save_requested.connect(self._on_save_requested)
+        self._group_params_panel.save_requested.connect(self._on_group_save_requested)
+
         # Pre-load all files in the background; auto-compute all subjects once done
         if subject_ids:
             QTimer.singleShot(0, self._start_preload)
@@ -191,6 +210,7 @@ class TrialStatsWindow(QMainWindow):
         except ValueError:
             return
         self._all_results.clear()
+        self._params_panel.set_save_enabled(False)
         self._tabs.setTabEnabled(1, False)
         self._start_compute_all(params=params)
 
@@ -258,6 +278,7 @@ class TrialStatsWindow(QMainWindow):
             self._current_worker = None
 
         self._plot_panel.show_placeholder()
+        self._params_panel.set_save_enabled(False)
         self._params_panel.set_computing(True)
         self._params_panel.set_status(
             f"Computing {len(self._subject_groups)} subject(s)…"
@@ -310,6 +331,10 @@ class TrialStatsWindow(QMainWindow):
         self._params_panel.set_computing(False)
         n = len(results)
         self._params_panel.set_status(f"Done — {n} subject(s) computed")
+
+        # Enable Save button when there are results and a bids_root is set
+        if n > 0 and self._bids_root is not None:
+            self._params_panel.set_save_enabled(True)
 
         # Ensure the current subject's result is displayed
         current = self._subject_panel.current_subject
@@ -372,6 +397,7 @@ class TrialStatsWindow(QMainWindow):
             self._group_worker = None
 
         self._group_plot_panel.show_placeholder()
+        self._group_params_panel.set_save_enabled(False)
         self._group_params_panel.set_computing(True)
         self._group_params_panel.set_status(
             f"Computing group stats for {len(self._all_results)} subject(s)…"
@@ -392,11 +418,119 @@ class TrialStatsWindow(QMainWindow):
         if excluded:
             status += f" ({excluded} excluded)"
         self._group_params_panel.set_status(status)
+        if self._bids_root is not None:
+            self._group_params_panel.set_save_enabled(True)
         self._group_plot_panel.update_plots(result, 0)
 
     def _on_group_error(self, message: str) -> None:
         self._group_params_panel.set_computing(False)
         self._group_params_panel.set_status(f"Error: {message}")
+
+    # ------------------------------------------------------------------
+    # Save lifecycle
+    # ------------------------------------------------------------------
+
+    def _on_save_requested(self) -> None:
+        if not self._all_results:
+            QMessageBox.information(
+                self, "Nothing to save", "Run Compute first before saving."
+            )
+            return
+        if self._bids_root is None:
+            QMessageBox.warning(
+                self,
+                "No BIDS root",
+                "No BIDS root was provided when the viewer was launched. "
+                "Cannot determine where to write output files.",
+            )
+            return
+
+        dlg = SaveTrialStatsDialog(self._bids_root, parent=self)
+        if dlg.exec() != SaveTrialStatsDialog.DialogCode.Accepted:
+            return
+
+        writer_params = dlg.get_writer_params()
+        writer = TrialStatsProcessingWriter(writer_params)
+
+        n = len(self._all_results)
+        self._params_panel.set_save_enabled(False)
+        self._params_panel.set_status(f"Saving {n} subject(s)…")
+
+        if self._write_worker is not None:
+            try:
+                self._write_worker.finished.disconnect()
+                self._write_worker.error.disconnect()
+                self._write_worker.progress.disconnect()
+            except RuntimeError:
+                pass
+
+        worker = WriteAllWorker(dict(self._all_results), writer, parent=self)
+        self._write_worker = worker
+        worker.progress.connect(self._params_panel.set_status)
+        worker.finished.connect(self._on_write_finished)
+        worker.error.connect(self._on_write_error)
+        worker.start()
+
+    def _on_write_finished(self, n: int) -> None:
+        subject_word = "subject" if n == 1 else "subjects"
+        self._params_panel.set_status(f"Saved {n} {subject_word}")
+        self._params_panel.set_save_enabled(True)
+
+    def _on_write_error(self, message: str) -> None:
+        self._params_panel.set_save_enabled(True)
+        self._params_panel.set_status(f"Save error: {message}")
+        QMessageBox.critical(self, "Save error", message)
+
+    def _on_group_save_requested(self) -> None:
+        if self._group_result is None:
+            QMessageBox.information(
+                self, "Nothing to save", "Run Compute group stats first before saving."
+            )
+            return
+        if self._bids_root is None:
+            QMessageBox.warning(
+                self,
+                "No BIDS root",
+                "No BIDS root was provided when the viewer was launched. "
+                "Cannot determine where to write output files.",
+            )
+            return
+
+        dlg = SaveTrialStatsGroupDialog(self._bids_root, parent=self)
+        if dlg.exec() != SaveTrialStatsGroupDialog.DialogCode.Accepted:
+            return
+
+        writer_params = dlg.get_writer_params()
+
+        from gin_bids_py_analysis.processing.trial_stats_group import (
+            TrialStatsGroupProcessingWriter,
+        )
+        writer = TrialStatsGroupProcessingWriter(writer_params)
+
+        self._group_params_panel.set_save_enabled(False)
+        self._group_params_panel.set_status("Saving group result…")
+
+        if self._write_group_worker is not None:
+            try:
+                self._write_group_worker.finished.disconnect()
+                self._write_group_worker.error.disconnect()
+            except RuntimeError:
+                pass
+
+        worker = WriteGroupWorker(self._group_result, writer, parent=self)
+        self._write_group_worker = worker
+        worker.finished.connect(self._on_write_group_finished)
+        worker.error.connect(self._on_write_group_error)
+        worker.start()
+
+    def _on_write_group_finished(self) -> None:
+        self._group_params_panel.set_status("Group result saved")
+        self._group_params_panel.set_save_enabled(True)
+
+    def _on_write_group_error(self, message: str) -> None:
+        self._group_params_panel.set_save_enabled(True)
+        self._group_params_panel.set_status(f"Save error: {message}")
+        QMessageBox.critical(self, "Save error", message)
 
 
 # ---------------------------------------------------------------------------
