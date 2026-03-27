@@ -1,45 +1,73 @@
-"""Middle panel: three stacked matplotlib plots."""
+"""Middle panel: three tabbed matplotlib plots."""
 
 from __future__ import annotations
 
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-from PySide6.QtWidgets import QVBoxLayout, QWidget
+from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
 
 from gin_bids_py_analysis.processing.trial_stats import TrialStatsProcessingResult
 
 
 class PlotPanel(QWidget):
-    """Middle panel showing three synchronized plots for trial stats results.
+    """Middle panel showing three tabbed plots for trial stats results.
 
-    Plots (top to bottom)
-    ----------------------
-    1. Condition means with ±1 SEM shading.
-    2. T-values.
-    3. P-values with significance threshold and significant-interval shading.
+    Tabs
+    ----
+    Activity      — Condition means with ±1 SEM shading; significance shown as a
+                    thin bar at the bottom of the axes.
+    T-values      — T-values over time with significance shading.
+    P-values      — P-values with significance threshold and significant-interval shading.
+    Trial Matrix  — Heatmap of individual trial epochs: condition A on top,
+                    condition B below, separated by a white divider line.
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        layout.setSpacing(2)
+        layout.setSpacing(0)
         layout.setContentsMargins(4, 4, 4, 4)
 
+        self._tabs = QTabWidget()
+
+        activity_w = QWidget()
+        al = QVBoxLayout(activity_w)
+        al.setContentsMargins(0, 0, 0, 0)
         self._fig_means = Figure(tight_layout=True)
         self._ax_means = self._fig_means.add_subplot(111)
         self._canvas_means = FigureCanvasQTAgg(self._fig_means)
-        layout.addWidget(self._canvas_means, stretch=1)
+        al.addWidget(self._canvas_means)
+        self._tabs.addTab(activity_w, "Activity")
 
+        t_w = QWidget()
+        tl = QVBoxLayout(t_w)
+        tl.setContentsMargins(0, 0, 0, 0)
         self._fig_t = Figure(tight_layout=True)
         self._ax_t = self._fig_t.add_subplot(111)
         self._canvas_t = FigureCanvasQTAgg(self._fig_t)
-        layout.addWidget(self._canvas_t, stretch=1)
+        tl.addWidget(self._canvas_t)
+        self._tabs.addTab(t_w, "T-values")
 
+        p_w = QWidget()
+        pl = QVBoxLayout(p_w)
+        pl.setContentsMargins(0, 0, 0, 0)
         self._fig_p = Figure(tight_layout=True)
         self._ax_p = self._fig_p.add_subplot(111)
         self._canvas_p = FigureCanvasQTAgg(self._fig_p)
-        layout.addWidget(self._canvas_p, stretch=1)
+        pl.addWidget(self._canvas_p)
+        self._tabs.addTab(p_w, "P-values")
+
+        matrix_w = QWidget()
+        ml = QVBoxLayout(matrix_w)
+        ml.setContentsMargins(0, 0, 0, 0)
+        self._fig_matrix = Figure(tight_layout=True)
+        self._ax_matrix = self._fig_matrix.add_subplot(111)
+        self._canvas_matrix = FigureCanvasQTAgg(self._fig_matrix)
+        ml.addWidget(self._canvas_matrix)
+        self._tabs.addTab(matrix_w, "Trial Matrix")
+
+        layout.addWidget(self._tabs)
 
         self._draw_placeholder("Select a subject and click Compute")
 
@@ -67,8 +95,10 @@ class PlotPanel(QWidget):
         ch = channel_idx
         t = result.time_axis_s
         ch_label = result.channel_names[ch]
+        alpha = result.significance_alpha
+        sig = result.significant_mask[ch].astype(bool)
 
-        # --- Plot 1: Means + SEM ---
+        # --- Activity tab ---
         ax = self._ax_means
         ax.clear()
         mean_a = result.condition_a_mean[ch]
@@ -79,6 +109,9 @@ class PlotPanel(QWidget):
         ax.fill_between(t, mean_a - sem_a, mean_a + sem_a, alpha=0.25, color="steelblue")
         ax.plot(t, mean_b, color="tomato", label=result.condition_b)
         ax.fill_between(t, mean_b - sem_b, mean_b + sem_b, alpha=0.25, color="tomato")
+        all_means = np.concatenate([mean_a, mean_b])
+        if np.nanmin(all_means) < 0 < np.nanmax(all_means):
+            ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
         ax.set_ylabel("Amplitude")
         ax.set_title(
@@ -87,24 +120,45 @@ class PlotPanel(QWidget):
             f"{result.condition_b_trial_count}× {result.condition_b}",
             fontsize=9,
         )
+        if sig.any():
+            ax.fill_between(
+                t,
+                0.005,
+                0.025,
+                where=sig,
+                alpha=0.75,
+                color="red",
+                transform=ax.get_xaxis_transform(),
+                zorder=5,
+            )
         ax.legend(fontsize="small", loc="upper right")
         self._canvas_means.draw_idle()
 
-        # --- Plot 2: T-values ---
+        # --- T-values tab ---
         ax = self._ax_t
         ax.clear()
-        ax.plot(t, result.t_values[ch], color="darkorange")
-        ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
+        tv = result.t_values[ch]
+        ax.plot(t, tv, color="darkorange")
+        if np.nanmin(tv) < 0 < np.nanmax(tv):
+            ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
+        if sig.any():
+            ax.fill_between(
+                t,
+                0,
+                1,
+                where=sig,
+                alpha=0.18,
+                color="red",
+                transform=ax.get_xaxis_transform(),
+            )
         ax.set_ylabel("t-value")
         self._canvas_t.draw_idle()
 
-        # --- Plot 3: P-values ---
+        # --- P-values tab ---
         ax = self._ax_p
         ax.clear()
-        alpha = result.significance_alpha
         p = result.p_values[ch]
-        sig = result.significant_mask[ch].astype(bool)
         ax.plot(t, p, color="purple")
         ax.axhline(alpha, color="red", linewidth=0.8, linestyle="--", label=f"α = {alpha}")
         if sig.any():
@@ -124,6 +178,51 @@ class PlotPanel(QWidget):
         ax.legend(fontsize="small", loc="upper right")
         self._canvas_p.draw_idle()
 
+        # --- Trial Matrix tab ---
+        self._fig_matrix.clear()
+        self._ax_matrix = self._fig_matrix.add_subplot(111)
+        ax = self._ax_matrix
+        epochs_a = result.condition_a_epochs  # (n_trials_a, n_channels, n_times)
+        epochs_b = result.condition_b_epochs  # (n_trials_b, n_channels, n_times)
+        n_a = epochs_a.shape[0] if epochs_a.ndim == 3 else 0
+        n_b = epochs_b.shape[0] if epochs_b.ndim == 3 else 0
+        if n_a == 0 and n_b == 0:
+            ax.text(0.5, 0.5, "No epoch data", transform=ax.transAxes,
+                    ha="center", va="center", color="gray", fontsize=10)
+        else:
+            rows_a = epochs_a[:, ch, :] if n_a > 0 else np.empty((0, len(t)))
+            rows_b = epochs_b[:, ch, :] if n_b > 0 else np.empty((0, len(t)))
+            matrix = np.concatenate([rows_a, rows_b], axis=0)  # (n_a+n_b, n_times)
+            vcenter = float(np.nanmean(matrix))
+            vrange = float(np.nanpercentile(np.abs(matrix - vcenter), 99)) or 1.0
+            im = ax.imshow(
+                matrix,
+                aspect="auto",
+                origin="upper",
+                cmap="jet",
+                vmin=vcenter - vrange,
+                vmax=vcenter + vrange,
+                extent=[t[0], t[-1], n_a + n_b - 0.5, -0.5],
+                interpolation="nearest",
+            )
+            self._fig_matrix.colorbar(im, ax=ax, location="right", shrink=0.8)
+            if n_a > 0:
+                ax.axhline(n_a - 0.5, color="white", linewidth=1.5, linestyle="-")
+            ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
+            y_ticks = []
+            y_labels = []
+            if n_a > 0:
+                y_ticks.append(n_a / 2 - 0.5)
+                y_labels.append(result.condition_a)
+            if n_b > 0:
+                y_ticks.append(n_a + n_b / 2 - 0.5)
+                y_labels.append(result.condition_b)
+            ax.set_yticks(y_ticks)
+            ax.set_yticklabels(y_labels, fontsize=8)
+        ax.set_xlabel("Time (s)")
+        ax.set_title(f"{ch_label}  —  trials ({n_a} / {n_b})", fontsize=9)
+        self._canvas_matrix.draw_idle()
+
     def show_placeholder(self) -> None:
         """Clear all plots and display a waiting message."""
         self._draw_placeholder("Computing…")
@@ -142,6 +241,11 @@ class PlotPanel(QWidget):
             ax.set_facecolor("#f4f4f4")
             ax.set_xticks([])
             ax.set_yticks([])
+        self._fig_matrix.clear()
+        self._ax_matrix = self._fig_matrix.add_subplot(111)
+        self._ax_matrix.set_facecolor("#f4f4f4")
+        self._ax_matrix.set_xticks([])
+        self._ax_matrix.set_yticks([])
         if message:
             self._ax_means.text(
                 0.5,
@@ -156,3 +260,4 @@ class PlotPanel(QWidget):
         self._canvas_means.draw_idle()
         self._canvas_t.draw_idle()
         self._canvas_p.draw_idle()
+        self._canvas_matrix.draw_idle()

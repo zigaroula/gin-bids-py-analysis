@@ -63,6 +63,36 @@ def compute_one_sample_epoch_summary(
     )
 
 
+def compute_condition_group_stats(
+    samples: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return group-level (mean, SEM) for a ``[n_samples, n_times]`` matrix.
+
+    Parameters
+    ----------
+    samples:
+        2D array of shape ``(n_samples, n_times)`` — each row is one channel's
+        timecourse (already channel-mean from the subject-level file).
+
+    Returns
+    -------
+    mean_values : shape ``(n_times,)``
+    sem_values  : shape ``(n_times,)``
+    """
+    sample_arr = np.asarray(samples, dtype=np.float64)
+    if sample_arr.ndim != 2:
+        raise ValueError(
+            f"samples must be a 2D array of shape [n_samples, n_times], got {sample_arr.shape!r}."
+        )
+    n_times = int(sample_arr.shape[1])
+    if sample_arr.shape[0] == 0:
+        empty = np.full((n_times,), np.nan, dtype=np.float64)
+        return empty.copy(), empty.copy()
+    mean_values = np.nanmean(sample_arr, axis=0, dtype=np.float64)
+    sem_values = _nansem(sample_arr, axis=0)
+    return mean_values, sem_values
+
+
 def correct_p_values(
     p_values: np.ndarray,
     *,

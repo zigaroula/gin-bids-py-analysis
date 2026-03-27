@@ -66,36 +66,36 @@ GROUP_PARAMS = TrialStatsGroupParams(
     source_metric="t_values",
     p_value_correction_method="none",
     significance_alpha=0.05,
-    roi_mode="atlas",
-    atlas_name="MarsAtlas",
-    # roi_mode="manual",
-    # manual_region_channels={
-    #     "daINS": {
-    #         "epi01": ["Y02", "Y06"],
-    #         "epi03": ["IAD2"],
-    #         "epi05": ["X04", "X07", "X03", "X06"],
-    #         "epi07": ["X08", "T03"],
-    #         "epi11": ["X05", "X07", "X06"],
-    #         "epi12": ["Ap02"],
-    #         "epi14": ["Xp04"],
-    #         "epi17": ["II08"],
-    #         "epi18": ["X06"],
-    #         "epi19": ["IMD2"],
-    #         "epi21": ["XS07", "XD07", "XD04", "XD08"],
-    #         "epi22": ["XS08"],
-    #         "epi23": ["EL02"]
-    #     },
-    #     "vaINS": {
-    #         "epi04": ["Bp2"],
-    #         "epi08": ["IA2", "IA4"],
-    #         "epi11": ["X04"],
-    #         "epi14": ["Xp02"],
-    #         "epi17": ["II02"],
-    #         "epi18": ["Y02", "X02"],
-    #         "epi21": ["XS04"],
-    #         "epi22": ["XS02", "YS02"]
-    #     },
-    # }
+    # roi_mode="atlas",
+    # atlas_name="MarsAtlas",
+    roi_mode="manual",
+    manual_region_channels={
+        "daINS": {
+            "epi01": ["Y02", "Y06"],
+            "epi03": ["IAD2"],
+            "epi05": ["X04", "X07", "X03", "X06"],
+            "epi07": ["X08", "T03"],
+            "epi11": ["X05", "X07", "X06"],
+            "epi12": ["Ap02"],
+            "epi14": ["Xp04"],
+            "epi17": ["II08"],
+            "epi18": ["X06"],
+            "epi19": ["IMD2"],
+            "epi21": ["XS07", "XD07", "XD04", "XD08"],
+            "epi22": ["XS08"],
+            "epi23": ["EL02"]
+        },
+        "vaINS": {
+            "epi04": ["Bp2"],
+            "epi08": ["IA2", "IA4"],
+            "epi11": ["X04"],
+            "epi14": ["Xp02"],
+            "epi17": ["II02"],
+            "epi18": ["Y02", "X02"],
+            "epi21": ["XS04"],
+            "epi22": ["XS02", "YS02"]
+        },
+    }
 )
 
 

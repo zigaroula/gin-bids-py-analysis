@@ -142,3 +142,11 @@ class TrialStatsWriterParams(BaseWriterParams):
             "A TSV companion trial table is written in both cases."
         ),
     )
+    include_epochs: bool = Field(
+        default=False,
+        description=(
+            "When True, the individual per-trial epoch arrays (condition_a_epochs and "
+            "condition_b_epochs) are written to the output file in addition to the "
+            "per-channel means and statistics. This can significantly increase file size."
+        ),
+    )

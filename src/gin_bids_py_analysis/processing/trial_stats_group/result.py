@@ -46,6 +46,30 @@ class TrialStatsGroupProcessingResult(BaseProcessingResult):
     roi_subject_counts: np.ndarray = field(default_factory=lambda: np.array([]))
     contributions: list[ROIChannelContribution] = field(default_factory=list)
 
+    condition_a_group_mean: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_a_group_sem: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_b_group_mean: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_b_group_sem: np.ndarray = field(default_factory=lambda: np.array([]))
+
+    condition_a_contributions: list = field(default_factory=list)
+    """Per-ROI list of condition-A contribution arrays.
+
+    ``condition_a_contributions[roi_idx]`` is a 2-D array of shape
+    ``(n_contributions, n_times)`` where each row is one (subject, channel)
+    sample used to compute the group mean for that ROI.
+    """
+    condition_b_contributions: list = field(default_factory=list)
+    """Per-ROI list of condition-B contribution arrays.  Same structure as
+    ``condition_a_contributions``.
+    """
+    contribution_labels: list = field(default_factory=list)
+    """Per-ROI list of human-readable row labels.
+
+    ``contribution_labels[roi_idx]`` is a list of strings, one per row of the
+    corresponding ``condition_a/b_contributions`` array, formatted as
+    ``"subject/channel"``.
+    """
+
     source_trial_stats_files: list[str] = field(default_factory=list)
     source_electrodes_files: list[str] = field(default_factory=list)
     excluded_rois: dict[str, str] = field(default_factory=dict)

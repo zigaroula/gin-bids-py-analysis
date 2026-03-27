@@ -178,6 +178,22 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             pipeline_version=np.str_(_package_version()),
         )
 
+        epochs_struct: object
+        if result.condition_a_epochs.ndim == 3 and self.params.include_epochs:
+            epochs_struct = make_struct(
+                condition_a=result.condition_a_epochs.astype(np.float64),
+                condition_b=result.condition_b_epochs.astype(np.float64),
+                channel=np.array(result.channel_names, dtype=object),
+                time_s=result.time_axis_s.astype(np.float64),
+            )
+        else:
+            epochs_struct = make_struct(
+                condition_a=np.empty((0, 0, 0), dtype=np.float64),
+                condition_b=np.empty((0, 0, 0), dtype=np.float64),
+                channel=np.array([], dtype=object),
+                time_s=np.array([], dtype=np.float64),
+            )
+
         data = make_struct(
             stats=stats_struct,
             means=means_struct,
@@ -185,6 +201,7 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             axes=axes_struct,
             meta=meta_struct,
             trials=trials_struct,
+            epochs=epochs_struct,
             provenance=prov_struct,
         )
         savemat(str(output_path), {"data": data}, do_compression=True)
@@ -439,6 +456,26 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
                     dtype=object,
                 ),
                 dtype=str_dtype,
+            )
+
+        if result.condition_a_epochs.ndim == 3 and self.params.include_epochs:
+            epochs_grp = fh.create_group("epochs")
+            epochs_grp.create_dataset(
+                "condition_a",
+                data=result.condition_a_epochs.astype(np.float64),
+            )
+            epochs_grp.create_dataset(
+                "condition_b",
+                data=result.condition_b_epochs.astype(np.float64),
+            )
+            epochs_grp.create_dataset(
+                "channel",
+                data=np.array(result.channel_names, dtype=object),
+                dtype=str_dtype,
+            )
+            epochs_grp.create_dataset(
+                "time_s",
+                data=result.time_axis_s.astype(np.float64),
             )
 
             prov_grp = fh.create_group("provenance")

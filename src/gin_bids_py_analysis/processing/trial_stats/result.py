@@ -45,3 +45,7 @@ class TrialStatsProcessingResult(BaseProcessingResult):
     p_value_correction_method: str = "fdr_bh"
     significance_alpha: float = 0.05
     stats_valid: bool = False
+    condition_a_epochs: np.ndarray = field(default_factory=lambda: np.array([]))
+    """Individual trial epochs for condition A.  Shape: ``(n_trials, n_channels, n_times)``."""
+    condition_b_epochs: np.ndarray = field(default_factory=lambda: np.array([]))
+    """Individual trial epochs for condition B.  Shape: ``(n_trials, n_channels, n_times)``."""

@@ -48,6 +48,10 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
 
         means_struct = make_struct(
             metric_mean=result.metric_mean.astype(np.float64),
+            condition_a_mean=result.condition_a_group_mean.astype(np.float64),
+            condition_a_sem=result.condition_a_group_sem.astype(np.float64),
+            condition_b_mean=result.condition_b_group_mean.astype(np.float64),
+            condition_b_sem=result.condition_b_group_sem.astype(np.float64),
         )
 
         uncertainty_struct = make_struct(
@@ -112,6 +116,35 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
             pipeline_version=np.str_(_package_version()),
         )
 
+        if result.condition_a_contributions:
+            n_rois = len(result.condition_a_contributions)
+            cond_a_cell: np.ndarray = np.empty(n_rois, dtype=object)
+            cond_b_cell: np.ndarray = np.empty(n_rois, dtype=object)
+            labels_cell: np.ndarray = np.empty(n_rois, dtype=object)
+            for i, (a, b, lbl) in enumerate(
+                zip(
+                    result.condition_a_contributions,
+                    result.condition_b_contributions,
+                    result.contribution_labels,
+                )
+            ):
+                cond_a_cell[i] = a.astype(np.float64)
+                cond_b_cell[i] = b.astype(np.float64)
+                labels_cell[i] = np.array(lbl, dtype=object)
+            contrib_epochs_struct = make_struct(
+                condition_a=cond_a_cell,
+                condition_b=cond_b_cell,
+                labels=labels_cell,
+                region=np.array(result.region_names, dtype=object),
+            )
+        else:
+            contrib_epochs_struct = make_struct(
+                condition_a=np.array([], dtype=object),
+                condition_b=np.array([], dtype=object),
+                labels=np.array([], dtype=object),
+                region=np.array([], dtype=object),
+            )
+
         data = make_struct(
             stats=stats_struct,
             means=means_struct,
@@ -120,6 +153,7 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
             axes=axes_struct,
             meta=meta_struct,
             contributions=contributions_struct,
+            contribution_epochs=contrib_epochs_struct,
             provenance=prov_struct,
         )
         savemat(str(output_path), {"data": data}, do_compression=True)
@@ -143,6 +177,22 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
             means_grp.create_dataset(
                 "metric_mean",
                 data=result.metric_mean.astype(np.float64),
+            )
+            means_grp.create_dataset(
+                "condition_a_mean",
+                data=result.condition_a_group_mean.astype(np.float64),
+            )
+            means_grp.create_dataset(
+                "condition_a_sem",
+                data=result.condition_a_group_sem.astype(np.float64),
+            )
+            means_grp.create_dataset(
+                "condition_b_mean",
+                data=result.condition_b_group_mean.astype(np.float64),
+            )
+            means_grp.create_dataset(
+                "condition_b_sem",
+                data=result.condition_b_group_sem.astype(np.float64),
             )
 
             uncertainty_grp = fh.create_group("uncertainty")
@@ -294,6 +344,24 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
                 ),
                 dtype=str_dtype,
             )
+
+            if result.condition_a_contributions:
+                contrib_epochs_grp = fh.create_group("contribution_epochs")
+                for roi_idx, roi_name in enumerate(result.region_names):
+                    roi_grp = contrib_epochs_grp.create_group(roi_name)
+                    roi_grp.create_dataset(
+                        "condition_a",
+                        data=result.condition_a_contributions[roi_idx].astype(np.float64),
+                    )
+                    roi_grp.create_dataset(
+                        "condition_b",
+                        data=result.condition_b_contributions[roi_idx].astype(np.float64),
+                    )
+                    roi_grp.create_dataset(
+                        "labels",
+                        data=np.array(result.contribution_labels[roi_idx], dtype=object),
+                        dtype=str_dtype,
+                    )
 
             prov_grp = fh.create_group("provenance")
             prov_grp.create_dataset(

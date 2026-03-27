@@ -386,6 +386,8 @@ class TrialStatsProcessing(BaseProcessing):
             p_value_correction_method=self.params.p_value_correction_method,
             significance_alpha=self.params.significance_alpha,
             stats_valid=stats_valid,
+            condition_a_epochs=epochs_a_array,
+            condition_b_epochs=epochs_b_array,
         )
 
     def _normalize_trial_labels(

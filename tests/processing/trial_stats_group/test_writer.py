@@ -86,6 +86,10 @@ def test_writer_outputs_expected_hdf5_schema_and_group_path() -> None:
                     source_stats_file=str(primary.path),
                 )
             ],
+            condition_a_group_mean=np.array([[2.0, 2.5]], dtype=np.float64),
+            condition_a_group_sem=np.array([[0.1, 0.2]], dtype=np.float64),
+            condition_b_group_mean=np.array([[1.0, 1.2]], dtype=np.float64),
+            condition_b_group_sem=np.array([[0.05, 0.1]], dtype=np.float64),
             source_trial_stats_files=[str(primary.path)],
             source_electrodes_files=[],
             excluded_rois={"ROI_B": "insufficient_subjects:1<2"},
@@ -104,6 +108,10 @@ def test_writer_outputs_expected_hdf5_schema_and_group_path() -> None:
         with h5py.File(out_path, "r") as fh:
             assert fh["stats"]["t_values"].shape == (1, 2)
             assert fh["means"]["metric_mean"].shape == (1, 2)
+            assert fh["means"]["condition_a_mean"].shape == (1, 2)
+            assert fh["means"]["condition_a_sem"].shape == (1, 2)
+            assert fh["means"]["condition_b_mean"].shape == (1, 2)
+            assert fh["means"]["condition_b_sem"].shape == (1, 2)
             assert fh["uncertainty"]["metric_sem"].shape == (1, 2)
             assert fh["summary_epoch"]["t_values"].shape == (1,)
             assert list(fh["axes"]["region"].asstr()[:]) == ["ROI_A"]
@@ -164,6 +172,10 @@ def test_writer_outputs_matlab_format() -> None:
                     source_stats_file=str(primary.path),
                 )
             ],
+            condition_a_group_mean=np.array([[2.0, 2.5]], dtype=np.float64),
+            condition_a_group_sem=np.array([[0.1, 0.2]], dtype=np.float64),
+            condition_b_group_mean=np.array([[1.0, 1.2]], dtype=np.float64),
+            condition_b_group_sem=np.array([[0.05, 0.1]], dtype=np.float64),
             source_trial_stats_files=[str(primary.path)],
             source_electrodes_files=[],
             excluded_rois={"ROI_B": "insufficient_subjects:1<2"},
@@ -190,6 +202,10 @@ def test_writer_outputs_matlab_format() -> None:
         assert np.atleast_1d(data.stats.p_values).shape == (2,)
         assert np.atleast_1d(data.stats.significant_mask).shape == (2,)
         assert np.atleast_1d(data.means.metric_mean).shape == (2,)
+        assert np.atleast_1d(data.means.condition_a_mean).shape == (2,)
+        assert np.atleast_1d(data.means.condition_b_mean).shape == (2,)
+        assert np.atleast_1d(data.means.condition_a_sem).shape == (2,)
+        assert np.atleast_1d(data.means.condition_b_sem).shape == (2,)
         assert np.atleast_1d(data.uncertainty.metric_sem).shape == (2,)
         assert np.atleast_1d(data.summary_epoch.t_values).shape == (1,)
         assert int(np.atleast_1d(data.summary_epoch.roi_channel_counts)[0]) == 5

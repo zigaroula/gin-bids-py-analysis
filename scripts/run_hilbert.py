@@ -23,14 +23,14 @@ from gin_bids_py_analysis.processing.utils.channels import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"E:\CBT\bids")
+BIDS_ROOT = Path(r"D:\CBT\bids")
 
 # BIDS entity filters: only files matching ALL of these will be processed.
 # Remove any key you don't want to filter on.
 FILE_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    "subject": "epi18",
+    #"subject": "epi18",
     #"run": "01",
 }
 
@@ -44,8 +44,8 @@ PARAMS = HilbertParams(
     montage_mode=MontageMode.BIPOLAR,
     bipolar_direction=BipolarDirection.NEXT_MINUS_PREVIOUS,
     bipolar_storage=BipolarStorage.NEXT,
-    normalization_mode=NormalizationMode.DB,
-    channels_to_exclude_for_montage=r'(?:MKR|DELD|DELG|EOG|ECG|EMG|DC|EXG|EKG|REF|GND).*',
+    normalization_mode=NormalizationMode.PERCENT,
+    channels_to_exclude_for_montage=r'(?:MKR|DELD|DELG|EOG|ECG|EMG|DC|EXG|EKG|REF|GND|EMPTY).*',
     #channels_for_montage=r'[A-Z]p?([0-1][0-9])'
 )
 

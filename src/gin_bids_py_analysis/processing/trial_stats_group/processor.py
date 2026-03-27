@@ -35,6 +35,7 @@ from gin_bids_py_analysis.processing.utils.tables import select_column
 from .params import TrialStatsGroupParams
 from .result import ROIChannelContribution, TrialStatsGroupProcessingResult
 from .stats import (
+    compute_condition_group_stats,
     compute_one_sample_epoch_summary,
     compute_one_sample_timecourse,
     correct_p_values,
@@ -49,6 +50,8 @@ class _RawTrialStatsData:
     channels: list[str]
     time_axis_s: np.ndarray
     metric_values: np.ndarray  # shape (n_channels, n_times)
+    condition_a_mean_values: np.ndarray  # shape (n_channels, n_times)
+    condition_b_mean_values: np.ndarray  # shape (n_channels, n_times)
     condition_labels: tuple[str, str]
     binning_mode: str
     window_ms: float
@@ -98,6 +101,8 @@ class _TrialStatsSnapshot:
     channel_index_by_norm: dict[str, int]
     time_axis_s: np.ndarray
     metric_values: np.ndarray
+    condition_a_mean_values: np.ndarray  # shape (n_channels, n_times)
+    condition_b_mean_values: np.ndarray  # shape (n_channels, n_times)
     analysis_level: str
     binning_mode: str
     window_ms: float
@@ -115,6 +120,8 @@ class _ContributionRecord:
     channel: str
     source_stats_file: str
     values: np.ndarray
+    condition_a_values: np.ndarray  # shape (n_times,)
+    condition_b_values: np.ndarray  # shape (n_times,)
 
 
 def build_trial_stats_compatible_groups(
@@ -182,6 +189,10 @@ class TrialStatsGroupProcessing(BaseProcessing):
         rows_p_uncorrected: list[np.ndarray] = []
         rows_mean: list[np.ndarray] = []
         rows_sem: list[np.ndarray] = []
+        rows_cond_a_mean: list[np.ndarray] = []
+        rows_cond_a_sem: list[np.ndarray] = []
+        rows_cond_b_mean: list[np.ndarray] = []
+        rows_cond_b_sem: list[np.ndarray] = []
         roi_channel_counts: list[int] = []
         roi_subject_counts: list[int] = []
         summary_t: list[float] = []
@@ -190,6 +201,9 @@ class TrialStatsGroupProcessing(BaseProcessing):
         summary_mean: list[float] = []
         summary_sem: list[float] = []
         contributions_out: list[ROIChannelContribution] = []
+        cond_a_contribution_samples: list[np.ndarray] = []
+        cond_b_contribution_samples: list[np.ndarray] = []
+        contribution_label_rows: list[list[str]] = []
 
         for roi, records in roi_records.items():
             if not records:
@@ -214,11 +228,23 @@ class TrialStatsGroupProcessing(BaseProcessing):
                 compute_one_sample_epoch_summary(samples)
             )
 
+            samples_a = np.stack([record.condition_a_values for record in records], axis=0).astype(np.float64)
+            samples_b = np.stack([record.condition_b_values for record in records], axis=0).astype(np.float64)
+            cond_a_mean, cond_a_sem = compute_condition_group_stats(samples_a)
+            cond_b_mean, cond_b_sem = compute_condition_group_stats(samples_b)
+
             region_names.append(roi)
             rows_t.append(t_values)
             rows_p_uncorrected.append(p_values_raw)
             rows_mean.append(mean_values)
             rows_sem.append(sem_values)
+            rows_cond_a_mean.append(cond_a_mean)
+            rows_cond_a_sem.append(cond_a_sem)
+            rows_cond_b_mean.append(cond_b_mean)
+            rows_cond_b_sem.append(cond_b_sem)
+            cond_a_contribution_samples.append(samples_a)
+            cond_b_contribution_samples.append(samples_b)
+            contribution_label_rows.append([f"{r.subject}/{r.channel}" for r in records])
             roi_channel_counts.append(channel_count)
             roi_subject_counts.append(subject_count)
             summary_t.append(t_summary)
@@ -243,11 +269,19 @@ class TrialStatsGroupProcessing(BaseProcessing):
             t_values = np.stack(rows_t, axis=0).astype(np.float64)
             metric_mean = np.stack(rows_mean, axis=0).astype(np.float64)
             metric_sem = np.stack(rows_sem, axis=0).astype(np.float64)
+            condition_a_group_mean = np.stack(rows_cond_a_mean, axis=0).astype(np.float64)
+            condition_a_group_sem = np.stack(rows_cond_a_sem, axis=0).astype(np.float64)
+            condition_b_group_mean = np.stack(rows_cond_b_mean, axis=0).astype(np.float64)
+            condition_b_group_sem = np.stack(rows_cond_b_sem, axis=0).astype(np.float64)
         else:
             t_values = np.empty((0, n_times), dtype=np.float64)
             p_values_uncorrected = np.empty((0, n_times), dtype=np.float64)
             metric_mean = np.empty((0, n_times), dtype=np.float64)
             metric_sem = np.empty((0, n_times), dtype=np.float64)
+            condition_a_group_mean = np.empty((0, n_times), dtype=np.float64)
+            condition_a_group_sem = np.empty((0, n_times), dtype=np.float64)
+            condition_b_group_mean = np.empty((0, n_times), dtype=np.float64)
+            condition_b_group_sem = np.empty((0, n_times), dtype=np.float64)
 
         p_values = correct_p_values(
             p_values_uncorrected,
@@ -303,6 +337,13 @@ class TrialStatsGroupProcessing(BaseProcessing):
             roi_channel_counts=np.asarray(roi_channel_counts, dtype=np.int64),
             roi_subject_counts=np.asarray(roi_subject_counts, dtype=np.int64),
             contributions=contributions_out,
+            condition_a_group_mean=condition_a_group_mean,
+            condition_a_group_sem=condition_a_group_sem,
+            condition_b_group_mean=condition_b_group_mean,
+            condition_b_group_sem=condition_b_group_sem,
+            condition_a_contributions=cond_a_contribution_samples,
+            condition_b_contributions=cond_b_contribution_samples,
+            contribution_labels=contribution_label_rows,
             source_trial_stats_files=[str(snapshot.stats_file.path) for snapshot in snapshots],
             source_electrodes_files=sorted(used_electrode_paths),
             excluded_rois=excluded_rois,
@@ -333,6 +374,8 @@ def _collect_manual_roi_records(
                         channel=snapshot.channel_names[idx],
                         source_stats_file=str(snapshot.stats_file.path),
                         values=np.asarray(snapshot.metric_values[idx, :], dtype=np.float64),
+                        condition_a_values=np.asarray(snapshot.condition_a_mean_values[idx, :], dtype=np.float64),
+                        condition_b_values=np.asarray(snapshot.condition_b_mean_values[idx, :], dtype=np.float64),
                     )
                 )
     return roi_records
@@ -365,6 +408,8 @@ def _collect_atlas_roi_records(
                         channel=snapshot.channel_names[idx],
                         source_stats_file=str(snapshot.stats_file.path),
                         values=np.asarray(snapshot.metric_values[idx, :], dtype=np.float64),
+                        condition_a_values=np.asarray(snapshot.condition_a_mean_values[idx, :], dtype=np.float64),
+                        condition_b_values=np.asarray(snapshot.condition_b_mean_values[idx, :], dtype=np.float64),
                     )
                 )
     return roi_records, used_electrode_paths
@@ -571,6 +616,8 @@ def _load_trial_stats_snapshot(
         channel_index_by_norm=channel_index_by_norm,
         time_axis_s=raw.time_axis_s,
         metric_values=raw.metric_values,
+        condition_a_mean_values=raw.condition_a_mean_values,
+        condition_b_mean_values=raw.condition_b_mean_values,
         analysis_level=raw.analysis_level,
         binning_mode=raw.binning_mode,
         window_ms=raw.window_ms,
@@ -616,6 +663,19 @@ def _load_raw_from_hdf5(
             n_channels=len(channels),
             n_times=len(time_axis_s),
         )
+        n_ch = len(channels)
+        n_t = len(time_axis_s)
+        _empty_cond = np.full((n_ch, n_t), np.nan, dtype=np.float64)
+        if "means" in fh and condition_labels[0] in fh["means"]:
+            raw_a = np.asarray(fh["means"][condition_labels[0]][:], dtype=np.float64)
+            condition_a_mean_values = coerce_feature_time(raw_a, n_features=n_ch, n_times=n_t)
+        else:
+            condition_a_mean_values = _empty_cond.copy()
+        if "means" in fh and condition_labels[1] in fh["means"]:
+            raw_b = np.asarray(fh["means"][condition_labels[1]][:], dtype=np.float64)
+            condition_b_mean_values = coerce_feature_time(raw_b, n_features=n_ch, n_times=n_t)
+        else:
+            condition_b_mean_values = _empty_cond.copy()
         binning_mode = str_scalar(dataset_or_none(fh, "meta/binning_mode"), default="none")
         window_ms = float_scalar(dataset_or_none(fh, "meta/window_ms"), default=0.0)
         n_bins = int_scalar(dataset_or_none(fh, "meta/n_bins"), default=0)
@@ -635,6 +695,8 @@ def _load_raw_from_hdf5(
         channels=channels,
         time_axis_s=time_axis_s,
         metric_values=metric_values,
+        condition_a_mean_values=condition_a_mean_values,
+        condition_b_mean_values=condition_b_mean_values,
         condition_labels=condition_labels,
         binning_mode=binning_mode,
         window_ms=window_ms,
@@ -721,6 +783,26 @@ def _load_raw_from_matlab(
             n_times=len(time_axis_s),
             filename=stats_file.path.name,
         )
+        n_ch = len(channels)
+        n_t = len(time_axis_s)
+        _empty_cond = np.full((n_ch, n_t), np.nan, dtype=np.float64)
+        means = data.means
+        safe_a = matlab_safe_name(condition_labels[0])
+        safe_b = matlab_safe_name(condition_labels[1])
+        cond_a_array = getattr(means, safe_a, None)
+        if cond_a_array is not None:
+            condition_a_mean_values = coerce_feature_time(
+                np.asarray(cond_a_array, dtype=np.float64), n_features=n_ch, n_times=n_t
+            )
+        else:
+            condition_a_mean_values = _empty_cond.copy()
+        cond_b_array = getattr(means, safe_b, None)
+        if cond_b_array is not None:
+            condition_b_mean_values = coerce_feature_time(
+                np.asarray(cond_b_array, dtype=np.float64), n_features=n_ch, n_times=n_t
+            )
+        else:
+            condition_b_mean_values = _empty_cond.copy()
         binning_mode = mat_str(getattr(meta, "binning_mode", None), default="none")
         window_ms = mat_float(getattr(meta, "window_ms", None), default=0.0)
         n_bins = mat_int(getattr(meta, "n_bins", None), default=0)
@@ -738,6 +820,8 @@ def _load_raw_from_matlab(
         channels=channels,
         time_axis_s=time_axis_s,
         metric_values=metric_values,
+        condition_a_mean_values=condition_a_mean_values,
+        condition_b_mean_values=condition_b_mean_values,
         condition_labels=condition_labels,
         binning_mode=binning_mode,
         window_ms=window_ms,

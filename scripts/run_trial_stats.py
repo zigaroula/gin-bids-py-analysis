@@ -20,7 +20,7 @@ from gin_bids_py_analysis.processing.trial_stats import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"E:\CBT\bids")
+BIDS_ROOT = Path(r"D:\CBT\bids")
 
 # iEEG files to analyse. These are grouped per subject.
 IEEG_FILTERS = {
