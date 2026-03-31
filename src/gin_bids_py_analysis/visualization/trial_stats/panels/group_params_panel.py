@@ -71,7 +71,7 @@ class GroupParamsPanel(QWidget):
 
         # p_value_correction_method
         self._correction = QComboBox()
-        for m in ("none", "fdr_bh", "bonferroni"):
+        for m in ("none", "fdr_bh", "bonferroni", "cluster_permutation"):
             self._correction.addItem(m)
         form.addRow("p-value correction", self._correction)
 

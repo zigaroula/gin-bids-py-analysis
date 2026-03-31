@@ -36,11 +36,32 @@ class TrialStatsParams(BaseProcessingParams):
         default=False,
         description="Forwarded to scipy.stats.ttest_ind; False selects Welch's t-test.",
     )
-    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni"] = Field(
+    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni", "permutation"] = Field(
         default="fdr_bh",
         description=(
             "Multiple-comparisons correction for p-values across all channel x time tests. "
+            "'fdr_bh' and 'bonferroni' use standard parametric approaches. "
+            "'permutation' computes pointwise p-values from the null t-distribution built by "
+            "randomly shuffling condition labels (requires n_permutations > 0). "
             "Use 'none' to disable correction."
+        ),
+    )
+    n_permutations: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Number of condition-label permutations to compute and store in the output. "
+            "0 disables permutation tests entirely. "
+            "A positive value generates a null t-value distribution for use as a standalone "
+            "correction method ('permutation') and/or as input to the group-level cluster "
+            "permutation test in trial_stats_group."
+        ),
+    )
+    permutation_seed: int | None = Field(
+        default=None,
+        description=(
+            "Seed for the NumPy random generator used during permutation testing. "
+            "None selects a non-reproducible random seed."
         ),
     )
     significance_alpha: float = Field(
@@ -123,6 +144,10 @@ class TrialStatsParams(BaseProcessingParams):
         if self.window_ms > 0 and self.n_bins > 0:
             raise ValueError(
                 "window_ms and n_bins are mutually exclusive; define only one."
+            )
+        if self.p_value_correction_method == "permutation" and self.n_permutations == 0:
+            raise ValueError(
+                "p_value_correction_method='permutation' requires n_permutations > 0."
             )
         return self
 

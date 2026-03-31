@@ -73,3 +73,25 @@ class TrialStatsGroupProcessingResult(BaseProcessingResult):
     source_trial_stats_files: list[str] = field(default_factory=list)
     source_electrodes_files: list[str] = field(default_factory=list)
     excluded_rois: dict[str, str] = field(default_factory=dict)
+
+    # --- Cluster-permutation results (populated only when method='cluster_permutation') ---
+    cluster_p_values: np.ndarray | None = None
+    """Cluster-permutation p-values, one per ROI.  Shape ``(n_rois,)``.
+
+    ``None`` when ``p_value_correction_method != 'cluster_permutation'``.
+    The p-value for ROI *i* is the fraction of null-distribution values that
+    exceed ``|best_cluster_t_sum[i]|``. Set to ``1.0`` for ROIs with no detected
+    cluster.
+    """
+    cluster_best_cluster_windows_s: list[tuple[float, float] | None] | None = None
+    """Time window (onset_s, offset_s) of the best cluster per ROI.
+
+    ``None`` at the list level when method != 'cluster_permutation'.
+    Individual entries are ``None`` for ROIs where no temporal cluster was found.
+    """
+    cluster_null_distributions: list[np.ndarray] | None = None
+    """Null distributions of maximum cluster t-sums, one per ROI.
+
+    Each entry has shape ``(n_group_perm,)``.  Useful for diagnostics or
+    custom threshold selection.  ``None`` when method != 'cluster_permutation'.
+    """

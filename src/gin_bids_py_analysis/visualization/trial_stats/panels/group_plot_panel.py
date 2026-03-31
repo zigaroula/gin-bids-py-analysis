@@ -270,7 +270,18 @@ class GroupPlotPanel(QWidget):
         ax.clear()
         if result.p_values.size > 0:
             p = result.p_values[roi_idx]
-            ax.plot(t, p, color="purple")
+            method = result.p_value_correction_method
+            has_correction = bool(method) and method.lower() not in ("none", "")
+            p_unc = (
+                result.p_values_uncorrected[roi_idx]
+                if result.p_values_uncorrected.size > 0 and has_correction
+                else None
+            )
+            if p_unc is not None:
+                ax.plot(t, p_unc, color="mediumpurple", linewidth=0.9, linestyle="--",
+                        alpha=0.7, label="p (uncorrected)")
+            corr_label = f"p ({method})" if has_correction else "p-value"
+            ax.plot(t, p, color="purple", label=corr_label)
             ax.axhline(alpha, color="red", linewidth=0.8, linestyle="--", label=f"α = {alpha}")
             if sig.any():
                 ax.fill_between(
@@ -282,7 +293,10 @@ class GroupPlotPanel(QWidget):
                     color="red",
                     transform=ax.get_xaxis_transform(),
                 )
-            p_max = float(np.nanmax(p)) if len(p) > 0 else 1.0
+            all_p = [p] if len(p) > 0 else []
+            if p_unc is not None:
+                all_p.append(p_unc)
+            p_max = float(np.nanmax(np.concatenate(all_p))) if all_p else 1.0
             ax.set_ylim(bottom=0.0, top=max(1.05, p_max * 1.05))
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("p-value")

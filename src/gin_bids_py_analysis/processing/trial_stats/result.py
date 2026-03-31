@@ -49,3 +49,10 @@ class TrialStatsProcessingResult(BaseProcessingResult):
     """Individual trial epochs for condition A.  Shape: ``(n_trials, n_channels, n_times)``."""
     condition_b_epochs: np.ndarray = field(default_factory=lambda: np.array([]))
     """Individual trial epochs for condition B.  Shape: ``(n_trials, n_channels, n_times)``."""
+    permuted_t_values: np.ndarray | None = None
+    """Permuted t-values forming the null distribution.
+
+    Shape: ``(n_perm, n_channels, n_times)``, dtype ``float32``.
+    ``None`` when ``n_permutations == 0`` (permutation tests disabled).
+    Stored in the output HDF5 file under ``/stats/permuted_t_values``.
+    """

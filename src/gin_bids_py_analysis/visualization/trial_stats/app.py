@@ -58,3 +58,55 @@ def launch(
     window = TrialStatsWindow(subject_groups, params, resolver, group_params=group_params, bids_root=bids_root)
     window.show()
     app.exec()
+
+
+def launch_precomputed(
+    subject_stats_files: dict[str, Path],
+    group_stats_file: Path | None = None,
+    group_params: "TrialStatsGroupParams | None" = None,
+) -> None:
+    """Launch the trial statistics viewer loading pre-computed result files.
+
+    Use this entry point when the per-subject statistics have already been
+    written to disk by ``TrialStatsProcessingWriter`` (for example after a slow
+    permutation run) and you want to visualize the saved results without
+    re-running the pipeline.
+
+    Parameters
+    ----------
+    subject_stats_files:
+        Mapping of ``subject_id → Path`` to the per-subject stats file
+        (``.h5``/``.hdf5`` or ``.mat``).
+    group_stats_file:
+        Optional path to a pre-computed group stats file written by
+        ``TrialStatsGroupProcessingWriter``.  When provided the group result is
+        loaded from disk and displayed immediately in the Group tab once all
+        subject files are ready.  The ``GroupParamsPanel`` is still available
+        so the group analysis can be re-run with different parameters.
+    group_params:
+        Optional ``TrialStatsGroupParams`` used to pre-populate the
+        ``GroupParamsPanel``.  When *group_stats_file* is ``None`` and
+        *group_params* is set, the user can click *Compute group stats* to run
+        the group analysis from the loaded subject results.
+    """
+    try:
+        import sys
+
+        from PySide6.QtWidgets import QApplication
+    except ImportError as exc:
+        raise ImportError(
+            "PySide6 is required for visualization. "
+            "Install with: pip install 'gin-bids-py-analysis[viz]'"
+        ) from exc
+
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    from .window_precomputed import TrialStatsPrecomputedWindow
+
+    window = TrialStatsPrecomputedWindow(
+        subject_stats_files,
+        group_file=group_stats_file,
+        group_params=group_params,
+    )
+    window.show()
+    app.exec()

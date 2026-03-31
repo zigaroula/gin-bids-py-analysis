@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from PySide6.QtCore import QThread, Signal
@@ -290,5 +291,97 @@ class WriteGroupWorker(QThread):
         try:
             self._writer.write(self._result)
             self.finished.emit()
+        except Exception as exc:  # noqa: BLE001
+            self.error.emit(str(exc))
+
+
+class LoadSubjectResultsWorker(QThread):
+    """Load pre-computed subject results from files in a background thread.
+
+    This worker reads ``.h5``/``.hdf5`` or ``.mat`` trial-stats files written
+    by ``TrialStatsProcessingWriter`` and reconstructs ``TrialStatsProcessingResult``
+    objects without re-running any processing.
+
+    Parameters
+    ----------
+    subject_files:
+        Mapping of ``subject_id → Path`` to the stats file for that subject.
+
+    Signals
+    -------
+    subject_done : (str, object) — emitted after each subject with (subject_id, result).
+    all_done     : (object)      — emitted with the full ``dict[str, result]`` when every
+                                   subject has been loaded.
+    progress     : str           — human-readable progress message.
+    error        : str           — emitted with the exception message on failure.
+    """
+
+    subject_done = Signal(str, object)  # subject_id, TrialStatsProcessingResult
+    all_done = Signal(object)           # dict[str, TrialStatsProcessingResult]
+    progress = Signal(str)
+    error = Signal(str)
+
+    def __init__(
+        self,
+        subject_files: dict[str, Path],
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self._subject_files = subject_files
+
+    def run(self) -> None:
+        from gin_bids_py_analysis.processing.trial_stats.result_loader import (
+            load_trial_stats_result,
+        )
+
+        results: dict[str, "TrialStatsProcessingResult"] = {}
+        total = len(self._subject_files)
+        try:
+            for i, (subject_id, path) in enumerate(self._subject_files.items(), start=1):
+                self.progress.emit(
+                    f"Loading subject {subject_id}  ({i}/{total})…"
+                )
+                result = load_trial_stats_result(path)
+                results[subject_id] = result
+                self.subject_done.emit(subject_id, result)
+            self.all_done.emit(results)
+        except Exception as exc:  # noqa: BLE001
+            self.error.emit(str(exc))
+
+
+class LoadGroupResultWorker(QThread):
+    """Load a pre-computed group result from a file in a background thread.
+
+    Parameters
+    ----------
+    group_file:
+        Path to the ``.h5``/``.hdf5`` or ``.mat`` group stats file written by
+        ``TrialStatsGroupProcessingWriter``.
+
+    Signals
+    -------
+    result_ready : emitted with the ``TrialStatsGroupProcessingResult`` on success.
+    error        : str — emitted with the exception message on failure.
+    """
+
+    result_ready = Signal(object)  # TrialStatsGroupProcessingResult
+    error = Signal(str)
+
+    def __init__(
+        self,
+        group_file: Path,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self._group_file = group_file
+
+    def run(self) -> None:
+        try:
+            from gin_bids_py_analysis.processing.trial_stats_group.result_loader import (
+                load_trial_stats_group_result,
+            )
+
+            result = load_trial_stats_group_result(self._group_file)
+            self.result_ready.emit(result)
         except Exception as exc:  # noqa: BLE001
             self.error.emit(str(exc))

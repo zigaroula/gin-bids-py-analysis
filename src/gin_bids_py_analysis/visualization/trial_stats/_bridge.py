@@ -109,6 +109,11 @@ def _write_hdf5_structure(
     if t.size == 0:
         t = np.zeros((len(result.channel_names), n_times), dtype=np.float64)
     stats.create_dataset("t_values", data=t.astype(np.float64))
+    if result.permuted_t_values is not None:
+        stats.create_dataset(
+            "permuted_t_values",
+            data=result.permuted_t_values.astype(np.float32),
+        )
 
     # means
     means = fh.create_group("means")

@@ -84,6 +84,8 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
             condition_labels=np.array(list(result.condition_labels), dtype=object),
             p_value_correction_method=np.str_(result.p_value_correction_method),
             significance_alpha=float(result.significance_alpha),
+            n_group_permutations=int(result.metadata.get("n_group_permutations", 0)),
+            cluster_threshold_alpha=float(result.metadata.get("cluster_threshold_alpha", 0.05)),
             roi_mode=np.str_(result.roi_mode),
             atlas_name=np.str_(result.atlas_name or ""),
             included_roi_count=int(len(result.region_names)),
@@ -156,6 +158,34 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
             contribution_epochs=contrib_epochs_struct,
             provenance=prov_struct,
         )
+        if result.cluster_p_values is not None:
+            n_rois_cs = len(result.cluster_p_values)
+            starts = np.full(n_rois_cs, np.nan, dtype=np.float64)
+            ends = np.full(n_rois_cs, np.nan, dtype=np.float64)
+            for i, window in enumerate(result.cluster_best_cluster_windows_s or []):
+                if window is not None:
+                    starts[i], ends[i] = window
+            null_cell: np.ndarray = np.empty(n_rois_cs, dtype=object)
+            for i, nd in enumerate(result.cluster_null_distributions or []):
+                null_cell[i] = nd.astype(np.float64)
+            cluster_stats_struct = make_struct(
+                p_values=result.cluster_p_values.astype(np.float64),
+                best_cluster_start_s=starts,
+                best_cluster_end_s=ends,
+                null_distributions=null_cell,
+            )
+            data = make_struct(
+                stats=stats_struct,
+                means=means_struct,
+                uncertainty=uncertainty_struct,
+                summary_epoch=summary_struct,
+                axes=axes_struct,
+                meta=meta_struct,
+                contributions=contributions_struct,
+                contribution_epochs=contrib_epochs_struct,
+                provenance=prov_struct,
+                cluster_stats=cluster_stats_struct,
+            )
         savemat(str(output_path), {"data": data}, do_compression=True)
 
     def _write_hdf5(self, result: TrialStatsGroupProcessingResult, output_path: Path) -> None:
@@ -266,6 +296,14 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
             meta_grp.create_dataset(
                 "significance_alpha",
                 data=float(result.significance_alpha),
+            )
+            meta_grp.create_dataset(
+                "n_group_permutations",
+                data=int(result.metadata.get("n_group_permutations", 0)),
+            )
+            meta_grp.create_dataset(
+                "cluster_threshold_alpha",
+                data=float(result.metadata.get("cluster_threshold_alpha", 0.05)),
             )
             meta_grp.create_dataset(
                 "roi_mode",
@@ -384,3 +422,36 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
                 data=_package_version(),
                 dtype=str_dtype,
             )
+
+            if result.cluster_p_values is not None:
+                cs_grp = fh.create_group("cluster_stats")
+                cs_grp.create_dataset(
+                    "p_values",
+                    data=result.cluster_p_values.astype(np.float64),
+                )
+                n_rois_cs = len(result.cluster_p_values)
+                starts = np.full(n_rois_cs, np.nan, dtype=np.float64)
+                ends = np.full(n_rois_cs, np.nan, dtype=np.float64)
+                for i, window in enumerate(result.cluster_best_cluster_windows_s or []):
+                    if window is not None:
+                        starts[i], ends[i] = window
+                cs_grp.create_dataset("best_cluster_start_s", data=starts)
+                cs_grp.create_dataset("best_cluster_end_s", data=ends)
+                if result.cluster_null_distributions:
+                    all_sizes = [nd.size for nd in result.cluster_null_distributions]
+                    max_len = max(all_sizes, default=0)
+                    if max_len > 0:
+                        null_matrix = np.full(
+                            (len(result.cluster_null_distributions), max_len),
+                            np.nan,
+                            dtype=np.float32,
+                        )
+                        for i, nd in enumerate(result.cluster_null_distributions):
+                            if nd.size > 0:
+                                null_matrix[i, : nd.size] = nd.astype(np.float32)
+                        cs_grp.create_dataset(
+                            "null_distributions",
+                            data=null_matrix,
+                            compression="gzip",
+                            compression_opts=4,
+                        )

@@ -7,6 +7,8 @@ from gin_bids_py_analysis.processing.trial_stats.resolver import ResolvedTrial
 from gin_bids_py_analysis.processing.trial_stats.params import TrialStatsParams
 from gin_bids_py_analysis.processing.trial_stats.stats import (
     compute_condition_statistics,
+    compute_permutation_p_values,
+    compute_permuted_statistics,
     correct_p_values,
     extract_epochs,
 )
@@ -116,5 +118,69 @@ def test_trial_stats_params_rejects_window_ms_and_n_bins_together() -> None:
             tmax_s=0.1,
             window_ms=100.0,
             n_bins=2,
+        )
+
+
+# --- permutation tests ---
+
+
+def test_compute_permuted_statistics_shape_and_dtype() -> None:
+    rng = np.random.default_rng(42)
+    n_a, n_b, n_ch, n_t = 5, 4, 3, 10
+    epochs_a = rng.standard_normal((n_a, n_ch, n_t)).astype(np.float32)
+    epochs_b = rng.standard_normal((n_b, n_ch, n_t)).astype(np.float32)
+
+    out = compute_permuted_statistics(epochs_a, epochs_b, n_perm=20, rng=rng)
+
+    assert out.shape == (20, n_ch, n_t)
+    assert out.dtype == np.float32
+
+
+def test_compute_permuted_statistics_empty_condition_returns_nan() -> None:
+    rng = np.random.default_rng(0)
+    epochs_a = np.zeros((0, 2, 5), dtype=np.float32)
+    epochs_b = np.ones((3, 2, 5), dtype=np.float32)
+
+    out = compute_permuted_statistics(epochs_a, epochs_b, n_perm=10, rng=rng)
+
+    assert out.shape == (10, 2, 5)
+    assert np.all(np.isnan(out))
+
+
+def test_compute_permutation_p_values_perfect_separation() -> None:
+    """Observed t >> all permuted t: p should be 0 (or close to 1/n_perm)."""
+    rng = np.random.default_rng(7)
+    n_perm, n_ch, n_t = 100, 2, 4
+    # Permuted t-values all near zero
+    permuted = rng.standard_normal((n_perm, n_ch, n_t)).astype(np.float32) * 0.1
+    # Observed t-values far above any permuted value
+    observed = np.full((n_ch, n_t), 100.0, dtype=np.float64)
+
+    p = compute_permutation_p_values(observed, permuted)
+
+    assert p.shape == (n_ch, n_t)
+    assert np.all(p == 0.0)
+
+
+def test_compute_permutation_p_values_preserves_nan() -> None:
+    rng = np.random.default_rng(3)
+    permuted = rng.standard_normal((50, 1, 3)).astype(np.float32)
+    observed = np.array([[1.0, np.nan, 2.0]])
+
+    p = compute_permutation_p_values(observed, permuted)
+
+    assert np.isnan(p[0, 1])
+    assert np.isfinite(p[0, 0])
+    assert np.isfinite(p[0, 2])
+
+
+def test_trial_stats_params_rejects_permutation_with_zero_n_permutations() -> None:
+    with pytest.raises(ValueError, match="n_permutations"):
+        TrialStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.1,
+            p_value_correction_method="permutation",
+            n_permutations=0,
         )
 

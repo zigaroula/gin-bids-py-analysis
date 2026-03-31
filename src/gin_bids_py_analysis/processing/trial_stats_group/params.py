@@ -20,9 +20,40 @@ class TrialStatsGroupParams(BaseProcessingParams):
         default="mean_difference",
         description="Channel-level metric read from each trial_stats file and tested against 0.",
     )
-    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni"] = Field(
+    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni", "cluster_permutation"] = Field(
         default="none",
-        description="Multiple-comparisons correction across ROI x time tests.",
+        description=(
+            "Multiple-comparisons correction across ROI x time tests. "
+            "'cluster_permutation' builds a null distribution of maximum temporal-cluster "
+            "t-sums by drawing from per-channel permuted t-values stored in each source "
+            "trial_stats file (requires those files to have been produced with "
+            "n_permutations > 0)."
+        ),
+    )
+    n_group_permutations: int = Field(
+        default=10000,
+        ge=1,
+        description=(
+            "Number of group-level null iterations when method='cluster_permutation'. "
+            "Ignored for all other correction methods."
+        ),
+    )
+    cluster_threshold_alpha: float = Field(
+        default=0.05,
+        gt=0.0,
+        lt=1.0,
+        description=(
+            "Significance threshold applied to the group one-sample t-test within each "
+            "null iteration to detect temporal clusters. "
+            "Used only when p_value_correction_method='cluster_permutation'."
+        ),
+    )
+    permutation_seed: int | None = Field(
+        default=None,
+        description=(
+            "Seed for the NumPy random generator used when building the cluster null "
+            "distribution. None selects a non-reproducible seed."
+        ),
     )
     significance_alpha: float = Field(
         default=0.05,

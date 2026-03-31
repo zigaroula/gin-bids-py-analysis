@@ -35,10 +35,13 @@ from gin_bids_py_analysis.processing.utils.tables import select_column
 from .params import TrialStatsGroupParams
 from .result import ROIChannelContribution, TrialStatsGroupProcessingResult
 from .stats import (
+    compute_cluster_null_distribution,
+    compute_cluster_permutation_pvalue,
     compute_condition_group_stats,
     compute_one_sample_epoch_summary,
     compute_one_sample_timecourse,
     correct_p_values,
+    find_temporal_clusters,
 )
 
 
@@ -59,6 +62,7 @@ class _RawTrialStatsData:
     effective_n_bins: int
     source_ieeg_files: list[str]
     source_electrodes_files: list[str]
+    permuted_t_values: np.ndarray | None  # shape (n_perm, n_channels, n_times) or None
 
 
 @dataclass(frozen=True)
@@ -111,6 +115,7 @@ class _TrialStatsSnapshot:
     source_ieeg_files: list[str]
     source_electrodes_files: list[str]
     signature: _SnapshotSignature
+    permuted_t_values: np.ndarray | None  # shape (n_perm, n_channels, n_times) or None
 
 
 @dataclass(frozen=True)
@@ -122,6 +127,7 @@ class _ContributionRecord:
     values: np.ndarray
     condition_a_values: np.ndarray  # shape (n_times,)
     condition_b_values: np.ndarray  # shape (n_times,)
+    permuted_t_values: np.ndarray | None  # shape (n_perm, n_times) or None
 
 
 def build_trial_stats_compatible_groups(
@@ -167,6 +173,19 @@ class TrialStatsGroupProcessing(BaseProcessing):
         ]
         _validate_group_compatibility(snapshots)
 
+        method = self.params.p_value_correction_method
+        rng: np.random.Generator | None = None
+        if method == "cluster_permutation":
+            for snap in snapshots:
+                if snap.permuted_t_values is None:
+                    raise ValueError(
+                        f"cluster_permutation requires permuted_t_values in all source files, "
+                        f"but {snap.stats_file.path.name} has none. "
+                        f"Re-run the subject-level analysis with n_permutations > 0 and "
+                        f"p_value_correction_method='permutation'."
+                    )
+            rng = np.random.default_rng(self.params.permutation_seed)
+
         first = snapshots[0]
         n_times = int(len(first.time_axis_s))
         excluded_rois: dict[str, str] = {}
@@ -187,6 +206,7 @@ class TrialStatsGroupProcessing(BaseProcessing):
         region_names: list[str] = []
         rows_t: list[np.ndarray] = []
         rows_p_uncorrected: list[np.ndarray] = []
+        cluster_perm_t_collection: list[list[np.ndarray] | None] = []
         rows_mean: list[np.ndarray] = []
         rows_sem: list[np.ndarray] = []
         rows_cond_a_mean: list[np.ndarray] = []
@@ -232,6 +252,16 @@ class TrialStatsGroupProcessing(BaseProcessing):
             samples_b = np.stack([record.condition_b_values for record in records], axis=0).astype(np.float64)
             cond_a_mean, cond_a_sem = compute_condition_group_stats(samples_a)
             cond_b_mean, cond_b_sem = compute_condition_group_stats(samples_b)
+
+            if method == "cluster_permutation":
+                perm_t_list: list[np.ndarray] | None = [
+                    np.asarray(r.permuted_t_values, dtype=np.float64)
+                    for r in records
+                    if r.permuted_t_values is not None
+                ]
+            else:
+                perm_t_list = None
+            cluster_perm_t_collection.append(perm_t_list)
 
             region_names.append(roi)
             rows_t.append(t_values)
@@ -285,9 +315,62 @@ class TrialStatsGroupProcessing(BaseProcessing):
 
         p_values = correct_p_values(
             p_values_uncorrected,
-            method=self.params.p_value_correction_method,
+            method=method,
         )
-        significant_mask = np.isfinite(p_values) & (p_values < self.params.significance_alpha)
+
+        cluster_p_values_out: np.ndarray | None = None
+        cluster_windows_out: list[tuple[float, float] | None] | None = None
+        cluster_null_dists_out: list[np.ndarray] | None = None
+        if method == "cluster_permutation" and rows_p_uncorrected and rng is not None:
+            cluster_p_values_list: list[float] = []
+            cluster_windows_list: list[tuple[float, float] | None] = []
+            cluster_null_dists_list: list[np.ndarray] = []
+            for roi_idx in range(len(region_names)):
+                roi_t = rows_t[roi_idx]
+                roi_p_raw = rows_p_uncorrected[roi_idx]
+                h_mask = roi_p_raw < self.params.cluster_threshold_alpha
+                observed_clusters = find_temporal_clusters(h_mask, roi_t)
+                perm_t_roi = cluster_perm_t_collection[roi_idx]
+                if not perm_t_roi:
+                    cluster_p_values_list.append(1.0)
+                    cluster_windows_list.append(None)
+                    cluster_null_dists_list.append(np.zeros(0, dtype=np.float64))
+                else:
+                    null = compute_cluster_null_distribution(
+                        perm_t_roi,
+                        cluster_threshold_alpha=self.params.cluster_threshold_alpha,
+                        n_group_perm=self.params.n_group_permutations,
+                        rng=rng,
+                    )
+                    if observed_clusters:
+                        best_start, best_end, best_tsum = observed_clusters[0]
+                        p_clust = compute_cluster_permutation_pvalue(best_tsum, null)
+                        t_start = float(first.time_axis_s[best_start])
+                        t_end = float(first.time_axis_s[best_end])
+                        cluster_p_values_list.append(p_clust)
+                        cluster_windows_list.append((t_start, t_end))
+                    else:
+                        cluster_p_values_list.append(1.0)
+                        cluster_windows_list.append(None)
+                    cluster_null_dists_list.append(null)
+            cluster_p_values_out = np.asarray(cluster_p_values_list, dtype=np.float64)
+            cluster_windows_out = cluster_windows_list
+            cluster_null_dists_out = cluster_null_dists_list
+
+        if method == "cluster_permutation" and cluster_p_values_out is not None:
+            significant_mask = np.zeros_like(p_values, dtype=bool)
+            for roi_idx, (p_clust, window) in enumerate(
+                zip(cluster_p_values_out, cluster_windows_out or [])
+            ):
+                if p_clust < self.params.significance_alpha and window is not None:
+                    t_start_s, t_end_s = window
+                    in_window = (
+                        (first.time_axis_s >= t_start_s)
+                        & (first.time_axis_s <= t_end_s)
+                    )
+                    significant_mask[roi_idx, in_window] = True
+        else:
+            significant_mask = np.isfinite(p_values) & (p_values < self.params.significance_alpha)
 
         output_entities = {
             "subject": "group",
@@ -304,8 +387,10 @@ class TrialStatsGroupProcessing(BaseProcessing):
                 "atlas_name": self.params.atlas_name,
                 "min_channels_per_roi": self.params.min_channels_per_roi,
                 "min_subjects_per_roi": self.params.min_subjects_per_roi,
-                "p_value_correction_method": self.params.p_value_correction_method,
+                "p_value_correction_method": method,
                 "significance_alpha": self.params.significance_alpha,
+                "n_group_permutations": self.params.n_group_permutations,
+                "cluster_threshold_alpha": self.params.cluster_threshold_alpha,
                 "condition_labels": list(first.condition_labels),
                 "task": first.task,
                 "source_desc": first.source_desc,
@@ -347,6 +432,9 @@ class TrialStatsGroupProcessing(BaseProcessing):
             source_trial_stats_files=[str(snapshot.stats_file.path) for snapshot in snapshots],
             source_electrodes_files=sorted(used_electrode_paths),
             excluded_rois=excluded_rois,
+            cluster_p_values=cluster_p_values_out,
+            cluster_best_cluster_windows_s=cluster_windows_out,
+            cluster_null_distributions=cluster_null_dists_out,
         )
 
 
@@ -376,6 +464,11 @@ def _collect_manual_roi_records(
                         values=np.asarray(snapshot.metric_values[idx, :], dtype=np.float64),
                         condition_a_values=np.asarray(snapshot.condition_a_mean_values[idx, :], dtype=np.float64),
                         condition_b_values=np.asarray(snapshot.condition_b_mean_values[idx, :], dtype=np.float64),
+                        permuted_t_values=(
+                            np.asarray(snapshot.permuted_t_values[:, idx, :], dtype=np.float32)
+                            if snapshot.permuted_t_values is not None
+                            else None
+                        ),
                     )
                 )
     return roi_records
@@ -410,6 +503,11 @@ def _collect_atlas_roi_records(
                         values=np.asarray(snapshot.metric_values[idx, :], dtype=np.float64),
                         condition_a_values=np.asarray(snapshot.condition_a_mean_values[idx, :], dtype=np.float64),
                         condition_b_values=np.asarray(snapshot.condition_b_mean_values[idx, :], dtype=np.float64),
+                        permuted_t_values=(
+                            np.asarray(snapshot.permuted_t_values[:, idx, :], dtype=np.float32)
+                            if snapshot.permuted_t_values is not None
+                            else None
+                        ),
                     )
                 )
     return roi_records, used_electrode_paths
@@ -626,6 +724,7 @@ def _load_trial_stats_snapshot(
         source_ieeg_files=raw.source_ieeg_files,
         source_electrodes_files=raw.source_electrodes_files,
         signature=signature,
+        permuted_t_values=raw.permuted_t_values,
     )
 
 
@@ -689,6 +788,10 @@ def _load_raw_from_hdf5(
         source_electrodes_files = decode_str_array(
             np.asarray(fh["provenance"]["source_electrodes_files"][:], dtype=object)
         ) if "provenance" in fh and "source_electrodes_files" in fh["provenance"] else []
+        perm_ds = dataset_or_none(fh, "stats/permuted_t_values")
+        permuted_t_values: np.ndarray | None = (
+            np.asarray(perm_ds[:], dtype=np.float32) if perm_ds is not None else None
+        )
 
     return _RawTrialStatsData(
         analysis_level=analysis_level,
@@ -704,6 +807,7 @@ def _load_raw_from_hdf5(
         effective_n_bins=effective_n_bins,
         source_ieeg_files=source_ieeg_files,
         source_electrodes_files=source_electrodes_files,
+        permuted_t_values=permuted_t_values,
     )
 
 
@@ -829,6 +933,7 @@ def _load_raw_from_matlab(
         effective_n_bins=effective_n_bins,
         source_ieeg_files=source_ieeg_files,
         source_electrodes_files=source_electrodes_files,
+        permuted_t_values=None,
     )
 
 

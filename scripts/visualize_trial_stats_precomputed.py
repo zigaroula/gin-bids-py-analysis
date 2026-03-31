@@ -1,9 +1,9 @@
 """
-Trial statistics visualization script.
+Example script to launch the interactive visualization for pre-computed trial statistics results.
 Edit BIDS_ROOT, IEEG_FILTERS, SECONDARY_FILTERS, PARAMS, and RESOLVER below,
 then run:
 
-    python scripts/visualize_trial_stats.py
+    python scripts/visualize_trial_stats_precomputed.py
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from gin_bids_py_analysis.processing.trial_stats import (
     TrialStatsParams,
 )
 from gin_bids_py_analysis.processing.trial_stats_group import TrialStatsGroupParams
-from gin_bids_py_analysis.visualization.trial_stats import launch
+from gin_bids_py_analysis.visualization.trial_stats import launch_precomputed
 
 # ---------------------------------------------------------------------------
 # Parameters  (edit these)
@@ -24,47 +24,12 @@ from gin_bids_py_analysis.visualization.trial_stats import launch
 
 BIDS_ROOT = Path(r"E:\CBT\bids")
 
-# iEEG files to visualize. These are grouped per subject.
-IEEG_FILTERS = {
-    "suffix": "ieeg",
-    "extension": ".vhdr",
-    "desc": "gammasm0",
-}
-
-# Optional secondary tables used by the task-specific resolver.
-# Adjust these filters to match where your events / behaviour tables live.
-SECONDARY_FILTERS = [
-    {"scope": "raw", "datatype": "beh", "suffix": "beh", "extension": ".tsv"},
-    {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
-]
-
-PARAMS = TrialStatsParams(
-    anchor_event_codes=["10"],
-    tmin_s=-2.0,
-    tmax_s=2.0,
-    condition_a="accepted",
-    condition_b="rejected",
-    # atlas_name="MarsAtlas",
-    # n_bins=24,
-    p_value_correction_method="fdr_bh",
-    significance_alpha=0.05,
-)
-
-# Update the column names and label map to match your dataset.
-RESOLVER = TableTrialLabelResolver(
-    label_column="choice",
-    label_map={
-        "0": "rejected",
-        "1": "accepted",
-    },
-)
-
 # Optional: configure group-level ROI statistics.
 # When set, a "Group" tab appears after all subjects have been computed.
 # Set to None to disable the Group tab.
 GROUP_PARAMS = TrialStatsGroupParams(
     source_metric="t_values",
-    p_value_correction_method="none",
+    p_value_correction_method="cluster_permutation",
     significance_alpha=0.05,
     # roi_mode="atlas",
     # atlas_name="MarsAtlas",
@@ -98,18 +63,36 @@ GROUP_PARAMS = TrialStatsGroupParams(
     }
 )
 
+# Discover subject-level stats files written by TrialStatsProcessingWriter.
+STATS_FILTERS = {
+    "suffix": "stats",
+    "extension": ".h5",
+    "desc": "trialstats",
+    "scope": "trial_stats"
+}
 
-def _build_subject_groups(dataset: BIDSDataset) -> dict[str, BIDSFileGroup]:
-    groups = build_subject_groups(dataset, IEEG_FILTERS, SECONDARY_FILTERS)
-    return {group.primary.get("subject"): group for group in groups}
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
+GROUP_STATS_FILTERS = {
+    "suffix": "stats",
+    "extension": ".h5",
+    "desc": "trialstatsgroup",
+    "scope": "trial_stats_group",
+}
 
 if __name__ == "__main__":
     ds = BIDSDataset(BIDS_ROOT)
-    subject_groups = _build_subject_groups(ds)
-    print(f"Found {len(subject_groups)} subject(s).")
-    launch(subject_groups, PARAMS, RESOLVER, group_params=GROUP_PARAMS, bids_root=BIDS_ROOT)
+
+    subject_stats_files = {
+        f.get("subject"): f.path
+        for f in ds.get_files(**STATS_FILTERS)
+    }
+
+    group_stats_file = None
+    group_stats_files = ds.get_files(**GROUP_STATS_FILTERS)
+    if group_stats_files:
+        group_stats_file = group_stats_files[0].path
+
+    launch_precomputed(
+        subject_stats_files,
+        group_stats_file=group_stats_file,
+        group_params=GROUP_PARAMS,
+    )

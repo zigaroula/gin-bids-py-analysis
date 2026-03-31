@@ -97,7 +97,7 @@ class ParamsPanel(QWidget):
 
         # p_value_correction_method
         self._correction = QComboBox()
-        for method in ("none", "fdr_bh", "bonferroni"):
+        for method in ("none", "fdr_bh", "bonferroni", "permutation"):
             self._correction.addItem(method)
         form.addRow("p-value correction", self._correction)
 

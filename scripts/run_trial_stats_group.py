@@ -20,7 +20,7 @@ from gin_bids_py_analysis.processing.trial_stats_group import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\CBT\bids")
+BIDS_ROOT = Path(r"E:\CBT\bids")
 
 # Query trial_stats channel-level outputs from derivatives/trial_stats.
 TRIAL_STATS_FILTERS = {
@@ -32,7 +32,7 @@ TRIAL_STATS_FILTERS = {
 
 PARAMS = TrialStatsGroupParams(
     source_metric="t_values",
-    p_value_correction_method="none",
+    p_value_correction_method="cluster_permutation",
     significance_alpha=0.05,
     roi_mode="manual",
     manual_region_channels={

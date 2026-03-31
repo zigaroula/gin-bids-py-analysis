@@ -3,9 +3,12 @@ from __future__ import annotations
 import numpy as np
 
 from gin_bids_py_analysis.processing.trial_stats_group.stats import (
+    compute_cluster_null_distribution,
+    compute_cluster_permutation_pvalue,
     compute_one_sample_epoch_summary,
     compute_one_sample_timecourse,
     correct_p_values,
+    find_temporal_clusters,
 )
 
 
@@ -66,3 +69,66 @@ def test_correct_p_values_fdr_bh_bonferroni_and_none() -> None:
     )
     np.testing.assert_allclose(none[0, :4], raw[0, :4])
     assert np.isnan(fdr[0, 4])
+
+
+# --- cluster permutation tests ---
+
+
+def test_find_temporal_clusters_known_mask() -> None:
+    # mask: [F, T, T, F, T, F]  → two clusters: [1,2] and [4,4]
+    h_mask = np.array([False, True, True, False, True, False])
+    t_values = np.array([0.0, 3.0, 5.0, 0.0, 2.0, 0.0], dtype=np.float64)
+
+    clusters = find_temporal_clusters(h_mask, t_values)
+
+    assert len(clusters) == 2
+    # Best cluster has |t_sum| = 8 (indices 1-2)
+    best = clusters[0]
+    assert best[0] == 1
+    assert best[1] == 2
+    assert np.isclose(best[2], 8.0)
+    # Second cluster: index 4, t_sum = 2
+    second = clusters[1]
+    assert second[0] == 4
+    assert second[1] == 4
+    assert np.isclose(second[2], 2.0)
+
+
+def test_find_temporal_clusters_empty_mask_returns_empty() -> None:
+    h_mask = np.zeros(5, dtype=bool)
+    t_values = np.ones(5, dtype=np.float64)
+
+    assert find_temporal_clusters(h_mask, t_values) == []
+
+
+def test_compute_cluster_null_distribution_shape() -> None:
+    rng = np.random.default_rng(99)
+    n_perm_subj, n_times = 50, 20
+    contributions = [
+        rng.standard_normal((n_perm_subj, n_times)).astype(np.float32)
+        for _ in range(4)
+    ]
+
+    null = compute_cluster_null_distribution(
+        contributions,
+        cluster_threshold_alpha=0.05,
+        n_group_perm=200,
+        rng=rng,
+    )
+
+    assert null.shape == (200,)
+    assert null.dtype == np.float64
+    assert np.all(null >= 0.0)
+
+
+def test_compute_cluster_permutation_pvalue_empty_null() -> None:
+    assert compute_cluster_permutation_pvalue(5.0, np.zeros(0, dtype=np.float64)) == 1.0
+
+
+def test_compute_cluster_permutation_pvalue_extreme() -> None:
+    null = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float64)
+    # observed > all null values → p = 0
+    assert compute_cluster_permutation_pvalue(100.0, null) == 0.0
+    # observed < all null values → p = 1
+    assert compute_cluster_permutation_pvalue(0.5, null) == 1.0
+

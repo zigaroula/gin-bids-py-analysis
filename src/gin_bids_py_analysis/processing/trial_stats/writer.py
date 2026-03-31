@@ -137,6 +137,7 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             effective_n_bins=effective_n_bins,
             binning_mode=binning_mode,
             stats_valid=bool(result.stats_valid),
+            n_permutations=int(result.metadata.get("n_permutations", 0)),
         )
 
         trials_struct = make_struct(
@@ -258,6 +259,13 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
                 "significant_mask",
                 data=significant_mask.astype(bool),
             )
+            if result.permuted_t_values is not None:
+                stats_grp.create_dataset(
+                    "permuted_t_values",
+                    data=result.permuted_t_values.astype(np.float32),
+                    compression="gzip",
+                    compression_opts=4,
+                )
 
             means_grp = fh.create_group("means")
             means_grp.create_dataset(
@@ -401,6 +409,10 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
                 dtype=str_dtype,
             )
             meta_grp.create_dataset("stats_valid", data=bool(result.stats_valid))
+            meta_grp.create_dataset(
+                "n_permutations",
+                data=int(result.metadata.get("n_permutations", 0)),
+            )
 
             trial_grp = fh.create_group("trials")
             trial_grp.create_dataset(

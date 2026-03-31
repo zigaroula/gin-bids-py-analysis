@@ -29,6 +29,8 @@ from .result import TrialStatsProcessingResult
 from .stats import (
     build_time_axis_s,
     compute_condition_statistics,
+    compute_permutation_p_values,
+    compute_permuted_statistics,
     correct_p_values,
     extract_epochs,
 )
@@ -313,6 +315,28 @@ class TrialStatsProcessing(BaseProcessing):
             p_values_raw,
             method=self.params.p_value_correction_method,
         )
+
+        # --- Build permuted null distribution (when n_permutations > 0) ---
+        permuted_t_values: np.ndarray | None = None
+        if self.params.n_permutations > 0 and stats_valid:
+            rng = np.random.default_rng(self.params.permutation_seed)
+            permuted_t_values = compute_permuted_statistics(
+                epochs_a_array,
+                epochs_b_array,
+                self.params.n_permutations,
+                rng,
+                equal_var=self.params.equal_var,
+            )
+
+        # When method='permutation', overwrite p_values with pointwise permutation p-values.
+        if self.params.p_value_correction_method == "permutation":
+            if permuted_t_values is not None:
+                p_values = compute_permutation_p_values(t_values, permuted_t_values)
+            else:
+                # Stats invalid or n_permutations==0 (the validator prevents n_perm==0 here,
+                # so this only fires when stats_valid is False — leave p_values as NaN).
+                p_values = p_values_raw.copy()
+
         significant_mask = np.isfinite(p_values) & (p_values < self.params.significance_alpha)
 
         source_electrodes_files = sorted(used_electrodes_paths)
@@ -343,6 +367,7 @@ class TrialStatsProcessing(BaseProcessing):
                 "equal_var": self.params.equal_var,
                 "p_value_correction_method": self.params.p_value_correction_method,
                 "significance_alpha": self.params.significance_alpha,
+                "n_permutations": self.params.n_permutations,
                 "analysis_level": "roi" if atlas_mode else "channel",
                 "atlas_name": self.params.atlas_name,
                 "atlas_regions": feature_names if atlas_mode else [],
@@ -388,6 +413,7 @@ class TrialStatsProcessing(BaseProcessing):
             stats_valid=stats_valid,
             condition_a_epochs=epochs_a_array,
             condition_b_epochs=epochs_b_array,
+            permuted_t_values=permuted_t_values,
         )
 
     def _normalize_trial_labels(
