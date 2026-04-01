@@ -26,7 +26,7 @@ BIDS_ROOT = Path(r"E:\CBT\bids")
 IEEG_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    "desc": "gammasm0",
+    "desc": "gammasm250",
 }
 
 # Optional secondary tables used by the task-specific resolver.

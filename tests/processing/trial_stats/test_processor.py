@@ -610,5 +610,145 @@ def test_process_group_raises_when_electrodes_ambiguity_persists_after_tiebreak(
         assert "Ambiguous electrodes table match" in str(exc)
 
 
+# ---------------------------------------------------------------------------
+# channel_significance_mode tests
+# ---------------------------------------------------------------------------
 
 
+def _make_ieeg_file_with_data(
+    tmp_path: Path,
+    data: np.ndarray,
+    ch_names: list[str],
+    sfreq: float,
+    n_events: int,
+    event_onset_step_s: float = 1.0,
+) -> "BIDSFile":
+    from mne import Annotations
+
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    onsets = [float(i + 1) * event_onset_step_s for i in range(n_events)]
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * n_events,
+        description=["Stimulus/S  10"] * n_events,
+    )
+    ieeg_file.attach_data(_FakeRaw(data, ch_names, sfreq, annotations))
+    return ieeg_file
+
+
+def test_process_group_channel_significance_mode_none_gives_null_mask(
+    tmp_path: Path,
+) -> None:
+    sfreq = 10.0
+    ch_names = ["A1", "A2"]
+    # 4 trials, 2 conditions; channel 0 has a large difference
+    data = np.zeros((2, 60), dtype=np.float32)
+    data[0, 10:13] = 10.0
+    data[0, 30:33] = 10.0
+    data[0, 20:23] = 0.0
+    data[0, 40:43] = 0.0
+    ieeg_file = _make_ieeg_file_with_data(tmp_path, data, ch_names, sfreq, n_events=4)
+
+    processor = TrialStatsProcessing(
+        TrialStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            channel_significance_mode="none",
+        ),
+        resolver=_AlternatingResolver(),
+    )
+    result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
+
+    assert result.channel_significant_mask is None
+
+
+def test_process_group_channel_significance_mode_single_bin(
+    tmp_path: Path,
+) -> None:
+    sfreq = 10.0
+    ch_names = ["A1", "A2"]
+    # 4 trials (alternating accepted/rejected), 1 s apart
+    # Channel 0: large, consistent difference in accepted vs rejected
+    # Channel 1: no difference
+    data = np.zeros((2, 60), dtype=np.float32)
+    data[0, 10:13] = 10.0  # trial 1 (accepted, anchor=1.0)
+    data[0, 20:23] = 0.0   # trial 2 (rejected, anchor=2.0)
+    data[0, 30:33] = 10.0  # trial 3 (accepted, anchor=3.0)
+    data[0, 40:43] = 0.0   # trial 4 (rejected, anchor=4.0)
+    # Channel 1 stays at 0 for all trials
+
+    ieeg_file = _make_ieeg_file_with_data(tmp_path, data, ch_names, sfreq, n_events=4)
+
+    processor = TrialStatsProcessing(
+        TrialStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            channel_significance_mode="single_bin",
+            p_value_correction_method="none",
+        ),
+        resolver=_AlternatingResolver(),
+    )
+    result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
+
+    assert result.channel_significant_mask is not None
+    assert result.channel_significant_mask.shape == (len(ch_names),)
+    assert result.channel_significant_mask.dtype == bool
+    assert result.channel_significant_mask[0] is np.bool_(True)
+    assert result.channel_significant_mask[1] is np.bool_(False)
+
+
+def test_process_group_channel_significance_mode_duration(
+    tmp_path: Path,
+) -> None:
+    sfreq = 10.0  # 100 ms per sample
+    ch_names = ["A1", "A2"]
+    # Use a longer epoch window (1 s = 11 samples at 10 Hz) so that
+    # significant bins can accumulate across time.
+    # Channel 0: strong consistent difference → multiple significant bins
+    # Channel 1: no difference → no significant bins
+    data = np.zeros((2, 80), dtype=np.float32)
+    # 4 trials, anchors at 1, 2, 3, 4 s; tmin=0, tmax=0.9 → 10 samples
+    data[0, 10:20] = 10.0  # trial 1 accepted
+    data[0, 20:30] = 0.0   # trial 2 rejected
+    data[0, 30:40] = 10.0  # trial 3 accepted
+    data[0, 40:50] = 0.0   # trial 4 rejected
+    # Channel 1 stays 0
+
+    ieeg_file = _make_ieeg_file_with_data(tmp_path, data, ch_names, sfreq, n_events=4)
+
+    processor = TrialStatsProcessing(
+        TrialStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.9,
+            condition_a="accepted",
+            condition_b="rejected",
+            channel_significance_mode="duration",
+            channel_significance_duration_threshold_ms=100.0,
+            p_value_correction_method="none",
+        ),
+        resolver=_AlternatingResolver(),
+    )
+    result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
+
+    assert result.channel_significant_mask is not None
+    assert result.channel_significant_mask.shape == (len(ch_names),)
+    assert result.channel_significant_mask.dtype == bool
+    assert result.channel_significant_mask[0] is np.bool_(True)
+    assert result.channel_significant_mask[1] is np.bool_(False)

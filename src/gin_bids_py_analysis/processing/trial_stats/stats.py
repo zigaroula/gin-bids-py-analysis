@@ -258,6 +258,148 @@ def correct_p_values(
                      "Valid methods are 'none', 'fdr_bh', 'bonferroni', 'permutation'.")
 
 
+def compute_single_bin_channel_significance(
+    epochs_a: np.ndarray,
+    epochs_b: np.ndarray,
+    *,
+    equal_var: bool = False,
+    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni", "permutation"] = "fdr_bh",
+    significance_alpha: float = 0.05,
+    n_permutations: int = 0,
+    rng: "np.random.Generator | None" = None,
+) -> np.ndarray:
+    """Derive a per-channel significance flag by collapsing epochs to their temporal mean.
+
+    Each trial epoch is reduced to a single value per channel by averaging over the time
+    axis.  A two-sample t-test is then run across trials for each channel (equivalent to
+    running the full pipeline with ``n_bins=1``).  The same ``p_value_correction_method``
+    that controls the main analysis is applied, but only across the channel dimension.
+
+    For ``'permutation'`` correction, a separate null distribution is built by shuffling
+    condition labels on the epoch-mean data using ``n_permutations`` iterations.
+
+    Parameters
+    ----------
+    epochs_a, epochs_b:
+        Shape ``(n_trials, n_channels, n_times)``.  Both arrays must have ``n_times >= 1``.
+    equal_var:
+        Forwarded to ``scipy.stats.ttest_ind``; ``False`` selects Welch's t-test.
+    p_value_correction_method:
+        Multiple-comparisons correction applied across channels.
+    significance_alpha:
+        Threshold applied to corrected p-values.
+    n_permutations:
+        Number of permutation iterations used when ``p_value_correction_method='permutation'``.
+        Ignored for other correction methods.
+    rng:
+        NumPy random Generator.  Required when ``p_value_correction_method='permutation'`` and
+        ``n_permutations > 0``.
+
+    Returns
+    -------
+    channel_significant_mask : bool array, shape ``(n_channels,)``
+        ``True`` for channels where the corrected p-value is below ``significance_alpha``.
+        All ``False`` when either condition is empty.
+    """
+    if epochs_a.ndim != 3 or epochs_b.ndim != 3:
+        raise ValueError("epochs_a and epochs_b must be 3-D (n_trials, n_channels, n_times).")
+
+    n_channels = epochs_a.shape[1]
+
+    if epochs_a.shape[0] == 0 or epochs_b.shape[0] == 0:
+        return np.zeros(n_channels, dtype=bool)
+
+    # Collapse time axis: shape (n_trials, n_channels, 1) so existing helpers are reusable.
+    means_a = epochs_a.mean(axis=2, keepdims=True)  # (n_trials_a, n_channels, 1)
+    means_b = epochs_b.mean(axis=2, keepdims=True)  # (n_trials_b, n_channels, 1)
+
+    _, p_raw_2d, _, _, _ = compute_condition_statistics(
+        means_a,
+        means_b,
+        n_channels=n_channels,
+        n_times=1,
+        equal_var=equal_var,
+    )
+    p_raw_1d = p_raw_2d[:, 0]  # (n_channels,)
+
+    if p_value_correction_method == "permutation" and n_permutations > 0:
+        if rng is None:
+            rng = np.random.default_rng()
+        permuted = compute_permuted_statistics(
+            means_a,
+            means_b,
+            n_permutations,
+            rng,
+            equal_var=equal_var,
+        )  # (n_perm, n_channels, 1)
+        t_obs_2d, *_ = compute_condition_statistics(
+            means_a,
+            means_b,
+            n_channels=n_channels,
+            n_times=1,
+            equal_var=equal_var,
+        )
+        p_corrected_2d = compute_permutation_p_values(t_obs_2d, permuted)
+        p_corrected_1d = p_corrected_2d[:, 0]
+    else:
+        p_corrected_1d = correct_p_values(
+            p_raw_1d.reshape(1, n_channels),
+            method=p_value_correction_method,
+        )[0]
+
+    return np.isfinite(p_corrected_1d) & (p_corrected_1d < significance_alpha)
+
+
+def compute_duration_channel_significance(
+    significant_mask: np.ndarray,
+    time_axis_s: np.ndarray,
+    *,
+    threshold_ms: float = 100.0,
+) -> np.ndarray:
+    """Flag channels whose total significant-bin duration meets a threshold.
+
+    Every significant bin contributes its full duration (derived from the uniform time
+    axis) to the channel total.  A channel is flagged when that total reaches
+    ``threshold_ms``.
+
+    Parameters
+    ----------
+    significant_mask : bool array, shape ``(n_channels, n_times)``
+        Per-channel, per-bin significance flags (e.g. from ``TrialStatsProcessingResult``).
+    time_axis_s : float array, shape ``(n_times,)``
+        Time axis in seconds.  Used to derive the per-bin duration in milliseconds.
+        Must contain at least 2 elements when ``n_times >= 2``.
+    threshold_ms:
+        Minimum total significant duration (in milliseconds) required to flag a channel.
+        Default is 100 ms.
+
+    Returns
+    -------
+    channel_significant_mask : bool array, shape ``(n_channels,)``
+        ``True`` for channels whose total significant duration is ``>= threshold_ms``.
+    """
+    mask = np.asarray(significant_mask, dtype=bool)
+    if mask.ndim != 2:
+        raise ValueError("significant_mask must be 2-D (n_channels, n_times).")
+
+    n_channels, n_times = mask.shape
+
+    if n_times == 0:
+        return np.zeros(n_channels, dtype=bool)
+
+    if n_times == 1:
+        # Cannot derive a meaningful bin duration from a single-element time axis;
+        # treat total duration as 0 so no channel can reach any positive threshold.
+        return np.zeros(n_channels, dtype=bool)
+
+    dt_ms = float(time_axis_s[1] - time_axis_s[0]) * 1000.0
+
+    significant_count = mask.sum(axis=1)  # (n_channels,)
+    duration_ms = significant_count * dt_ms
+
+    return duration_ms >= threshold_ms
+
+
 def _sample_offsets(sfreq: float, tmin_s: float, tmax_s: float) -> np.ndarray:
     start = int(round(tmin_s * sfreq))
     stop = int(round(tmax_s * sfreq))

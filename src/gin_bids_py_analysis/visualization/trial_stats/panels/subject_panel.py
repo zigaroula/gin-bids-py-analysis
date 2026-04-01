@@ -2,15 +2,41 @@
 
 from __future__ import annotations
 
+import numpy as np
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
+
+
+class _SignificanceDelegate(QStyledItemDelegate):
+    """Paints a small filled orange square at the right edge of flagged rows."""
+
+    _COLOR = QColor("darkorange")
+    _SIZE = 10
+    _MARGIN = 5
+
+    def __init__(self, significant_rows: frozenset[int], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._significant_rows = significant_rows
+
+    def paint(self, painter, option, index) -> None:  # type: ignore[override]
+        super().paint(painter, option, index)
+        if index.row() in self._significant_rows:
+            painter.save()
+            rect = option.rect
+            side = self._SIZE
+            x = rect.right() - side - self._MARGIN
+            y = rect.top() + (rect.height() - side) // 2
+            painter.fillRect(x, y, side, side, self._COLOR)
+            painter.restore()
 
 
 class SubjectChannelPanel(QWidget):
@@ -56,17 +82,42 @@ class SubjectChannelPanel(QWidget):
     # Public API
     # ------------------------------------------------------------------
 
-    def set_channels(self, channel_names: list[str], restore_name: str | None = None) -> None:
+    def set_channels(
+        self,
+        channel_names: list[str],
+        restore_name: str | None = None,
+        channel_significant_mask: np.ndarray | None = None,
+    ) -> None:
         """Repopulate the channel list.
 
         If *restore_name* is given and exists in *channel_names*, that channel
         is re-selected; otherwise the first entry is selected.
+
+        If *channel_significant_mask* is provided (bool array, shape
+        ``(n_channels,)``), channels for which the mask is ``True`` are
+        marked with a small filled orange square on the right edge of the row.
         """
+        if channel_significant_mask is not None:
+            significant_rows = frozenset(
+                int(i)
+                for i in range(len(channel_names))
+                if bool(channel_significant_mask[i])
+            )
+        else:
+            significant_rows = frozenset()
+
+        self._channel_list.setItemDelegate(
+            _SignificanceDelegate(significant_rows, parent=self._channel_list)
+        )
         self._channel_list.blockSignals(True)
         self._channel_list.clear()
         for name in channel_names:
             self._channel_list.addItem(QListWidgetItem(name))
         self._channel_list.blockSignals(False)
+        if significant_rows:
+            self._channel_list.setToolTip("Channels marked with an orange square passed the channel-level significance test")
+        else:
+            self._channel_list.setToolTip("")
         if self._channel_list.count() > 0:
             restore_row = 0
             if restore_name is not None:

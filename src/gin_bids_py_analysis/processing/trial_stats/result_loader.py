@@ -136,6 +136,12 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
             if perm_ds is not None
             else None
         )
+        ch_sig_ds = dataset_or_none(fh, "stats/channel_significant_mask")
+        channel_significant_mask: np.ndarray | None = (
+            np.asarray(ch_sig_ds[:], dtype=bool)
+            if ch_sig_ds is not None
+            else None
+        )
 
         # --- means ---
         def _read_arr(key: str) -> np.ndarray:
@@ -250,6 +256,7 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
         condition_a_epochs=condition_a_epochs,
         condition_b_epochs=condition_b_epochs,
         permuted_t_values=permuted_t_values,
+        channel_significant_mask=channel_significant_mask,
         source_ieeg_files=source_ieeg_files,
         source_electrodes_files=source_electrodes_files,
     )

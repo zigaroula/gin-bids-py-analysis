@@ -7,8 +7,10 @@ from gin_bids_py_analysis.processing.trial_stats.resolver import ResolvedTrial
 from gin_bids_py_analysis.processing.trial_stats.params import TrialStatsParams
 from gin_bids_py_analysis.processing.trial_stats.stats import (
     compute_condition_statistics,
+    compute_duration_channel_significance,
     compute_permutation_p_values,
     compute_permuted_statistics,
+    compute_single_bin_channel_significance,
     correct_p_values,
     extract_epochs,
 )
@@ -183,4 +185,187 @@ def test_trial_stats_params_rejects_permutation_with_zero_n_permutations() -> No
             p_value_correction_method="permutation",
             n_permutations=0,
         )
+
+
+# ---------------------------------------------------------------------------
+# compute_single_bin_channel_significance
+# ---------------------------------------------------------------------------
+
+
+def test_compute_single_bin_channel_significance_detects_known_difference() -> None:
+    # Channel 0: clearly different means; Channel 1: identical means (no difference)
+    rng = np.random.default_rng(0)
+    n_trials, n_channels, n_times = 10, 2, 5
+    epochs_a = np.zeros((n_trials, n_channels, n_times), dtype=np.float32)
+    epochs_b = np.zeros((n_trials, n_channels, n_times), dtype=np.float32)
+    # Channel 0: condition A = 10, condition B = 0 → large t-stat
+    epochs_a[:, 0, :] = 10.0
+    epochs_b[:, 0, :] = 0.0
+    # Channel 1: no difference
+    epochs_a[:, 1, :] = 5.0
+    epochs_b[:, 1, :] = 5.0
+
+    mask = compute_single_bin_channel_significance(
+        epochs_a,
+        epochs_b,
+        equal_var=False,
+        p_value_correction_method="none",
+        significance_alpha=0.05,
+    )
+
+    assert mask.shape == (n_channels,)
+    assert mask.dtype == bool
+    assert mask[0] is np.bool_(True)
+    assert mask[1] is np.bool_(False)
+
+
+def test_compute_single_bin_channel_significance_fdr_bh_correction() -> None:
+    # Two channels: one with strong signal, one null. FDR-BH should still flag the strong one.
+    n_trials, n_channels, n_times = 12, 2, 8
+    epochs_a = np.zeros((n_trials, n_channels, n_times), dtype=np.float32)
+    epochs_b = np.zeros((n_trials, n_channels, n_times), dtype=np.float32)
+    epochs_a[:, 0, :] = 20.0
+    epochs_b[:, 0, :] = 0.0
+
+    mask = compute_single_bin_channel_significance(
+        epochs_a,
+        epochs_b,
+        p_value_correction_method="fdr_bh",
+        significance_alpha=0.05,
+    )
+
+    assert mask.shape == (n_channels,)
+    assert mask[0] is np.bool_(True)
+    assert mask[1] is np.bool_(False)
+
+
+def test_compute_single_bin_channel_significance_bonferroni_correction() -> None:
+    # Same strong signal as above; Bonferroni should still flag the significant channel.
+    n_trials, n_channels, n_times = 12, 2, 8
+    epochs_a = np.zeros((n_trials, n_channels, n_times), dtype=np.float32)
+    epochs_b = np.zeros((n_trials, n_channels, n_times), dtype=np.float32)
+    epochs_a[:, 0, :] = 20.0
+    epochs_b[:, 0, :] = 0.0
+
+    mask = compute_single_bin_channel_significance(
+        epochs_a,
+        epochs_b,
+        p_value_correction_method="bonferroni",
+        significance_alpha=0.05,
+    )
+
+    assert mask.shape == (n_channels,)
+    assert mask[0] is np.bool_(True)
+
+
+def test_compute_single_bin_channel_significance_permutation_mode() -> None:
+    rng = np.random.default_rng(42)
+    n_trials, n_channels, n_times = 10, 2, 4
+    epochs_a = np.zeros((n_trials, n_channels, n_times), dtype=np.float32)
+    epochs_b = np.zeros((n_trials, n_channels, n_times), dtype=np.float32)
+    # Large, consistent difference on channel 0; add tiny noise so std != 0
+    noise = rng.standard_normal((n_trials, 1, n_times)).astype(np.float32) * 0.01
+    epochs_a[:, 0:1, :] = 50.0 + noise
+    epochs_b[:, 0:1, :] = 0.0 + noise
+
+    mask = compute_single_bin_channel_significance(
+        epochs_a,
+        epochs_b,
+        p_value_correction_method="permutation",
+        significance_alpha=0.05,
+        n_permutations=200,
+        rng=np.random.default_rng(0),
+    )
+
+    assert mask.shape == (n_channels,)
+    assert mask.dtype == bool
+    assert mask[0] is np.bool_(True)
+
+
+def test_compute_single_bin_channel_significance_empty_condition_returns_all_false() -> None:
+    epochs_a = np.zeros((0, 3, 5), dtype=np.float32)
+    epochs_b = np.ones((4, 3, 5), dtype=np.float32)
+
+    mask = compute_single_bin_channel_significance(epochs_a, epochs_b)
+
+    assert mask.shape == (3,)
+    assert not mask.any()
+
+
+# ---------------------------------------------------------------------------
+# compute_duration_channel_significance
+# ---------------------------------------------------------------------------
+
+
+def test_compute_duration_channel_significance_counts_all_significant_bins() -> None:
+    # Channel 0: 1 significant bin at 100 ms/bin → 100 ms < 250 ms threshold
+    # Channel 1: 3 significant bins at 100 ms/bin → 300 ms ≥ 250 ms threshold
+    dt = 0.1  # 100 ms per bin
+    n_times = 10
+    time_axis_s = np.arange(n_times) * dt
+
+    sig_mask = np.zeros((2, n_times), dtype=bool)
+    sig_mask[0, 5] = True     # single bin → 100 ms total
+    sig_mask[1, 4:7] = True   # 3 bins → 300 ms total
+
+    result = compute_duration_channel_significance(
+        sig_mask,
+        time_axis_s,
+        threshold_ms=250.0,
+    )
+
+    assert result.shape == (2,)
+    assert result.dtype == bool
+    assert result[0] is np.bool_(False)  # 1 bin × 100 ms = 100 ms < 250 ms
+    assert result[1] is np.bool_(True)   # 3 bins × 100 ms = 300 ms ≥ 250 ms
+
+
+def test_compute_duration_channel_significance_threshold_boundary() -> None:
+    # 2 consecutive bins at 100 ms each → 200 ms total
+    dt = 0.1
+    n_times = 5
+    time_axis_s = np.arange(n_times) * dt
+
+    sig_mask = np.zeros((1, n_times), dtype=bool)
+    sig_mask[0, 1:3] = True  # bins 1 and 2 are significant (neighbours of each other)
+
+    # Just below threshold: 199 ms → False
+    result_below = compute_duration_channel_significance(
+        sig_mask, time_axis_s, threshold_ms=201.0
+    )
+    # At threshold: 200 ms → True
+    result_at = compute_duration_channel_significance(
+        sig_mask, time_axis_s, threshold_ms=200.0
+    )
+
+    assert result_below[0] is np.bool_(False)
+    assert result_at[0] is np.bool_(True)
+
+
+def test_compute_duration_channel_significance_edge_bins_counted() -> None:
+    # Significant bins at the start and end of the time axis are counted like any other bin.
+    dt = 0.1
+    n_times = 5
+    time_axis_s = np.arange(n_times) * dt
+
+    sig_mask = np.zeros((2, n_times), dtype=bool)
+    sig_mask[0, 0:2] = True   # 2 bins at the start
+    sig_mask[1, -2:] = True   # 2 bins at the end
+
+    result = compute_duration_channel_significance(sig_mask, time_axis_s, threshold_ms=150.0)
+
+    # 2 bins × 100 ms = 200 ms > 150 ms
+    assert result[0] is np.bool_(True)
+    assert result[1] is np.bool_(True)
+
+
+def test_compute_duration_channel_significance_single_time_bin_returns_all_false() -> None:
+    # With a single-element time axis the bin duration cannot be derived; all channels → False.
+    time_axis_s = np.array([0.0])
+    sig_mask = np.ones((3, 1), dtype=bool)
+
+    result = compute_duration_channel_significance(sig_mask, time_axis_s, threshold_ms=1.0)
+
+    assert result.shape == (3,)
+    assert not result.any()
 

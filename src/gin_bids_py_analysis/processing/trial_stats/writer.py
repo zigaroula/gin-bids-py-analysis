@@ -68,12 +68,15 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
         cond_a = matlab_safe_name(result.condition_a)
         cond_b = matlab_safe_name(result.condition_b)
 
-        stats_struct = make_struct(
+        stats_struct_fields: dict = dict(
             t_values=result.t_values.astype(np.float64),
             p_values=result.p_values.astype(np.float64),
             p_values_uncorrected=p_values_uncorrected.astype(np.float64),
             significant_mask=significant_mask.astype(np.uint8),
         )
+        if result.channel_significant_mask is not None:
+            stats_struct_fields["channel_significant_mask"] = result.channel_significant_mask.astype(np.uint8)
+        stats_struct = make_struct(**stats_struct_fields)
 
         means_struct = make_struct(
             **{
@@ -138,6 +141,10 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             binning_mode=binning_mode,
             stats_valid=bool(result.stats_valid),
             n_permutations=int(result.metadata.get("n_permutations", 0)),
+            channel_significance_mode=str(result.metadata.get("channel_significance_mode", "none")),
+            ch_sig_duration_threshold_ms=float(
+                result.metadata.get("channel_significance_duration_threshold_ms", 100.0)
+            ),
         )
 
         trials_struct = make_struct(
@@ -259,6 +266,11 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
                 "significant_mask",
                 data=significant_mask.astype(bool),
             )
+            if result.channel_significant_mask is not None:
+                stats_grp.create_dataset(
+                    "channel_significant_mask",
+                    data=result.channel_significant_mask.astype(bool),
+                )
             if result.permuted_t_values is not None:
                 stats_grp.create_dataset(
                     "permuted_t_values",
@@ -412,6 +424,15 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             meta_grp.create_dataset(
                 "n_permutations",
                 data=int(result.metadata.get("n_permutations", 0)),
+            )
+            meta_grp.create_dataset(
+                "channel_significance_mode",
+                data=str(result.metadata.get("channel_significance_mode", "none")),
+                dtype=str_dtype,
+            )
+            meta_grp.create_dataset(
+                "channel_significance_duration_threshold_ms",
+                data=float(result.metadata.get("channel_significance_duration_threshold_ms", 100.0)),
             )
 
             trial_grp = fh.create_group("trials")

@@ -29,8 +29,10 @@ from .result import TrialStatsProcessingResult
 from .stats import (
     build_time_axis_s,
     compute_condition_statistics,
+    compute_duration_channel_significance,
     compute_permutation_p_values,
     compute_permuted_statistics,
+    compute_single_bin_channel_significance,
     correct_p_values,
     extract_epochs,
 )
@@ -339,6 +341,31 @@ class TrialStatsProcessing(BaseProcessing):
 
         significant_mask = np.isfinite(p_values) & (p_values < self.params.significance_alpha)
 
+        # --- Compute optional per-channel significance flag ---
+        channel_significant_mask: np.ndarray | None = None
+        if self.params.channel_significance_mode == "single_bin" and stats_valid:
+            rng_csm = np.random.default_rng(self.params.permutation_seed)
+            n_perm_csm = (
+                self.params.n_permutations
+                if self.params.p_value_correction_method == "permutation"
+                else 0
+            )
+            channel_significant_mask = compute_single_bin_channel_significance(
+                epochs_a_array,
+                epochs_b_array,
+                equal_var=self.params.equal_var,
+                p_value_correction_method=self.params.p_value_correction_method,
+                significance_alpha=self.params.significance_alpha,
+                n_permutations=n_perm_csm,
+                rng=rng_csm,
+            )
+        elif self.params.channel_significance_mode == "duration" and stats_valid:
+            channel_significant_mask = compute_duration_channel_significance(
+                significant_mask,
+                time_axis_eval,
+                threshold_ms=self.params.channel_significance_duration_threshold_ms,
+            )
+
         source_electrodes_files = sorted(used_electrodes_paths)
         if not source_electrodes_files and electrodes_files:
             source_electrodes_files = sorted({str(file.path) for file in electrodes_files})
@@ -378,6 +405,8 @@ class TrialStatsProcessing(BaseProcessing):
                 "window_samples": window_samples,
                 "effective_n_bins": effective_n_bins,
                 "binning_mode": binning_mode,
+                "channel_significance_mode": self.params.channel_significance_mode,
+                "channel_significance_duration_threshold_ms": self.params.channel_significance_duration_threshold_ms,
             },
             t_values=t_values,
             p_values=p_values,
@@ -414,6 +443,7 @@ class TrialStatsProcessing(BaseProcessing):
             condition_a_epochs=epochs_a_array,
             condition_b_epochs=epochs_b_array,
             permuted_t_values=permuted_t_values,
+            channel_significant_mask=channel_significant_mask,
         )
 
     def _normalize_trial_labels(

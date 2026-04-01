@@ -136,6 +136,27 @@ class ParamsPanel(QWidget):
         self._window_ms.valueChanged.connect(self._on_window_ms_changed)
         self._n_bins.valueChanged.connect(self._on_n_bins_changed)
 
+        # ---- channel significance ----
+        _sig_sep = QLabel("— Channel significance —")
+        _sig_sep.setStyleSheet("color: gray; font-size: 10px;")
+        form.addRow(_sig_sep)
+
+        # channel_significance_mode
+        self._sig_mode = QComboBox()
+        for _mode in ("none", "single_bin", "duration"):
+            self._sig_mode.addItem(_mode)
+        form.addRow("Mode", self._sig_mode)
+
+        # channel_significance_duration_threshold_ms
+        self._sig_duration_threshold = QDoubleSpinBox()
+        self._sig_duration_threshold.setRange(0.1, 100_000.0)
+        self._sig_duration_threshold.setDecimals(1)
+        self._sig_duration_threshold.setSingleStep(10.0)
+        self._sig_duration_threshold.setSuffix(" ms")
+        form.addRow("Duration threshold", self._sig_duration_threshold)
+
+        self._sig_mode.currentTextChanged.connect(self._on_sig_mode_changed)
+
         scroll.setWidget(form_widget)
         outer.addWidget(scroll, stretch=1)
 
@@ -205,6 +226,8 @@ class ParamsPanel(QWidget):
                 atlas_regions=atlas_regions,
                 window_ms=self._window_ms.value(),
                 n_bins=self._n_bins.value(),
+                channel_significance_mode=self._sig_mode.currentText(),
+                channel_significance_duration_threshold_ms=self._sig_duration_threshold.value(),
             )
         except (ValidationError, ValueError) as exc:
             QMessageBox.warning(self, "Invalid parameters", str(exc))
@@ -228,6 +251,15 @@ class ParamsPanel(QWidget):
         self._atlas_regions.setText(", ".join(params.atlas_regions))
         self._window_ms.setValue(params.window_ms)
         self._n_bins.setValue(params.n_bins)
+        idx = self._sig_mode.findText(params.channel_significance_mode)
+        if idx >= 0:
+            self._sig_mode.setCurrentIndex(idx)
+        self._sig_duration_threshold.setValue(
+            params.channel_significance_duration_threshold_ms
+        )
+        self._sig_duration_threshold.setEnabled(
+            params.channel_significance_mode == "duration"
+        )
 
     def set_status(self, message: str) -> None:
         """Update the status label text."""
@@ -246,6 +278,9 @@ class ParamsPanel(QWidget):
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _on_sig_mode_changed(self, mode: str) -> None:
+        self._sig_duration_threshold.setEnabled(mode == "duration")
 
     def _on_window_ms_changed(self, value: float) -> None:
         if value > 0.0 and self._n_bins.value() > 0:

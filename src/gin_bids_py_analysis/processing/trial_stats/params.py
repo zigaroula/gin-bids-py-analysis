@@ -107,6 +107,30 @@ class TrialStatsParams(BaseProcessingParams):
             "Cannot be combined with window_ms > 0."
         ),
     )
+    channel_significance_mode: Literal["none", "single_bin", "duration"] = Field(
+        default="none",
+        description=(
+            "Method used to derive a per-channel significance flag "
+            "(``channel_significant_mask``, shape ``(n_channels,)``). "
+            "'none' disables per-channel significance (default, fully backward-compatible). "
+            "'single_bin' collapses each epoch to its temporal mean and runs a t-test across "
+            "trials, equivalent to running the pipeline with n_bins=1; "
+            "the same p_value_correction_method is applied across channels. "
+            "'duration' sums the duration of all significant bins in "
+            "``significant_mask`` and flags a channel if that total meets "
+            "``channel_significance_duration_threshold_ms``."
+        ),
+    )
+    channel_significance_duration_threshold_ms: float = Field(
+        default=100.0,
+        gt=0.0,
+        description=(
+            "Minimum total significant duration (in milliseconds) required to flag a channel "
+            "as significant in 'duration' mode. Each significant bin contributes its full bin "
+            "duration to the channel total. "
+            "Only used when channel_significance_mode='duration'."
+        ),
+    )
 
     @field_validator("anchor_event_codes", mode="before")
     @classmethod

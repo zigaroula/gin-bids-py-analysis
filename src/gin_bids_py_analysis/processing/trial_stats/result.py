@@ -56,3 +56,11 @@ class TrialStatsProcessingResult(BaseProcessingResult):
     ``None`` when ``n_permutations == 0`` (permutation tests disabled).
     Stored in the output HDF5 file under ``/stats/permuted_t_values``.
     """
+    channel_significant_mask: np.ndarray | None = None
+    """Per-channel significance flag.
+
+    Shape: ``(n_channels,)``, dtype ``bool``.
+    ``None`` when ``channel_significance_mode='none'`` (default).
+    Derived by :meth:`TrialStatsProcessing.process_group` according to
+    ``TrialStatsParams.channel_significance_mode``.
+    """

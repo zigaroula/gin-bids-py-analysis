@@ -259,3 +259,112 @@ def test_writer_outputs_matlab_and_trial_table() -> None:
         assert "accepted" in lines[1]
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
+
+
+def _make_minimal_result(
+    tmp_path: Path,
+    channel_significant_mask=None,
+) -> "TrialStatsProcessingResult":
+    """Build the smallest valid TrialStatsProcessingResult for writer tests."""
+    primary = _make_bids_file(
+        tmp_path / "sub-01_task-t_ieeg.vhdr",
+        {"subject": "01", "task": "t", "suffix": "ieeg", "extension": ".vhdr"},
+    )
+    return TrialStatsProcessingResult(
+        source_group=BIDSFileGroup(primary=primary),
+        output_entities={"subject": "01", "task": "t"},
+        t_values=np.ones((2, 3), dtype=np.float64),
+        p_values=np.full((2, 3), 0.04, dtype=np.float64),
+        p_values_uncorrected=np.full((2, 3), 0.01, dtype=np.float64),
+        condition_a_mean=np.full((2, 3), 5.0, dtype=np.float64),
+        condition_b_mean=np.full((2, 3), 1.0, dtype=np.float64),
+        mean_difference=np.full((2, 3), 4.0, dtype=np.float64),
+        condition_a_sem=np.full((2, 3), 0.5, dtype=np.float64),
+        condition_b_sem=np.full((2, 3), 0.4, dtype=np.float64),
+        difference_sem=np.full((2, 3), 0.64, dtype=np.float64),
+        difference_ci95_low=np.full((2, 3), 2.7, dtype=np.float64),
+        difference_ci95_high=np.full((2, 3), 5.3, dtype=np.float64),
+        significant_mask=np.ones((2, 3), dtype=bool),
+        time_axis_s=np.array([0.0, 0.1, 0.2], dtype=np.float64),
+        channel_names=["A1", "A2"],
+        condition_a="accepted",
+        condition_b="rejected",
+        condition_a_trial_count=2,
+        condition_b_trial_count=2,
+        sfreq=10.0,
+        resolved_trials=[
+            ResolvedTrial(
+                source_file=primary,
+                anchor_event_index=0,
+                anchor_event_code="10",
+                anchor_onset_s=1.0,
+                anchor_duration_s=0.0,
+                label="accepted",
+                keep=True,
+            )
+        ],
+        source_ieeg_files=[str(primary.path)],
+        source_table_files=[],
+        source_electrodes_files=[],
+        analysis_level="channel",
+        atlas_name=None,
+        atlas_regions=[],
+        region_channels={},
+        window_ms=0.0,
+        n_bins=0,
+        p_value_correction_method="fdr_bh",
+        significance_alpha=0.05,
+        stats_valid=True,
+        channel_significant_mask=channel_significant_mask,
+        metadata={
+            "channel_significance_mode": "none" if channel_significant_mask is None else "single_bin",
+            "channel_significance_duration_threshold_ms": 100.0,
+        },
+    )
+
+
+def test_writer_hdf5_channel_significant_mask_written_and_loaded(
+    tmp_path: Path,
+) -> None:
+    from gin_bids_py_analysis.processing.trial_stats.result_loader import load_trial_stats_result
+
+    mask = np.array([True, False], dtype=bool)
+    result = _make_minimal_result(tmp_path, channel_significant_mask=mask)
+
+    writer = TrialStatsProcessingWriter(
+        TrialStatsWriterParams(bids_root=tmp_path)
+    )
+    output_path = writer.write(result)
+
+    # Verify dataset is in the HDF5 file with correct content
+    with h5py.File(output_path, "r") as fh:
+        assert "channel_significant_mask" in fh["stats"]
+        stored = np.asarray(fh["stats"]["channel_significant_mask"][:], dtype=bool)
+        np.testing.assert_array_equal(stored, mask)
+        assert fh["meta"]["channel_significance_mode"].asstr()[()] == "single_bin"
+        assert float(fh["meta"]["channel_significance_duration_threshold_ms"][()]) == 100.0
+
+    # Round-trip through the loader
+    loaded = load_trial_stats_result(output_path)
+    assert loaded.channel_significant_mask is not None
+    np.testing.assert_array_equal(loaded.channel_significant_mask, mask)
+
+
+def test_writer_hdf5_channel_significant_mask_absent_when_none(
+    tmp_path: Path,
+) -> None:
+    from gin_bids_py_analysis.processing.trial_stats.result_loader import load_trial_stats_result
+
+    result = _make_minimal_result(tmp_path, channel_significant_mask=None)
+
+    writer = TrialStatsProcessingWriter(
+        TrialStatsWriterParams(bids_root=tmp_path)
+    )
+    output_path = writer.write(result)
+
+    with h5py.File(output_path, "r") as fh:
+        assert "channel_significant_mask" not in fh["stats"]
+
+    loaded = load_trial_stats_result(output_path)
+    assert loaded.channel_significant_mask is None
+
