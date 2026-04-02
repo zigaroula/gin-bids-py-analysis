@@ -36,6 +36,7 @@ from .params import TrialStatsGroupParams
 from .result import ROIChannelContribution, TrialStatsGroupProcessingResult
 from .stats import (
     compute_cluster_null_distribution,
+    compute_cluster_null_distribution_sign_flip,
     compute_cluster_permutation_pvalue,
     compute_condition_group_stats,
     compute_one_sample_epoch_summary,
@@ -176,14 +177,16 @@ class TrialStatsGroupProcessing(BaseProcessing):
         method = self.params.p_value_correction_method
         rng: np.random.Generator | None = None
         if method == "cluster_permutation":
-            for snap in snapshots:
-                if snap.permuted_t_values is None:
-                    raise ValueError(
-                        f"cluster_permutation requires permuted_t_values in all source files, "
-                        f"but {snap.stats_file.path.name} has none. "
-                        f"Re-run the subject-level analysis with n_permutations > 0 and "
-                        f"p_value_correction_method='permutation'."
-                    )
+            if self.params.cluster_permutation_method == "hierarchical":
+                for snap in snapshots:
+                    if snap.permuted_t_values is None:
+                        raise ValueError(
+                            f"cluster_permutation with cluster_permutation_method='hierarchical' "
+                            f"requires permuted_t_values in all source files, "
+                            f"but {snap.stats_file.path.name} has none. "
+                            f"Re-run the subject-level analysis with n_permutations > 0 and "
+                            f"p_value_correction_method='permutation'."
+                        )
             rng = np.random.default_rng(self.params.permutation_seed)
 
         first = snapshots[0]
@@ -254,11 +257,14 @@ class TrialStatsGroupProcessing(BaseProcessing):
             cond_b_mean, cond_b_sem = compute_condition_group_stats(samples_b)
 
             if method == "cluster_permutation":
-                perm_t_list: list[np.ndarray] | None = [
-                    np.asarray(r.permuted_t_values, dtype=np.float64)
-                    for r in records
-                    if r.permuted_t_values is not None
-                ]
+                if self.params.cluster_permutation_method == "hierarchical":
+                    perm_t_list: list[np.ndarray] | None = [
+                        np.asarray(r.permuted_t_values, dtype=np.float64)
+                        for r in records
+                        if r.permuted_t_values is not None
+                    ]
+                else:
+                    perm_t_list = [np.asarray(r.values, dtype=np.float64) for r in records]
             else:
                 perm_t_list = None
             cluster_perm_t_collection.append(perm_t_list)
@@ -336,12 +342,20 @@ class TrialStatsGroupProcessing(BaseProcessing):
                     cluster_windows_list.append(None)
                     cluster_null_dists_list.append(np.zeros(0, dtype=np.float64))
                 else:
-                    null = compute_cluster_null_distribution(
-                        perm_t_roi,
-                        cluster_threshold_alpha=self.params.cluster_threshold_alpha,
-                        n_group_perm=self.params.n_group_permutations,
-                        rng=rng,
-                    )
+                    if self.params.cluster_permutation_method == "sign_flip":
+                        null = compute_cluster_null_distribution_sign_flip(
+                            perm_t_roi,
+                            cluster_threshold_alpha=self.params.cluster_threshold_alpha,
+                            n_group_perm=self.params.n_group_permutations,
+                            rng=rng,
+                        )
+                    else:
+                        null = compute_cluster_null_distribution(
+                            perm_t_roi,
+                            cluster_threshold_alpha=self.params.cluster_threshold_alpha,
+                            n_group_perm=self.params.n_group_permutations,
+                            rng=rng,
+                        )
                     if observed_clusters:
                         best_start, best_end, best_tsum = observed_clusters[0]
                         p_clust = compute_cluster_permutation_pvalue(best_tsum, null)
@@ -391,6 +405,7 @@ class TrialStatsGroupProcessing(BaseProcessing):
                 "significance_alpha": self.params.significance_alpha,
                 "n_group_permutations": self.params.n_group_permutations,
                 "cluster_threshold_alpha": self.params.cluster_threshold_alpha,
+                "cluster_permutation_method": self.params.cluster_permutation_method,
                 "condition_labels": list(first.condition_labels),
                 "task": first.task,
                 "source_desc": first.source_desc,

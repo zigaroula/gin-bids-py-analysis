@@ -158,21 +158,23 @@ def find_temporal_clusters(
     if not mask.any():
         return []
 
-    labeled, n_clusters = _ndimage_label(mask)
     t = np.asarray(t_values, dtype=np.float64)
     clusters: list[tuple[int, int, float]] = []
-    for k in range(1, n_clusters + 1):
-        indices = np.where(labeled == k)[0]
-        t_sum = float(np.sum(t[indices]))
-        clusters.append((int(indices[0]), int(indices[-1]), t_sum))
+    for sign_mask in [mask & (t > 0), mask & (t < 0)]:
+        if not sign_mask.any():
+            continue
+        labeled, n_clusters = _ndimage_label(sign_mask)
+        for k in range(1, n_clusters + 1):
+            indices = np.where(labeled == k)[0]
+            t_sum = float(np.sum(t[indices]))
+            clusters.append((int(indices[0]), int(indices[-1]), t_sum))
 
     clusters.sort(key=lambda c: abs(c[2]), reverse=True)
     return clusters
 
 
 def compute_cluster_null_distribution(
-    contributions_perm_t: list[np.ndarray],
-    *,
+    contributions_perm_t: list[np.ndarray],    *,
     cluster_threshold_alpha: float,
     n_group_perm: int,
     rng: np.random.Generator,
@@ -217,6 +219,55 @@ def compute_cluster_null_distribution(
             sampled[j] = arr[perm_idx]
 
         group_t, group_p = _one_sample_ttest(sampled)
+        h_mask = np.isfinite(group_p) & (group_p < cluster_threshold_alpha)
+        clusters = find_temporal_clusters(h_mask, group_t)
+        if clusters:
+            null[i] = abs(clusters[0][2])
+
+    return null
+
+
+def compute_cluster_null_distribution_sign_flip(
+    contributions_observed: list[np.ndarray],
+    *,
+    cluster_threshold_alpha: float,
+    n_group_perm: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Build the null distribution via group-level sign-flipping (Maris & Oostenveld, 2007).
+
+    For each of ``n_group_perm`` iterations:
+    1. Randomly flip the sign of each contribution's observed timecourse.
+    2. Stack into ``(n_contributions, n_times)`` and run a one-sample t-test vs 0.
+    3. Apply ``cluster_threshold_alpha``, detect temporal clusters, and record the
+       maximum ``|cluster_t_sum|``.
+
+    Parameters
+    ----------
+    contributions_observed : list of arrays, each shape ``(n_times,)``
+        Per-contribution observed timecourses (one per channel contributing to the ROI).
+    cluster_threshold_alpha : float
+        Threshold for calling a time-point significant within each null iteration.
+    n_group_perm : int
+        Number of group-level permutation iterations.
+    rng : numpy Generator
+
+    Returns
+    -------
+    null_distribution : float64 array, shape ``(n_group_perm,)``
+        Maximum absolute cluster t-sum from each null iteration (0 when no cluster found).
+    """
+    if not contributions_observed:
+        return np.zeros(n_group_perm, dtype=np.float64)
+
+    n_contribs = len(contributions_observed)
+    obs = np.stack([np.asarray(c, dtype=np.float64) for c in contributions_observed], axis=0)
+    null = np.zeros(n_group_perm, dtype=np.float64)
+
+    for i in range(n_group_perm):
+        signs = rng.choice(np.array([-1.0, 1.0]), size=n_contribs)
+        flipped = signs[:, np.newaxis] * obs
+        group_t, group_p = _one_sample_ttest(flipped)
         h_mask = np.isfinite(group_p) & (group_p < cluster_threshold_alpha)
         clusters = find_temporal_clusters(h_mask, group_t)
         if clusters:

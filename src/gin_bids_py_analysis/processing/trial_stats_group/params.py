@@ -55,6 +55,18 @@ class TrialStatsGroupParams(BaseProcessingParams):
             "distribution. None selects a non-reproducible seed."
         ),
     )
+    cluster_permutation_method: Literal["hierarchical", "sign_flip"] = Field(
+        default="hierarchical",
+        description=(
+            "Strategy for building the group-level cluster null distribution when "
+            "p_value_correction_method='cluster_permutation'. "
+            "'hierarchical' samples from per-channel permuted t-value pools stored in each "
+            "source trial_stats file (requires those files to have been produced with "
+            "n_permutations > 0). "
+            "'sign_flip' randomly flips the sign of each channel's observed values at each "
+            "iteration, following Maris & Oostenveld (2007) exactly."
+        ),
+    )
     significance_alpha: float = Field(
         default=0.05,
         gt=0.0,

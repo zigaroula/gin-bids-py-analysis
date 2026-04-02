@@ -14,6 +14,9 @@ if TYPE_CHECKING:
     from gin_bids_py_analysis.processing.trial_stats_group.params import (
         TrialStatsGroupParams,
     )
+    from gin_bids_py_analysis.processing.trial_stats_group.result import (
+        TrialStatsGroupProcessingResult,
+    )
 
 
 def launch(
@@ -106,6 +109,48 @@ def launch_precomputed(
     window = TrialStatsPrecomputedWindow(
         subject_stats_files,
         group_file=group_stats_file,
+        group_params=group_params,
+    )
+    window.show()
+    app.exec()
+
+
+def launch_group_precomputed(
+    group_stats_file: Path,
+    group_params: "TrialStatsGroupParams | None" = None,
+) -> None:
+    """Launch a group-only viewer loading a pre-computed group stats file.
+
+    Use this entry point when you only have a group stats file written by
+    ``TrialStatsGroupProcessingWriter`` and do not need to visualize individual
+    subjects.  The window shows the ``GroupPlotPanel`` immediately after the
+    file is loaded.
+
+    Parameters
+    ----------
+    group_stats_file:
+        Path to the group stats file (``.h5``/``.hdf5``).
+    group_params:
+        Optional ``TrialStatsGroupParams`` used to pre-populate the
+        ``GroupParamsPanel`` display.  No computation is performed — the
+        params are shown for reference only.
+    """
+    try:
+        import sys
+
+        from PySide6.QtWidgets import QApplication
+    except ImportError as exc:
+        raise ImportError(
+            "PySide6 is required for visualization. "
+            "Install with: pip install 'gin-bids-py-analysis[viz]'"
+        ) from exc
+
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    from .window_group_precomputed import TrialStatsGroupPrecomputedWindow
+
+    window = TrialStatsGroupPrecomputedWindow(
+        group_stats_file,
         group_params=group_params,
     )
     window.show()

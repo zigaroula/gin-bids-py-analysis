@@ -32,7 +32,8 @@ TRIAL_STATS_FILTERS = {
 
 PARAMS = TrialStatsGroupParams(
     source_metric="t_values",
-    p_value_correction_method="cluster_permutation",
+    p_value_correction_method="none",
+    cluster_permutation_method="sign_flip",
     significance_alpha=0.05,
     roi_mode="manual",
     manual_region_channels={
@@ -44,29 +45,30 @@ PARAMS = TrialStatsGroupParams(
             "epi11": ["X05", "X07", "X06"],
             "epi12": ["Ap02"],
             "epi14": ["Xp04"],
-            "epi17": ["II08"],
+            "epi17": ["II8"],
             "epi18": ["X06"],
             "epi19": ["IMD2"],
-            "epi21": ["XS07", "XD07", "XD04", "XD08"],
-            "epi22": ["XS08"],
-            "epi23": ["EL02"]
+            "epi21": ["XS7", "XD7", "XD4", "XD8"],
+            "epi22": ["XS8"],
+            "epi23": ["EL2"]
         },
         "vaINS": {
-            "epi04": ["Bp2"],
+            "epi04": ["Bp02"],
             "epi08": ["IA2", "IA4"],
             "epi11": ["X04"],
             "epi14": ["Xp02"],
-            "epi17": ["II02"],
+            "epi17": ["II2"],
             "epi18": ["Y02", "X02"],
-            "epi21": ["XS04"],
-            "epi22": ["XS02", "YS02"]
+            "epi21": ["XS4"],
+            "epi22": ["XS2", "YS2"]
         },
-    }
+    },
 )
 
 WRITER_PARAMS = TrialStatsGroupWriterParams(
     bids_root=BIDS_ROOT,
-    output_format="hdf5"
+    output_format="hdf5",
+    output_description="none"
 )
 
 N_JOBS = 1

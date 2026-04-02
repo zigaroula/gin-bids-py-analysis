@@ -4,6 +4,7 @@ import numpy as np
 
 from gin_bids_py_analysis.processing.trial_stats_group.stats import (
     compute_cluster_null_distribution,
+    compute_cluster_null_distribution_sign_flip,
     compute_cluster_permutation_pvalue,
     compute_one_sample_epoch_summary,
     compute_one_sample_timecourse,
@@ -101,6 +102,24 @@ def test_find_temporal_clusters_empty_mask_returns_empty() -> None:
     assert find_temporal_clusters(h_mask, t_values) == []
 
 
+def test_find_temporal_clusters_separates_positive_and_negative() -> None:
+    # mask covers indices 1-3; t_values change sign at index 2.
+    # Without sign-split these would be one cluster (t_sum = 4 - 3 - 2 = -1).
+    # With sign-split: positive cluster at index 1 (t_sum=4), negative cluster
+    # at indices 2-3 (t_sum=-5). Best is the negative cluster (|−5| > |4|).
+    h_mask = np.array([False, True, True, True, False])
+    t_values = np.array([0.0, 4.0, -3.0, -2.0, 0.0], dtype=np.float64)
+
+    clusters = find_temporal_clusters(h_mask, t_values)
+
+    assert len(clusters) == 2
+    t_sums = sorted([c[2] for c in clusters], key=abs, reverse=True)
+    assert np.isclose(t_sums[0], -5.0)
+    assert np.isclose(t_sums[1], 4.0)
+    # Best cluster (index 0) is the strongest by |t_sum|
+    assert np.isclose(clusters[0][2], -5.0)
+
+
 def test_compute_cluster_null_distribution_shape() -> None:
     rng = np.random.default_rng(99)
     n_perm_subj, n_times = 50, 20
@@ -119,6 +138,38 @@ def test_compute_cluster_null_distribution_shape() -> None:
     assert null.shape == (200,)
     assert null.dtype == np.float64
     assert np.all(null >= 0.0)
+
+
+def test_compute_cluster_null_distribution_sign_flip_shape() -> None:
+    rng = np.random.default_rng(42)
+    n_times = 20
+    contributions = [
+        rng.standard_normal(n_times).astype(np.float64) * 5.0
+        for _ in range(4)
+    ]
+
+    null = compute_cluster_null_distribution_sign_flip(
+        contributions,
+        cluster_threshold_alpha=0.05,
+        n_group_perm=200,
+        rng=rng,
+    )
+
+    assert null.shape == (200,)
+    assert null.dtype == np.float64
+    assert np.all(null >= 0.0)
+
+
+def test_compute_cluster_null_distribution_sign_flip_empty_returns_zeros() -> None:
+    rng = np.random.default_rng(0)
+    null = compute_cluster_null_distribution_sign_flip(
+        [],
+        cluster_threshold_alpha=0.05,
+        n_group_perm=100,
+        rng=rng,
+    )
+    assert null.shape == (100,)
+    assert np.all(null == 0.0)
 
 
 def test_compute_cluster_permutation_pvalue_empty_null() -> None:
