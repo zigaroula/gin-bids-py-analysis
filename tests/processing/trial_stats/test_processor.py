@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-from mne import Annotations
+from mne import Annotations, create_info
+from mne.io import RawArray
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
@@ -29,21 +30,17 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-class _FakeRaw:
-    def __init__(
-        self,
-        data: np.ndarray,
-        ch_names: list[str],
-        sfreq: float,
-        annotations: Annotations,
-    ) -> None:
-        self._data = data
-        self.ch_names = ch_names
-        self.info = {"sfreq": sfreq}
-        self.annotations = annotations
 
-    def get_data(self) -> np.ndarray:
-        return self._data
+def _make_raw(
+    data: np.ndarray,
+    ch_names: list[str],
+    sfreq: float,
+    annotations: Annotations,
+) -> RawArray:
+    info = create_info(ch_names=ch_names, sfreq=sfreq, ch_types=["seeg"] * len(ch_names))
+    raw = RawArray(np.asarray(data, dtype=np.float64), info, verbose="ERROR")
+    raw.set_annotations(annotations)
+    return raw
 
 
 class _FixedResolver:
@@ -126,8 +123,8 @@ def test_process_group_pools_multiple_ieeg_files_and_sets_shared_output_entities
         duration=[0.0, 0.0],
         description=["Stimulus/S  10", "Stimulus/S  10"],
     )
-    file_run1.attach_data(_FakeRaw(data_run1, ch_names, sfreq, annotations))
-    file_run2.attach_data(_FakeRaw(data_run2, ch_names, sfreq, annotations))
+    file_run1.attach_data(_make_raw(data_run1, ch_names, sfreq, annotations))
+    file_run2.attach_data(_make_raw(data_run2, ch_names, sfreq, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
@@ -201,7 +198,7 @@ def test_process_group_aggregates_channels_by_atlas_region(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    ieeg_file.attach_data(_FakeRaw(data, ch_names, sfreq, annotations))
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
@@ -273,7 +270,7 @@ def test_process_group_drops_na_like_regions_when_atlas_regions_not_set(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    ieeg_file.attach_data(_FakeRaw(data, ch_names, sfreq, annotations))
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
@@ -321,7 +318,7 @@ def test_process_group_window_ms_binning(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    ieeg_file.attach_data(_FakeRaw(data, ch_names, sfreq, annotations))
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
@@ -371,7 +368,7 @@ def test_process_group_n_bins_binning(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    ieeg_file.attach_data(_FakeRaw(data, ch_names, sfreq, annotations))
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
@@ -452,7 +449,7 @@ def test_process_group_raises_when_atlas_name_without_matching_electrodes(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    ieeg_file.attach_data(_FakeRaw(np.zeros((1, 60), dtype=np.float32), ["A1"], 10.0, annotations))
+    ieeg_file.attach_data(_make_raw(np.zeros((1, 60), dtype=np.float32), ["A1"], 10.0, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
@@ -520,7 +517,7 @@ def test_process_group_prefers_least_specific_electrodes_file_on_tie(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    ieeg_file.attach_data(_FakeRaw(np.zeros((1, 60), dtype=np.float32), ["A1"], 10.0, annotations))
+    ieeg_file.attach_data(_make_raw(np.zeros((1, 60), dtype=np.float32), ["A1"], 10.0, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
@@ -589,7 +586,7 @@ def test_process_group_raises_when_electrodes_ambiguity_persists_after_tiebreak(
         duration=[0.0, 0.0, 0.0, 0.0],
         description=["Stimulus/S  10"] * 4,
     )
-    ieeg_file.attach_data(_FakeRaw(np.zeros((1, 60), dtype=np.float32), ["A1"], 10.0, annotations))
+    ieeg_file.attach_data(_make_raw(np.zeros((1, 60), dtype=np.float32), ["A1"], 10.0, annotations))
 
     processor = TrialStatsProcessing(
         TrialStatsParams(
@@ -623,7 +620,6 @@ def _make_ieeg_file_with_data(
     n_events: int,
     event_onset_step_s: float = 1.0,
 ) -> "BIDSFile":
-    from mne import Annotations
 
     ieeg_file = _make_bids_file(
         tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
@@ -642,7 +638,7 @@ def _make_ieeg_file_with_data(
         duration=[0.0] * n_events,
         description=["Stimulus/S  10"] * n_events,
     )
-    ieeg_file.attach_data(_FakeRaw(data, ch_names, sfreq, annotations))
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
     return ieeg_file
 
 
@@ -752,3 +748,4 @@ def test_process_group_channel_significance_mode_duration(
     assert result.channel_significant_mask.dtype == bool
     assert result.channel_significant_mask[0] is np.bool_(True)
     assert result.channel_significant_mask[1] is np.bool_(False)
+

@@ -15,6 +15,7 @@ def default_group_params() -> TrialStatsGroupParams:
     return TrialStatsGroupParams(
         source_metric="t_values",
         p_value_correction_method="fdr_bh",
+        cluster_permutation_method="custom",
         significance_alpha=0.05,
         roi_mode="manual",
         manual_region_channels={
@@ -34,6 +35,7 @@ class TestGroupParamsPanelRoundTrip:
 
         assert recovered.source_metric == default_group_params.source_metric
         assert recovered.p_value_correction_method == default_group_params.p_value_correction_method
+        assert recovered.cluster_permutation_method == default_group_params.cluster_permutation_method
         assert recovered.significance_alpha == pytest.approx(default_group_params.significance_alpha)
         assert recovered.roi_mode == default_group_params.roi_mode
         assert recovered.manual_region_channels == default_group_params.manual_region_channels
@@ -47,6 +49,7 @@ class TestGroupParamsPanelRoundTrip:
         new_params = TrialStatsGroupParams(
             source_metric="mean_difference",
             p_value_correction_method="bonferroni",
+            cluster_permutation_method="mne",
             significance_alpha=0.01,
             roi_mode="manual",
             manual_region_channels={"regionB": {"03": ["CH5"]}},
@@ -58,6 +61,7 @@ class TestGroupParamsPanelRoundTrip:
 
         assert recovered.source_metric == "mean_difference"
         assert recovered.p_value_correction_method == "bonferroni"
+        assert recovered.cluster_permutation_method == "mne"
         assert recovered.significance_alpha == pytest.approx(0.01)
         assert recovered.manual_region_channels == new_params.manual_region_channels
         assert recovered.min_channels_per_roi == 2

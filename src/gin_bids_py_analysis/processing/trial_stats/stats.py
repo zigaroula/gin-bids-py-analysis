@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Literal
 
+from mne.stats import bonferroni_correction, fdr_correction
 import numpy as np
 from scipy.stats import ttest_ind
 
@@ -71,8 +72,9 @@ def compute_permutation_p_values(
 ) -> np.ndarray:
     """Compute pointwise permutation p-values from a null-t distribution.
 
-    For each ``(channel, time)`` position the p-value is the fraction of
-    permuted ``|t|``-values that are greater than or equal to the observed ``|t|``.
+    For each ``(channel, time)`` position, p-values use the conservative
+    ``(count + 1) / (n_perm + 1)`` convention where ``count`` is the number of
+    permuted ``|t|``-values greater than or equal to the observed ``|t|``.
 
     Parameters
     ----------
@@ -99,8 +101,50 @@ def compute_permutation_p_values(
     abs_obs = np.abs(obs)
     abs_perm = np.abs(perm)  # (n_perm, n_channels, n_times)
     count = np.sum(abs_perm >= abs_obs[np.newaxis, :, :], axis=0)
-    out[finite_mask] = (count / n_perm)[finite_mask]
+    out[finite_mask] = ((count + 1) / (n_perm + 1))[finite_mask]
     return out
+
+
+def compute_bootstrap_difference_ci95(
+    epochs_a: np.ndarray,
+    epochs_b: np.ndarray,
+    *,
+    n_bootstraps: int = 2000,
+    random_state: int | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Estimate 95% bootstrap CIs for mean(A) - mean(B) per channel and time."""
+    arr_a = np.asarray(epochs_a, dtype=np.float64)
+    arr_b = np.asarray(epochs_b, dtype=np.float64)
+    if arr_a.ndim != 3 or arr_b.ndim != 3:
+        raise ValueError("epochs_a and epochs_b must be 3-D (n_trials, n_channels, n_times).")
+    if arr_a.shape[1:] != arr_b.shape[1:]:
+        raise ValueError(
+            "epochs_a and epochs_b must share channel/time dimensions, got "
+            f"{arr_a.shape[1:]!r} and {arr_b.shape[1:]!r}."
+        )
+
+    n_a, n_channels, n_times = arr_a.shape
+    n_b = arr_b.shape[0]
+    if n_a < 2 or n_b < 2:
+        nan = np.full((n_channels, n_times), np.nan, dtype=np.float64)
+        return nan.copy(), nan.copy()
+    if n_bootstraps < 1:
+        raise ValueError(f"n_bootstraps must be >= 1, got {n_bootstraps}.")
+
+    rng = np.random.default_rng(random_state)
+    boot_diff = np.empty((n_bootstraps, n_channels, n_times), dtype=np.float64)
+
+    for idx in range(n_bootstraps):
+        sample_a = arr_a[rng.integers(0, n_a, size=n_a)]
+        sample_b = arr_b[rng.integers(0, n_b, size=n_b)]
+        boot_diff[idx] = (
+            np.nanmean(sample_a, axis=0, dtype=np.float64)
+            - np.nanmean(sample_b, axis=0, dtype=np.float64)
+        )
+
+    low = np.nanpercentile(boot_diff, 2.5, axis=0)
+    high = np.nanpercentile(boot_diff, 97.5, axis=0)
+    return np.asarray(low, dtype=np.float64), np.asarray(high, dtype=np.float64)
 
 
 @dataclass
@@ -234,24 +278,14 @@ def correct_p_values(
         return corrected
 
     flat = corrected[finite_mask]
-    n_tests = flat.size
-
     if method == "bonferroni":
-        corrected[finite_mask] = np.minimum(flat * n_tests, 1.0)
+        _, corrected_flat = bonferroni_correction(flat, alpha=0.05)
+        corrected[finite_mask] = np.asarray(corrected_flat, dtype=np.float64)
         return corrected
 
     if method == "fdr_bh":
-        order = np.argsort(flat)
-        ranked = flat[order]
-        ranks = np.arange(1, n_tests + 1, dtype=np.float64)
-
-        adjusted = ranked * (n_tests / ranks)
-        adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
-        adjusted = np.clip(adjusted, 0.0, 1.0)
-
-        flat_corrected = np.empty_like(flat)
-        flat_corrected[order] = adjusted
-        corrected[finite_mask] = flat_corrected
+        _, corrected_flat = fdr_correction(flat, alpha=0.05, method="indep")
+        corrected[finite_mask] = np.asarray(corrected_flat, dtype=np.float64)
         return corrected
 
     raise ValueError(f"Unsupported p-value correction method: {method!r}. "

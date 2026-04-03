@@ -5,6 +5,7 @@ import numpy as np
 from gin_bids_py_analysis.processing.trial_stats_group.stats import (
     compute_cluster_null_distribution,
     compute_cluster_null_distribution_sign_flip,
+    compute_mne_cluster_permutation,
     compute_cluster_permutation_pvalue,
     compute_one_sample_epoch_summary,
     compute_one_sample_timecourse,
@@ -178,8 +179,24 @@ def test_compute_cluster_permutation_pvalue_empty_null() -> None:
 
 def test_compute_cluster_permutation_pvalue_extreme() -> None:
     null = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float64)
-    # observed > all null values → p = 0
-    assert compute_cluster_permutation_pvalue(100.0, null) == 0.0
+    # observed > all null values → smallest possible non-zero p
+    assert compute_cluster_permutation_pvalue(100.0, null) == 0.2
     # observed < all null values → p = 1
     assert compute_cluster_permutation_pvalue(0.5, null) == 1.0
+
+
+def test_compute_mne_cluster_permutation_returns_expected_shapes() -> None:
+    rng = np.random.default_rng(0)
+    samples = rng.normal(loc=1.5, scale=0.5, size=(6, 20)).astype(np.float64)
+
+    p_value, window, null = compute_mne_cluster_permutation(
+        samples,
+        cluster_threshold_alpha=0.05,
+        n_group_perm=50,
+        seed=42,
+    )
+
+    assert 0.0 <= p_value <= 1.0
+    assert window is None or (0 <= window[0] <= window[1] < samples.shape[1])
+    assert null.ndim == 1
 

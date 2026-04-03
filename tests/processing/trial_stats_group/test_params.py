@@ -37,3 +37,22 @@ def test_params_coerce_manual_mapping_and_subject_labels() -> None:
         "ROI1": {"01": ["A1", "A2"]},
         "ROI2": {"02": ["B1"]},
     }
+
+
+def test_params_accept_new_cluster_method_names() -> None:
+    params = TrialStatsGroupParams(
+        roi_mode="manual",
+        manual_region_channels={"ROI": {"01": ["A1"]}},
+        cluster_permutation_method="mne",
+    )
+    assert params.cluster_permutation_method == "mne"
+
+
+@pytest.mark.parametrize("legacy_name", ["hierarchical", "sign_flip"])
+def test_params_reject_legacy_cluster_method_names(legacy_name: str) -> None:
+    with pytest.raises(ValueError, match="renamed to 'custom' and 'mne'"):
+        TrialStatsGroupParams(
+            roi_mode="manual",
+            manual_region_channels={"ROI": {"01": ["A1"]}},
+            cluster_permutation_method=legacy_name,  # type: ignore[arg-type]
+        )

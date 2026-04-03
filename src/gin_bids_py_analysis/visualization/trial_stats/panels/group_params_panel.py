@@ -75,6 +75,12 @@ class GroupParamsPanel(QWidget):
             self._correction.addItem(m)
         form.addRow("p-value correction", self._correction)
 
+        # cluster_permutation_method
+        self._cluster_method = QComboBox()
+        for m in ("custom", "mne"):
+            self._cluster_method.addItem(m)
+        form.addRow("Cluster method", self._cluster_method)
+
         # significance_alpha
         self._alpha = QDoubleSpinBox()
         self._alpha.setRange(0.0001, 0.9999)
@@ -162,6 +168,7 @@ class GroupParamsPanel(QWidget):
             return TrialStatsGroupParams(
                 source_metric=self._source_metric.currentText(),
                 p_value_correction_method=self._correction.currentText(),
+                cluster_permutation_method=self._cluster_method.currentText(),
                 significance_alpha=self._alpha.value(),
                 roi_mode=self._roi_mode.currentText(),
                 atlas_name=atlas_name,
@@ -177,6 +184,7 @@ class GroupParamsPanel(QWidget):
         """Populate all widgets from *params*."""
         _set_combo(self._source_metric, params.source_metric)
         _set_combo(self._correction, params.p_value_correction_method)
+        _set_combo(self._cluster_method, params.cluster_permutation_method)
         self._alpha.setValue(params.significance_alpha)
         _set_combo(self._roi_mode, params.roi_mode)
         self._atlas_name.setText(params.atlas_name or "")

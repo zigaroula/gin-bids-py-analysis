@@ -36,7 +36,7 @@ from .params import TrialStatsGroupParams
 from .result import ROIChannelContribution, TrialStatsGroupProcessingResult
 from .stats import (
     compute_cluster_null_distribution,
-    compute_cluster_null_distribution_sign_flip,
+    compute_mne_cluster_permutation,
     compute_cluster_permutation_pvalue,
     compute_condition_group_stats,
     compute_one_sample_epoch_summary,
@@ -177,11 +177,11 @@ class TrialStatsGroupProcessing(BaseProcessing):
         method = self.params.p_value_correction_method
         rng: np.random.Generator | None = None
         if method == "cluster_permutation":
-            if self.params.cluster_permutation_method == "hierarchical":
+            if self.params.cluster_permutation_method == "custom":
                 for snap in snapshots:
                     if snap.permuted_t_values is None:
                         raise ValueError(
-                            f"cluster_permutation with cluster_permutation_method='hierarchical' "
+                            f"cluster_permutation with cluster_permutation_method='custom' "
                             f"requires permuted_t_values in all source files, "
                             f"but {snap.stats_file.path.name} has none. "
                             f"Re-run the subject-level analysis with n_permutations > 0 and "
@@ -210,6 +210,7 @@ class TrialStatsGroupProcessing(BaseProcessing):
         rows_t: list[np.ndarray] = []
         rows_p_uncorrected: list[np.ndarray] = []
         cluster_perm_t_collection: list[list[np.ndarray] | None] = []
+        cluster_observed_collection: list[np.ndarray | None] = []
         rows_mean: list[np.ndarray] = []
         rows_sem: list[np.ndarray] = []
         rows_cond_a_mean: list[np.ndarray] = []
@@ -257,17 +258,21 @@ class TrialStatsGroupProcessing(BaseProcessing):
             cond_b_mean, cond_b_sem = compute_condition_group_stats(samples_b)
 
             if method == "cluster_permutation":
-                if self.params.cluster_permutation_method == "hierarchical":
+                if self.params.cluster_permutation_method == "custom":
                     perm_t_list: list[np.ndarray] | None = [
                         np.asarray(r.permuted_t_values, dtype=np.float64)
                         for r in records
                         if r.permuted_t_values is not None
                     ]
+                    observed_samples: np.ndarray | None = None
                 else:
-                    perm_t_list = [np.asarray(r.values, dtype=np.float64) for r in records]
+                    perm_t_list = None
+                    observed_samples = np.asarray(samples, dtype=np.float64)
             else:
                 perm_t_list = None
+                observed_samples = None
             cluster_perm_t_collection.append(perm_t_list)
+            cluster_observed_collection.append(observed_samples)
 
             region_names.append(roi)
             rows_t.append(t_values)
@@ -338,24 +343,40 @@ class TrialStatsGroupProcessing(BaseProcessing):
                 observed_clusters = find_temporal_clusters(h_mask, roi_t)
                 perm_t_roi = cluster_perm_t_collection[roi_idx]
                 if not perm_t_roi:
-                    cluster_p_values_list.append(1.0)
-                    cluster_windows_list.append(None)
-                    cluster_null_dists_list.append(np.zeros(0, dtype=np.float64))
-                else:
-                    if self.params.cluster_permutation_method == "sign_flip":
-                        null = compute_cluster_null_distribution_sign_flip(
-                            perm_t_roi,
+                    if self.params.cluster_permutation_method == "mne":
+                        obs_samples = cluster_observed_collection[roi_idx]
+                        if obs_samples is None:
+                            cluster_p_values_list.append(1.0)
+                            cluster_windows_list.append(None)
+                            cluster_null_dists_list.append(np.zeros(0, dtype=np.float64))
+                            continue
+                        seed = int(rng.integers(0, np.iinfo(np.int32).max))
+                        p_clust, window_idx, null = compute_mne_cluster_permutation(
+                            obs_samples,
                             cluster_threshold_alpha=self.params.cluster_threshold_alpha,
                             n_group_perm=self.params.n_group_permutations,
-                            rng=rng,
+                            seed=seed,
                         )
+                        if window_idx is None:
+                            cluster_p_values_list.append(1.0)
+                            cluster_windows_list.append(None)
+                        else:
+                            t_start = float(first.time_axis_s[window_idx[0]])
+                            t_end = float(first.time_axis_s[window_idx[1]])
+                            cluster_p_values_list.append(p_clust)
+                            cluster_windows_list.append((t_start, t_end))
+                        cluster_null_dists_list.append(null)
                     else:
-                        null = compute_cluster_null_distribution(
-                            perm_t_roi,
-                            cluster_threshold_alpha=self.params.cluster_threshold_alpha,
-                            n_group_perm=self.params.n_group_permutations,
-                            rng=rng,
-                        )
+                        cluster_p_values_list.append(1.0)
+                        cluster_windows_list.append(None)
+                        cluster_null_dists_list.append(np.zeros(0, dtype=np.float64))
+                else:
+                    null = compute_cluster_null_distribution(
+                        perm_t_roi,
+                        cluster_threshold_alpha=self.params.cluster_threshold_alpha,
+                        n_group_perm=self.params.n_group_permutations,
+                        rng=rng,
+                    )
                     if observed_clusters:
                         best_start, best_end, best_tsum = observed_clusters[0]
                         p_clust = compute_cluster_permutation_pvalue(best_tsum, null)
@@ -558,8 +579,6 @@ def _resolve_snapshot_atlas_regions(
 
     for source_ieeg_path in snapshot.source_ieeg_files:
         ieeg_path = Path(source_ieeg_path)
-        if not ieeg_path.exists():
-            continue
         ieeg_file = BIDSFile.from_path(ieeg_path)
         matched_electrodes = find_best_entity_match(
             ieeg_file,

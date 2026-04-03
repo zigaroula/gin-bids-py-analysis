@@ -6,6 +6,7 @@ import pytest
 from gin_bids_py_analysis.processing.trial_stats.resolver import ResolvedTrial
 from gin_bids_py_analysis.processing.trial_stats.params import TrialStatsParams
 from gin_bids_py_analysis.processing.trial_stats.stats import (
+    compute_bootstrap_difference_ci95,
     compute_condition_statistics,
     compute_duration_channel_significance,
     compute_permutation_p_values,
@@ -150,7 +151,7 @@ def test_compute_permuted_statistics_empty_condition_returns_nan() -> None:
 
 
 def test_compute_permutation_p_values_perfect_separation() -> None:
-    """Observed t >> all permuted t: p should be 0 (or close to 1/n_perm)."""
+    """Observed t >> all permuted t: p should be the smallest non-zero value."""
     rng = np.random.default_rng(7)
     n_perm, n_ch, n_t = 100, 2, 4
     # Permuted t-values all near zero
@@ -161,7 +162,8 @@ def test_compute_permutation_p_values_perfect_separation() -> None:
     p = compute_permutation_p_values(observed, permuted)
 
     assert p.shape == (n_ch, n_t)
-    assert np.all(p == 0.0)
+    assert np.allclose(p, 1.0 / (n_perm + 1))
+    assert np.all(p > 0.0)
 
 
 def test_compute_permutation_p_values_preserves_nan() -> None:
@@ -174,6 +176,46 @@ def test_compute_permutation_p_values_preserves_nan() -> None:
     assert np.isnan(p[0, 1])
     assert np.isfinite(p[0, 0])
     assert np.isfinite(p[0, 2])
+
+
+def test_bootstrap_difference_ci95_is_deterministic_with_seed() -> None:
+    rng = np.random.default_rng(123)
+    epochs_a = rng.normal(loc=2.0, scale=0.5, size=(12, 2, 4)).astype(np.float64)
+    epochs_b = rng.normal(loc=1.0, scale=0.5, size=(12, 2, 4)).astype(np.float64)
+
+    low_1, high_1 = compute_bootstrap_difference_ci95(
+        epochs_a,
+        epochs_b,
+        n_bootstraps=200,
+        random_state=7,
+    )
+    low_2, high_2 = compute_bootstrap_difference_ci95(
+        epochs_a,
+        epochs_b,
+        n_bootstraps=200,
+        random_state=7,
+    )
+
+    np.testing.assert_allclose(low_1, low_2)
+    np.testing.assert_allclose(high_1, high_2)
+    assert low_1.shape == (2, 4)
+    assert high_1.shape == (2, 4)
+    assert np.all(low_1 <= high_1)
+
+
+def test_bootstrap_difference_ci95_returns_nan_when_trials_insufficient() -> None:
+    epochs_a = np.ones((1, 2, 3), dtype=np.float64)
+    epochs_b = np.ones((4, 2, 3), dtype=np.float64)
+
+    low, high = compute_bootstrap_difference_ci95(
+        epochs_a,
+        epochs_b,
+        n_bootstraps=50,
+        random_state=0,
+    )
+
+    assert np.all(np.isnan(low))
+    assert np.all(np.isnan(high))
 
 
 def test_trial_stats_params_rejects_permutation_with_zero_n_permutations() -> None:

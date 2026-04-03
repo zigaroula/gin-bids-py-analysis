@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from typing import Literal
 
+from mne.stats import (
+    bonferroni_correction,
+    fdr_correction,
+    permutation_cluster_1samp_test,
+)
 import numpy as np
 from scipy.ndimage import label as _ndimage_label
+from scipy.stats import t as t_dist
 from scipy.stats import ttest_1samp
 
 
@@ -111,24 +117,14 @@ def correct_p_values(
         return corrected
 
     flat = corrected[finite_mask]
-    n_tests = flat.size
-
     if method == "bonferroni":
-        corrected[finite_mask] = np.minimum(flat * n_tests, 1.0)
+        _, corrected_flat = bonferroni_correction(flat, alpha=0.05)
+        corrected[finite_mask] = np.asarray(corrected_flat, dtype=np.float64)
         return corrected
 
     if method == "fdr_bh":
-        order = np.argsort(flat)
-        ranked = flat[order]
-        ranks = np.arange(1, n_tests + 1, dtype=np.float64)
-
-        adjusted = ranked * (n_tests / ranks)
-        adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
-        adjusted = np.clip(adjusted, 0.0, 1.0)
-
-        flat_corrected = np.empty_like(flat)
-        flat_corrected[order] = adjusted
-        corrected[finite_mask] = flat_corrected
+        _, corrected_flat = fdr_correction(flat, alpha=0.05, method="indep")
+        corrected[finite_mask] = np.asarray(corrected_flat, dtype=np.float64)
         return corrected
 
     raise ValueError(f"Unsupported p-value correction method: {method!r}. "
@@ -292,12 +288,76 @@ def compute_cluster_permutation_pvalue(
     Returns
     -------
     p_value : float
-        Fraction of null values strictly exceeding ``|observed_cluster_tsum|``.
+        Conservative permutation p-value ``(count + 1) / (n_perm + 1)`` where
+        ``count`` is the number of null values ``>= |observed_cluster_tsum|``.
         Returns ``1.0`` when ``null_distribution`` is empty.
     """
-    if null_distribution.size == 0:
+    null = np.asarray(null_distribution, dtype=np.float64).ravel()
+    if null.size == 0:
         return 1.0
-    return float(np.mean(null_distribution > abs(observed_cluster_tsum)))
+    count = int(np.sum(null >= abs(float(observed_cluster_tsum))))
+    return float((count + 1) / (null.size + 1))
+
+
+def compute_mne_cluster_permutation(
+    samples_observed: np.ndarray,
+    *,
+    cluster_threshold_alpha: float,
+    n_group_perm: int,
+    seed: int | None = None,
+) -> tuple[float, tuple[int, int] | None, np.ndarray]:
+    """Run MNE one-sample temporal cluster permutation and return best-cluster stats."""
+    samples = np.asarray(samples_observed, dtype=np.float64)
+    if samples.ndim != 2:
+        raise ValueError(
+            f"samples_observed must be 2-D [n_samples, n_times], got {samples.shape!r}."
+        )
+    n_samples, n_times = samples.shape
+    if n_samples < 2 or n_times == 0:
+        return 1.0, None, np.zeros(0, dtype=np.float64)
+
+    threshold = float(t_dist.ppf(1.0 - (cluster_threshold_alpha / 2.0), df=n_samples - 1))
+    if not np.isfinite(threshold) or threshold <= 0:
+        threshold = None
+
+    t_obs, clusters, cluster_p_values, h0 = permutation_cluster_1samp_test(
+        samples,
+        n_permutations=n_group_perm,
+        threshold=threshold,
+        tail=0,
+        adjacency=None,
+        out_type="mask",
+        seed=seed,
+        verbose=False,
+    )
+    t_values = np.asarray(t_obs, dtype=np.float64).ravel()
+    null_distribution = np.asarray(h0, dtype=np.float64).ravel()
+    if not clusters:
+        return 1.0, None, null_distribution
+
+    cluster_p = np.asarray(cluster_p_values, dtype=np.float64).ravel()
+    best_idx = -1
+    best_abs_tsum = -np.inf
+    for idx, cluster_mask in enumerate(clusters):
+        mask = np.asarray(cluster_mask, dtype=bool).ravel()
+        if mask.size != n_times or not mask.any():
+            continue
+        tsum = float(np.sum(t_values[mask]))
+        abs_tsum = abs(tsum)
+        if abs_tsum > best_abs_tsum:
+            best_abs_tsum = abs_tsum
+            best_idx = idx
+
+    if best_idx < 0:
+        return 1.0, None, null_distribution
+
+    best_mask = np.asarray(clusters[best_idx], dtype=bool).ravel()
+    indices = np.where(best_mask)[0]
+    if indices.size == 0:
+        return 1.0, None, null_distribution
+    best_window = (int(indices[0]), int(indices[-1]))
+    p_value = float(cluster_p[best_idx]) if best_idx < cluster_p.size else 1.0
+    return p_value, best_window, null_distribution
 
 
 def _one_sample_ttest(samples: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -311,7 +371,6 @@ def _one_sample_ttest(samples: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     std = np.std(samples, axis=0, ddof=1)
     with np.errstate(invalid="ignore", divide="ignore"):
         t = np.where(std > 0, mean / (std / np.sqrt(n)), np.nan)
-    from scipy.stats import t as t_dist  # noqa: PLC0415
     p = np.where(np.isfinite(t), 2.0 * t_dist.sf(np.abs(t), df=n - 1), np.nan)
     return t, p
 

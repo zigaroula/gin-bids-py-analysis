@@ -49,6 +49,7 @@ def _write_trial_stats_h5(
     time_s: np.ndarray,
     mean_difference: np.ndarray,
     t_values: np.ndarray | None = None,
+    permuted_t_values: np.ndarray | None = None,
     condition_labels: tuple[str, str] = ("accepted", "rejected"),
     source_ieeg_files: list[str] | None = None,
     source_electrodes_files: list[str] | None = None,
@@ -63,6 +64,8 @@ def _write_trial_stats_h5(
         stats_grp.create_dataset("p_values", data=p_values)
         stats_grp.create_dataset("p_values_uncorrected", data=p_values)
         stats_grp.create_dataset("significant_mask", data=np.zeros_like(mean_difference, dtype=bool))
+        if permuted_t_values is not None:
+            stats_grp.create_dataset("permuted_t_values", data=permuted_t_values.astype(np.float32))
 
         means_grp = fh.create_group("means")
         means_grp.create_dataset(condition_labels[0], data=mean_difference + 1.0)
@@ -321,6 +324,116 @@ def test_process_group_atlas_mode_with_nonexistent_ieeg_path() -> None:
 
         assert result.region_names == ["ROI_A", "ROI_B"]
         assert list(result.roi_channel_counts) == [1, 1]
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+
+
+def test_process_group_cluster_permutation_custom_mode() -> None:
+    case_dir = _make_case_dir("cluster_custom")
+    try:
+        time_s = np.array([0.0, 0.1, 0.2, 0.3], dtype=np.float64)
+        perm_rng = np.random.default_rng(10)
+        perm_01 = perm_rng.normal(0.0, 1.0, size=(20, 1, len(time_s))).astype(np.float64)
+        perm_02 = perm_rng.normal(0.0, 1.0, size=(20, 1, len(time_s))).astype(np.float64)
+
+        path_01 = case_dir / "sub-01_task-decid_desc-trialstats_stats.h5"
+        _write_trial_stats_h5(
+            path_01,
+            channels=["A1"],
+            time_s=time_s,
+            mean_difference=np.array([[2.0, 2.0, 2.0, 0.5]], dtype=np.float64),
+            permuted_t_values=perm_01,
+        )
+        path_02 = case_dir / "sub-02_task-decid_desc-trialstats_stats.h5"
+        _write_trial_stats_h5(
+            path_02,
+            channels=["A1"],
+            time_s=time_s,
+            mean_difference=np.array([[2.5, 2.5, 2.5, 0.5]], dtype=np.float64),
+            permuted_t_values=perm_02,
+        )
+
+        file_01 = _make_bids_file(
+            path_01,
+            {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
+        )
+        file_02 = _make_bids_file(
+            path_02,
+            {"subject": "02", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
+        )
+
+        processor = TrialStatsGroupProcessing(
+            TrialStatsGroupParams(
+                roi_mode="manual",
+                manual_region_channels={"ROI_A": {"01": ["A1"], "02": ["A1"]}},
+                p_value_correction_method="cluster_permutation",
+                cluster_permutation_method="custom",
+                n_group_permutations=40,
+                permutation_seed=123,
+            )
+        )
+        result = processor.process_group(BIDSFileGroup(primary=file_01, secondaries=[file_02]))
+
+        assert result.cluster_p_values is not None
+        assert result.cluster_p_values.shape == (1,)
+        assert result.cluster_best_cluster_windows_s is not None
+        assert len(result.cluster_best_cluster_windows_s) == 1
+        assert result.cluster_null_distributions is not None
+        assert result.cluster_null_distributions[0].shape == (40,)
+        assert result.p_values.shape == (1, len(time_s))
+        assert result.significant_mask.shape == (1, len(time_s))
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+
+
+def test_process_group_cluster_permutation_mne_mode() -> None:
+    case_dir = _make_case_dir("cluster_mne")
+    try:
+        time_s = np.array([0.0, 0.1, 0.2, 0.3], dtype=np.float64)
+        path_01 = case_dir / "sub-01_task-decid_desc-trialstats_stats.h5"
+        _write_trial_stats_h5(
+            path_01,
+            channels=["A1"],
+            time_s=time_s,
+            mean_difference=np.array([[2.0, 2.0, 2.0, 0.0]], dtype=np.float64),
+        )
+        path_02 = case_dir / "sub-02_task-decid_desc-trialstats_stats.h5"
+        _write_trial_stats_h5(
+            path_02,
+            channels=["A1"],
+            time_s=time_s,
+            mean_difference=np.array([[2.1, 2.1, 2.1, 0.0]], dtype=np.float64),
+        )
+
+        file_01 = _make_bids_file(
+            path_01,
+            {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
+        )
+        file_02 = _make_bids_file(
+            path_02,
+            {"subject": "02", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
+        )
+
+        processor = TrialStatsGroupProcessing(
+            TrialStatsGroupParams(
+                roi_mode="manual",
+                manual_region_channels={"ROI_A": {"01": ["A1"], "02": ["A1"]}},
+                p_value_correction_method="cluster_permutation",
+                cluster_permutation_method="mne",
+                n_group_permutations=40,
+                permutation_seed=321,
+            )
+        )
+        result = processor.process_group(BIDSFileGroup(primary=file_01, secondaries=[file_02]))
+
+        assert result.cluster_p_values is not None
+        assert result.cluster_p_values.shape == (1,)
+        assert result.cluster_best_cluster_windows_s is not None
+        assert len(result.cluster_best_cluster_windows_s) == 1
+        assert result.cluster_null_distributions is not None
+        assert result.cluster_null_distributions[0].ndim == 1
+        assert result.p_values.shape == (1, len(time_s))
+        assert result.significant_mask.shape == (1, len(time_s))
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 

@@ -6,9 +6,10 @@ aggregation, temporal binning, and statistical testing across all iEEG files in 
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Sequence
 
+import mne
 import numpy as np
 
 from gin_bids_py_analysis.bids.file import BIDSFile
@@ -20,21 +21,25 @@ from gin_bids_py_analysis.bids.matching import (
 )
 from gin_bids_py_analysis.processing.base import BaseProcessing
 from gin_bids_py_analysis.processing.utils.channels import normalize_channel_name
-from gin_bids_py_analysis.processing.utils.events import coerce_annotation_events
+from gin_bids_py_analysis.processing.utils.events import (
+    AnnotationEvent,
+    parse_annotation_description,
+)
 from gin_bids_py_analysis.processing.utils.tables import select_column
 
 from .params import TrialStatsParams
 from .resolver import ResolvedTrial, TrialLabelResolver
 from .result import TrialStatsProcessingResult
 from .stats import (
+    EpochExtractionResult,
     build_time_axis_s,
+    compute_bootstrap_difference_ci95,
     compute_condition_statistics,
     compute_duration_channel_significance,
     compute_permutation_p_values,
     compute_permuted_statistics,
     compute_single_bin_channel_significance,
     correct_p_values,
-    extract_epochs,
 )
 
 
@@ -123,94 +128,106 @@ class TrialStatsProcessing(BaseProcessing):
         for ieeg_file in ieeg_files:
             with ieeg_file.ensure_loaded() as raw:
                 sfreq = float(raw.info["sfreq"])
-                data = raw.get_data().astype(np.float32)
                 channel_names = list(raw.ch_names)
-                annotations = raw.annotations
+                # Capture reference values from the first file; validate consistency for the rest.
+                if sfreq_ref is None:
+                    sfreq_ref = sfreq
+                    channel_names_ref = channel_names
+                else:
+                    if sfreq != sfreq_ref:
+                        raise ValueError(
+                            "All ieeg files in a subject group must share the same "
+                            "sampling frequency."
+                        )
+                    if channel_names != channel_names_ref:
+                        raise ValueError(
+                            "All ieeg files in a subject group must share the same "
+                            "channel ordering."
+                        )
 
-            # Capture reference values from the first file; validate consistency for the rest.
-            if sfreq_ref is None:
-                sfreq_ref = sfreq
-                channel_names_ref = channel_names
-                time_axis_ref = build_time_axis_s(
-                    sfreq,
-                    self.params.tmin_s,
-                    self.params.tmax_s,
-                )
-            else:
-                if sfreq != sfreq_ref:
-                    raise ValueError(
-                        "All ieeg files in a subject group must share the same "
-                        "sampling frequency."
-                    )
-                if channel_names != channel_names_ref:
-                    raise ValueError(
-                        "All ieeg files in a subject group must share the same "
-                        "channel ordering."
-                    )
-
-            # Atlas mode: map channels to brain regions, replacing channel-level features.
-            if atlas_mode:
-                assert self.params.atlas_name is not None
-                grouping = _resolve_atlas_grouping(
-                    ieeg_file=ieeg_file,
-                    electrodes_files=electrodes_files,
-                    channel_names=channel_names,
-                    atlas_name=self.params.atlas_name,
-                    atlas_regions=self.params.atlas_regions,
-                )
-                used_electrodes_paths.add(str(grouping.source_file.path))
-                missing_atlas_regions.update(grouping.missing_regions)
-
-                if feature_names_ref is None:
-                    feature_names_ref = grouping.feature_names
-                    feature_indices_ref = grouping.feature_channel_indices
-                elif feature_names_ref != grouping.feature_names:
-                    raise ValueError(
-                        "Atlas region grouping must be consistent across all ieeg files "
-                        f"in a subject group. Got {grouping.feature_names} for "
-                        f"{ieeg_file.path.name} but expected {feature_names_ref}."
-                    )
-
-            # Extract only the annotations whose codes mark trial onsets.
-            anchor_events = [
-                event
-                for event in coerce_annotation_events(annotations)
-                if event.code in anchor_codes
-            ]
-            resolved_trials = self.resolver.resolve_trials(
-                group,
-                ieeg_file,
-                anchor_events,
-            )
-            if len(resolved_trials) != len(anchor_events):
-                raise ValueError(
-                    f"Resolver returned {len(resolved_trials)} trial rows for "
-                    f"{len(anchor_events)} anchor events in {ieeg_file.path.name}."
-                )
-
-            # Cut the continuous recording into per-trial windows.
-            extraction = extract_epochs(
-                data,
-                sfreq,
-                self._normalize_trial_labels(resolved_trials),
-                self.params.tmin_s,
-                self.params.tmax_s,
-                drop_partial_epochs=self.params.drop_partial_epochs,
-            )
-            all_resolved_trials.extend(extraction.updated_trials)
-
-            # Route each kept epoch to the appropriate condition list.
-            for epoch, trial in zip(extraction.epochs, extraction.kept_trials):
-                epoch_for_stats = epoch
+                # Atlas mode: map channels to brain regions, replacing channel-level features.
                 if atlas_mode:
-                    # Collapse channel dimension into atlas-region means.
-                    assert feature_indices_ref is not None
-                    epoch_for_stats = _aggregate_channels(epoch, feature_indices_ref)
+                    assert self.params.atlas_name is not None
+                    grouping = _resolve_atlas_grouping(
+                        ieeg_file=ieeg_file,
+                        electrodes_files=electrodes_files,
+                        channel_names=channel_names,
+                        atlas_name=self.params.atlas_name,
+                        atlas_regions=self.params.atlas_regions,
+                    )
+                    used_electrodes_paths.add(str(grouping.source_file.path))
+                    missing_atlas_regions.update(grouping.missing_regions)
 
-                if trial.label == self.params.condition_a:
-                    epochs_a.append(epoch_for_stats)
-                elif trial.label == self.params.condition_b:
-                    epochs_b.append(epoch_for_stats)
+                    if feature_names_ref is None:
+                        feature_names_ref = grouping.feature_names
+                        feature_indices_ref = grouping.feature_channel_indices
+                    elif feature_names_ref != grouping.feature_names:
+                        raise ValueError(
+                            "Atlas region grouping must be consistent across all ieeg files "
+                            f"in a subject group. Got {grouping.feature_names} for "
+                            f"{ieeg_file.path.name} but expected {feature_names_ref}."
+                        )
+
+                # Extract only the annotations whose codes mark trial onsets.
+                anchor_events, anchor_samples = _extract_anchor_events_with_mne(
+                    raw,
+                    anchor_codes=anchor_codes,
+                )
+                resolved_trials = self.resolver.resolve_trials(
+                    group,
+                    ieeg_file,
+                    anchor_events,
+                )
+                if len(resolved_trials) != len(anchor_events):
+                    raise ValueError(
+                        f"Resolver returned {len(resolved_trials)} trial rows for "
+                        f"{len(anchor_events)} anchor events in {ieeg_file.path.name}."
+                    )
+
+                # Cut the continuous recording into per-trial windows.
+                extraction = _extract_epochs_with_mne(
+                    raw,
+                    anchor_samples=anchor_samples,
+                    trials=self._normalize_trial_labels(resolved_trials),
+                    tmin_s=self.params.tmin_s,
+                    tmax_s=self.params.tmax_s,
+                    drop_partial_epochs=self.params.drop_partial_epochs,
+                )
+                if time_axis_ref is None:
+                    time_axis_ref = extraction.time_axis_s
+                elif not np.allclose(
+                    np.asarray(extraction.time_axis_s, dtype=np.float64),
+                    np.asarray(time_axis_ref, dtype=np.float64),
+                    atol=1e-12,
+                    rtol=0.0,
+                ):
+                    raise ValueError(
+                        "All ieeg files in a subject group must yield the same epoch time axis."
+                    )
+                all_resolved_trials.extend(extraction.updated_trials)
+
+                # Route each kept epoch to the appropriate condition list.
+                epochs_for_stats = np.asarray(extraction.epochs, dtype=np.float64)
+                if atlas_mode and extraction.epochs.shape[0] > 0:
+                    assert feature_names_ref is not None
+                    assert feature_indices_ref is not None
+                    epochs_for_stats = _aggregate_epochs_with_mne(
+                        epochs_for_stats,
+                        channel_names=channel_names,
+                        feature_names=feature_names_ref,
+                        feature_channel_indices=feature_indices_ref,
+                        sfreq=sfreq,
+                        tmin_s=float(extraction.time_axis_s[0]),
+                    )
+
+                for epoch_for_stats, trial in zip(epochs_for_stats, extraction.kept_trials):
+                    if atlas_mode:
+                        assert epoch_for_stats.shape[0] == len(feature_names_ref or [])
+
+                    if trial.label == self.params.condition_a:
+                        epochs_a.append(epoch_for_stats)
+                    elif trial.label == self.params.condition_b:
+                        epochs_b.append(epoch_for_stats)
 
         assert sfreq_ref is not None
         assert channel_names_ref is not None
@@ -310,8 +327,12 @@ class TrialStatsProcessing(BaseProcessing):
             np.square(condition_a_sem, dtype=np.float64)
             + np.square(condition_b_sem, dtype=np.float64)
         )
-        difference_ci95_low = mean_difference - (1.96 * difference_sem)
-        difference_ci95_high = mean_difference + (1.96 * difference_sem)
+        difference_ci95_low, difference_ci95_high = compute_bootstrap_difference_ci95(
+            epochs_a_array,
+            epochs_b_array,
+            n_bootstraps=2000,
+            random_state=self.params.permutation_seed,
+        )
 
         p_values = correct_p_values(
             p_values_raw,
@@ -476,6 +497,210 @@ class TrialStatsProcessing(BaseProcessing):
                 normalized.append(trial)
         return normalized
 
+
+def _extract_anchor_events_with_mne(
+    raw: mne.io.BaseRaw,
+    *,
+    anchor_codes: set[str],
+) -> tuple[list[AnnotationEvent], np.ndarray]:
+    """Extract anchor events using MNE's sample-accurate annotation parser."""
+    sfreq = float(raw.info["sfreq"])
+
+    events, _ = mne.events_from_annotations(
+        raw,
+        event_id=_annotation_code_parser,
+        use_rounding=True,
+        verbose=False,
+    )
+    if events.size == 0:
+        return [], np.empty((0,), dtype=np.int64)
+
+    durations_by_key: dict[tuple[int, str], list[float]] = {}
+    for annotation in raw.annotations:
+        _, _, code = parse_annotation_description(str(annotation["description"]))
+        if code is None or code not in anchor_codes:
+            continue
+        sample = int(round(float(annotation["onset"]) * sfreq))
+        durations_by_key.setdefault((sample, code), []).append(float(annotation["duration"]))
+
+    anchor_events: list[AnnotationEvent] = []
+    anchor_samples: list[int] = []
+    for sample, _, event_code in events:
+        code = str(int(event_code))
+        if code not in anchor_codes:
+            continue
+        key = (int(sample), code)
+        durations = durations_by_key.get(key, [])
+        duration_s = durations.pop(0) if durations else 0.0
+        anchor_events.append(
+            AnnotationEvent(
+                onset_s=float(sample) / sfreq,
+                duration_s=duration_s,
+                event_type="Stimulus",
+                description=f"S {code}",
+                code=code,
+            )
+        )
+        anchor_samples.append(int(sample))
+
+    return anchor_events, np.asarray(anchor_samples, dtype=np.int64)
+
+
+def _annotation_code_parser(description: str) -> int | None:
+    """Return integer event code parsed from an annotation description."""
+    _, _, code = parse_annotation_description(description)
+    if code is None:
+        return None
+    try:
+        return int(code)
+    except ValueError:
+        return None
+
+
+def _extract_epochs_with_mne(
+    raw: mne.io.BaseRaw,
+    *,
+    anchor_samples: np.ndarray,
+    trials: list[ResolvedTrial],
+    tmin_s: float,
+    tmax_s: float,
+    drop_partial_epochs: bool,
+) -> EpochExtractionResult:
+    """Extract per-trial epochs via ``mne.Epochs`` and map dropped trials to exclusions."""
+    sfreq = float(raw.info["sfreq"])
+    fallback_time_axis = build_time_axis_s(sfreq, tmin_s, tmax_s)
+    if not trials:
+        return EpochExtractionResult(
+            epochs=np.empty((0, len(raw.ch_names), len(fallback_time_axis)), dtype=np.float64),
+            kept_trials=[],
+            updated_trials=[],
+            time_axis_s=fallback_time_axis,
+        )
+    if len(trials) != int(anchor_samples.size):
+        raise ValueError(
+            f"Trial/event length mismatch: {len(trials)} trials for {anchor_samples.size} anchor samples."
+        )
+
+    kept_indices = [idx for idx, trial in enumerate(trials) if trial.keep]
+    updated_trials = list(trials)
+    if not kept_indices:
+        return EpochExtractionResult(
+            epochs=np.empty((0, len(raw.ch_names), len(fallback_time_axis)), dtype=np.float64),
+            kept_trials=[],
+            updated_trials=updated_trials,
+            time_axis_s=fallback_time_axis,
+        )
+
+    events = np.column_stack(
+        [
+            anchor_samples[np.asarray(kept_indices, dtype=np.int64)],
+            np.zeros(len(kept_indices), dtype=np.int64),
+            np.ones(len(kept_indices), dtype=np.int64),
+        ]
+    )
+    epochs_obj = mne.Epochs(
+        raw,
+        events=events,
+        event_id={"anchor": 1},
+        tmin=tmin_s,
+        tmax=tmax_s,
+        baseline=None,
+        preload=True,
+        reject_by_annotation=False,
+        verbose=False,
+    )
+    time_axis_s = np.asarray(epochs_obj.times, dtype=np.float64)
+    drop_log = list(epochs_obj.drop_log)
+    kept_trials: list[ResolvedTrial] = []
+    kept_epoch_rows: list[np.ndarray] = []
+    kept_data = np.asarray(epochs_obj.get_data(copy=True), dtype=np.float64)
+    kept_data_cursor = 0
+
+    for local_idx, trial_idx in enumerate(kept_indices):
+        reasons = tuple(drop_log[local_idx]) if local_idx < len(drop_log) else ()
+        if reasons:
+            is_partial = any(reason in {"TOO_SHORT", "NO_DATA"} for reason in reasons)
+            if not drop_partial_epochs and is_partial:
+                raise ValueError(
+                    f"Trial at {trials[trial_idx].anchor_onset_s:.6f}s would create a partial epoch."
+                )
+            updated_trials[trial_idx] = replace(
+                trials[trial_idx],
+                keep=False,
+                exclusion_reason=trials[trial_idx].exclusion_reason or "partial_epoch",
+            )
+            continue
+
+        kept_trials.append(updated_trials[trial_idx])
+        if kept_data_cursor >= kept_data.shape[0]:
+            raise ValueError("Internal epoch extraction mismatch: missing kept epoch row.")
+        kept_epoch_rows.append(kept_data[kept_data_cursor])
+        kept_data_cursor += 1
+
+    epochs_array = (
+        np.stack(kept_epoch_rows, axis=0).astype(np.float64)
+        if kept_epoch_rows
+        else np.empty((0, len(raw.ch_names), len(time_axis_s)), dtype=np.float64)
+    )
+    return EpochExtractionResult(
+        epochs=epochs_array,
+        kept_trials=kept_trials,
+        updated_trials=updated_trials,
+        time_axis_s=time_axis_s,
+    )
+
+
+def _aggregate_epochs_with_mne(
+    epochs: np.ndarray,
+    *,
+    channel_names: Sequence[str],
+    feature_names: Sequence[str],
+    feature_channel_indices: Sequence[np.ndarray],
+    sfreq: float,
+    tmin_s: float,
+) -> np.ndarray:
+    """Aggregate channels into ROI means via ``mne.channels.combine_channels``."""
+    if epochs.ndim != 3:
+        raise ValueError(
+            f"epochs must be 3-D (n_epochs, n_channels, n_times), got {epochs.shape!r}."
+        )
+    if epochs.shape[0] == 0:
+        return np.empty((0, len(feature_names), epochs.shape[2]), dtype=np.float64)
+
+    info = mne.create_info(
+        ch_names=list(channel_names),
+        sfreq=float(sfreq),
+        ch_types=["seeg"] * len(channel_names),
+    )
+    events = np.column_stack(
+        [
+            np.arange(epochs.shape[0], dtype=np.int64),
+            np.zeros(epochs.shape[0], dtype=np.int64),
+            np.ones(epochs.shape[0], dtype=np.int64),
+        ]
+    )
+    epochs_obj = mne.EpochsArray(
+        np.asarray(epochs, dtype=np.float64),
+        info=info,
+        events=events,
+        event_id={"anchor": 1},
+        tmin=float(tmin_s),
+        verbose=False,
+    )
+    groups = {
+        str(name): np.asarray(indices, dtype=np.int64).tolist()
+        for name, indices in zip(feature_names, feature_channel_indices)
+    }
+    combined = mne.channels.combine_channels(
+        epochs_obj,
+        groups=groups,
+        method="mean",
+        keep_stim=False,
+        drop_bad=False,
+    )
+    return np.asarray(combined.get_data(copy=True), dtype=np.float64)
+
+
 def _stack_epochs(
     epochs: Sequence[np.ndarray],
     n_channels: int,
@@ -486,8 +711,8 @@ def _stack_epochs(
     Returns an empty array of the correct shape when *epochs* is empty.
     """
     if not epochs:
-        return np.empty((0, n_channels, n_times), dtype=np.float32)
-    return np.stack(epochs, axis=0).astype(np.float32)
+        return np.empty((0, n_channels, n_times), dtype=np.float64)
+    return np.stack(epochs, axis=0).astype(np.float64)
 
 
 def _compute_condition_sem(
@@ -581,7 +806,7 @@ def _aggregate_time_bins(
         raise ValueError("starts and stops must have the same length.")
     if not starts:
         n_epochs, n_channels, _ = epochs.shape
-        return np.empty((n_epochs, n_channels, 0), dtype=np.float32), np.empty((0,), dtype=np.float64)
+        return np.empty((n_epochs, n_channels, 0), dtype=np.float64), np.empty((0,), dtype=np.float64)
 
     for start, stop in zip(starts, stops):
         if start < 0 or stop <= start or stop > len(time_axis_s):
@@ -595,32 +820,16 @@ def _aggregate_time_bins(
         dtype=np.float64,
     )
     if n_epochs == 0:
-        return np.empty((0, n_channels, len(starts)), dtype=np.float32), binned_time_axis
+        return np.empty((0, n_channels, len(starts)), dtype=np.float64), binned_time_axis
 
-    binned = np.empty((n_epochs, n_channels, len(starts)), dtype=np.float32)
+    binned = np.empty((n_epochs, n_channels, len(starts)), dtype=np.float64)
     for bin_idx, (start, stop) in enumerate(zip(starts, stops)):
         binned[:, :, bin_idx] = np.nanmean(
             epochs[:, :, start:stop],
             axis=2,
             dtype=np.float64,
-        ).astype(np.float32)
+        ).astype(np.float64)
     return binned, binned_time_axis
-
-
-def _aggregate_channels(
-    epoch: np.ndarray,
-    channel_indices_by_feature: Sequence[np.ndarray],
-) -> np.ndarray:
-    """Replace channel rows with per-region means.
-
-    Input shape:  (n_channels, n_times)
-    Output shape: (n_regions, n_times)
-    """
-    aggregated = [
-        np.nanmean(epoch[channel_indices, :], axis=0, dtype=np.float64)
-        for channel_indices in channel_indices_by_feature
-    ]
-    return np.stack(aggregated, axis=0).astype(np.float32)
 
 
 def _is_na_like_region_label(label: str) -> bool:

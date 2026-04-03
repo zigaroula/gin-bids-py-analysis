@@ -30,6 +30,7 @@ BIDS_ROOT = Path(r"E:\CBT\bids")
 GROUP_PARAMS = TrialStatsGroupParams(
     source_metric="t_values",
     p_value_correction_method="cluster_permutation",
+    cluster_permutation_method="mne",
     significance_alpha=0.05,
     # roi_mode="atlas",
     # atlas_name="MarsAtlas",

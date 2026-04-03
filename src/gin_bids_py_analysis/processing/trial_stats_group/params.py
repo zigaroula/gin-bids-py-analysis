@@ -55,16 +55,16 @@ class TrialStatsGroupParams(BaseProcessingParams):
             "distribution. None selects a non-reproducible seed."
         ),
     )
-    cluster_permutation_method: Literal["hierarchical", "sign_flip"] = Field(
-        default="hierarchical",
+    cluster_permutation_method: Literal["custom", "mne"] = Field(
+        default="custom",
         description=(
             "Strategy for building the group-level cluster null distribution when "
             "p_value_correction_method='cluster_permutation'. "
-            "'hierarchical' samples from per-channel permuted t-value pools stored in each "
+            "'custom' samples from per-channel permuted t-value pools stored in each "
             "source trial_stats file (requires those files to have been produced with "
             "n_permutations > 0). "
-            "'sign_flip' randomly flips the sign of each channel's observed values at each "
-            "iteration, following Maris & Oostenveld (2007) exactly."
+            "'mne' runs mne.stats.permutation_cluster_1samp_test directly on the "
+            "per-channel contribution timecourses."
         ),
     )
     significance_alpha: float = Field(
@@ -147,6 +147,16 @@ class TrialStatsGroupParams(BaseProcessingParams):
             if subject_map:
                 cleaned[roi] = subject_map
         return cleaned
+
+    @field_validator("cluster_permutation_method", mode="before")
+    @classmethod
+    def _validate_cluster_method_rename(cls, value: object) -> object:
+        if value in {"hierarchical", "sign_flip"}:
+            raise ValueError(
+                "cluster_permutation_method values 'hierarchical' and 'sign_flip' were "
+                "renamed to 'custom' and 'mne'."
+            )
+        return value
 
     @model_validator(mode="after")
     def _validate_roi_mode(self) -> "TrialStatsGroupParams":
