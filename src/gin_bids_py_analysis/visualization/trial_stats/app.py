@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from gin_bids_py_analysis.bids import BIDSFileGroup
+    from gin_bids_py_analysis.processing.trial_slope_stats import (
+        TrialSlopeStatsParams,
+    )
     from gin_bids_py_analysis.processing.trial_stats import (
         TrialLabelResolver,
         TrialStatsParams,
@@ -59,6 +62,57 @@ def launch(
     from .window import TrialStatsWindow
 
     window = TrialStatsWindow(subject_groups, params, resolver, group_params=group_params, bids_root=bids_root)
+    window.show()
+    app.exec()
+
+
+def launch_slope(
+    subject_groups: dict[str, "BIDSFileGroup"],
+    params: "TrialSlopeStatsParams",
+    resolver: "TrialLabelResolver",
+    bids_root: Path | None = None,
+) -> None:
+    """Launch the trial statistics visualization window in slope mode."""
+    try:
+        import sys
+
+        from PySide6.QtWidgets import QApplication
+    except ImportError as exc:
+        raise ImportError(
+            "PySide6 is required for visualization. "
+            "Install with: pip install 'gin-bids-py-analysis[viz]'"
+        ) from exc
+
+    from gin_bids_py_analysis.processing.trial_stats import TrialStatsParams
+
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    from .window import TrialStatsWindow
+
+    fallback_ttest_params = TrialStatsParams(
+        anchor_event_codes=list(params.anchor_event_codes),
+        tmin_s=params.tmin_s,
+        tmax_s=params.tmax_s,
+        condition_a=params.condition_a,
+        condition_b=params.condition_b,
+        min_trials_per_condition=max(2, params.min_trials_per_condition),
+        drop_partial_epochs=params.drop_partial_epochs,
+        p_value_correction_method=params.p_value_correction_method,
+        significance_alpha=params.significance_alpha,
+        atlas_name=params.atlas_name,
+        atlas_regions=list(params.atlas_regions),
+        window_ms=params.window_ms,
+        n_bins=params.n_bins,
+    )
+    window = TrialStatsWindow(
+        subject_groups,
+        fallback_ttest_params,
+        resolver,
+        group_params=None,
+        bids_root=bids_root,
+        default_slope_params=params,
+        default_mode="slope",
+    )
     window.show()
     app.exec()
 

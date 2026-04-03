@@ -193,3 +193,57 @@ def test_table_trial_label_resolver_rejects_rows_with_task_mismatch(
     assert len(resolved) == 1
     assert resolved[0].keep is False
     assert resolved[0].exclusion_reason == "no_matching_table_row"
+
+
+def test_table_trial_label_resolver_copies_extra_metadata_columns(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    trial_table_path = tmp_path / "sub-01_task-decid_run-1_trials.tsv"
+    trial_table_path.write_text(
+        "decision\tvalue_for_slope\n"
+        "accept\t1.5\n"
+        "reject\t2.75\n",
+        encoding="utf-8",
+    )
+    trial_table_file = _make_bids_file(
+        trial_table_path,
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "events",
+            "extension": ".tsv",
+            "datatype": "ieeg",
+        },
+    )
+
+    resolver = TableTrialLabelResolver(
+        label_column="decision",
+        label_map={"accept": "accepted", "reject": "rejected"},
+        extra_metadata_columns={"predictor_value": "value_for_slope"},
+    )
+    anchor_events = [
+        AnnotationEvent(1.0, 0.0, "Stimulus", "S  10", "10"),
+        AnnotationEvent(2.0, 0.0, "Stimulus", "S  10", "10"),
+    ]
+
+    resolved = resolver.resolve_trials(
+        BIDSFileGroup(primary=ieeg_file, secondaries=[trial_table_file]),
+        ieeg_file,
+        anchor_events,
+    )
+
+    assert [trial.label for trial in resolved] == ["accepted", "rejected"]
+    assert resolved[0].metadata["predictor_value"] == "1.5"
+    assert resolved[1].metadata["predictor_value"] == "2.75"

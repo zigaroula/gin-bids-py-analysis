@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from gin_bids_py_analysis.processing.trial_slope_stats import TrialSlopeStatsParams
 from gin_bids_py_analysis.processing.trial_stats import TrialStatsParams
 from gin_bids_py_analysis.visualization.trial_stats.panels.params_panel import ParamsPanel
 
@@ -113,3 +114,16 @@ class TestParamsPanelRoundTrip:
 
         panel.set_computing(False)
         assert panel._compute_btn.isEnabled()
+
+    def test_slope_mode_round_trip(self, qtbot, default_params, default_slope_params):
+        panel = ParamsPanel(
+            default_params,
+            slope_params=default_slope_params,
+            default_mode="slope",
+        )
+        qtbot.addWidget(panel)
+
+        mode, params = panel.get_mode_and_params()
+        assert mode == "slope"
+        assert isinstance(params, TrialSlopeStatsParams)
+        assert params.predictor_metadata_key == default_slope_params.predictor_metadata_key

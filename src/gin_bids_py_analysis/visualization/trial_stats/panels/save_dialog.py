@@ -35,7 +35,14 @@ class SaveTrialStatsDialog(QDialog):
         Optional parent widget.
     """
 
-    def __init__(self, bids_root: Path, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        bids_root: Path,
+        parent: QWidget | None = None,
+        *,
+        default_pipeline_label: str = "trial_stats",
+        default_output_description: str = "trialstats",
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Save results")
         self.setMinimumWidth(380)
@@ -56,7 +63,7 @@ class SaveTrialStatsDialog(QDialog):
         form.addRow("BIDS root", self._root_edit)
 
         # pipeline_label
-        self._pipeline_label = QLineEdit("trial_stats")
+        self._pipeline_label = QLineEdit(default_pipeline_label)
         form.addRow("Pipeline label", self._pipeline_label)
 
         # output_modality
@@ -68,7 +75,7 @@ class SaveTrialStatsDialog(QDialog):
         form.addRow("Output suffix", self._output_suffix)
 
         # output_description
-        self._output_description = QLineEdit("trialstats")
+        self._output_description = QLineEdit(default_output_description)
         form.addRow("Output description", self._output_description)
 
         # output_format
@@ -111,12 +118,16 @@ class SaveTrialStatsDialog(QDialog):
 
     def get_writer_params(self) -> TrialStatsWriterParams:
         """Build a :class:`TrialStatsWriterParams` from the current dialog values."""
-        return TrialStatsWriterParams(
-            bids_root=self._bids_root,
-            pipeline_label=self._pipeline_label.text().strip(),
-            output_modality=self._output_modality.text().strip(),
-            output_suffix=self._output_suffix.text().strip(),
-            output_description=self._output_description.text().strip(),
-            output_format=self._format_combo.currentText(),
-            include_epochs=self._include_epochs.isChecked(),
-        )
+        return TrialStatsWriterParams(**self.get_common_writer_kwargs())
+
+    def get_common_writer_kwargs(self) -> dict[str, object]:
+        """Return dialog values as kwargs accepted by trial-stats writers."""
+        return {
+            "bids_root": self._bids_root,
+            "pipeline_label": self._pipeline_label.text().strip(),
+            "output_modality": self._output_modality.text().strip(),
+            "output_suffix": self._output_suffix.text().strip(),
+            "output_description": self._output_description.text().strip(),
+            "output_format": self._format_combo.currentText(),
+            "include_epochs": self._include_epochs.isChecked(),
+        }

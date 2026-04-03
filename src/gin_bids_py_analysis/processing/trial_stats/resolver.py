@@ -70,13 +70,22 @@ class _TrialRow:
 
 
 class TableTrialLabelResolver:
-    """Resolve trials from TSV/CSV tables carried in the BIDSFileGroup."""
+    """Resolve trials from TSV/CSV tables carried in the BIDSFileGroup.
+
+    Parameters
+    ----------
+    extra_metadata_columns:
+        Optional mapping ``output_key -> column_name``. Values found in the
+        label row (fallback event row) are copied into each resolved trial's
+        ``metadata`` dictionary under ``output_key``.
+    """
 
     def __init__(
         self,
         *,
         label_column: str,  # Required column that carries the trial label.
         label_map: dict[str, str] | None = None,
+        extra_metadata_columns: dict[str, str] | None = None,
         trial_id_column: str = "trial_id",
         anchor_onset_column: str | None = "onset",
         anchor_event_code_column: str | None = "anchor_event_code",
@@ -89,6 +98,11 @@ class TableTrialLabelResolver:
         self.label_map = {
             str(k).strip().casefold(): str(v).strip()
             for k, v in (label_map or {}).items()
+        }
+        self.extra_metadata_columns = {
+            str(output_key).strip(): str(column_name).strip()
+            for output_key, column_name in (extra_metadata_columns or {}).items()
+            if str(output_key).strip() and str(column_name).strip()
         }
         self.trial_id_column = trial_id_column
         self.anchor_onset_column = anchor_onset_column
@@ -344,6 +358,12 @@ class TableTrialLabelResolver:
             "label_row_index": label_row.row_index,
             "label_raw": row_value(label_row, self.label_column) or "",
         }
+        for output_key, column_name in self.extra_metadata_columns.items():
+            value = row_value(label_row, column_name)
+            if value is None or value == "":
+                value = row_value(event_row, column_name)
+            if value is not None:
+                metadata[output_key] = value
         if event_row is not None:
             metadata["event_source_path"] = str(event_row.file.path)
             metadata["event_row_index"] = event_row.row_index

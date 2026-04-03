@@ -8,6 +8,10 @@ from typing import TYPE_CHECKING, Callable
 from PySide6.QtCore import QThread, Signal
 
 from gin_bids_py_analysis.bids import BIDSFileGroup
+from gin_bids_py_analysis.processing.trial_slope_stats import (
+    TrialSlopeStatsParams,
+    TrialSlopeStatsProcessing,
+)
 from gin_bids_py_analysis.processing.trial_stats import (
     TrialStatsParams,
     TrialStatsProcessing,
@@ -98,7 +102,7 @@ class ComputeWorker(QThread):
 
     def __init__(
         self,
-        processor: TrialStatsProcessing,
+        processor: TrialStatsProcessing | TrialSlopeStatsProcessing,
         group: BIDSFileGroup,
         parent=None,
     ) -> None:
@@ -143,9 +147,12 @@ class ComputeAllWorker(QThread):
 
     def __init__(
         self,
-        processor_factory: Callable[[TrialStatsParams], TrialStatsProcessing],
+        processor_factory: Callable[
+            [TrialStatsParams | TrialSlopeStatsParams],
+            TrialStatsProcessing | TrialSlopeStatsProcessing,
+        ],
         subject_groups: dict[str, BIDSFileGroup],
-        params: TrialStatsParams,
+        params: TrialStatsParams | TrialSlopeStatsParams,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -330,6 +337,9 @@ class LoadSubjectResultsWorker(QThread):
         self._subject_files = subject_files
 
     def run(self) -> None:
+        from gin_bids_py_analysis.processing.trial_slope_stats.result_loader import (
+            load_trial_slope_stats_result,
+        )
         from gin_bids_py_analysis.processing.trial_stats.result_loader import (
             load_trial_stats_result,
         )
@@ -341,7 +351,11 @@ class LoadSubjectResultsWorker(QThread):
                 self.progress.emit(
                     f"Loading subject {subject_id}  ({i}/{total})…"
                 )
-                result = load_trial_stats_result(path)
+                result = _load_subject_result_auto(
+                    path,
+                    load_trial_stats_result=load_trial_stats_result,
+                    load_trial_slope_stats_result=load_trial_slope_stats_result,
+                )
                 results[subject_id] = result
                 self.subject_done.emit(subject_id, result)
             self.all_done.emit(results)
@@ -385,3 +399,38 @@ class LoadGroupResultWorker(QThread):
             self.result_ready.emit(result)
         except Exception as exc:  # noqa: BLE001
             self.error.emit(str(exc))
+
+
+def _load_subject_result_auto(
+    path: Path,
+    *,
+    load_trial_stats_result,
+    load_trial_slope_stats_result,
+):
+    suffix = path.suffix.lower()
+    if suffix in {".h5", ".hdf5"}:
+        try:
+            import h5py
+
+            with h5py.File(path, "r") as fh:
+                analysis_type = ""
+                if "meta" in fh and "analysis_type" in fh["meta"]:
+                    try:
+                        analysis_type = str(fh["meta"]["analysis_type"].asstr()[()]).strip()
+                    except Exception:
+                        analysis_type = ""
+            if analysis_type == "slope_regression":
+                return load_trial_slope_stats_result(path)
+            return load_trial_stats_result(path)
+        except Exception:
+            # Fallback: try slope loader first, then classic trial-stats.
+            try:
+                return load_trial_slope_stats_result(path)
+            except Exception:
+                return load_trial_stats_result(path)
+
+    # MATLAB and others: optimistic slope-first fallback strategy.
+    try:
+        return load_trial_slope_stats_result(path)
+    except Exception:
+        return load_trial_stats_result(path)

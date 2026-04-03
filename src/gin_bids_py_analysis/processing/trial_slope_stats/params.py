@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import Field, field_validator, model_validator
+
+from gin_bids_py_analysis.processing.base import BaseProcessingParams, BaseWriterParams
+
+
+class TrialSlopeStatsParams(BaseProcessingParams):
+    """Parameters for subject-level slope regression on trial-epoched iEEG data."""
+
+    anchor_event_codes: list[str] = Field(
+        description="Event codes used to define trial anchors in iEEG annotations."
+    )
+    tmin_s: float = Field(description="Epoch start relative to the anchor event, in seconds.")
+    tmax_s: float = Field(description="Epoch end relative to the anchor event, in seconds.")
+    condition_a: str = Field(
+        default="condition_a",
+        description="Canonical label for the first trial condition.",
+    )
+    condition_b: str = Field(
+        default="condition_b",
+        description="Canonical label for the second trial condition.",
+    )
+    min_trials_per_condition: int = Field(
+        default=3,
+        ge=3,
+        description=(
+            "Minimum number of kept trials required in each condition to report non-NaN "
+            "regression statistics."
+        ),
+    )
+    drop_partial_epochs: bool = Field(
+        default=True,
+        description="When True, exclude epochs that would extend outside recording bounds.",
+    )
+    predictor_metadata_key: str = Field(
+        default="predictor_value",
+        description=(
+            "Resolved-trial metadata key containing the continuous predictor value used in "
+            "the per-condition regression."
+        ),
+    )
+    predictor_scaling: Literal["none"] = Field(
+        default="none",
+        description="Predictor scaling mode. V1 supports only raw values ('none').",
+    )
+    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni"] = Field(
+        default="fdr_bh",
+        description="Multiple-comparisons correction applied across feature x time tests.",
+    )
+    significance_alpha: float = Field(
+        default=0.05,
+        gt=0.0,
+        lt=1.0,
+        description="Significance threshold applied to corrected p-values.",
+    )
+    atlas_name: str | None = Field(
+        default=None,
+        description=(
+            "Column name in *_electrodes.tsv used to group channels into ROI regions. "
+            "When unset, regression is computed channel-by-channel."
+        ),
+    )
+    atlas_regions: list[str] = Field(
+        default_factory=list,
+        description="Optional subset of atlas regions to include when atlas_name is set.",
+    )
+    window_ms: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Temporal bin size in milliseconds. 0 disables window binning; >0 averages "
+            "non-overlapping bins before regression."
+        ),
+    )
+    n_bins: int = Field(
+        default=0,
+        ge=-1,
+        description=(
+            "Number of contiguous non-overlapping temporal bins. 0 or -1 disables count-based "
+            "binning. Cannot be combined with window_ms > 0."
+        ),
+    )
+
+    @field_validator("anchor_event_codes", mode="before")
+    @classmethod
+    def _coerce_anchor_codes(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, (str, int)):
+            return [str(value)]
+        return [str(item) for item in value]
+
+    @field_validator("atlas_regions", mode="before")
+    @classmethod
+    def _coerce_atlas_regions(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            cleaned = value.strip()
+            return [cleaned] if cleaned else []
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    @model_validator(mode="after")
+    def _validate(self) -> "TrialSlopeStatsParams":
+        if not self.anchor_event_codes:
+            raise ValueError("anchor_event_codes must contain at least one event code.")
+        if self.tmax_s <= self.tmin_s:
+            raise ValueError("tmax_s must be greater than tmin_s.")
+        if self.condition_a == self.condition_b:
+            raise ValueError("condition_a and condition_b must be different.")
+        predictor_key = self.predictor_metadata_key.strip()
+        if not predictor_key:
+            raise ValueError("predictor_metadata_key must be a non-empty string.")
+        self.predictor_metadata_key = predictor_key
+        if self.atlas_name is not None:
+            self.atlas_name = self.atlas_name.strip() or None
+        if self.atlas_regions and not self.atlas_name:
+            raise ValueError("atlas_regions requires atlas_name to be set.")
+        if self.n_bins < 0:
+            self.n_bins = 0
+        if self.window_ms > 0 and self.n_bins > 0:
+            raise ValueError("window_ms and n_bins are mutually exclusive; define only one.")
+        return self
+
+
+class TrialSlopeStatsWriterParams(BaseWriterParams):
+    """Writer configuration for trial slope statistics outputs."""
+
+    pipeline_label: str = "trial_slope_stats"
+    output_modality: str = "ieeg"
+    output_suffix: str = "stats"
+    output_description: str = "trialslopestats"
+    output_format: Literal["hdf5", "matlab"] = Field(
+        default="hdf5",
+        description=(
+            "Output format for trial-slope results. 'hdf5' writes an HDF5 file (.h5); "
+            "'matlab' writes a MATLAB file (.mat). A TSV companion trial table is written "
+            "in both cases."
+        ),
+    )
+    include_epochs: bool = Field(
+        default=False,
+        description=(
+            "When True, individual per-trial epoch arrays are written to the output file in "
+            "addition to summary and regression statistics."
+        ),
+    )

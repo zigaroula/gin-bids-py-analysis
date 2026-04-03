@@ -61,3 +61,9 @@ class TestPlotPanel:
         panel.update_plots(synthetic_result, channel_idx=0)
         ymin, _ = panel._ax_p.get_ylim()
         assert ymin == pytest.approx(0.0)
+
+    def test_update_plots_slope_mode(self, qtbot, synthetic_slope_result):
+        panel = PlotPanel()
+        qtbot.addWidget(panel)
+        panel.update_plots(synthetic_slope_result, channel_idx=0)
+        assert panel._tabs.tabText(1) == "Slopes"

@@ -10,6 +10,8 @@ import pytest
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
+from gin_bids_py_analysis.processing.trial_slope_stats import TrialSlopeStatsParams
+from gin_bids_py_analysis.processing.trial_slope_stats.result import TrialSlopeStatsProcessingResult
 from gin_bids_py_analysis.processing.trial_stats import TrialStatsParams
 from gin_bids_py_analysis.processing.trial_stats.result import TrialStatsProcessingResult
 
@@ -101,5 +103,88 @@ def synthetic_result(default_params: TrialStatsParams) -> TrialStatsProcessingRe
         n_bins=0,
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
+        stats_valid=True,
+    )
+
+
+@pytest.fixture()
+def default_slope_params() -> TrialSlopeStatsParams:
+    return TrialSlopeStatsParams(
+        anchor_event_codes=["10"],
+        tmin_s=-1.0,
+        tmax_s=2.0,
+        condition_a="accepted",
+        condition_b="rejected",
+        predictor_metadata_key="predictor_value",
+        p_value_correction_method="fdr_bh",
+        significance_alpha=0.05,
+    )
+
+
+@pytest.fixture()
+def synthetic_slope_result(default_slope_params: TrialSlopeStatsParams) -> TrialSlopeStatsProcessingResult:
+    rng = np.random.default_rng(seed=123)
+    n_ch, n_t = 4, 60
+
+    mock_file = _make_bids_file(
+        Path("/fake/bids/sub-01_task-test_ieeg.vhdr"),
+        {"subject": "01", "task": "test", "suffix": "ieeg"},
+    )
+    group = BIDSFileGroup(primary=mock_file)
+
+    slope_a = rng.normal(loc=0.5, scale=0.2, size=(n_ch, n_t))
+    slope_b = rng.normal(loc=-0.3, scale=0.2, size=(n_ch, n_t))
+    p_a_raw = rng.uniform(0, 1, (n_ch, n_t))
+    p_b_raw = rng.uniform(0, 1, (n_ch, n_t))
+    p_a = np.clip(p_a_raw, 0, 1)
+    p_b = np.clip(p_b_raw, 0, 1)
+    sig_a = p_a < 0.05
+    sig_b = p_b < 0.05
+    mean_a = rng.standard_normal((n_ch, n_t))
+    mean_b = rng.standard_normal((n_ch, n_t))
+
+    return TrialSlopeStatsProcessingResult(
+        source_group=group,
+        metadata={},
+        output_entities=None,
+        condition_a_slope=slope_a,
+        condition_a_intercept=rng.standard_normal((n_ch, n_t)),
+        condition_a_r_value=np.clip(rng.standard_normal((n_ch, n_t)) * 0.3, -1, 1),
+        condition_a_p_value=p_a_raw,
+        condition_a_p_value_corrected=p_a,
+        condition_a_significant_mask=sig_a,
+        condition_b_slope=slope_b,
+        condition_b_intercept=rng.standard_normal((n_ch, n_t)),
+        condition_b_r_value=np.clip(rng.standard_normal((n_ch, n_t)) * 0.3, -1, 1),
+        condition_b_p_value=p_b_raw,
+        condition_b_p_value_corrected=p_b,
+        condition_b_significant_mask=sig_b,
+        condition_a_mean=mean_a,
+        condition_b_mean=mean_b,
+        condition_a_sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
+        condition_b_sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
+        time_axis_s=np.linspace(-1.0, 2.0, n_t),
+        channel_names=["A1", "A2", "A3", "A4"],
+        condition_a="accepted",
+        condition_b="rejected",
+        condition_a_trial_count=12,
+        condition_b_trial_count=11,
+        condition_a_trials_used=12,
+        condition_b_trials_used=11,
+        sfreq=20.0,
+        condition_a_predictor_values=np.linspace(0.0, 1.0, 12),
+        condition_b_predictor_values=np.linspace(0.0, 1.0, 11),
+        resolved_trials=[],
+        source_ieeg_files=[str(mock_file.path)],
+        source_table_files=[],
+        source_electrodes_files=[],
+        analysis_level="channel",
+        analysis_type="slope_regression",
+        predictor_metadata_key="predictor_value",
+        predictor_scaling="none",
+        p_value_correction_method="fdr_bh",
+        significance_alpha=0.05,
+        condition_a_stats_valid=True,
+        condition_b_stats_valid=True,
         stats_valid=True,
     )

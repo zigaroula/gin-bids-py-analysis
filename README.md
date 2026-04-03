@@ -4,6 +4,7 @@ BIDS-based iEEG analysis pipelines:
 - `hilbert` (band envelope extraction)
 - `delphos` (HFO/spike detection)
 - `trial_stats` (subject-level condition statistics)
+- `trial_slope_stats` (subject-level condition-specific slope regression)
 - `trial_stats_group` (group-level ROI statistics from `trial_stats`)
 
 ## Installation (venv, by OS)
@@ -103,7 +104,8 @@ out_paths = processor.run(files, writer, n_jobs=1)
 
 1. `hilbert` or `delphos` from raw iEEG (`scope="raw"`).
 2. `trial_stats` from chosen iEEG derivatives (often Hilbert BrainVision outputs).
-3. `trial_stats_group` from `trial_stats` outputs (`scope="trial_stats"`).
+3. `trial_slope_stats` from chosen iEEG derivatives when your analysis is `gamma ~ continuous_value`.
+4. `trial_stats_group` from `trial_stats` outputs (`scope="trial_stats"`).
 
 ## Pipeline Details and Configuration
 
@@ -221,7 +223,54 @@ Note for downstream `trial_stats_group`:
 - `trial_stats_group` requires channel-level `trial_stats` inputs.
 - If you plan to run group stats later, keep `atlas_name=None` in `trial_stats`.
 
-### 4) Trial Stats Group (group level ROI) (`scripts/run_trial_stats_group.py`)
+### 4) Trial Slope Stats (subject level) (`scripts/run_trial_slope_stats.py`)
+
+Run:
+
+```bash
+python scripts/run_trial_slope_stats.py
+```
+
+This pipeline computes, for each condition separately, a linear regression
+between epoched gamma activity and a continuous predictor value coming from TSV/CSV.
+
+Core configuration in `TrialSlopeStatsParams`
+(`src/gin_bids_py_analysis/processing/trial_slope_stats/params.py`):
+- Required:
+  - `anchor_event_codes`
+  - `tmin_s`, `tmax_s`
+  - `predictor_metadata_key` (metadata key carrying the numeric value)
+- Labels and minimum data:
+  - `condition_a`, `condition_b`
+  - `min_trials_per_condition` (default `3`)
+  - `drop_partial_epochs`
+- Statistical controls:
+  - `p_value_correction_method` (`none`, `fdr_bh`, `bonferroni`)
+  - `significance_alpha`
+  - `predictor_scaling` (`none` in V1)
+- Feature space and binning:
+  - same `atlas_name` / `atlas_regions` behavior as `trial_stats`
+  - same `window_ms` / `n_bins` mutual exclusivity
+
+Resolver configuration:
+- Use `TableTrialLabelResolver` as in `trial_stats`.
+- To inject the predictor from table columns into trial metadata, use:
+  - `extra_metadata_columns={"predictor_value": "<column_name>"}`.
+- Trials with missing/non-numeric predictor values are excluded and tagged
+  with `invalid_predictor_value`.
+
+Writer configuration (`TrialSlopeStatsWriterParams`):
+- `output_format`: `"hdf5"` or `"matlab"`
+- `include_epochs`: optional per-trial epoch arrays
+
+Outputs:
+- `*_stats.h5` or `*_stats.mat`
+- companion `*_trials.tsv` with predictor audit columns (`predictor_raw`, `predictor_value`)
+
+Current scope:
+- Subject-level only in V1 (no `trial_slope_stats_group` pipeline).
+
+### 5) Trial Stats Group (group level ROI) (`scripts/run_trial_stats_group.py`)
 
 Run:
 
@@ -258,7 +307,8 @@ There are two ways to visualize trial-stats results:
 
 1. Interactive UI:
    - Script: `scripts/visualize_trial_stats.py`
-   - Uses the same `TrialStatsParams` and optional `TrialStatsGroupParams`.
+   - Uses `TrialStatsParams` (ttest mode) or `TrialSlopeStatsParams` via `launch_slope(...)`.
+   - Group tab is available only in ttest mode.
    - Requires viz dependencies (`pip install -e ".[viz]"`).
 
 2. Static inspection:

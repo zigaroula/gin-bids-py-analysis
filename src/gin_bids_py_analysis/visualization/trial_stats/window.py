@@ -16,6 +16,13 @@ from PySide6.QtWidgets import (
 )
 
 from gin_bids_py_analysis.bids import BIDSFileGroup
+from gin_bids_py_analysis.processing.trial_slope_stats import (
+    TrialSlopeStatsParams,
+    TrialSlopeStatsProcessing,
+    TrialSlopeStatsProcessingResult,
+    TrialSlopeStatsProcessingWriter,
+    TrialSlopeStatsWriterParams,
+)
 from gin_bids_py_analysis.processing.trial_stats import (
     TrialLabelResolver,
     TrialStatsParams,
@@ -83,6 +90,8 @@ class TrialStatsWindow(QMainWindow):
         resolver: TrialLabelResolver,
         group_params: "TrialStatsGroupParams | None" = None,
         bids_root: Path | None = None,
+        default_slope_params: TrialSlopeStatsParams | None = None,
+        default_mode: str = "ttest",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -92,7 +101,7 @@ class TrialStatsWindow(QMainWindow):
         self._subject_groups = subject_groups
         self._resolver = resolver
         self._bids_root = bids_root
-        self._current_result: TrialStatsProcessingResult | None = None
+        self._current_result: TrialStatsProcessingResult | TrialSlopeStatsProcessingResult | None = None
         self._current_worker: ComputeAllWorker | None = None
         # Guard variable: only accept results whose generation matches this value
         self._compute_generation: int = 0
@@ -103,7 +112,8 @@ class TrialStatsWindow(QMainWindow):
         self._write_worker: WriteAllWorker | None = None
         self._write_group_worker: WriteGroupWorker | None = None
         # Accumulated per-subject results; unlocks Group tab when all are done
-        self._all_results: dict[str, TrialStatsProcessingResult] = {}
+        self._all_results: dict[str, TrialStatsProcessingResult | TrialSlopeStatsProcessingResult] = {}
+        self._analysis_mode = default_mode if default_mode in {"ttest", "slope"} else "ttest"
 
         subject_ids = sorted(subject_groups.keys())
 
@@ -112,7 +122,11 @@ class TrialStatsWindow(QMainWindow):
         # ------------------------------------------------------------------
         self._subject_panel = SubjectChannelPanel(subject_ids)
         self._plot_panel = PlotPanel()
-        self._params_panel = ParamsPanel(default_params)
+        self._params_panel = ParamsPanel(
+            default_params,
+            slope_params=default_slope_params,
+            default_mode=self._analysis_mode,
+        )
 
         subject_splitter = QSplitter(Qt.Orientation.Horizontal)
         subject_splitter.addWidget(self._subject_panel)
@@ -193,12 +207,12 @@ class TrialStatsWindow(QMainWindow):
             self._display_subject_result(subject_id, self._all_results[subject_id])
         else:
             try:
-                params = self._params_panel.get_params()
+                mode, params = self._params_panel.get_mode_and_params()
             except ValueError:
                 return
             self._all_results.clear()
             self._tabs.setTabEnabled(1, False)
-            self._start_compute_all(params=params)
+            self._start_compute_all(params=params, mode=mode)
 
     def _on_channel_changed(self, channel_idx: int) -> None:
         if self._current_result is not None and channel_idx >= 0:
@@ -206,13 +220,13 @@ class TrialStatsWindow(QMainWindow):
 
     def _on_compute_requested(self) -> None:
         try:
-            params = self._params_panel.get_params()
+            mode, params = self._params_panel.get_mode_and_params()
         except ValueError:
             return
         self._all_results.clear()
         self._params_panel.set_save_enabled(False)
         self._tabs.setTabEnabled(1, False)
-        self._start_compute_all(params=params)
+        self._start_compute_all(params=params, mode=mode)
 
     # ------------------------------------------------------------------
     # Pre-loading lifecycle
@@ -254,13 +268,17 @@ class TrialStatsWindow(QMainWindow):
 
     def _start_compute_all(
         self,
-        params: TrialStatsParams | None = None,
+        params: TrialStatsParams | TrialSlopeStatsParams | None = None,
+        mode: str | None = None,
     ) -> None:
         if params is None:
             try:
-                params = self._params_panel.get_params()
+                mode, params = self._params_panel.get_mode_and_params()
             except ValueError:
                 return
+        if mode is None:
+            mode = self._params_panel.analysis_mode
+        self._analysis_mode = mode if mode in {"ttest", "slope"} else "ttest"
 
         # Bump generation so any in-flight result from a previous run is discarded
         self._compute_generation += 1
@@ -285,8 +303,22 @@ class TrialStatsWindow(QMainWindow):
         )
 
         resolver = self._resolver
+        if self._analysis_mode == "slope":
+            processor_factory = (
+                lambda p: TrialSlopeStatsProcessing(
+                    p,  # type: ignore[arg-type]
+                    resolver=resolver,
+                )
+            )
+        else:
+            processor_factory = (
+                lambda p: TrialStatsProcessing(
+                    p,  # type: ignore[arg-type]
+                    resolver=resolver,
+                )
+            )
         worker = ComputeAllWorker(
-            processor_factory=lambda p: TrialStatsProcessing(p, resolver=resolver),
+            processor_factory=processor_factory,
             subject_groups=self._subject_groups,
             params=params,
             parent=self,
@@ -308,7 +340,7 @@ class TrialStatsWindow(QMainWindow):
     def _on_subject_done(
         self,
         subject_id: str,
-        result: TrialStatsProcessingResult,
+        result: TrialStatsProcessingResult | TrialSlopeStatsProcessingResult,
         generation: int,
     ) -> None:
         if generation != self._compute_generation:
@@ -322,7 +354,7 @@ class TrialStatsWindow(QMainWindow):
 
     def _on_all_done(
         self,
-        results: dict[str, TrialStatsProcessingResult],
+        results: dict[str, TrialStatsProcessingResult | TrialSlopeStatsProcessingResult],
         generation: int,
     ) -> None:
         if generation != self._compute_generation:
@@ -341,8 +373,13 @@ class TrialStatsWindow(QMainWindow):
         if current in results and self._current_result is not results.get(current):
             self._display_subject_result(current, results[current])
 
-        # Enable Group tab only when group_params is configured
-        if self._group_params is not None and n > 0:
+        # Enable Group tab only for classic t-test mode.
+        if self._analysis_mode == "slope":
+            self._tabs.setTabEnabled(1, False)
+            self._group_params_panel.set_status(
+                "Group tab disabled in slope mode (V1)."
+            )
+        elif self._group_params is not None and n > 0:
             self._tabs.setTabEnabled(1, True)
             self._group_params_panel.set_status(
                 f"{n} subject(s) ready — click 'Compute group stats'"
@@ -357,7 +394,7 @@ class TrialStatsWindow(QMainWindow):
     def _display_subject_result(
         self,
         subject_id: str,
-        result: TrialStatsProcessingResult,
+        result: TrialStatsProcessingResult | TrialSlopeStatsProcessingResult,
     ) -> None:
         """Update Subject tab plots for *result* (already in memory)."""
         self._current_result = result
@@ -372,7 +409,7 @@ class TrialStatsWindow(QMainWindow):
         self._subject_panel.set_channels(
             result.channel_names,
             restore_name=previous_channel,
-            channel_significant_mask=result.channel_significant_mask,
+            channel_significant_mask=getattr(result, "channel_significant_mask", None),
         )
         self._plot_panel.update_plots(result, self._subject_panel.current_channel_index)
 
@@ -381,6 +418,11 @@ class TrialStatsWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_group_compute_requested(self) -> None:
+        if self._analysis_mode == "slope":
+            self._group_params_panel.set_status(
+                "Group statistics are unavailable in slope mode (V1)."
+            )
+            return
         if not self._all_results:
             self._group_params_panel.set_status("No subject results available yet.")
             return
@@ -449,12 +491,27 @@ class TrialStatsWindow(QMainWindow):
             )
             return
 
-        dlg = SaveTrialStatsDialog(self._bids_root, parent=self)
+        default_pipeline_label = (
+            "trial_slope_stats" if self._analysis_mode == "slope" else "trial_stats"
+        )
+        default_output_description = (
+            "trialslopestats" if self._analysis_mode == "slope" else "trialstats"
+        )
+        dlg = SaveTrialStatsDialog(
+            self._bids_root,
+            parent=self,
+            default_pipeline_label=default_pipeline_label,
+            default_output_description=default_output_description,
+        )
         if dlg.exec() != SaveTrialStatsDialog.DialogCode.Accepted:
             return
 
-        writer_params = dlg.get_writer_params()
-        writer = TrialStatsProcessingWriter(writer_params)
+        if self._analysis_mode == "slope":
+            writer_params = TrialSlopeStatsWriterParams(**dlg.get_common_writer_kwargs())
+            writer = TrialSlopeStatsProcessingWriter(writer_params)
+        else:
+            writer_params = dlg.get_writer_params()
+            writer = TrialStatsProcessingWriter(writer_params)
 
         n = len(self._all_results)
         self._params_panel.set_save_enabled(False)

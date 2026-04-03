@@ -31,6 +31,9 @@ from PySide6.QtWidgets import (
 from gin_bids_py_analysis.processing.trial_stats import (
     TrialStatsProcessingResult,
 )
+from gin_bids_py_analysis.processing.trial_slope_stats import (
+    TrialSlopeStatsProcessingResult,
+)
 
 from .panels.group_params_panel import GroupParamsPanel
 from .panels.group_plot_panel import GroupPlotPanel
@@ -106,8 +109,8 @@ class TrialStatsPrecomputedWindow(QMainWindow):
         self._subject_files = subject_files
         self._group_file = group_file
         self._group_params = group_params
-        self._current_result: TrialStatsProcessingResult | None = None
-        self._all_results: dict[str, TrialStatsProcessingResult] = {}
+        self._current_result: TrialStatsProcessingResult | TrialSlopeStatsProcessingResult | None = None
+        self._all_results: dict[str, TrialStatsProcessingResult | TrialSlopeStatsProcessingResult] = {}
         self._group_result: "TrialStatsGroupProcessingResult | None" = None
         self._load_worker: LoadSubjectResultsWorker | None = None
         self._load_group_worker: LoadGroupResultWorker | None = None
@@ -207,7 +210,7 @@ class TrialStatsPrecomputedWindow(QMainWindow):
             self._display_subject_result(subject_id, result)
 
     def _on_all_loaded(
-        self, results: dict[str, TrialStatsProcessingResult]
+        self, results: dict[str, TrialStatsProcessingResult | TrialSlopeStatsProcessingResult]
     ) -> None:
         self._subject_panel.set_interactive(True)
         n = len(results)
@@ -217,7 +220,14 @@ class TrialStatsPrecomputedWindow(QMainWindow):
         if current in results and self._current_result is not results.get(current):
             self._display_subject_result(current, results[current])
 
-        # Enable Group tab when group_params or group_file provided
+        has_slope = any(_is_slope_result(result) for result in results.values())
+        # Enable Group tab when group_params or group_file provided (ttest only).
+        if has_slope:
+            self._tabs.setTabEnabled(1, False)
+            self._group_params_panel.set_status(
+                "Group tab disabled for slope precomputed files (V1)."
+            )
+            return
         if self._group_params is not None or self._group_file is not None:
             self._tabs.setTabEnabled(1, True)
             if self._group_file is not None:
@@ -235,7 +245,7 @@ class TrialStatsPrecomputedWindow(QMainWindow):
     def _display_subject_result(
         self,
         subject_id: str,
-        result: TrialStatsProcessingResult,
+        result: TrialStatsProcessingResult | TrialSlopeStatsProcessingResult,
     ) -> None:
         self._current_result = result
         n_ok = len(self._all_results)
@@ -295,6 +305,11 @@ class TrialStatsPrecomputedWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_group_compute_requested(self) -> None:
+        if any(_is_slope_result(result) for result in self._all_results.values()):
+            self._group_params_panel.set_status(
+                "Group statistics are unavailable in slope mode (V1)."
+            )
+            return
         if not self._all_results:
             self._group_params_panel.set_status("No subject results loaded yet.")
             return
@@ -372,3 +387,7 @@ class _LoadStatusPanel(QWidget):
     def set_status(self, message: str) -> None:
         """Update the status text."""
         self._status_label.setText(message)
+
+
+def _is_slope_result(result: object) -> bool:
+    return hasattr(result, "analysis_type") and getattr(result, "analysis_type", "") == "slope_regression"

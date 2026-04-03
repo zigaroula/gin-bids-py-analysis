@@ -1,0 +1,119 @@
+from __future__ import annotations
+
+from typing import Literal
+
+from mne.stats import bonferroni_correction, fdr_correction
+import numpy as np
+from scipy.stats import t as student_t
+
+
+def compute_linear_regression_maps(
+    predictor_values: np.ndarray,
+    epochs: np.ndarray,
+    *,
+    n_features: int,
+    n_times: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, bool]:
+    """Compute per-feature, per-time OLS maps for y ~ x.
+
+    Parameters
+    ----------
+    predictor_values:
+        Array of shape ``(n_trials,)``.
+    epochs:
+        Array of shape ``(n_trials, n_features, n_times)``.
+
+    Returns
+    -------
+    slope, intercept, r_value, p_value, stats_valid
+        Arrays are ``(n_features, n_times)``; all NaN when invalid.
+    """
+    empty = np.full((n_features, n_times), np.nan, dtype=np.float64)
+
+    x = np.asarray(predictor_values, dtype=np.float64).reshape(-1)
+    y = np.asarray(epochs, dtype=np.float64)
+    if y.ndim != 3:
+        raise ValueError("epochs must be 3-D (n_trials, n_features, n_times).")
+    if y.shape[0] != x.shape[0]:
+        raise ValueError(
+            f"predictor/epochs mismatch: {x.shape[0]} predictor values for {y.shape[0]} epochs."
+        )
+
+    finite_x = np.isfinite(x)
+    if not np.all(finite_x):
+        x = x[finite_x]
+        y = y[finite_x]
+
+    n_trials = int(x.shape[0])
+    if n_trials < 3:
+        return empty.copy(), empty.copy(), empty.copy(), empty.copy(), False
+
+    var_x = float(np.nanvar(x, ddof=1))
+    if not np.isfinite(var_x) or var_x <= 0.0:
+        return empty.copy(), empty.copy(), empty.copy(), empty.copy(), False
+
+    # Flatten feature x time so regression is computed in one vectorized pass.
+    y_flat = y.reshape(n_trials, -1)
+    x_mean = float(np.nanmean(x))
+    y_mean = np.nanmean(y_flat, axis=0, dtype=np.float64)
+
+    x_centered = x - x_mean
+    y_centered = y_flat - y_mean[np.newaxis, :]
+    cov = np.sum(x_centered[:, np.newaxis] * y_centered, axis=0, dtype=np.float64) / float(n_trials - 1)
+
+    slope_flat = cov / var_x
+    intercept_flat = y_mean - (slope_flat * x_mean)
+
+    var_y = np.nanvar(y_flat, axis=0, ddof=1, dtype=np.float64)
+    denom = np.sqrt(var_x * var_y)
+
+    r_flat = np.full_like(slope_flat, np.nan, dtype=np.float64)
+    corr_mask = np.isfinite(denom) & (denom > 0.0)
+    r_flat[corr_mask] = cov[corr_mask] / denom[corr_mask]
+    r_flat[corr_mask] = np.clip(r_flat[corr_mask], -1.0, 1.0)
+
+    p_flat = np.full_like(slope_flat, np.nan, dtype=np.float64)
+    df = float(n_trials - 2)
+    valid_t_mask = np.isfinite(r_flat) & (np.abs(r_flat) < 1.0)
+    if np.any(valid_t_mask):
+        t_values = r_flat[valid_t_mask] * np.sqrt(df / (1.0 - np.square(r_flat[valid_t_mask], dtype=np.float64)))
+        p_flat[valid_t_mask] = 2.0 * student_t.sf(np.abs(t_values), df)
+
+    perfect_mask = np.isfinite(r_flat) & (np.abs(r_flat) >= 1.0)
+    p_flat[perfect_mask] = 0.0
+
+    return (
+        slope_flat.reshape(n_features, n_times),
+        intercept_flat.reshape(n_features, n_times),
+        r_flat.reshape(n_features, n_times),
+        p_flat.reshape(n_features, n_times),
+        True,
+    )
+
+
+def correct_p_values(
+    p_values: np.ndarray,
+    *,
+    method: Literal["none", "fdr_bh", "bonferroni"] = "fdr_bh",
+) -> np.ndarray:
+    """Apply multiple-comparisons correction to p-values."""
+    corrected = np.asarray(p_values, dtype=np.float64).copy()
+    finite_mask = np.isfinite(corrected)
+    if not finite_mask.any() or method == "none":
+        return corrected
+
+    flat = corrected[finite_mask]
+    if method == "bonferroni":
+        _, corrected_flat = bonferroni_correction(flat, alpha=0.05)
+        corrected[finite_mask] = np.asarray(corrected_flat, dtype=np.float64)
+        return corrected
+
+    if method == "fdr_bh":
+        _, corrected_flat = fdr_correction(flat, alpha=0.05, method="indep")
+        corrected[finite_mask] = np.asarray(corrected_flat, dtype=np.float64)
+        return corrected
+
+    raise ValueError(
+        f"Unsupported p-value correction method: {method!r}. "
+        "Valid methods are 'none', 'fdr_bh', 'bonferroni'."
+    )
