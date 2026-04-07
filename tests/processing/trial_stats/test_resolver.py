@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialLabelResolver
+from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
 from gin_bids_py_analysis.processing.utils.events import AnnotationEvent
 
 
@@ -18,7 +20,7 @@ def _make_bids_file(path: Path, entities: dict[str, str]) -> BIDSFile:
     return BIDSFile(_MockPyBIDSFile(str(path), entities))
 
 
-def test_table_trial_label_resolver_joins_event_and_label_tables_by_trial_id(
+def test_table_trial_resolver_joins_event_and_label_tables_by_trial_id(
     tmp_path: Path,
 ) -> None:
     ieeg_file = _make_bids_file(
@@ -72,7 +74,7 @@ def test_table_trial_label_resolver_joins_event_and_label_tables_by_trial_id(
         },
     )
 
-    resolver = TableTrialLabelResolver(
+    resolver = TableTrialResolver(
         label_column="decision",
         label_map={"accept": "accepted", "reject": "rejected"},
         trial_id_column="trial_id",
@@ -95,7 +97,7 @@ def test_table_trial_label_resolver_joins_event_and_label_tables_by_trial_id(
     assert all(trial.keep for trial in resolved)
 
 
-def test_table_trial_label_resolver_falls_back_to_anchor_order(
+def test_table_trial_resolver_falls_back_to_anchor_order(
     tmp_path: Path,
 ) -> None:
     ieeg_file = _make_bids_file(
@@ -128,7 +130,7 @@ def test_table_trial_label_resolver_falls_back_to_anchor_order(
         },
     )
 
-    resolver = TableTrialLabelResolver(
+    resolver = TableTrialResolver(
         label_column="decision",
         label_map={"accept": "accepted", "reject": "rejected"},
     )
@@ -147,7 +149,7 @@ def test_table_trial_label_resolver_falls_back_to_anchor_order(
     assert all(trial.keep for trial in resolved)
 
 
-def test_table_trial_label_resolver_rejects_rows_with_task_mismatch(
+def test_table_trial_resolver_rejects_rows_with_task_mismatch(
     tmp_path: Path,
 ) -> None:
     ieeg_file = _make_bids_file(
@@ -178,7 +180,7 @@ def test_table_trial_label_resolver_rejects_rows_with_task_mismatch(
             "datatype": "ieeg",
         },
     )
-    resolver = TableTrialLabelResolver(
+    resolver = TableTrialResolver(
         label_column="decision",
         label_map={"accept": "accepted"},
     )
@@ -195,7 +197,7 @@ def test_table_trial_label_resolver_rejects_rows_with_task_mismatch(
     assert resolved[0].exclusion_reason == "no_matching_table_row"
 
 
-def test_table_trial_label_resolver_copies_extra_metadata_columns(
+def test_table_trial_resolver_copies_extract_columns(
     tmp_path: Path,
 ) -> None:
     ieeg_file = _make_bids_file(
@@ -228,10 +230,10 @@ def test_table_trial_label_resolver_copies_extra_metadata_columns(
         },
     )
 
-    resolver = TableTrialLabelResolver(
+    resolver = TableTrialResolver(
         label_column="decision",
         label_map={"accept": "accepted", "reject": "rejected"},
-        extra_metadata_columns={"predictor_value": "value_for_slope"},
+        extract_columns=["value_for_slope"],
     )
     anchor_events = [
         AnnotationEvent(1.0, 0.0, "Stimulus", "S  10", "10"),
@@ -245,5 +247,68 @@ def test_table_trial_label_resolver_copies_extra_metadata_columns(
     )
 
     assert [trial.label for trial in resolved] == ["accepted", "rejected"]
-    assert resolved[0].metadata["predictor_value"] == "1.5"
-    assert resolved[1].metadata["predictor_value"] == "2.75"
+    assert resolved[0].metadata["value_for_slope"] == "1.5"
+    assert resolved[1].metadata["value_for_slope"] == "2.75"
+
+
+def test_table_trial_resolver_rejects_non_list_extract_columns() -> None:
+    with pytest.raises(TypeError, match="extract_columns must be a list\\[str\\]"):
+        TableTrialResolver(
+            label_column="decision",
+            extract_columns={"rating": "rating"},  # type: ignore[arg-type]
+        )
+
+
+def test_table_trial_resolver_without_label_column_uses_anchor_rows(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    events_path = tmp_path / "sub-01_task-decid_run-1_events.tsv"
+    events_path.write_text(
+        "onset\tanchor_event_code\trating\n"
+        "1.0\t10\t1.5\n"
+        "2.0\t10\t2.5\n",
+        encoding="utf-8",
+    )
+    events_file = _make_bids_file(
+        events_path,
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "events",
+            "extension": ".tsv",
+            "datatype": "ieeg",
+        },
+    )
+    resolver = TableTrialResolver(
+        label_column=None,
+        extract_columns=["rating"],
+    )
+    anchor_events = [
+        AnnotationEvent(1.0, 0.0, "Stimulus", "S  10", "10"),
+        AnnotationEvent(2.0, 0.0, "Stimulus", "S  10", "10"),
+    ]
+
+    resolved = resolver.resolve_trials(
+        BIDSFileGroup(primary=ieeg_file, secondaries=[events_file]),
+        ieeg_file,
+        anchor_events,
+    )
+
+    assert [trial.label for trial in resolved] == [None, None]
+    assert [trial.keep for trial in resolved] == [False, False]
+    assert [trial.exclusion_reason for trial in resolved] == ["missing_label", "missing_label"]
+    assert [trial.metadata["rating"] for trial in resolved] == ["1.5", "2.5"]
+
+

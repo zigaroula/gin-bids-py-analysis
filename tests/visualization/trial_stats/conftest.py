@@ -115,7 +115,7 @@ def default_slope_params() -> TrialSlopeStatsParams:
         tmax_s=2.0,
         condition_a="accepted",
         condition_b="rejected",
-        predictor_metadata_key="predictor_value",
+        predictor="predictor_value",
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
     )
@@ -180,7 +180,7 @@ def synthetic_slope_result(default_slope_params: TrialSlopeStatsParams) -> Trial
         source_electrodes_files=[],
         analysis_level="channel",
         analysis_type="slope_regression",
-        predictor_metadata_key="predictor_value",
+        predictor="predictor_value",
         predictor_scaling="none",
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
@@ -188,3 +188,5 @@ def synthetic_slope_result(default_slope_params: TrialSlopeStatsParams) -> Trial
         condition_b_stats_valid=True,
         stats_valid=True,
     )
+
+

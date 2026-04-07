@@ -33,7 +33,7 @@ from gin_bids_py_analysis.processing.utils.statistics import (
     compute_condition_sem,
     correct_p_values,
 )
-from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialLabelResolver
+from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from .params import TrialStatsParams
 from .result import TrialStatsProcessingResult
@@ -53,7 +53,7 @@ class TrialStatsProcessing(BaseProcessing):
     def __init__(
         self,
         params: TrialStatsParams,
-        resolver: TrialLabelResolver,
+        resolver: TrialResolver,
     ) -> None:
         self.params = params
         self.resolver = resolver

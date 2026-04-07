@@ -92,9 +92,9 @@ class ParamsPanel(QWidget):
         form.addRow("Condition B", self._condition_b)
 
         # slope-specific predictor settings
-        self._predictor_key = QLineEdit()
-        self._predictor_key.setPlaceholderText("predictor_value")
-        form.addRow("Predictor key", self._predictor_key)
+        self._predictor = QLineEdit()
+        self._predictor.setPlaceholderText("predictor_value")
+        form.addRow("Predictor", self._predictor)
 
         self._predictor_scaling = QComboBox()
         self._predictor_scaling.addItem("none")
@@ -300,7 +300,7 @@ class ParamsPanel(QWidget):
                 condition_b=self._condition_b.text().strip(),
                 min_trials_per_condition=max(3, self._min_trials.value()),
                 drop_partial_epochs=self._drop_partial.isChecked(),
-                predictor_metadata_key=self._predictor_key.text().strip(),
+                predictor=self._predictor.text().strip(),
                 predictor_scaling=self._predictor_scaling.currentText(),
                 p_value_correction_method=self._correction.currentText(),
                 significance_alpha=self._alpha.value(),
@@ -351,7 +351,7 @@ class ParamsPanel(QWidget):
         self._condition_b.setText(params.condition_b)
         self._min_trials.setValue(max(3, params.min_trials_per_condition))
         self._drop_partial.setChecked(params.drop_partial_epochs)
-        self._predictor_key.setText(params.predictor_metadata_key)
+        self._predictor.setText(params.predictor)
         idx_scale = self._predictor_scaling.findText(params.predictor_scaling)
         if idx_scale >= 0:
             self._predictor_scaling.setCurrentIndex(idx_scale)
@@ -391,7 +391,7 @@ class ParamsPanel(QWidget):
 
     def _on_analysis_mode_changed(self, mode: str) -> None:
         is_slope = mode.strip().lower() == "slope"
-        self._set_form_row_visible(self._predictor_key, is_slope)
+        self._set_form_row_visible(self._predictor, is_slope)
         self._set_form_row_visible(self._predictor_scaling, is_slope)
         self._set_form_row_visible(self._equal_var, not is_slope)
         self._set_form_row_visible(self._sig_mode, not is_slope)
@@ -416,3 +416,5 @@ class ParamsPanel(QWidget):
         if label_widget is not None:
             label_widget.setVisible(visible)
         field_widget.setVisible(visible)
+
+

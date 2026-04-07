@@ -86,7 +86,7 @@ def _make_result(tmp_path: Path) -> TrialSlopeStatsProcessingResult:
         source_electrodes_files=[],
         analysis_level="channel",
         analysis_type="slope_regression",
-        predictor_metadata_key="predictor_value",
+        predictor="predictor_value",
         predictor_scaling="none",
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
@@ -120,7 +120,7 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
     loaded = load_trial_slope_stats_result(output_path)
     np.testing.assert_allclose(loaded.condition_a_slope, result.condition_a_slope)
     np.testing.assert_allclose(loaded.condition_b_p_value_corrected, result.condition_b_p_value_corrected)
-    assert loaded.predictor_metadata_key == "predictor_value"
+    assert loaded.predictor == "predictor_value"
 
 
 def test_writer_outputs_matlab(tmp_path: Path) -> None:
@@ -138,3 +138,5 @@ def test_writer_outputs_matlab(tmp_path: Path) -> None:
     data = mat["data"]
     assert str(data.meta.analysis_type) == "slope_regression"
     assert data.regression.condition_a.slope.shape == (2, 3)
+
+

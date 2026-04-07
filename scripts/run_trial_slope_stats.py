@@ -14,7 +14,7 @@ from gin_bids_py_analysis.processing.trial_slope_stats import (
     TrialSlopeStatsProcessingWriter,
     TrialSlopeStatsWriterParams,
 )
-from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialLabelResolver
+from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
 
 # ---------------------------------------------------------------------------
 # Parameters
@@ -39,21 +39,19 @@ PARAMS = TrialSlopeStatsParams(
     tmax_s=2.0,
     condition_a="accepted",
     condition_b="rejected",
-    predictor_metadata_key="predictor_value",
+    predictor="value_for_slope",
     p_value_correction_method="fdr_bh",
     significance_alpha=0.05,
 )
 
 # Update column names to match your dataset.
-RESOLVER = TableTrialLabelResolver(
+RESOLVER = TableTrialResolver(
     label_column="choice",
     label_map={
         "0": "rejected",
         "1": "accepted",
     },
-    extra_metadata_columns={
-        "predictor_value": "value_for_slope",
-    },
+    extract_columns=["value_for_slope"],
 )
 
 WRITER_PARAMS = TrialSlopeStatsWriterParams(
@@ -81,3 +79,5 @@ def main() -> list[Path]:
 
 if __name__ == "__main__":
     main()
+
+

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
 from gin_bids_py_analysis.processing.trial_stats import (
-    TableTrialLabelResolver,
+    TableTrialResolver,
     TrialStatsParams,
     TrialStatsProcessing,
     TrialStatsProcessingWriter,
@@ -51,7 +51,7 @@ PARAMS = TrialStatsParams(
 
 # This resolver is the task-specific layer for accepted vs rejected.
 # Update the column names and label map to match your dataset.
-RESOLVER = TableTrialLabelResolver(
+RESOLVER = TableTrialResolver(
     label_column="choice",
     label_map={
         "0": "rejected",
@@ -79,3 +79,4 @@ if __name__ == "__main__":
     out_paths = processor.run(groups, writer, n_jobs=N_JOBS)
     for path in out_paths:
         print(f"Wrote {path}")
+

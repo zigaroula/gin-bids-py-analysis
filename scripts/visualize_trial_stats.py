@@ -12,7 +12,7 @@ from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
 from gin_bids_py_analysis.processing.trial_stats import (
-    TableTrialLabelResolver,
+    TableTrialResolver,
     TrialStatsParams,
 )
 from gin_bids_py_analysis.processing.trial_stats_group import TrialStatsGroupParams
@@ -51,7 +51,7 @@ PARAMS = TrialStatsParams(
 )
 
 # Update the column names and label map to match your dataset.
-RESOLVER = TableTrialLabelResolver(
+RESOLVER = TableTrialResolver(
     label_column="choice",
     label_map={
         "0": "rejected",
@@ -113,3 +113,4 @@ if __name__ == "__main__":
     subject_groups = _build_subject_groups(ds)
     print(f"Found {len(subject_groups)} subject(s).")
     launch(subject_groups, PARAMS, RESOLVER, group_params=GROUP_PARAMS, bids_root=BIDS_ROOT)
+

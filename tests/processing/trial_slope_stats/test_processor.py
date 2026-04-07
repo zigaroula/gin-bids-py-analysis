@@ -103,7 +103,7 @@ def test_process_group_computes_condition_slopes(tmp_path: Path) -> None:
             tmax_s=0.2,
             condition_a="accepted",
             condition_b="rejected",
-            predictor_metadata_key="predictor_value",
+            predictor="predictor_value",
             min_trials_per_condition=3,
             p_value_correction_method="none",
         ),
@@ -154,7 +154,7 @@ def test_process_group_excludes_invalid_predictor_trials(tmp_path: Path) -> None
             tmax_s=0.2,
             condition_a="accepted",
             condition_b="rejected",
-            predictor_metadata_key="predictor_value",
+            predictor="predictor_value",
             min_trials_per_condition=3,
             p_value_correction_method="none",
         ),
@@ -167,3 +167,5 @@ def test_process_group_excludes_invalid_predictor_trials(tmp_path: Path) -> None
     assert result.condition_a_trial_count == 2
     assert result.condition_a_stats_valid is False
     assert any(trial.exclusion_reason == "invalid_predictor_value" for trial in result.resolved_trials)
+
+

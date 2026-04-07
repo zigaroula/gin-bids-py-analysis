@@ -40,10 +40,12 @@ def test_params_rejects_window_ms_and_n_bins_together() -> None:
 
 
 def test_params_rejects_empty_predictor_key() -> None:
-    with pytest.raises(ValueError, match="predictor_metadata_key"):
+    with pytest.raises(ValueError, match="predictor"):
         TrialSlopeStatsParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=1.0,
-            predictor_metadata_key="   ",
+            predictor="   ",
         )
+
+

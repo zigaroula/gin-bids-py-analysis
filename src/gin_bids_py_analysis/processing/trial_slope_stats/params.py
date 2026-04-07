@@ -35,10 +35,10 @@ class TrialSlopeStatsParams(BaseProcessingParams):
         default=True,
         description="When True, exclude epochs that would extend outside recording bounds.",
     )
-    predictor_metadata_key: str = Field(
+    predictor: str = Field(
         default="predictor_value",
         description=(
-            "Resolved-trial metadata key containing the continuous predictor value used in "
+            "Resolved-trial key containing the continuous predictor value used in "
             "the per-condition regression."
         ),
     )
@@ -111,10 +111,10 @@ class TrialSlopeStatsParams(BaseProcessingParams):
             raise ValueError("tmax_s must be greater than tmin_s.")
         if self.condition_a == self.condition_b:
             raise ValueError("condition_a and condition_b must be different.")
-        predictor_key = self.predictor_metadata_key.strip()
+        predictor_key = self.predictor.strip()
         if not predictor_key:
-            raise ValueError("predictor_metadata_key must be a non-empty string.")
-        self.predictor_metadata_key = predictor_key
+            raise ValueError("predictor must be a non-empty string.")
+        self.predictor = predictor_key
         if self.atlas_name is not None:
             self.atlas_name = self.atlas_name.strip() or None
         if self.atlas_regions and not self.atlas_name:
@@ -148,3 +148,5 @@ class TrialSlopeStatsWriterParams(BaseWriterParams):
             "addition to summary and regression statistics."
         ),
     )
+
+

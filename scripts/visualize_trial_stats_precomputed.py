@@ -12,7 +12,7 @@ from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
 from gin_bids_py_analysis.processing.trial_stats import (
-    TableTrialLabelResolver,
+    TableTrialResolver,
     TrialStatsParams,
 )
 from gin_bids_py_analysis.processing.trial_stats_group import TrialStatsGroupParams
@@ -97,3 +97,4 @@ if __name__ == "__main__":
         group_stats_file=group_stats_file,
         group_params=GROUP_PARAMS,
     )
+

@@ -126,4 +126,6 @@ class TestParamsPanelRoundTrip:
         mode, params = panel.get_mode_and_params()
         assert mode == "slope"
         assert isinstance(params, TrialSlopeStatsParams)
-        assert params.predictor_metadata_key == default_slope_params.predictor_metadata_key
+        assert params.predictor == default_slope_params.predictor
+
+

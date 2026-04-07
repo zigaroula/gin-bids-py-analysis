@@ -56,7 +56,7 @@ class TrialSlopeStatsProcessingResult(BaseProcessingResult):
     window_ms: float = 0.0
     n_bins: int = 0
 
-    predictor_metadata_key: str = "predictor_value"
+    predictor: str = "predictor_value"
     predictor_scaling: str = "none"
     p_value_correction_method: str = "fdr_bh"
     significance_alpha: float = 0.05
@@ -70,3 +70,5 @@ class TrialSlopeStatsProcessingResult(BaseProcessingResult):
 
     condition_b_epochs: np.ndarray = field(default_factory=lambda: np.array([]))
     """Individual trial epochs for condition B (n_trials, n_channels, n_times)."""
+
+

@@ -26,7 +26,7 @@ from gin_bids_py_analysis.processing.utils.statistics import (
     compute_condition_sem,
     correct_p_values,
 )
-from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialLabelResolver
+from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from .params import TrialSlopeStatsParams
 from .result import TrialSlopeStatsProcessingResult
@@ -39,7 +39,7 @@ class TrialSlopeStatsProcessing(BaseProcessing):
     def __init__(
         self,
         params: TrialSlopeStatsParams,
-        resolver: TrialLabelResolver,
+        resolver: TrialResolver,
     ) -> None:
         self.params = params
         self.resolver = resolver
@@ -323,7 +323,7 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 "tmax_s": self.params.tmax_s,
                 "min_trials_per_condition": self.params.min_trials_per_condition,
                 "drop_partial_epochs": self.params.drop_partial_epochs,
-                "predictor_metadata_key": self.params.predictor_metadata_key,
+                "predictor": self.params.predictor,
                 "predictor_scaling": self.params.predictor_scaling,
                 "p_value_correction_method": self.params.p_value_correction_method,
                 "significance_alpha": self.params.significance_alpha,
@@ -376,7 +376,7 @@ class TrialSlopeStatsProcessing(BaseProcessing):
             region_channels=region_channels,
             window_ms=self.params.window_ms,
             n_bins=self.params.n_bins,
-            predictor_metadata_key=self.params.predictor_metadata_key,
+            predictor=self.params.predictor,
             predictor_scaling=self.params.predictor_scaling,
             p_value_correction_method=self.params.p_value_correction_method,
             significance_alpha=self.params.significance_alpha,
@@ -393,7 +393,7 @@ class TrialSlopeStatsProcessing(BaseProcessing):
     ) -> list[ResolvedTrial]:
         normalized: list[ResolvedTrial] = []
         supported_labels = {self.params.condition_a, self.params.condition_b}
-        predictor_key = self.params.predictor_metadata_key
+        predictor_key = self.params.predictor
         for trial in trials:
             metadata = dict(trial.metadata)
             raw_predictor = metadata.get(predictor_key)
@@ -457,4 +457,6 @@ def _to_float_or_nan(value: object) -> float:
     except ValueError:
         return float("nan")
     return out if np.isfinite(out) else float("nan")
+
+
 

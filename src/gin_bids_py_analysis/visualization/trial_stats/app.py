@@ -11,7 +11,7 @@ if TYPE_CHECKING:
         TrialSlopeStatsParams,
     )
     from gin_bids_py_analysis.processing.trial_stats import (
-        TrialLabelResolver,
+        TrialResolver,
         TrialStatsParams,
     )
     from gin_bids_py_analysis.processing.trial_stats_group.params import (
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 def launch(
     subject_groups: dict[str, "BIDSFileGroup"],
     params: "TrialStatsParams",
-    resolver: "TrialLabelResolver",
+    resolver: "TrialResolver",
     group_params: "TrialStatsGroupParams | None" = None,
     bids_root: Path | None = None,
 ) -> None:
@@ -38,7 +38,7 @@ def launch(
     params:
         Default ``TrialStatsParams`` to pre-populate the parameters panel.
     resolver:
-        The ``TrialLabelResolver`` configured for this dataset.
+        The ``TrialResolver`` configured for this dataset.
     group_params:
         Optional ``TrialStatsGroupParams``.  When provided the Group tab is
         enabled after all subjects have been computed.
@@ -69,7 +69,7 @@ def launch(
 def launch_slope(
     subject_groups: dict[str, "BIDSFileGroup"],
     params: "TrialSlopeStatsParams",
-    resolver: "TrialLabelResolver",
+    resolver: "TrialResolver",
     bids_root: Path | None = None,
 ) -> None:
     """Launch the trial statistics visualization window in slope mode."""

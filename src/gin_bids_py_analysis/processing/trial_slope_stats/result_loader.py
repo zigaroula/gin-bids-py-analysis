@@ -125,7 +125,7 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
         )
 
         sfreq = float_scalar(dataset_or_none(fh, "meta/sampling_frequency_hz"), default=0.0)
-        predictor_metadata_key = str_scalar(dataset_or_none(fh, "meta/predictor_metadata_key"), default="predictor_value")
+        predictor = str_scalar(dataset_or_none(fh, "meta/predictor"), default="")
         predictor_scaling = str_scalar(dataset_or_none(fh, "meta/predictor_scaling"), default="none")
         p_value_correction_method = str_scalar(dataset_or_none(fh, "meta/p_value_correction_method"), default="fdr_bh")
         significance_alpha = float_scalar(dataset_or_none(fh, "meta/significance_alpha"), default=0.05)
@@ -209,7 +209,7 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
         region_channels=region_channels,
         window_ms=window_ms,
         n_bins=n_bins,
-        predictor_metadata_key=predictor_metadata_key,
+        predictor=predictor,
         predictor_scaling=predictor_scaling,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,
@@ -315,7 +315,7 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
     condition_b_trial_count = int(counts[1]) if len(counts) >= 2 else 0
 
     sfreq = mat_float(getattr(meta, "sampling_frequency_hz", None), default=0.0)
-    predictor_metadata_key = mat_str(getattr(meta, "predictor_metadata_key", None), default="predictor_value")
+    predictor = mat_str(getattr(meta, "predictor", None), default="")
     predictor_scaling = mat_str(getattr(meta, "predictor_scaling", None), default="none")
     p_value_correction_method = mat_str(getattr(meta, "p_value_correction_method", None), default="fdr_bh")
     significance_alpha = mat_float(getattr(meta, "significance_alpha", None), default=0.05)
@@ -372,7 +372,7 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
         region_channels={},
         window_ms=window_ms,
         n_bins=n_bins,
-        predictor_metadata_key=predictor_metadata_key,
+        predictor=predictor,
         predictor_scaling=predictor_scaling,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,

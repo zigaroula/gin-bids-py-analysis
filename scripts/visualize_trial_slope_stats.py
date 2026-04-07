@@ -12,7 +12,7 @@ from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
 from gin_bids_py_analysis.processing.trial_slope_stats import TrialSlopeStatsParams
-from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialLabelResolver
+from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
 from gin_bids_py_analysis.visualization.trial_stats import launch_slope
 
 BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
@@ -34,20 +34,18 @@ PARAMS = TrialSlopeStatsParams(
     tmax_s=6.0,
     condition_a="pleasant",
     condition_b="unpleasant",
-    predictor_metadata_key="rating",
+    predictor="rating",
     p_value_correction_method="none",
     significance_alpha=0.05,
 )
 
-RESOLVER = TableTrialLabelResolver(
+RESOLVER = TableTrialResolver(
     label_column="pleasant",
     label_map={
         "1.0": "unpleasant",
         "2.0": "pleasant",
     },
-    extra_metadata_columns={
-        "rating": "rating",
-    },
+    extract_columns=["rating"],
 )
 
 
@@ -61,3 +59,5 @@ if __name__ == "__main__":
     subject_groups = _build_subject_groups(ds)
     print(f"Found {len(subject_groups)} subject(s).")
     launch_slope(subject_groups, PARAMS, RESOLVER, bids_root=BIDS_ROOT)
+
+

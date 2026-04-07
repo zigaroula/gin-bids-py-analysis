@@ -24,7 +24,7 @@ from gin_bids_py_analysis.processing.trial_slope_stats import (
     TrialSlopeStatsWriterParams,
 )
 from gin_bids_py_analysis.processing.trial_stats import (
-    TrialLabelResolver,
+    TrialResolver,
     TrialStatsParams,
     TrialStatsProcessing,
     TrialStatsProcessingResult,
@@ -74,7 +74,7 @@ class TrialStatsWindow(QMainWindow):
     default_params:
         Initial ``TrialStatsParams`` to pre-populate the parameters panel.
     resolver:
-        The ``TrialLabelResolver`` configured for this dataset.
+        The ``TrialResolver`` configured for this dataset.
     group_params:
         Optional ``TrialStatsGroupParams``.  When ``None`` the Group tab is
         visible but permanently disabled.
@@ -87,7 +87,7 @@ class TrialStatsWindow(QMainWindow):
         self,
         subject_groups: dict[str, BIDSFileGroup],
         default_params: TrialStatsParams,
-        resolver: TrialLabelResolver,
+        resolver: TrialResolver,
         group_params: "TrialStatsGroupParams | None" = None,
         bids_root: Path | None = None,
         default_slope_params: TrialSlopeStatsParams | None = None,

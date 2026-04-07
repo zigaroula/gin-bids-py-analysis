@@ -1,13 +1,15 @@
-"""Trial-label resolution utilities shared across processing pipelines.
+"""Trial resolution utilities shared across processing pipelines.
 
-Provides the ``TrialLabelResolver`` protocol and a table-driven implementation
-(``TableTrialLabelResolver``) that matches iEEG anchor events to trial labels
+Provides the ``TrialResolver`` protocol and a table-driven implementation
+(``TableTrialResolver``) that matches iEEG anchor events to trial labels
 read from TSV/CSV secondary files carried in a ``BIDSFileGroup``.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Protocol, Sequence
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
@@ -43,7 +45,7 @@ class ResolvedTrial:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-class TrialLabelResolver(Protocol):
+class TrialResolver(Protocol):
     """Interface for task-specific mapping from anchor events to trial labels."""
 
     def resolve_trials(
@@ -69,48 +71,107 @@ class _TrialRow:
     metadata: dict[str, Any]
 
 
-class TableTrialLabelResolver:
-    """Resolve trials from TSV/CSV tables carried in the BIDSFileGroup.
+class TableTrialResolver(BaseModel):
+    """Resolve trials from TSV/CSV tables carried in the BIDSFileGroup."""
 
-    Parameters
-    ----------
-    extra_metadata_columns:
-        Optional mapping ``output_key -> column_name``. Values found in the
-        label row (fallback event row) are copied into each resolved trial's
-        ``metadata`` dictionary under ``output_key``.
-    """
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
-    def __init__(
-        self,
-        *,
-        label_column: str,  # Required column that carries the trial label.
-        label_map: dict[str, str] | None = None,
-        extra_metadata_columns: dict[str, str] | None = None,
-        trial_id_column: str = "trial_id",
-        anchor_onset_column: str | None = "onset",
-        anchor_event_code_column: str | None = "anchor_event_code",
-        anchor_event_order_column: str | None = "anchor_event_order",
-        keep_column: str | None = None,
-        exclusion_reason_column: str | None = None,
-        onset_tolerance_s: float = 1e-3,  # Max allowed onset difference (s) for onset-based matching.
-    ) -> None:
-        self.label_column = label_column
-        self.label_map = {
-            str(k).strip().casefold(): str(v).strip()
-            for k, v in (label_map or {}).items()
-        }
-        self.extra_metadata_columns = {
-            str(output_key).strip(): str(column_name).strip()
-            for output_key, column_name in (extra_metadata_columns or {}).items()
-            if str(output_key).strip() and str(column_name).strip()
-        }
-        self.trial_id_column = trial_id_column
-        self.anchor_onset_column = anchor_onset_column
-        self.anchor_event_code_column = anchor_event_code_column
-        self.anchor_event_order_column = anchor_event_order_column
-        self.keep_column = keep_column
-        self.exclusion_reason_column = exclusion_reason_column
-        self.onset_tolerance_s = onset_tolerance_s
+    label_column: str | None = Field(
+        default=None,
+        description=(
+            "Column that carries trial labels. When unset, the resolver builds trials from "
+            "anchor rows only and leaves labels unset."
+        ),
+    )
+    label_map: dict[str, str] = Field(
+        default_factory=dict,
+        description="Optional mapping used to canonicalize label values (case-insensitive keys).",
+    )
+    extract_columns: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional list of column names copied into resolved trial metadata. Values are read "
+            "from label rows with event-row fallback."
+        ),
+    )
+    trial_id_column: str | None = Field(
+        default="trial_id",
+        description="Optional trial identifier column used to join event and label rows.",
+    )
+    anchor_onset_column: str | None = Field(
+        default="onset",
+        description="Optional anchor onset column used for onset-based matching.",
+    )
+    anchor_event_code_column: str | None = Field(
+        default="anchor_event_code",
+        description="Optional anchor event code column used to constrain row/event pairing.",
+    )
+    anchor_event_order_column: str | None = Field(
+        default="anchor_event_order",
+        description="Optional anchor order column used for deterministic fallback ordering.",
+    )
+    keep_column: str | None = Field(
+        default=None,
+        description="Optional keep flag column. Falsey values mark a trial as excluded.",
+    )
+    exclusion_reason_column: str | None = Field(
+        default=None,
+        description="Optional column carrying exclusion reasons.",
+    )
+    onset_tolerance_s: float = Field(
+        default=1e-3,
+        ge=0.0,
+        description="Maximum onset mismatch (seconds) accepted for onset-based row matching.",
+    )
+
+    @field_validator(
+        "label_column",
+        "trial_id_column",
+        "anchor_onset_column",
+        "anchor_event_code_column",
+        "anchor_event_order_column",
+        "keep_column",
+        "exclusion_reason_column",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_optional_columns(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned or None
+
+    @field_validator("label_map", mode="before")
+    @classmethod
+    def _normalize_label_map(cls, value: object) -> dict[str, str]:
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            raise TypeError("label_map must be a dict[str, str].")
+        normalized: dict[str, str] = {}
+        for raw_key, raw_val in value.items():
+            key = str(raw_key).strip().casefold()
+            mapped = str(raw_val).strip()
+            if key and mapped:
+                normalized[key] = mapped
+        return normalized
+
+    @field_validator("extract_columns", mode="before")
+    @classmethod
+    def _normalize_extract_columns(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise TypeError("extract_columns must be a list[str].")
+        normalized: list[str] = []
+        seen_columns: set[str] = set()
+        for raw_name in value:
+            cleaned = str(raw_name).strip()
+            if not cleaned or cleaned in seen_columns:
+                continue
+            seen_columns.add(cleaned)
+            normalized.append(cleaned)
+        return normalized
 
     def resolve_trials(
         self,
@@ -136,10 +197,21 @@ class TableTrialLabelResolver:
         """Convert raw table rows into ``_TrialRow`` objects, choosing the best available strategy.
 
         Strategy priority:
+        0. No ``label_column`` configured: use anchor rows directly and leave labels unset.
         1. Rows that have both a label *and* anchor information (self-contained).
         2. Separate event rows joined to label rows via trial_id or positional order.
         3. Label-only rows (no anchor info available in the table at all).
         """
+        if self.label_column is None:
+            anchor_rows = [row for row in rows if self._has_anchor_info(row)]
+            if not anchor_rows:
+                return []
+            ordered_anchor_rows = self._sort_rows(anchor_rows)
+            return [
+                self._make_trial_row(event_row=row, label_row=None)
+                for row in ordered_anchor_rows
+            ]
+
         labeled_rows = [row for row in rows if row_value(row, self.label_column)]
         if not labeled_rows:
             return []
@@ -330,7 +402,7 @@ class TableTrialLabelResolver:
         self,
         *,
         event_row: LoadedTableRow | None,
-        label_row: LoadedTableRow,
+        label_row: LoadedTableRow | None,
     ) -> _TrialRow:
         """Build a ``_TrialRow`` by merging anchor info from *event_row* and label from *label_row*.
 
@@ -353,17 +425,19 @@ class TableTrialLabelResolver:
         if event_row is not None:
             keep = keep and self._keep_value(event_row)
 
-        metadata: dict[str, Any] = {
-            "label_source_path": str(label_row.file.path),
-            "label_row_index": label_row.row_index,
-            "label_raw": row_value(label_row, self.label_column) or "",
-        }
-        for output_key, column_name in self.extra_metadata_columns.items():
+        metadata: dict[str, Any] = {}
+        if label_row is not None:
+            metadata["label_source_path"] = str(label_row.file.path)
+            metadata["label_row_index"] = label_row.row_index
+            metadata["label_raw"] = row_value(label_row, self.label_column) or ""
+        else:
+            metadata["label_raw"] = ""
+        for column_name in self.extract_columns:
             value = row_value(label_row, column_name)
             if value is None or value == "":
                 value = row_value(event_row, column_name)
             if value is not None:
-                metadata[output_key] = value
+                metadata[column_name] = value
         if event_row is not None:
             metadata["event_source_path"] = str(event_row.file.path)
             metadata["event_row_index"] = event_row.row_index
@@ -419,3 +493,5 @@ class TableTrialLabelResolver:
                 row.row_index,
             ),
         )
+
+

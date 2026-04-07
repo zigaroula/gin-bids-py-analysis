@@ -114,8 +114,8 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
             meta_grp = fh.create_group("meta")
             meta_grp.create_dataset("analysis_type", data="slope_regression", dtype=str_dtype)
             meta_grp.create_dataset(
-                "predictor_metadata_key",
-                data=str(result.predictor_metadata_key),
+                "predictor",
+                data=str(result.predictor),
                 dtype=str_dtype,
             )
             meta_grp.create_dataset(
@@ -354,7 +354,7 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
 
         meta_struct = make_struct(
             analysis_type=np.str_("slope_regression"),
-            predictor_metadata_key=np.str_(result.predictor_metadata_key),
+            predictor=np.str_(result.predictor),
             predictor_scaling=np.str_(result.predictor_scaling),
             trial_counts=np.array(
                 [result.condition_a_trial_count, result.condition_b_trial_count],
@@ -536,3 +536,5 @@ def _to_float_or_nan(value: object) -> float:
     except (TypeError, ValueError):
         return float("nan")
     return out if np.isfinite(out) else float("nan")
+
+
