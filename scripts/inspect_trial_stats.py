@@ -22,14 +22,14 @@ import h5py
 import numpy as np
 
 
-DEFAULT_BIDS_ROOT = Path(r"E:\CBT\bids")
+DEFAULT_BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
 DEFAULT_STATS_GLOB = "derivatives/**/*_stats.h5"
 
 # ---------------------------------------------------------------------------
 # Display options — toggle these to control which figure panels are rendered.
 # ---------------------------------------------------------------------------
 SHOW_HEATMAP = True        # difference heatmap (multi-bin mode)
-SHOW_BAR_CHART = False     # condition-means bar chart (single-bin mode)
+SHOW_BAR_CHART = True      # condition-means bar chart (single-bin mode)
 SHOW_TABLE = False         # per-channel/region statistics table
 SHOW_PARAMS_PANEL = False  # metadata text box (right side of figure)
 HEATMAP_ROW_HEIGHT_PX = 20  # pixel height per channel/region row in the heatmap

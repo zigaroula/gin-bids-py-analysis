@@ -226,6 +226,11 @@ def select_channels_for_montage(
                 for idx, name in enumerate(channel_names)
                 if pattern.fullmatch(name)
             ]
+            if not indices:
+                raise ValueError(
+                    f"{selector_name} pattern did not match any input channels: "
+                    f"{selector!r}"
+                )
             return indices
 
         if not selector:

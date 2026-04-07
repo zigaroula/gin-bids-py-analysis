@@ -195,7 +195,7 @@ def test_run_creates_dataset_description(mock_bids_file: BIDSFile, tmp_path: Pat
     assert desc["Name"] == "dummy"
     assert desc["BIDSVersion"] == "1.11.1"
     assert desc["DatasetType"] == "derivative"
-    assert desc["GeneratedBy"][0]["Name"] == "gin-bids-py-analysis"
+    assert desc["GeneratedBy"][0]["Name"] == "dummy"
     assert "Version" in desc["GeneratedBy"][0]
 
 

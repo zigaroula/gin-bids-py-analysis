@@ -317,9 +317,6 @@ class PlotPanel(QWidget):
         ax.fill_between(t, mean_a - sem_a, mean_a + sem_a, alpha=0.25, color="steelblue")
         ax.plot(t, mean_b, color="tomato", label=condition_b)
         ax.fill_between(t, mean_b - sem_b, mean_b + sem_b, alpha=0.25, color="tomato")
-        all_means = np.concatenate([mean_a, mean_b])
-        if np.nanmin(all_means) < 0 < np.nanmax(all_means):
-            ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
         ax.set_ylabel("Amplitude")
         ax.set_title(

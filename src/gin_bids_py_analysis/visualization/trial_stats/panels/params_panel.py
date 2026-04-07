@@ -218,9 +218,14 @@ class ParamsPanel(QWidget):
             window_ms=params.window_ms,
             n_bins=params.n_bins,
         )
-        self.set_slope_params(self._slope_params)
+        self._predictor.setText(self._slope_params.predictor)
+        idx_scale = self._predictor_scaling.findText(self._slope_params.predictor_scaling)
+        if idx_scale >= 0:
+            self._predictor_scaling.setCurrentIndex(idx_scale)
         if default_mode not in {"ttest", "slope"}:
             default_mode = "ttest"
+        if default_mode == "slope":
+            self.set_slope_params(self._slope_params)
         self._analysis_mode.setCurrentText(default_mode)
         self._on_analysis_mode_changed(self._analysis_mode.currentText())
 

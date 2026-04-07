@@ -20,7 +20,7 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResol
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\CBT\bids")
+BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
 
 IEEG_FILTERS = {
     "suffix": "ieeg",
@@ -34,30 +34,29 @@ SECONDARY_FILTERS = [
 ]
 
 PARAMS = TrialSlopeStatsParams(
-    anchor_event_codes=["10"],
-    tmin_s=-2.0,
-    tmax_s=2.0,
-    condition_a="accepted",
-    condition_b="rejected",
-    predictor="value_for_slope",
-    p_value_correction_method="fdr_bh",
+    anchor_event_codes=["11", "12"],
+    tmin_s=-1.0,
+    tmax_s=6.0,
+    condition_a="pleasant",
+    condition_b="unpleasant",
+    predictor="rating",
+    p_value_correction_method="none",
     significance_alpha=0.05,
 )
 
-# Update column names to match your dataset.
 RESOLVER = TableTrialResolver(
-    label_column="choice",
+    label_column="pleasant",
     label_map={
-        "0": "rejected",
-        "1": "accepted",
+        "1.0": "unpleasant",
+        "2.0": "pleasant",
     },
-    extract_columns=["value_for_slope"],
+    extract_columns=["rating"],
 )
 
 WRITER_PARAMS = TrialSlopeStatsWriterParams(
     bids_root=BIDS_ROOT,
     output_format="hdf5",
-    output_description="simple",
+    output_description="correlation",
 )
 
 N_JOBS = 1

@@ -20,7 +20,10 @@ from pathlib import Path
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.hilbert.params import HilbertWriterParams
+from gin_bids_py_analysis.processing.hilbert.params import (
+    HilbertWriterParams,
+    NormalizationMode,
+)
 from gin_bids_py_analysis.processing.hilbert.result import HilbertProcessingResult
 from gin_bids_py_analysis.processing.hilbert.writer import HilbertProcessingWriter
 
@@ -79,7 +82,12 @@ def _make_result(
         downsampled_fs=64.0,
         original_fs=1000.0,
         original_events=original_events,
-        metadata={"unit": "percent", "montage_mode": "mono", "centered": False},
+        metadata={
+            "unit": NormalizationMode.PERCENT.unit,
+            "scale_factor": NormalizationMode.PERCENT.scale_factor,
+            "montage_mode": "mono",
+            "centered": False,
+        },
     )
 
 
@@ -192,7 +200,11 @@ class TestHdf5Regression:
 
 
 class TestBrainVisionUnit:
-    def _make_result_with_unit(self, tmp_path: Path, unit: str) -> HilbertProcessingResult:
+    def _make_result_with_unit(
+        self,
+        tmp_path: Path,
+        normalization_mode: NormalizationMode,
+    ) -> HilbertProcessingResult:
         rng = np.random.default_rng(seed=42)
         smoothed = {0: rng.standard_normal((2, 50)).astype(np.float32)}
         source_file = _make_bids_file(str(tmp_path / "dummy.nii"))
@@ -204,23 +216,28 @@ class TestBrainVisionUnit:
             downsampled_fs=64.0,
             original_fs=1000.0,
             original_events=None,
-            metadata={"unit": unit, "montage_mode": "mono", "centered": False},
+            metadata={
+                "unit": normalization_mode.unit,
+                "scale_factor": normalization_mode.scale_factor,
+                "montage_mode": "mono",
+                "centered": normalization_mode.is_centered,
+            },
         )
 
     def test_percent_unit_written_in_vhdr(self, tmp_path: Path) -> None:
-        result = self._make_result_with_unit(tmp_path, "percent")
+        result = self._make_result_with_unit(tmp_path, NormalizationMode.PERCENT)
         _bv_writer(tmp_path).write(result)
         vhdr = next((tmp_path / "derivatives" / "hilbert").rglob("*.vhdr"))
         assert "%" in vhdr.read_text(encoding="utf-8")
 
     def test_db_unit_written_in_vhdr(self, tmp_path: Path) -> None:
-        result = self._make_result_with_unit(tmp_path, "dB")
+        result = self._make_result_with_unit(tmp_path, NormalizationMode.DB)
         _bv_writer(tmp_path).write(result)
         vhdr = next((tmp_path / "derivatives" / "hilbert").rglob("*.vhdr"))
         assert "dB" in vhdr.read_text(encoding="utf-8")
 
     def test_amplitude_unit_written_as_microvolt_in_vhdr(self, tmp_path: Path) -> None:
-        result = self._make_result_with_unit(tmp_path, "amplitude")
+        result = self._make_result_with_unit(tmp_path, NormalizationMode.NONE)
         _bv_writer(tmp_path).write(result)
         vhdr = next((tmp_path / "derivatives" / "hilbert").rglob("*.vhdr"))
         assert "µV" in vhdr.read_text(encoding="utf-8")

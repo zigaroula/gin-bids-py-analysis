@@ -491,25 +491,25 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
                 dtype=str_dtype,
             )
 
-        if result.condition_a_epochs.ndim == 3 and self.params.include_epochs:
-            epochs_grp = fh.create_group("epochs")
-            epochs_grp.create_dataset(
-                "condition_a",
-                data=result.condition_a_epochs.astype(np.float64),
-            )
-            epochs_grp.create_dataset(
-                "condition_b",
-                data=result.condition_b_epochs.astype(np.float64),
-            )
-            epochs_grp.create_dataset(
-                "channel",
-                data=np.array(result.channel_names, dtype=object),
-                dtype=str_dtype,
-            )
-            epochs_grp.create_dataset(
-                "time_s",
-                data=result.time_axis_s.astype(np.float64),
-            )
+            if result.condition_a_epochs.ndim == 3 and self.params.include_epochs:
+                epochs_grp = fh.create_group("epochs")
+                epochs_grp.create_dataset(
+                    "condition_a",
+                    data=result.condition_a_epochs.astype(np.float64),
+                )
+                epochs_grp.create_dataset(
+                    "condition_b",
+                    data=result.condition_b_epochs.astype(np.float64),
+                )
+                epochs_grp.create_dataset(
+                    "channel",
+                    data=np.array(result.channel_names, dtype=object),
+                    dtype=str_dtype,
+                )
+                epochs_grp.create_dataset(
+                    "time_s",
+                    data=result.time_axis_s.astype(np.float64),
+                )
 
             prov_grp = fh.create_group("provenance")
             prov_grp.create_dataset(
