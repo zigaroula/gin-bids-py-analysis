@@ -54,28 +54,24 @@ def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> TrialSlope
             "n_bins": 0,
             "effective_n_bins": n_t,
         },
-        condition_a_slope_t_values=np.full(shape, 2.0, dtype=np.float64),
-        condition_a_slope_p_values=np.full(shape, 0.02, dtype=np.float64),
-        condition_a_slope_p_values_uncorrected=np.full(shape, 0.02, dtype=np.float64),
-        condition_a_slope_significant_mask=np.ones(shape, dtype=bool),
+        slope_t_values=np.full(shape, 2.0, dtype=np.float64),
+        slope_p_values=np.full(shape, 0.02, dtype=np.float64),
+        slope_p_values_uncorrected=np.full(shape, 0.02, dtype=np.float64),
+        slope_significant_mask=np.ones(shape, dtype=bool),
         condition_a_slope_mean=np.full(shape, 1.5, dtype=np.float64),
         condition_a_slope_sem=np.full(shape, 0.3, dtype=np.float64),
-        condition_a_epoch_slope_t=np.full(n_rois, 3.0, dtype=np.float64),
-        condition_a_epoch_slope_p=np.full(n_rois, 0.01, dtype=np.float64),
-        condition_a_epoch_slope_df=np.full(n_rois, 4.0, dtype=np.float64),
-        condition_a_epoch_slope_mean=np.full(n_rois, 1.5, dtype=np.float64),
-        condition_a_epoch_slope_sem=np.full(n_rois, 0.25, dtype=np.float64),
-        condition_b_slope_t_values=np.full(shape, -2.0, dtype=np.float64),
-        condition_b_slope_p_values=np.full(shape, 0.04, dtype=np.float64),
-        condition_b_slope_p_values_uncorrected=np.full(shape, 0.04, dtype=np.float64),
-        condition_b_slope_significant_mask=np.zeros(shape, dtype=bool),
         condition_b_slope_mean=np.full(shape, -1.5, dtype=np.float64),
         condition_b_slope_sem=np.full(shape, 0.3, dtype=np.float64),
-        condition_b_epoch_slope_t=np.full(n_rois, -2.5, dtype=np.float64),
-        condition_b_epoch_slope_p=np.full(n_rois, 0.05, dtype=np.float64),
-        condition_b_epoch_slope_df=np.full(n_rois, 4.0, dtype=np.float64),
-        condition_b_epoch_slope_mean=np.full(n_rois, -1.5, dtype=np.float64),
-        condition_b_epoch_slope_sem=np.full(n_rois, 0.25, dtype=np.float64),
+        epoch_slope_t=np.full(n_rois, 3.0, dtype=np.float64),
+        epoch_slope_p=np.full(n_rois, 0.01, dtype=np.float64),
+        epoch_slope_df=np.full(n_rois, 4.0, dtype=np.float64),
+        activity_t_values=np.full(shape, 1.5, dtype=np.float64),
+        activity_p_values=np.full(shape, 0.05, dtype=np.float64),
+        activity_p_values_uncorrected=np.full(shape, 0.05, dtype=np.float64),
+        activity_significant_mask=np.zeros(shape, dtype=bool),
+        epoch_activity_t=np.full(n_rois, 1.2, dtype=np.float64),
+        epoch_activity_p=np.full(n_rois, 0.1, dtype=np.float64),
+        epoch_activity_df=np.full(n_rois, 3.0, dtype=np.float64),
         condition_a_activity_mean=np.full(shape, 2.0, dtype=np.float64),
         condition_a_activity_sem=np.full(shape, 0.2, dtype=np.float64),
         condition_b_activity_mean=np.full(shape, 1.0, dtype=np.float64),
@@ -128,13 +124,15 @@ def test_writer_hdf5_schema_and_path() -> None:
 
         with h5py.File(out_path, "r") as fh:
             assert "regression" in fh
-            assert "condition_a" in fh["regression"]
-            assert "condition_b" in fh["regression"]
-            assert "t_values" in fh["regression"]["condition_a"]
-            assert "p_values" in fh["regression"]["condition_a"]
-            assert "significant_mask" in fh["regression"]["condition_a"]
-            assert "slope_mean" in fh["regression"]["condition_a"]
-            assert "epoch_summary" in fh["regression"]["condition_a"]
+            assert "t_values" in fh["regression"]
+            assert "p_values" in fh["regression"]
+            assert "significant_mask" in fh["regression"]
+            assert "slope_mean_a" in fh["regression"]
+            assert "epoch_summary" in fh["regression"]
+            assert "activity" in fh
+            assert "t_values" in fh["activity"]
+            assert "p_values" in fh["activity"]
+            assert "epoch_summary" in fh["activity"]
             assert "means" in fh
             assert "condition_a_mean" in fh["means"]
             assert "condition_b_mean" in fh["means"]
@@ -149,8 +147,8 @@ def test_writer_hdf5_schema_and_path() -> None:
             assert "contribution_samples" in fh
             assert "provenance" in fh
 
-            assert fh["regression"]["condition_a"]["t_values"].shape == (1, 2)
-            assert fh["regression"]["condition_a"]["epoch_summary"]["t"].shape == (1,)
+            assert fh["regression"]["t_values"].shape == (1, 2)
+            assert fh["regression"]["epoch_summary"]["t"].shape == (1,)
             assert list(fh["axes"]["region"].asstr()[:]) == ["ROI_0"]
             assert fh["meta"]["roi_mode"].asstr()[()] == "manual"
             assert list(fh["excluded_rois"]["name"].asstr()[:]) == ["ROI_BAD"]
@@ -175,8 +173,8 @@ def test_writer_hdf5_roundtrip_via_loader() -> None:
 
         assert loaded.region_names == result.region_names
         assert len(loaded.time_axis_s) == 3
-        np.testing.assert_allclose(loaded.condition_a_slope_t_values, result.condition_a_slope_t_values)
-        np.testing.assert_allclose(loaded.condition_b_slope_t_values, result.condition_b_slope_t_values)
+        np.testing.assert_allclose(loaded.slope_t_values, result.slope_t_values)
+        np.testing.assert_allclose(loaded.activity_t_values, result.activity_t_values)
         np.testing.assert_allclose(loaded.condition_a_activity_mean, result.condition_a_activity_mean)
         np.testing.assert_allclose(loaded.condition_b_r_value_mean, result.condition_b_r_value_mean)
         assert loaded.p_value_correction_method == "none"

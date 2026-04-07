@@ -96,44 +96,39 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
                 return np.zeros(n_rois, dtype=np.int64)
             return np.asarray(ds[:], dtype=np.int64).ravel()
 
-        # --- regression (per condition) ---
-        def _read_sig(key: str, p_key: str) -> np.ndarray:
-            ds = dataset_or_none(fh, key)
-            if ds is None:
-                p = _read_2d(p_key, fill=1.0)
-                return np.isfinite(p) & (p < significance_alpha)
-            loaded = np.asarray(ds[:], dtype=bool)
-            if loaded.shape == (n_rois, n_t):
-                return loaded
-            p = _read_2d(p_key, fill=1.0)
-            return np.isfinite(p) & (p < significance_alpha)
+        # --- regression (condition_a vs condition_b slope comparison) ---
+        slope_t = _read_2d("regression/t_values")
+        slope_p = _read_2d("regression/p_values", fill=1.0)
+        slope_p_uncorr = _read_2d("regression/p_values_uncorrected", fill=1.0)
+        slope_sig_ds = dataset_or_none(fh, "regression/significant_mask")
+        if slope_sig_ds is not None:
+            loaded = np.asarray(slope_sig_ds[:], dtype=bool)
+            slope_sig = loaded if loaded.shape == (n_rois, n_t) else np.isfinite(slope_p) & (slope_p < significance_alpha)
+        else:
+            slope_sig = np.isfinite(slope_p) & (slope_p < significance_alpha)
+        ca_slope_mean = _read_2d("regression/slope_mean_a")
+        ca_slope_sem = _read_2d("regression/slope_sem_a")
+        cb_slope_mean = _read_2d("regression/slope_mean_b")
+        cb_slope_sem = _read_2d("regression/slope_sem_b")
 
-        ca_t = _read_2d("regression/condition_a/t_values")
-        ca_p = _read_2d("regression/condition_a/p_values", fill=1.0)
-        ca_p_uncorr = _read_2d("regression/condition_a/p_values_uncorrected", fill=1.0)
-        ca_sig = _read_sig("regression/condition_a/significant_mask", "regression/condition_a/p_values")
-        ca_slope_mean = _read_2d("regression/condition_a/slope_mean")
-        ca_slope_sem = _read_2d("regression/condition_a/slope_sem")
+        ep_slope_t = _read_1d("regression/epoch_summary/t")
+        ep_slope_p = _read_1d("regression/epoch_summary/p", fill=1.0)
+        ep_slope_df = _read_1d("regression/epoch_summary/df")
 
-        cb_t = _read_2d("regression/condition_b/t_values")
-        cb_p = _read_2d("regression/condition_b/p_values", fill=1.0)
-        cb_p_uncorr = _read_2d("regression/condition_b/p_values_uncorrected", fill=1.0)
-        cb_sig = _read_sig("regression/condition_b/significant_mask", "regression/condition_b/p_values")
-        cb_slope_mean = _read_2d("regression/condition_b/slope_mean")
-        cb_slope_sem = _read_2d("regression/condition_b/slope_sem")
+        # --- activity (condition_a vs condition_b activity comparison) ---
+        activity_t = _read_2d("activity/t_values")
+        activity_p = _read_2d("activity/p_values", fill=1.0)
+        activity_p_uncorr = _read_2d("activity/p_values_uncorrected", fill=1.0)
+        activity_sig_ds = dataset_or_none(fh, "activity/significant_mask")
+        if activity_sig_ds is not None:
+            loaded = np.asarray(activity_sig_ds[:], dtype=bool)
+            activity_sig = loaded if loaded.shape == (n_rois, n_t) else np.isfinite(activity_p) & (activity_p < significance_alpha)
+        else:
+            activity_sig = np.isfinite(activity_p) & (activity_p < significance_alpha)
 
-        # epoch summaries
-        ca_ep_t = _read_1d("regression/condition_a/epoch_summary/t")
-        ca_ep_p = _read_1d("regression/condition_a/epoch_summary/p", fill=1.0)
-        ca_ep_df = _read_1d("regression/condition_a/epoch_summary/df")
-        ca_ep_mean = _read_1d("regression/condition_a/epoch_summary/mean")
-        ca_ep_sem = _read_1d("regression/condition_a/epoch_summary/sem")
-
-        cb_ep_t = _read_1d("regression/condition_b/epoch_summary/t")
-        cb_ep_p = _read_1d("regression/condition_b/epoch_summary/p", fill=1.0)
-        cb_ep_df = _read_1d("regression/condition_b/epoch_summary/df")
-        cb_ep_mean = _read_1d("regression/condition_b/epoch_summary/mean")
-        cb_ep_sem = _read_1d("regression/condition_b/epoch_summary/sem")
+        ep_activity_t = _read_1d("activity/epoch_summary/t")
+        ep_activity_p = _read_1d("activity/epoch_summary/p", fill=1.0)
+        ep_activity_df = _read_1d("activity/epoch_summary/df")
 
         # --- means (activity) ---
         ca_act_mean = _read_2d("means/condition_a_mean")
@@ -253,6 +248,38 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
                     activity_b_contribs.append(ab)
                     contrib_labels.append(lbl)
 
+        # --- scatter data (per-ROI predictor vs epoch-mean-activity) ---
+        scatter_pred_a: list[np.ndarray] = []
+        scatter_act_a: list[np.ndarray] = []
+        scatter_pred_b: list[np.ndarray] = []
+        scatter_act_b: list[np.ndarray] = []
+        if "scatter_data" in fh:
+            sd_grp = fh["scatter_data"]
+            for roi_idx in range(n_rois):
+                roi_key = str(roi_idx)
+                if roi_key in sd_grp:
+                    rg = sd_grp[roi_key]
+                    scatter_pred_a.append(
+                        np.asarray(rg["condition_a_predictor"][:], dtype=np.float64)
+                        if "condition_a_predictor" in rg
+                        else np.empty(0, dtype=np.float64)
+                    )
+                    scatter_act_a.append(
+                        np.asarray(rg["condition_a_activity"][:], dtype=np.float64)
+                        if "condition_a_activity" in rg
+                        else np.empty(0, dtype=np.float64)
+                    )
+                    scatter_pred_b.append(
+                        np.asarray(rg["condition_b_predictor"][:], dtype=np.float64)
+                        if "condition_b_predictor" in rg
+                        else np.empty(0, dtype=np.float64)
+                    )
+                    scatter_act_b.append(
+                        np.asarray(rg["condition_b_activity"][:], dtype=np.float64)
+                        if "condition_b_activity" in rg
+                        else np.empty(0, dtype=np.float64)
+                    )
+
         # --- provenance ---
         source_trial_slope_stats_files: list[str] = []
         source_electrodes_files: list[str] = []
@@ -271,28 +298,24 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
     return TrialSlopeStatsGroupProcessingResult(
         source_group=source_group,
         metadata=metadata,
-        condition_a_slope_t_values=ca_t,
-        condition_a_slope_p_values=ca_p,
-        condition_a_slope_p_values_uncorrected=ca_p_uncorr,
-        condition_a_slope_significant_mask=ca_sig,
+        slope_t_values=slope_t,
+        slope_p_values=slope_p,
+        slope_p_values_uncorrected=slope_p_uncorr,
+        slope_significant_mask=slope_sig,
+        activity_t_values=activity_t,
+        activity_p_values=activity_p,
+        activity_p_values_uncorrected=activity_p_uncorr,
+        activity_significant_mask=activity_sig,
         condition_a_slope_mean=ca_slope_mean,
         condition_a_slope_sem=ca_slope_sem,
-        condition_a_epoch_slope_t=ca_ep_t,
-        condition_a_epoch_slope_p=ca_ep_p,
-        condition_a_epoch_slope_df=ca_ep_df,
-        condition_a_epoch_slope_mean=ca_ep_mean,
-        condition_a_epoch_slope_sem=ca_ep_sem,
-        condition_b_slope_t_values=cb_t,
-        condition_b_slope_p_values=cb_p,
-        condition_b_slope_p_values_uncorrected=cb_p_uncorr,
-        condition_b_slope_significant_mask=cb_sig,
         condition_b_slope_mean=cb_slope_mean,
         condition_b_slope_sem=cb_slope_sem,
-        condition_b_epoch_slope_t=cb_ep_t,
-        condition_b_epoch_slope_p=cb_ep_p,
-        condition_b_epoch_slope_df=cb_ep_df,
-        condition_b_epoch_slope_mean=cb_ep_mean,
-        condition_b_epoch_slope_sem=cb_ep_sem,
+        epoch_slope_t=ep_slope_t,
+        epoch_slope_p=ep_slope_p,
+        epoch_slope_df=ep_slope_df,
+        epoch_activity_t=ep_activity_t,
+        epoch_activity_p=ep_activity_p,
+        epoch_activity_df=ep_activity_df,
         condition_a_activity_mean=ca_act_mean,
         condition_a_activity_sem=ca_act_sem,
         condition_b_activity_mean=cb_act_mean,
@@ -319,6 +342,10 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         source_trial_slope_stats_files=source_trial_slope_stats_files,
         source_electrodes_files=source_electrodes_files,
         excluded_rois=excluded_rois,
+        condition_a_scatter_predictor=scatter_pred_a,
+        condition_a_scatter_activity=scatter_act_a,
+        condition_b_scatter_predictor=scatter_pred_b,
+        condition_b_scatter_activity=scatter_act_b,
     )
 
 
@@ -339,6 +366,7 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
     data = mat["data"]
     axes = data.axes
     regression = data.regression
+    activity_raw = getattr(data, "activity", None)
     means = data.means
     r_values = getattr(data, "r_values", None)
     meta = data.meta
@@ -373,47 +401,41 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
             return np.zeros(n_rois, dtype=np.int64)
         return np.asarray(raw, dtype=np.int64).ravel()
 
-    # regression condition_a
-    cond_a_reg = getattr(regression, "condition_a", None)
-    cond_b_reg = getattr(regression, "condition_b", None)
-    ca_ep = getattr(cond_a_reg, "epoch_summary", None) if cond_a_reg is not None else None
-    cb_ep = getattr(cond_b_reg, "epoch_summary", None) if cond_b_reg is not None else None
-
     significance_alpha = mat_float(getattr(meta, "significance_alpha", None), default=0.05)
 
-    ca_t = _mat_2d(cond_a_reg, "t_values")
-    ca_p = _mat_2d(cond_a_reg, "p_values", fill=1.0)
-    ca_p_uncorr = _mat_2d(cond_a_reg, "p_values_uncorrected", fill=1.0)
-    sig_raw_a = getattr(cond_a_reg, "significant_mask", None) if cond_a_reg is not None else None
-    ca_sig = (
-        np.asarray(sig_raw_a, dtype=bool).reshape(n_rois, n_t)
-        if sig_raw_a is not None
-        else np.isfinite(ca_p) & (ca_p < significance_alpha)
+    # regression (condition_a vs condition_b slope comparison)
+    ep_reg = getattr(regression, "epoch_summary", None) if regression is not None else None
+    slope_t = _mat_2d(regression, "t_values")
+    slope_p = _mat_2d(regression, "p_values", fill=1.0)
+    slope_p_uncorr = _mat_2d(regression, "p_values_uncorrected", fill=1.0)
+    sig_raw = getattr(regression, "significant_mask", None) if regression is not None else None
+    slope_sig = (
+        np.asarray(sig_raw, dtype=bool).reshape(n_rois, n_t)
+        if sig_raw is not None
+        else np.isfinite(slope_p) & (slope_p < significance_alpha)
     )
-    ca_slope_mean = _mat_2d(cond_a_reg, "slope_mean")
-    ca_slope_sem = _mat_2d(cond_a_reg, "slope_sem")
-    ca_ep_t = _mat_1d(ca_ep, "t")
-    ca_ep_p = _mat_1d(ca_ep, "p", fill=1.0)
-    ca_ep_df = _mat_1d(ca_ep, "df")
-    ca_ep_mean = _mat_1d(ca_ep, "mean")
-    ca_ep_sem = _mat_1d(ca_ep, "sem")
+    ca_slope_mean = _mat_2d(regression, "slope_mean_a")
+    ca_slope_sem = _mat_2d(regression, "slope_sem_a")
+    cb_slope_mean = _mat_2d(regression, "slope_mean_b")
+    cb_slope_sem = _mat_2d(regression, "slope_sem_b")
+    ep_slope_t = _mat_1d(ep_reg, "t")
+    ep_slope_p = _mat_1d(ep_reg, "p", fill=1.0)
+    ep_slope_df = _mat_1d(ep_reg, "df")
 
-    cb_t = _mat_2d(cond_b_reg, "t_values")
-    cb_p = _mat_2d(cond_b_reg, "p_values", fill=1.0)
-    cb_p_uncorr = _mat_2d(cond_b_reg, "p_values_uncorrected", fill=1.0)
-    sig_raw_b = getattr(cond_b_reg, "significant_mask", None) if cond_b_reg is not None else None
-    cb_sig = (
-        np.asarray(sig_raw_b, dtype=bool).reshape(n_rois, n_t)
-        if sig_raw_b is not None
-        else np.isfinite(cb_p) & (cb_p < significance_alpha)
+    # activity (condition_a vs condition_b activity comparison)
+    ep_act = getattr(activity_raw, "epoch_summary", None) if activity_raw is not None else None
+    activity_t = _mat_2d(activity_raw, "t_values")
+    activity_p = _mat_2d(activity_raw, "p_values", fill=1.0)
+    activity_p_uncorr = _mat_2d(activity_raw, "p_values_uncorrected", fill=1.0)
+    sig_raw_act = getattr(activity_raw, "significant_mask", None) if activity_raw is not None else None
+    activity_sig = (
+        np.asarray(sig_raw_act, dtype=bool).reshape(n_rois, n_t)
+        if sig_raw_act is not None
+        else np.isfinite(activity_p) & (activity_p < significance_alpha)
     )
-    cb_slope_mean = _mat_2d(cond_b_reg, "slope_mean")
-    cb_slope_sem = _mat_2d(cond_b_reg, "slope_sem")
-    cb_ep_t = _mat_1d(cb_ep, "t")
-    cb_ep_p = _mat_1d(cb_ep, "p", fill=1.0)
-    cb_ep_df = _mat_1d(cb_ep, "df")
-    cb_ep_mean = _mat_1d(cb_ep, "mean")
-    cb_ep_sem = _mat_1d(cb_ep, "sem")
+    ep_activity_t = _mat_1d(ep_act, "t")
+    ep_activity_p = _mat_1d(ep_act, "p", fill=1.0)
+    ep_activity_df = _mat_1d(ep_act, "df")
 
     # means
     ca_act_mean = _mat_2d(means, "condition_a_mean")
@@ -515,6 +537,34 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
             for i in range(min(n_rois, len(cell))):
                 contrib_labels.append(mat_str_list(cell[i]))
 
+    # scatter data (per-ROI scatter from condition_a/b predictor vs epoch means)
+    scatter_pred_a_m: list[np.ndarray] = []
+    scatter_act_a_m: list[np.ndarray] = []
+    scatter_pred_b_m: list[np.ndarray] = []
+    scatter_act_b_m: list[np.ndarray] = []
+    scatter_raw = getattr(data, "scatter_data", None)
+    if scatter_raw is not None:
+        cap_raw = getattr(scatter_raw, "condition_a_predictor", None)
+        caa_raw = getattr(scatter_raw, "condition_a_activity", None)
+        cbp_raw = getattr(scatter_raw, "condition_b_predictor", None)
+        cba_raw = getattr(scatter_raw, "condition_b_activity", None)
+        if cap_raw is not None:
+            cell: np.ndarray = np.asarray(cap_raw).ravel()
+            for i in range(min(n_rois, len(cell))):
+                scatter_pred_a_m.append(np.asarray(cell[i], dtype=np.float64).ravel())
+        if caa_raw is not None:
+            cell = np.asarray(caa_raw).ravel()
+            for i in range(min(n_rois, len(cell))):
+                scatter_act_a_m.append(np.asarray(cell[i], dtype=np.float64).ravel())
+        if cbp_raw is not None:
+            cell = np.asarray(cbp_raw).ravel()
+            for i in range(min(n_rois, len(cell))):
+                scatter_pred_b_m.append(np.asarray(cell[i], dtype=np.float64).ravel())
+        if cba_raw is not None:
+            cell = np.asarray(cba_raw).ravel()
+            for i in range(min(n_rois, len(cell))):
+                scatter_act_b_m.append(np.asarray(cell[i], dtype=np.float64).ravel())
+
     # provenance
     source_trial_slope_stats_files: list[str] = []
     source_electrodes_files: list[str] = []
@@ -530,28 +580,24 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
     return TrialSlopeStatsGroupProcessingResult(
         source_group=source_group,
         metadata=metadata,
-        condition_a_slope_t_values=ca_t,
-        condition_a_slope_p_values=ca_p,
-        condition_a_slope_p_values_uncorrected=ca_p_uncorr,
-        condition_a_slope_significant_mask=ca_sig,
+        slope_t_values=slope_t,
+        slope_p_values=slope_p,
+        slope_p_values_uncorrected=slope_p_uncorr,
+        slope_significant_mask=slope_sig,
+        activity_t_values=activity_t,
+        activity_p_values=activity_p,
+        activity_p_values_uncorrected=activity_p_uncorr,
+        activity_significant_mask=activity_sig,
         condition_a_slope_mean=ca_slope_mean,
         condition_a_slope_sem=ca_slope_sem,
-        condition_a_epoch_slope_t=ca_ep_t,
-        condition_a_epoch_slope_p=ca_ep_p,
-        condition_a_epoch_slope_df=ca_ep_df,
-        condition_a_epoch_slope_mean=ca_ep_mean,
-        condition_a_epoch_slope_sem=ca_ep_sem,
-        condition_b_slope_t_values=cb_t,
-        condition_b_slope_p_values=cb_p,
-        condition_b_slope_p_values_uncorrected=cb_p_uncorr,
-        condition_b_slope_significant_mask=cb_sig,
         condition_b_slope_mean=cb_slope_mean,
         condition_b_slope_sem=cb_slope_sem,
-        condition_b_epoch_slope_t=cb_ep_t,
-        condition_b_epoch_slope_p=cb_ep_p,
-        condition_b_epoch_slope_df=cb_ep_df,
-        condition_b_epoch_slope_mean=cb_ep_mean,
-        condition_b_epoch_slope_sem=cb_ep_sem,
+        epoch_slope_t=ep_slope_t,
+        epoch_slope_p=ep_slope_p,
+        epoch_slope_df=ep_slope_df,
+        epoch_activity_t=ep_activity_t,
+        epoch_activity_p=ep_activity_p,
+        epoch_activity_df=ep_activity_df,
         condition_a_activity_mean=ca_act_mean,
         condition_a_activity_sem=ca_act_sem,
         condition_b_activity_mean=cb_act_mean,
@@ -578,4 +624,8 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         source_trial_slope_stats_files=source_trial_slope_stats_files,
         source_electrodes_files=source_electrodes_files,
         excluded_rois=excluded_rois,
+        condition_a_scatter_predictor=scatter_pred_a_m,
+        condition_a_scatter_activity=scatter_act_a_m,
+        condition_b_scatter_predictor=scatter_pred_b_m,
+        condition_b_scatter_activity=scatter_act_b_m,
     )

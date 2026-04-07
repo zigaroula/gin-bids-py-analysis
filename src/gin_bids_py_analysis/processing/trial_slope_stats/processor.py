@@ -136,6 +136,8 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 anchor_events, anchor_samples = extract_anchor_events_with_mne(
                     raw,
                     anchor_codes=anchor_codes,
+                    experiment_start_event_code=self.params.experiment_start_event_code,
+                    experiment_end_event_code=self.params.experiment_end_event_code,
                 )
                 resolved_trials = self.resolver.resolve_trials(group, ieeg_file, anchor_events)
                 if len(resolved_trials) != len(anchor_events):
@@ -319,6 +321,8 @@ class TrialSlopeStatsProcessing(BaseProcessing):
             metadata={
                 "analysis_type": "slope_regression",
                 "anchor_event_codes": list(self.params.anchor_event_codes),
+                "experiment_start_event_code": self.params.experiment_start_event_code,
+                "experiment_end_event_code": self.params.experiment_end_event_code,
                 "tmin_s": self.params.tmin_s,
                 "tmax_s": self.params.tmax_s,
                 "min_trials_per_condition": self.params.min_trials_per_condition,
@@ -385,6 +389,16 @@ class TrialSlopeStatsProcessing(BaseProcessing):
             stats_valid=bool(condition_a_stats_valid or condition_b_stats_valid),
             condition_a_epochs=epochs_a_array,
             condition_b_epochs=epochs_b_array,
+            condition_a_epoch_means=(
+                epochs_a_array.mean(axis=2).T.astype(np.float64)
+                if epochs_a_array.ndim == 3 and epochs_a_array.size > 0
+                else np.empty((len(feature_names), 0), dtype=np.float64)
+            ),
+            condition_b_epoch_means=(
+                epochs_b_array.mean(axis=2).T.astype(np.float64)
+                if epochs_b_array.ndim == 3 and epochs_b_array.size > 0
+                else np.empty((len(feature_names), 0), dtype=np.float64)
+            ),
         )
 
     def _normalize_trials_for_slope(

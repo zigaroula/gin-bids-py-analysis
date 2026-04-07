@@ -749,3 +749,155 @@ def test_process_group_channel_significance_mode_duration(
     assert result.channel_significant_mask[0] is np.bool_(True)
     assert result.channel_significant_mask[1] is np.bool_(False)
 
+
+def test_process_group_experiment_start_code_filters_early_anchors(
+    tmp_path: Path,
+) -> None:
+    """Anchors at or before the start-code onset are excluded from trial resolution."""
+    sfreq = 10.0
+    ch_names = ["A1"]
+    # Events: two anchors before/at start (t=1,2 → excluded), start at t=2 (same sample as t=2
+    # anchor → anchor excluded), then four anchors after start (t=3,4,5,6 → 2 accepted + 2 rejected).
+    data = np.zeros((1, 80), dtype=np.float32)
+
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    annotations = Annotations(
+        onset=[1.0, 2.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        duration=[0.0] * 7,
+        description=[
+            "Stimulus/S  10",  # t=1 excluded (before start)
+            "Stimulus/S  1",   # t=2 start marker
+            "Stimulus/S  10",  # t=2 excluded (at start)
+            "Stimulus/S  10",  # t=3 accepted
+            "Stimulus/S  10",  # t=4 rejected
+            "Stimulus/S  10",  # t=5 accepted
+            "Stimulus/S  10",  # t=6 rejected
+        ],
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    class _ExperimentBoundaryResolver:
+        def resolve_trials(self, group, ieeg_file, anchor_events):
+            del group
+            labels = ["accepted", "rejected", "accepted", "rejected"]
+            return [
+                ResolvedTrial(
+                    source_file=ieeg_file,
+                    anchor_event_index=i,
+                    anchor_event_code=ev.code,
+                    anchor_onset_s=ev.onset_s,
+                    anchor_duration_s=ev.duration_s,
+                    label=labels[i],
+                )
+                for i, ev in enumerate(anchor_events)
+            ]
+
+    processor = TrialStatsProcessing(
+        TrialStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.1,
+            condition_a="accepted",
+            condition_b="rejected",
+            min_trials_per_condition=2,
+            p_value_correction_method="none",
+            experiment_start_event_code="1",
+        ),
+        resolver=_ExperimentBoundaryResolver(),
+    )
+
+    result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
+
+    # Only the four anchors strictly after the start code should appear.
+    assert len(result.resolved_trials) == 4
+    assert all(t.anchor_onset_s > 2.0 for t in result.resolved_trials)
+    assert result.condition_a_trial_count == 2
+    assert result.condition_b_trial_count == 2
+    assert result.metadata["experiment_start_event_code"] == "1"
+    assert result.metadata["experiment_end_event_code"] is None
+
+
+def test_process_group_experiment_end_code_filters_late_anchors(
+    tmp_path: Path,
+) -> None:
+    """Anchors at or after the end-code onset are excluded from trial resolution."""
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 80), dtype=np.float32)
+
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    # anchors at t=1 (kept), t=2 (kept), t=3 (kept), t=4 (kept), end at t=5,
+    # anchor at t=5 (excluded), t=6 (excluded)
+    annotations = Annotations(
+        onset=[1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 6.0],
+        duration=[0.0] * 7,
+        description=[
+            "Stimulus/S  10",  # t=1 accepted
+            "Stimulus/S  10",  # t=2 rejected
+            "Stimulus/S  10",  # t=3 accepted
+            "Stimulus/S  10",  # t=4 rejected
+            "Stimulus/S  2",   # t=5 end marker
+            "Stimulus/S  10",  # t=5 excluded (at end)
+            "Stimulus/S  10",  # t=6 excluded (after end)
+        ],
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    class _ExperimentEndResolver:
+        def resolve_trials(self, group, ieeg_file, anchor_events):
+            del group
+            labels = ["accepted", "rejected", "accepted", "rejected"]
+            return [
+                ResolvedTrial(
+                    source_file=ieeg_file,
+                    anchor_event_index=i,
+                    anchor_event_code=ev.code,
+                    anchor_onset_s=ev.onset_s,
+                    anchor_duration_s=ev.duration_s,
+                    label=labels[i],
+                )
+                for i, ev in enumerate(anchor_events)
+            ]
+
+    processor = TrialStatsProcessing(
+        TrialStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.1,
+            condition_a="accepted",
+            condition_b="rejected",
+            min_trials_per_condition=2,
+            p_value_correction_method="none",
+            experiment_end_event_code="2",
+        ),
+        resolver=_ExperimentEndResolver(),
+    )
+
+    result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
+
+    assert len(result.resolved_trials) == 4
+    assert all(t.anchor_onset_s < 5.0 for t in result.resolved_trials)
+    assert result.condition_a_trial_count == 2
+    assert result.condition_b_trial_count == 2
+    assert result.metadata["experiment_start_event_code"] is None
+    assert result.metadata["experiment_end_event_code"] == "2"

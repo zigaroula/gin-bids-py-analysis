@@ -166,6 +166,8 @@ class TrialStatsProcessing(BaseProcessing):
                 anchor_events, anchor_samples = extract_anchor_events_with_mne(
                     raw,
                     anchor_codes=anchor_codes,
+                    experiment_start_event_code=self.params.experiment_start_event_code,
+                    experiment_end_event_code=self.params.experiment_end_event_code,
                 )
                 resolved_trials = self.resolver.resolve_trials(
                     group,
@@ -402,6 +404,8 @@ class TrialStatsProcessing(BaseProcessing):
             ),
             metadata={
                 "anchor_event_codes": list(self.params.anchor_event_codes),
+                "experiment_start_event_code": self.params.experiment_start_event_code,
+                "experiment_end_event_code": self.params.experiment_end_event_code,
                 "tmin_s": self.params.tmin_s,
                 "tmax_s": self.params.tmax_s,
                 "min_trials_per_condition": self.params.min_trials_per_condition,

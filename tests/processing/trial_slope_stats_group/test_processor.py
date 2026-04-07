@@ -198,9 +198,9 @@ def test_process_group_manual_mode_shapes_and_values() -> None:
         assert result.region_names == ["ROI_POS", "ROI_MIX"]
         n_rois = 2
         n_t = 3
-        assert result.condition_a_slope_t_values.shape == (n_rois, n_t)
-        assert result.condition_a_slope_p_values.shape == (n_rois, n_t)
-        assert result.condition_b_slope_t_values.shape == (n_rois, n_t)
+        assert result.slope_t_values.shape == (n_rois, n_t)
+        assert result.slope_p_values.shape == (n_rois, n_t)
+        assert result.activity_t_values.shape == (n_rois, n_t)
         assert result.condition_a_activity_mean.shape == (n_rois, n_t)
         assert result.condition_a_r_value_mean.shape == (n_rois, n_t)
         assert result.roi_channel_counts.shape == (n_rois,)

@@ -14,16 +14,17 @@ __all__ = ["TrialSlopeStatsGroupProcessingResult"]
 class TrialSlopeStatsGroupProcessingResult(BaseProcessingResult):
     """Structured outputs for group-level ROI statistics on trial-slope-stats data."""
 
-    # --- Per-condition slope one-sample tests vs 0 (n_rois, n_times) ---
-    condition_a_slope_t_values: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_a_slope_p_values: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_a_slope_p_values_uncorrected: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_a_slope_significant_mask: np.ndarray = field(default_factory=lambda: np.array([]))
+    # --- Two-sample (condition_a vs condition_b) slope comparison (n_rois, n_times) ---
+    slope_t_values: np.ndarray = field(default_factory=lambda: np.array([]))
+    slope_p_values: np.ndarray = field(default_factory=lambda: np.array([]))
+    slope_p_values_uncorrected: np.ndarray = field(default_factory=lambda: np.array([]))
+    slope_significant_mask: np.ndarray = field(default_factory=lambda: np.array([]))
 
-    condition_b_slope_t_values: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_b_slope_p_values: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_b_slope_p_values_uncorrected: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_b_slope_significant_mask: np.ndarray = field(default_factory=lambda: np.array([]))
+    # --- Two-sample (condition_a vs condition_b) activity comparison (n_rois, n_times) ---
+    activity_t_values: np.ndarray = field(default_factory=lambda: np.array([]))
+    activity_p_values: np.ndarray = field(default_factory=lambda: np.array([]))
+    activity_p_values_uncorrected: np.ndarray = field(default_factory=lambda: np.array([]))
+    activity_significant_mask: np.ndarray = field(default_factory=lambda: np.array([]))
 
     # --- Group mean / SEM of slopes per condition (n_rois, n_times) ---
     condition_a_slope_mean: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -43,18 +44,14 @@ class TrialSlopeStatsGroupProcessingResult(BaseProcessingResult):
     condition_b_r_value_mean: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_r_value_sem: np.ndarray = field(default_factory=lambda: np.array([]))
 
-    # --- Per-condition epoch-level summaries (n_rois,) ---
-    condition_a_epoch_slope_t: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_a_epoch_slope_p: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_a_epoch_slope_df: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_a_epoch_slope_mean: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_a_epoch_slope_sem: np.ndarray = field(default_factory=lambda: np.array([]))
+    # --- Epoch-level two-sample summaries (n_rois,) ---
+    epoch_slope_t: np.ndarray = field(default_factory=lambda: np.array([]))
+    epoch_slope_p: np.ndarray = field(default_factory=lambda: np.array([]))
+    epoch_slope_df: np.ndarray = field(default_factory=lambda: np.array([]))
 
-    condition_b_epoch_slope_t: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_b_epoch_slope_p: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_b_epoch_slope_df: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_b_epoch_slope_mean: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_b_epoch_slope_sem: np.ndarray = field(default_factory=lambda: np.array([]))
+    epoch_activity_t: np.ndarray = field(default_factory=lambda: np.array([]))
+    epoch_activity_p: np.ndarray = field(default_factory=lambda: np.array([]))
+    epoch_activity_df: np.ndarray = field(default_factory=lambda: np.array([]))
 
     # --- Axes and identifiers ---
     time_axis_s: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -83,6 +80,21 @@ class TrialSlopeStatsGroupProcessingResult(BaseProcessingResult):
     """Per-ROI list of condition-B mean-activity contribution arrays.  Same shape."""
     contribution_labels: list = field(default_factory=list)
     """Per-ROI list of human-readable row labels formatted as ``"subject/channel"``."""
+
+    # --- Per-ROI scatter data (predictor value vs epoch mean activity) ---
+    condition_a_scatter_predictor: list = field(default_factory=list)
+    """Per-ROI concatenated predictor values for condition A.
+    ``condition_a_scatter_predictor[roi_idx]`` is a 1-D array of shape ``(N_total,)``
+    where N_total is the sum of trial counts across all contributing (subject, channel) pairs.
+    """
+    condition_a_scatter_activity: list = field(default_factory=list)
+    """Per-ROI concatenated epoch-mean activity for condition A.  Paired with
+    ``condition_a_scatter_predictor``; same shape ``(N_total,)``.
+    """
+    condition_b_scatter_predictor: list = field(default_factory=list)
+    """Per-ROI concatenated predictor values for condition B.  Same structure."""
+    condition_b_scatter_activity: list = field(default_factory=list)
+    """Per-ROI concatenated epoch-mean activity for condition B.  Same structure."""
 
     # --- Analysis parameters stored in the result for provenance ---
     p_value_correction_method: str = "none"

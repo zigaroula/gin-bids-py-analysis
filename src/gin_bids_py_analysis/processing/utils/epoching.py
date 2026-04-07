@@ -39,8 +39,28 @@ def extract_anchor_events_with_mne(
     raw: mne.io.BaseRaw,
     *,
     anchor_codes: set[str],
+    experiment_start_event_code: str | None = None,
+    experiment_end_event_code: str | None = None,
 ) -> tuple[list[AnnotationEvent], np.ndarray]:
-    """Extract anchor events using MNE's sample-accurate annotation parser."""
+    """Extract anchor events using MNE's sample-accurate annotation parser.
+
+    Optionally restricts the set of returned anchor events to those strictly inside
+    an experiment window defined by boundary event codes:
+
+    - *experiment_start_event_code*: the first occurrence of this code in the
+      recording defines ``t_start``.  Anchors with ``onset_s <= t_start`` are
+      excluded (boundary-exclusive).  When multiple occurrences exist the first
+      is used so the window is as inclusive as possible.
+    - *experiment_end_event_code*: the last occurrence of this code defines
+      ``t_end``.  Anchors with ``onset_s >= t_end`` are excluded
+      (boundary-exclusive).  When multiple occurrences exist the last is used
+      so the window is as inclusive as possible.
+
+    If a boundary code is not provided, or is not found in the recording, no
+    filtering is applied for that boundary.  The epoch window of a kept anchor
+    may still extend outside the experiment window; only the anchor onset is
+    checked.
+    """
     sfreq = float(raw.info["sfreq"])
 
     events, _ = mne.events_from_annotations(
@@ -51,6 +71,24 @@ def extract_anchor_events_with_mne(
     )
     if events.size == 0:
         return [], np.empty((0,), dtype=np.int64)
+
+    # --- Derive experiment window from boundary annotations ---
+    t_start = -float("inf")
+    t_end = float("inf")
+    if experiment_start_event_code is not None or experiment_end_event_code is not None:
+        for annotation in raw.annotations:
+            _, _, code = parse_annotation_description(str(annotation["description"]))
+            onset = float(annotation["onset"])
+            if (
+                experiment_start_event_code is not None
+                and code == experiment_start_event_code
+                and t_start == -float("inf")
+            ):
+                # Use the FIRST occurrence → most inclusive left boundary.
+                t_start = onset
+            if experiment_end_event_code is not None and code == experiment_end_event_code:
+                # Keep updating → last occurrence → most inclusive right boundary.
+                t_end = onset
 
     durations_by_key: dict[tuple[int, str], list[float]] = {}
     for annotation in raw.annotations:
@@ -66,12 +104,15 @@ def extract_anchor_events_with_mne(
         code = str(int(event_code))
         if code not in anchor_codes:
             continue
+        onset_s = float(sample) / sfreq
+        if onset_s <= t_start or onset_s >= t_end:
+            continue
         key = (int(sample), code)
         durations = durations_by_key.get(key, [])
         duration_s = durations.pop(0) if durations else 0.0
         anchor_events.append(
             AnnotationEvent(
-                onset_s=float(sample) / sfreq,
+                onset_s=onset_s,
                 duration_s=duration_s,
                 event_type="Stimulus",
                 description=f"S {code}",

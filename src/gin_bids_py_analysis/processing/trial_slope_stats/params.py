@@ -83,6 +83,34 @@ class TrialSlopeStatsParams(BaseProcessingParams):
             "binning. Cannot be combined with window_ms > 0."
         ),
     )
+    experiment_start_event_code: str | None = Field(
+        default=None,
+        description=(
+            "Event code marking the experiment start. "
+            "The FIRST occurrence of this code in the recording defines the left boundary. "
+            "Anchor events with onset_s <= that boundary are excluded. "
+            "When absent or not found in the recording no filtering is applied. "
+            "The epoch window may still extend before the boundary."
+        ),
+    )
+    experiment_end_event_code: str | None = Field(
+        default=None,
+        description=(
+            "Event code marking the experiment end. "
+            "The LAST occurrence of this code in the recording defines the right boundary. "
+            "Anchor events with onset_s >= that boundary are excluded. "
+            "When absent or not found in the recording no filtering is applied. "
+            "The epoch window may still extend after the boundary."
+        ),
+    )
+
+    @field_validator("experiment_start_event_code", "experiment_end_event_code", mode="before")
+    @classmethod
+    def _coerce_boundary_codes(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned if cleaned else None
 
     @field_validator("anchor_event_codes", mode="before")
     @classmethod

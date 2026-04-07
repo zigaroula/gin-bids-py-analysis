@@ -45,36 +45,31 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
         str_dtype = h5py.string_dtype(encoding="utf-8")
 
         with h5py.File(output_path, "w") as fh:
-            # --- /regression ---
+            # --- /regression (condition_a vs condition_b slope t-test) ---
             reg = fh.create_group("regression")
-            _write_condition_slope_hdf5(
-                reg.create_group("condition_a"),
-                t_values=result.condition_a_slope_t_values,
-                p_values=result.condition_a_slope_p_values,
-                p_values_uncorrected=result.condition_a_slope_p_values_uncorrected,
-                significant_mask=result.condition_a_slope_significant_mask,
-                slope_mean=result.condition_a_slope_mean,
-                slope_sem=result.condition_a_slope_sem,
-                epoch_t=result.condition_a_epoch_slope_t,
-                epoch_p=result.condition_a_epoch_slope_p,
-                epoch_df=result.condition_a_epoch_slope_df,
-                epoch_mean=result.condition_a_epoch_slope_mean,
-                epoch_sem=result.condition_a_epoch_slope_sem,
-            )
-            _write_condition_slope_hdf5(
-                reg.create_group("condition_b"),
-                t_values=result.condition_b_slope_t_values,
-                p_values=result.condition_b_slope_p_values,
-                p_values_uncorrected=result.condition_b_slope_p_values_uncorrected,
-                significant_mask=result.condition_b_slope_significant_mask,
-                slope_mean=result.condition_b_slope_mean,
-                slope_sem=result.condition_b_slope_sem,
-                epoch_t=result.condition_b_epoch_slope_t,
-                epoch_p=result.condition_b_epoch_slope_p,
-                epoch_df=result.condition_b_epoch_slope_df,
-                epoch_mean=result.condition_b_epoch_slope_mean,
-                epoch_sem=result.condition_b_epoch_slope_sem,
-            )
+            reg.create_dataset("t_values", data=result.slope_t_values.astype(np.float64))
+            reg.create_dataset("p_values", data=result.slope_p_values.astype(np.float64))
+            reg.create_dataset("p_values_uncorrected", data=result.slope_p_values_uncorrected.astype(np.float64))
+            reg.create_dataset("significant_mask", data=result.slope_significant_mask.astype(bool))
+            reg.create_dataset("slope_mean_a", data=result.condition_a_slope_mean.astype(np.float64))
+            reg.create_dataset("slope_sem_a", data=result.condition_a_slope_sem.astype(np.float64))
+            reg.create_dataset("slope_mean_b", data=result.condition_b_slope_mean.astype(np.float64))
+            reg.create_dataset("slope_sem_b", data=result.condition_b_slope_sem.astype(np.float64))
+            ep_reg = reg.create_group("epoch_summary")
+            ep_reg.create_dataset("t", data=result.epoch_slope_t.astype(np.float64))
+            ep_reg.create_dataset("p", data=result.epoch_slope_p.astype(np.float64))
+            ep_reg.create_dataset("df", data=result.epoch_slope_df.astype(np.float64))
+
+            # --- /activity (condition_a vs condition_b activity t-test) ---
+            act = fh.create_group("activity")
+            act.create_dataset("t_values", data=result.activity_t_values.astype(np.float64))
+            act.create_dataset("p_values", data=result.activity_p_values.astype(np.float64))
+            act.create_dataset("p_values_uncorrected", data=result.activity_p_values_uncorrected.astype(np.float64))
+            act.create_dataset("significant_mask", data=result.activity_significant_mask.astype(bool))
+            ep_act = act.create_group("epoch_summary")
+            ep_act.create_dataset("t", data=result.epoch_activity_t.astype(np.float64))
+            ep_act.create_dataset("p", data=result.epoch_activity_p.astype(np.float64))
+            ep_act.create_dataset("df", data=result.epoch_activity_df.astype(np.float64))
 
             # --- /means ---
             means = fh.create_group("means")
@@ -186,6 +181,17 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
                     str_dtype=str_dtype,
                 )
 
+            if result.condition_a_scatter_predictor:
+                _write_scatter_hdf5(
+                    fh.create_group("scatter_data"),
+                    condition_a_predictor=result.condition_a_scatter_predictor,
+                    condition_a_activity=result.condition_a_scatter_activity,
+                    condition_b_predictor=result.condition_b_scatter_predictor,
+                    condition_b_activity=result.condition_b_scatter_activity,
+                    region_names=result.region_names,
+                    str_dtype=str_dtype,
+                )
+
             # --- /provenance ---
             prov = fh.create_group("provenance")
             prov.create_dataset(
@@ -212,60 +218,34 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
         result: TrialSlopeStatsGroupProcessingResult,
         output_path: Path,
     ) -> None:
-        def _cond_slope_struct(
-            t_values: np.ndarray,
-            p_values: np.ndarray,
-            p_values_uncorrected: np.ndarray,
-            significant_mask: np.ndarray,
-            slope_mean: np.ndarray,
-            slope_sem: np.ndarray,
-            epoch_t: np.ndarray,
-            epoch_p: np.ndarray,
-            epoch_df: np.ndarray,
-            epoch_mean: np.ndarray,
-            epoch_sem: np.ndarray,
-        ) -> object:
-            return make_struct(
-                t_values=t_values.astype(np.float64),
-                p_values=p_values.astype(np.float64),
-                p_values_uncorrected=p_values_uncorrected.astype(np.float64),
-                significant_mask=significant_mask.astype(np.uint8),
-                slope_mean=slope_mean.astype(np.float64),
-                slope_sem=slope_sem.astype(np.float64),
-                epoch_t=epoch_t.astype(np.float64),
-                epoch_p=epoch_p.astype(np.float64),
-                epoch_df=epoch_df.astype(np.float64),
-                epoch_mean=epoch_mean.astype(np.float64),
-                epoch_sem=epoch_sem.astype(np.float64),
-            )
-
+        epoch_slope_struct = make_struct(
+            t=result.epoch_slope_t.astype(np.float64),
+            p=result.epoch_slope_p.astype(np.float64),
+            df=result.epoch_slope_df.astype(np.float64),
+        )
         regression_struct = make_struct(
-            condition_a=_cond_slope_struct(
-                result.condition_a_slope_t_values,
-                result.condition_a_slope_p_values,
-                result.condition_a_slope_p_values_uncorrected,
-                result.condition_a_slope_significant_mask,
-                result.condition_a_slope_mean,
-                result.condition_a_slope_sem,
-                result.condition_a_epoch_slope_t,
-                result.condition_a_epoch_slope_p,
-                result.condition_a_epoch_slope_df,
-                result.condition_a_epoch_slope_mean,
-                result.condition_a_epoch_slope_sem,
-            ),
-            condition_b=_cond_slope_struct(
-                result.condition_b_slope_t_values,
-                result.condition_b_slope_p_values,
-                result.condition_b_slope_p_values_uncorrected,
-                result.condition_b_slope_significant_mask,
-                result.condition_b_slope_mean,
-                result.condition_b_slope_sem,
-                result.condition_b_epoch_slope_t,
-                result.condition_b_epoch_slope_p,
-                result.condition_b_epoch_slope_df,
-                result.condition_b_epoch_slope_mean,
-                result.condition_b_epoch_slope_sem,
-            ),
+            t_values=result.slope_t_values.astype(np.float64),
+            p_values=result.slope_p_values.astype(np.float64),
+            p_values_uncorrected=result.slope_p_values_uncorrected.astype(np.float64),
+            significant_mask=result.slope_significant_mask.astype(np.uint8),
+            slope_mean_a=result.condition_a_slope_mean.astype(np.float64),
+            slope_sem_a=result.condition_a_slope_sem.astype(np.float64),
+            slope_mean_b=result.condition_b_slope_mean.astype(np.float64),
+            slope_sem_b=result.condition_b_slope_sem.astype(np.float64),
+            epoch_summary=epoch_slope_struct,
+        )
+
+        epoch_activity_struct = make_struct(
+            t=result.epoch_activity_t.astype(np.float64),
+            p=result.epoch_activity_p.astype(np.float64),
+            df=result.epoch_activity_df.astype(np.float64),
+        )
+        activity_struct = make_struct(
+            t_values=result.activity_t_values.astype(np.float64),
+            p_values=result.activity_p_values.astype(np.float64),
+            p_values_uncorrected=result.activity_p_values_uncorrected.astype(np.float64),
+            significant_mask=result.activity_significant_mask.astype(np.uint8),
+            epoch_summary=epoch_activity_struct,
         )
 
         means_struct = make_struct(
@@ -360,14 +340,42 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
                 region=np.array([], dtype=object),
             )
 
+        if result.condition_a_scatter_predictor:
+            scatter_pred_a_cell: np.ndarray = np.empty(n_rois, dtype=object)
+            scatter_act_a_cell: np.ndarray = np.empty(n_rois, dtype=object)
+            scatter_pred_b_cell: np.ndarray = np.empty(n_rois, dtype=object)
+            scatter_act_b_cell: np.ndarray = np.empty(n_rois, dtype=object)
+            for i in range(n_rois):
+                scatter_pred_a_cell[i] = np.asarray(result.condition_a_scatter_predictor[i], dtype=np.float64)
+                scatter_act_a_cell[i] = np.asarray(result.condition_a_scatter_activity[i], dtype=np.float64)
+                scatter_pred_b_cell[i] = np.asarray(result.condition_b_scatter_predictor[i], dtype=np.float64)
+                scatter_act_b_cell[i] = np.asarray(result.condition_b_scatter_activity[i], dtype=np.float64)
+            scatter_data_struct = make_struct(
+                condition_a_predictor=scatter_pred_a_cell,
+                condition_a_activity=scatter_act_a_cell,
+                condition_b_predictor=scatter_pred_b_cell,
+                condition_b_activity=scatter_act_b_cell,
+                region=np.array(result.region_names, dtype=object),
+            )
+        else:
+            scatter_data_struct = make_struct(
+                condition_a_predictor=np.array([], dtype=object),
+                condition_a_activity=np.array([], dtype=object),
+                condition_b_predictor=np.array([], dtype=object),
+                condition_b_activity=np.array([], dtype=object),
+                region=np.array([], dtype=object),
+            )
+
         data = make_struct(
             regression=regression_struct,
+            activity=activity_struct,
             means=means_struct,
             r_values=r_values_struct,
             axes=axes_struct,
             meta=meta_struct,
             contributions=contributions_struct,
             contribution_samples=contrib_samples_struct,
+            scatter_data=scatter_data_struct,
             provenance=prov_struct,
         )
         savemat(str(output_path), {"data": data}, do_compression=True)
@@ -376,35 +384,6 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
 # ---------------------------------------------------------------------------
 # HDF5 helpers
 # ---------------------------------------------------------------------------
-
-def _write_condition_slope_hdf5(
-    grp: h5py.Group,
-    *,
-    t_values: np.ndarray,
-    p_values: np.ndarray,
-    p_values_uncorrected: np.ndarray,
-    significant_mask: np.ndarray,
-    slope_mean: np.ndarray,
-    slope_sem: np.ndarray,
-    epoch_t: np.ndarray,
-    epoch_p: np.ndarray,
-    epoch_df: np.ndarray,
-    epoch_mean: np.ndarray,
-    epoch_sem: np.ndarray,
-) -> None:
-    grp.create_dataset("t_values", data=t_values.astype(np.float64))
-    grp.create_dataset("p_values", data=p_values.astype(np.float64))
-    grp.create_dataset("p_values_uncorrected", data=p_values_uncorrected.astype(np.float64))
-    grp.create_dataset("significant_mask", data=significant_mask.astype(bool))
-    grp.create_dataset("slope_mean", data=slope_mean.astype(np.float64))
-    grp.create_dataset("slope_sem", data=slope_sem.astype(np.float64))
-    epoch_grp = grp.create_group("epoch_summary")
-    epoch_grp.create_dataset("t", data=epoch_t.astype(np.float64))
-    epoch_grp.create_dataset("p", data=epoch_p.astype(np.float64))
-    epoch_grp.create_dataset("df", data=epoch_df.astype(np.float64))
-    epoch_grp.create_dataset("mean", data=epoch_mean.astype(np.float64))
-    epoch_grp.create_dataset("sem", data=epoch_sem.astype(np.float64))
-
 
 def _write_ragged_hdf5(
     grp: h5py.Group,
@@ -448,4 +427,41 @@ def _write_ragged_hdf5(
             "labels",
             data=np.array(labels[i], dtype=object),
             dtype=str_dtype,
+        )
+
+
+def _write_scatter_hdf5(
+    grp: h5py.Group,
+    *,
+    condition_a_predictor: list,
+    condition_a_activity: list,
+    condition_b_predictor: list,
+    condition_b_activity: list,
+    region_names: list[str],
+    str_dtype: object,
+) -> None:
+    """Write per-ROI scatter arrays (predictor × epoch-mean-activity) as indexed HDF5 datasets."""
+    grp.create_dataset(
+        "region_names",
+        data=np.array(region_names, dtype=object),
+        dtype=str_dtype,
+    )
+    for i, roi_name in enumerate(region_names):
+        roi_grp = grp.create_group(str(i))
+        roi_grp.attrs["roi"] = roi_name
+        roi_grp.create_dataset(
+            "condition_a_predictor",
+            data=np.asarray(condition_a_predictor[i], dtype=np.float64),
+        )
+        roi_grp.create_dataset(
+            "condition_a_activity",
+            data=np.asarray(condition_a_activity[i], dtype=np.float64),
+        )
+        roi_grp.create_dataset(
+            "condition_b_predictor",
+            data=np.asarray(condition_b_predictor[i], dtype=np.float64),
+        )
+        roi_grp.create_dataset(
+            "condition_b_activity",
+            data=np.asarray(condition_b_activity[i], dtype=np.float64),
         )

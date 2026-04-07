@@ -156,6 +156,22 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
             condition_a_epochs = np.array([])
             condition_b_epochs = np.array([])
 
+        if "scatter" in fh:
+            sg = fh["scatter"]
+            condition_a_epoch_means = (
+                np.asarray(sg["condition_a_epoch_means"][:], dtype=np.float64)
+                if "condition_a_epoch_means" in sg
+                else np.array([])
+            )
+            condition_b_epoch_means = (
+                np.asarray(sg["condition_b_epoch_means"][:], dtype=np.float64)
+                if "condition_b_epoch_means" in sg
+                else np.array([])
+            )
+        else:
+            condition_a_epoch_means = np.array([])
+            condition_b_epoch_means = np.array([])
+
         source_ieeg_files = []
         source_table_files = []
         source_electrodes_files = []
@@ -218,6 +234,8 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
         stats_valid=stats_valid,
         condition_a_epochs=condition_a_epochs,
         condition_b_epochs=condition_b_epochs,
+        condition_a_epoch_means=condition_a_epoch_means,
+        condition_b_epoch_means=condition_b_epoch_means,
     )
 
 

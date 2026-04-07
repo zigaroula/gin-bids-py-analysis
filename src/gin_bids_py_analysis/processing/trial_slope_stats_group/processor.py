@@ -33,8 +33,8 @@ from gin_bids_py_analysis.processing.utils.tables import select_column
 
 from gin_bids_py_analysis.processing.utils.group_stats import (
     compute_condition_group_stats,
-    compute_one_sample_epoch_summary,
-    compute_one_sample_timecourse,
+    compute_two_sample_epoch_summary,
+    compute_two_sample_timecourse,
 )
 from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
 
@@ -60,6 +60,10 @@ class _RawSlopeStatsData:
     condition_b_mean: np.ndarray        # (n_channels, n_times)
     condition_a_r_value: np.ndarray     # (n_channels, n_times)
     condition_b_r_value: np.ndarray     # (n_channels, n_times)
+    condition_a_predictor_values: np.ndarray  # (n_trials_a,)
+    condition_b_predictor_values: np.ndarray  # (n_trials_b,)
+    condition_a_epoch_means: np.ndarray       # (n_channels, n_trials_a)  or empty
+    condition_b_epoch_means: np.ndarray       # (n_channels, n_trials_b)  or empty
     binning_mode: str
     window_ms: float
     n_bins: int
@@ -113,6 +117,10 @@ class _SlopeStatsSnapshot:
     condition_b_mean: np.ndarray
     condition_a_r_value: np.ndarray
     condition_b_r_value: np.ndarray
+    condition_a_predictor_values: np.ndarray   # (n_trials_a,)
+    condition_b_predictor_values: np.ndarray   # (n_trials_b,)
+    condition_a_epoch_means: np.ndarray        # (n_channels, n_trials_a) or empty
+    condition_b_epoch_means: np.ndarray        # (n_channels, n_trials_b) or empty
     analysis_level: str
     binning_mode: str
     window_ms: float
@@ -135,6 +143,10 @@ class _ContributionRecord:
     mean_b_values: np.ndarray       # (n_times,)
     r_value_a_values: np.ndarray    # (n_times,)
     r_value_b_values: np.ndarray    # (n_times,)
+    predictor_a_values: np.ndarray  # (n_trials_a,)
+    predictor_b_values: np.ndarray  # (n_trials_b,)
+    epoch_means_a: np.ndarray       # (n_trials_a,)  mean activity per trial for this channel
+    epoch_means_b: np.ndarray       # (n_trials_b,)  mean activity per trial for this channel
 
 
 # ---------------------------------------------------------------------------
@@ -204,15 +216,16 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
         method = self.params.p_value_correction_method
 
         region_names: list[str] = []
-        # Per-condition slope timecourse statistics
-        rows_t_a: list[np.ndarray] = []
-        rows_p_uncorr_a: list[np.ndarray] = []
+        # Two-sample slope comparison timecourse statistics
+        rows_slope_t: list[np.ndarray] = []
+        rows_slope_p_uncorr: list[np.ndarray] = []
         rows_slope_mean_a: list[np.ndarray] = []
         rows_slope_sem_a: list[np.ndarray] = []
-        rows_t_b: list[np.ndarray] = []
-        rows_p_uncorr_b: list[np.ndarray] = []
         rows_slope_mean_b: list[np.ndarray] = []
         rows_slope_sem_b: list[np.ndarray] = []
+        # Two-sample activity comparison timecourse statistics
+        rows_activity_t: list[np.ndarray] = []
+        rows_activity_p_uncorr: list[np.ndarray] = []
         # Activity and r_value group means
         rows_activity_mean_a: list[np.ndarray] = []
         rows_activity_sem_a: list[np.ndarray] = []
@@ -222,17 +235,13 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
         rows_r_value_sem_a: list[np.ndarray] = []
         rows_r_value_mean_b: list[np.ndarray] = []
         rows_r_value_sem_b: list[np.ndarray] = []
-        # Epoch-level summaries
-        epoch_t_a: list[float] = []
-        epoch_p_a: list[float] = []
-        epoch_df_a: list[float] = []
-        epoch_mean_a: list[float] = []
-        epoch_sem_a: list[float] = []
-        epoch_t_b: list[float] = []
-        epoch_p_b: list[float] = []
-        epoch_df_b: list[float] = []
-        epoch_mean_b: list[float] = []
-        epoch_sem_b: list[float] = []
+        # Epoch-level two-sample summaries
+        epoch_slope_t: list[float] = []
+        epoch_slope_p: list[float] = []
+        epoch_slope_df: list[float] = []
+        epoch_activity_t: list[float] = []
+        epoch_activity_p: list[float] = []
+        epoch_activity_df: list[float] = []
         # Contribution metadata
         roi_channel_counts: list[int] = []
         roi_subject_counts: list[int] = []
@@ -242,6 +251,11 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
         activity_a_contribution_samples: list[np.ndarray] = []
         activity_b_contribution_samples: list[np.ndarray] = []
         contribution_label_rows: list[list[str]] = []
+        # Scatter data: per-ROI concatenated (predictor_value, epoch_mean) pairs
+        scatter_a_predictor: list[np.ndarray] = []
+        scatter_a_activity: list[np.ndarray] = []
+        scatter_b_predictor: list[np.ndarray] = []
+        scatter_b_activity: list[np.ndarray] = []
 
         for roi, records in roi_records.items():
             if not records:
@@ -279,24 +293,26 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
                 [r.r_value_b_values for r in records], axis=0
             ).astype(np.float64)
 
-            t_a, p_a_raw, slope_mean_a, slope_sem_a = compute_one_sample_timecourse(samples_slope_a)
-            t_b, p_b_raw, slope_mean_b, slope_sem_b = compute_one_sample_timecourse(samples_slope_b)
-            ep_t_a, ep_p_a, ep_df_a, ep_mean_a, ep_sem_a = compute_one_sample_epoch_summary(samples_slope_a)
-            ep_t_b, ep_p_b, ep_df_b, ep_mean_b, ep_sem_b = compute_one_sample_epoch_summary(samples_slope_b)
+            t_slope, p_slope_raw = compute_two_sample_timecourse(samples_slope_a, samples_slope_b)
+            ep_slope_t, ep_slope_p, ep_slope_df = compute_two_sample_epoch_summary(samples_slope_a, samples_slope_b)
+            t_activity, p_activity_raw = compute_two_sample_timecourse(samples_mean_a, samples_mean_b)
+            ep_act_t, ep_act_p, ep_act_df = compute_two_sample_epoch_summary(samples_mean_a, samples_mean_b)
+            slope_mean_a, slope_sem_a = compute_condition_group_stats(samples_slope_a)
+            slope_mean_b, slope_sem_b = compute_condition_group_stats(samples_slope_b)
             act_mean_a, act_sem_a = compute_condition_group_stats(samples_mean_a)
             act_mean_b, act_sem_b = compute_condition_group_stats(samples_mean_b)
             r_mean_a, r_sem_a = compute_condition_group_stats(samples_r_a)
             r_mean_b, r_sem_b = compute_condition_group_stats(samples_r_b)
 
             region_names.append(roi)
-            rows_t_a.append(t_a)
-            rows_p_uncorr_a.append(p_a_raw)
+            rows_slope_t.append(t_slope)
+            rows_slope_p_uncorr.append(p_slope_raw)
             rows_slope_mean_a.append(slope_mean_a)
             rows_slope_sem_a.append(slope_sem_a)
-            rows_t_b.append(t_b)
-            rows_p_uncorr_b.append(p_b_raw)
             rows_slope_mean_b.append(slope_mean_b)
             rows_slope_sem_b.append(slope_sem_b)
+            rows_activity_t.append(t_activity)
+            rows_activity_p_uncorr.append(p_activity_raw)
             rows_activity_mean_a.append(act_mean_a)
             rows_activity_sem_a.append(act_sem_a)
             rows_activity_mean_b.append(act_mean_b)
@@ -305,16 +321,12 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
             rows_r_value_sem_a.append(r_sem_a)
             rows_r_value_mean_b.append(r_mean_b)
             rows_r_value_sem_b.append(r_sem_b)
-            epoch_t_a.append(ep_t_a)
-            epoch_p_a.append(ep_p_a)
-            epoch_df_a.append(ep_df_a)
-            epoch_mean_a.append(ep_mean_a)
-            epoch_sem_a.append(ep_sem_a)
-            epoch_t_b.append(ep_t_b)
-            epoch_p_b.append(ep_p_b)
-            epoch_df_b.append(ep_df_b)
-            epoch_mean_b.append(ep_mean_b)
-            epoch_sem_b.append(ep_sem_b)
+            epoch_slope_t.append(ep_slope_t)
+            epoch_slope_p.append(ep_slope_p)
+            epoch_slope_df.append(ep_slope_df)
+            epoch_activity_t.append(ep_act_t)
+            epoch_activity_p.append(ep_act_p)
+            epoch_activity_df.append(ep_act_df)
             roi_channel_counts.append(channel_count)
             roi_subject_counts.append(subject_count)
             slope_a_contribution_samples.append(samples_slope_a)
@@ -322,6 +334,24 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
             activity_a_contribution_samples.append(samples_mean_a)
             activity_b_contribution_samples.append(samples_mean_b)
             contribution_label_rows.append([f"{r.subject}/{r.channel}" for r in records])
+
+            # Scatter: concatenate per-trial (predictor, epoch_mean) pairs across all records
+            valid_pred_a = [r.predictor_a_values for r in records if r.predictor_a_values.size > 0]
+            valid_act_a = [r.epoch_means_a for r in records if r.epoch_means_a.size > 0]
+            valid_pred_b = [r.predictor_b_values for r in records if r.predictor_b_values.size > 0]
+            valid_act_b = [r.epoch_means_b for r in records if r.epoch_means_b.size > 0]
+            scatter_a_predictor.append(
+                np.concatenate(valid_pred_a) if valid_pred_a else np.empty(0, dtype=np.float64)
+            )
+            scatter_a_activity.append(
+                np.concatenate(valid_act_a) if valid_act_a else np.empty(0, dtype=np.float64)
+            )
+            scatter_b_predictor.append(
+                np.concatenate(valid_pred_b) if valid_pred_b else np.empty(0, dtype=np.float64)
+            )
+            scatter_b_activity.append(
+                np.concatenate(valid_act_b) if valid_act_b else np.empty(0, dtype=np.float64)
+            )
             contributions_out.extend(
                 ROIChannelContribution(
                     roi=record.roi,
@@ -343,18 +373,18 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
         def _arr_1d(values: list[float]) -> np.ndarray:
             return np.array(values, dtype=np.float64)
 
-        t_values_a = _stack_rows(rows_t_a)
-        p_values_uncorr_a = _stack_rows(rows_p_uncorr_a)
-        t_values_b = _stack_rows(rows_t_b)
-        p_values_uncorr_b = _stack_rows(rows_p_uncorr_b)
+        t_values_slope = _stack_rows(rows_slope_t)
+        p_values_slope_uncorr = _stack_rows(rows_slope_p_uncorr)
+        t_values_activity = _stack_rows(rows_activity_t)
+        p_values_activity_uncorr = _stack_rows(rows_activity_p_uncorr)
 
-        # Apply p-value correction separately per condition across ROI x time
-        p_values_a = _apply_correction_2d(p_values_uncorr_a, method=method)
-        p_values_b = _apply_correction_2d(p_values_uncorr_b, method=method)
+        # Apply p-value correction separately for slopes and activity
+        p_values_slope = _apply_correction_2d(p_values_slope_uncorr, method=method)
+        p_values_activity = _apply_correction_2d(p_values_activity_uncorr, method=method)
 
         alpha = self.params.significance_alpha
-        sig_mask_a = np.isfinite(p_values_a) & (p_values_a < alpha)
-        sig_mask_b = np.isfinite(p_values_b) & (p_values_b < alpha)
+        sig_mask_slope = np.isfinite(p_values_slope) & (p_values_slope < alpha)
+        sig_mask_activity = np.isfinite(p_values_activity) & (p_values_activity < alpha)
 
         result = TrialSlopeStatsGroupProcessingResult(
             source_group=BIDSFileGroup(primary=files[0], secondaries=files[1:]),
@@ -369,14 +399,14 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
                 "effective_n_bins": first.effective_n_bins,
             },
             output_entities={"subject": "group"},
-            condition_a_slope_t_values=t_values_a,
-            condition_a_slope_p_values=p_values_a,
-            condition_a_slope_p_values_uncorrected=p_values_uncorr_a,
-            condition_a_slope_significant_mask=sig_mask_a,
-            condition_b_slope_t_values=t_values_b,
-            condition_b_slope_p_values=p_values_b,
-            condition_b_slope_p_values_uncorrected=p_values_uncorr_b,
-            condition_b_slope_significant_mask=sig_mask_b,
+            slope_t_values=t_values_slope,
+            slope_p_values=p_values_slope,
+            slope_p_values_uncorrected=p_values_slope_uncorr,
+            slope_significant_mask=sig_mask_slope,
+            activity_t_values=t_values_activity,
+            activity_p_values=p_values_activity,
+            activity_p_values_uncorrected=p_values_activity_uncorr,
+            activity_significant_mask=sig_mask_activity,
             condition_a_slope_mean=_stack_rows(rows_slope_mean_a),
             condition_a_slope_sem=_stack_rows(rows_slope_sem_a),
             condition_b_slope_mean=_stack_rows(rows_slope_mean_b),
@@ -389,16 +419,12 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
             condition_a_r_value_sem=_stack_rows(rows_r_value_sem_a),
             condition_b_r_value_mean=_stack_rows(rows_r_value_mean_b),
             condition_b_r_value_sem=_stack_rows(rows_r_value_sem_b),
-            condition_a_epoch_slope_t=_arr_1d(epoch_t_a),
-            condition_a_epoch_slope_p=_arr_1d(epoch_p_a),
-            condition_a_epoch_slope_df=_arr_1d(epoch_df_a),
-            condition_a_epoch_slope_mean=_arr_1d(epoch_mean_a),
-            condition_a_epoch_slope_sem=_arr_1d(epoch_sem_a),
-            condition_b_epoch_slope_t=_arr_1d(epoch_t_b),
-            condition_b_epoch_slope_p=_arr_1d(epoch_p_b),
-            condition_b_epoch_slope_df=_arr_1d(epoch_df_b),
-            condition_b_epoch_slope_mean=_arr_1d(epoch_mean_b),
-            condition_b_epoch_slope_sem=_arr_1d(epoch_sem_b),
+            epoch_slope_t=_arr_1d(epoch_slope_t),
+            epoch_slope_p=_arr_1d(epoch_slope_p),
+            epoch_slope_df=_arr_1d(epoch_slope_df),
+            epoch_activity_t=_arr_1d(epoch_activity_t),
+            epoch_activity_p=_arr_1d(epoch_activity_p),
+            epoch_activity_df=_arr_1d(epoch_activity_df),
             time_axis_s=first.time_axis_s.copy(),
             region_names=region_names,
             condition_labels=first.condition_labels,
@@ -410,6 +436,10 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
             condition_a_activity_contributions=activity_a_contribution_samples,
             condition_b_activity_contributions=activity_b_contribution_samples,
             contribution_labels=contribution_label_rows,
+            condition_a_scatter_predictor=scatter_a_predictor,
+            condition_a_scatter_activity=scatter_a_activity,
+            condition_b_scatter_predictor=scatter_b_predictor,
+            condition_b_scatter_activity=scatter_b_activity,
             p_value_correction_method=method,
             significance_alpha=alpha,
             roi_mode=self.params.roi_mode,
@@ -470,6 +500,20 @@ def _collect_manual_roi_records(
                         mean_b_values=np.asarray(snapshot.condition_b_mean[idx, :], dtype=np.float64),
                         r_value_a_values=np.asarray(snapshot.condition_a_r_value[idx, :], dtype=np.float64),
                         r_value_b_values=np.asarray(snapshot.condition_b_r_value[idx, :], dtype=np.float64),
+                        predictor_a_values=np.asarray(snapshot.condition_a_predictor_values, dtype=np.float64),
+                        predictor_b_values=np.asarray(snapshot.condition_b_predictor_values, dtype=np.float64),
+                        epoch_means_a=(
+                            np.asarray(snapshot.condition_a_epoch_means[idx, :], dtype=np.float64)
+                            if snapshot.condition_a_epoch_means.ndim == 2
+                            and snapshot.condition_a_epoch_means.shape[0] > idx
+                            else np.empty(0, dtype=np.float64)
+                        ),
+                        epoch_means_b=(
+                            np.asarray(snapshot.condition_b_epoch_means[idx, :], dtype=np.float64)
+                            if snapshot.condition_b_epoch_means.ndim == 2
+                            and snapshot.condition_b_epoch_means.shape[0] > idx
+                            else np.empty(0, dtype=np.float64)
+                        ),
                     )
                 )
     return roi_records
@@ -507,6 +551,20 @@ def _collect_atlas_roi_records(
                         mean_b_values=np.asarray(snapshot.condition_b_mean[idx, :], dtype=np.float64),
                         r_value_a_values=np.asarray(snapshot.condition_a_r_value[idx, :], dtype=np.float64),
                         r_value_b_values=np.asarray(snapshot.condition_b_r_value[idx, :], dtype=np.float64),
+                        predictor_a_values=np.asarray(snapshot.condition_a_predictor_values, dtype=np.float64),
+                        predictor_b_values=np.asarray(snapshot.condition_b_predictor_values, dtype=np.float64),
+                        epoch_means_a=(
+                            np.asarray(snapshot.condition_a_epoch_means[idx, :], dtype=np.float64)
+                            if snapshot.condition_a_epoch_means.ndim == 2
+                            and snapshot.condition_a_epoch_means.shape[0] > idx
+                            else np.empty(0, dtype=np.float64)
+                        ),
+                        epoch_means_b=(
+                            np.asarray(snapshot.condition_b_epoch_means[idx, :], dtype=np.float64)
+                            if snapshot.condition_b_epoch_means.ndim == 2
+                            and snapshot.condition_b_epoch_means.shape[0] > idx
+                            else np.empty(0, dtype=np.float64)
+                        ),
                     )
                 )
     return roi_records, used_electrode_paths
@@ -677,6 +735,10 @@ def _load_slope_stats_snapshot(stats_file: BIDSFile) -> _SlopeStatsSnapshot:
         condition_b_mean=raw.condition_b_mean,
         condition_a_r_value=raw.condition_a_r_value,
         condition_b_r_value=raw.condition_b_r_value,
+        condition_a_predictor_values=raw.condition_a_predictor_values,
+        condition_b_predictor_values=raw.condition_b_predictor_values,
+        condition_a_epoch_means=raw.condition_a_epoch_means,
+        condition_b_epoch_means=raw.condition_b_epoch_means,
         analysis_level=raw.analysis_level,
         binning_mode=raw.binning_mode,
         window_ms=raw.window_ms,
@@ -790,6 +852,10 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
         condition_b_mean=condition_b_mean,
         condition_a_r_value=condition_a_r_value,
         condition_b_r_value=condition_b_r_value,
+        condition_a_predictor_values=_read_predictor_values_hdf5(stats_file, "predictor/condition_a_values"),
+        condition_b_predictor_values=_read_predictor_values_hdf5(stats_file, "predictor/condition_b_values"),
+        condition_a_epoch_means=_read_epoch_means_hdf5(stats_file, "scatter/condition_a_epoch_means"),
+        condition_b_epoch_means=_read_epoch_means_hdf5(stats_file, "scatter/condition_b_epoch_means"),
         binning_mode=binning_mode,
         window_ms=window_ms,
         n_bins=n_bins,
@@ -854,6 +920,30 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
             source_ieeg_files = mat_str_list(getattr(prov, "source_ieeg_files", None))
             source_electrodes_files = mat_str_list(getattr(prov, "source_electrodes_files", None))
 
+        predictor_raw = getattr(data, "predictor", None)
+        condition_a_predictor_values: np.ndarray
+        condition_b_predictor_values: np.ndarray
+        if predictor_raw is not None:
+            raw_a = getattr(predictor_raw, "condition_a_values", None)
+            raw_b = getattr(predictor_raw, "condition_b_values", None)
+            condition_a_predictor_values = np.asarray(raw_a, dtype=np.float64).ravel() if raw_a is not None else np.empty(0, dtype=np.float64)
+            condition_b_predictor_values = np.asarray(raw_b, dtype=np.float64).ravel() if raw_b is not None else np.empty(0, dtype=np.float64)
+        else:
+            condition_a_predictor_values = np.empty(0, dtype=np.float64)
+            condition_b_predictor_values = np.empty(0, dtype=np.float64)
+
+        scatter_raw = getattr(data, "scatter", None)
+        condition_a_epoch_means: np.ndarray
+        condition_b_epoch_means: np.ndarray
+        if scatter_raw is not None:
+            raw_em_a = getattr(scatter_raw, "condition_a_epoch_means", None)
+            raw_em_b = getattr(scatter_raw, "condition_b_epoch_means", None)
+            condition_a_epoch_means = np.asarray(raw_em_a, dtype=np.float64) if raw_em_a is not None and np.asarray(raw_em_a).size > 0 else np.empty((n_ch, 0), dtype=np.float64)
+            condition_b_epoch_means = np.asarray(raw_em_b, dtype=np.float64) if raw_em_b is not None and np.asarray(raw_em_b).size > 0 else np.empty((n_ch, 0), dtype=np.float64)
+        else:
+            condition_a_epoch_means = np.empty((n_ch, 0), dtype=np.float64)
+            condition_b_epoch_means = np.empty((n_ch, 0), dtype=np.float64)
+
     return _RawSlopeStatsData(
         analysis_level=analysis_level,
         channels=channels,
@@ -865,6 +955,10 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
         condition_b_mean=condition_b_mean,
         condition_a_r_value=condition_a_r_value,
         condition_b_r_value=condition_b_r_value,
+        condition_a_predictor_values=condition_a_predictor_values,
+        condition_b_predictor_values=condition_b_predictor_values,
+        condition_a_epoch_means=condition_a_epoch_means,
+        condition_b_epoch_means=condition_b_epoch_means,
         binning_mode=binning_mode,
         window_ms=window_ms,
         n_bins=n_bins,
@@ -872,6 +966,24 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
         source_ieeg_files=source_ieeg_files,
         source_electrodes_files=source_electrodes_files,
     )
+
+
+def _read_predictor_values_hdf5(stats_file: BIDSFile, path: str) -> np.ndarray:
+    """Read a 1-D predictor values array from a subject slope-stats HDF5 file."""
+    with stats_file.ensure_loaded() as fh:
+        ds = dataset_or_none(fh, path)
+        if ds is None:
+            return np.empty(0, dtype=np.float64)
+        return np.asarray(ds[:], dtype=np.float64).ravel()
+
+
+def _read_epoch_means_hdf5(stats_file: BIDSFile, path: str) -> np.ndarray:
+    """Read a (n_channels, n_trials) epoch-means array from a subject slope-stats HDF5 file."""
+    with stats_file.ensure_loaded() as fh:
+        ds = dataset_or_none(fh, path)
+        if ds is None or ds.size == 0:
+            return np.empty((0, 0), dtype=np.float64)
+        return np.asarray(ds[:], dtype=np.float64)
 
 
 def _read_condition_labels_hdf5(fh: h5py.File) -> tuple[str, str]:

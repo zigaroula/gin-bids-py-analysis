@@ -68,7 +68,34 @@ class GroupPlotPanel(QWidget):
         self._ax_means = self._fig_means.add_subplot(111)
         self._canvas_means = FigureCanvasQTAgg(self._fig_means)
         activity_layout.addWidget(self._canvas_means)
-        self._plot_tabs.addTab(activity_w, "Activity")
+        self._plot_tabs.addTab(activity_w, "Activity mean")
+
+        activity_t_w = QWidget()
+        activity_t_layout = QVBoxLayout(activity_t_w)
+        activity_t_layout.setContentsMargins(0, 0, 0, 0)
+        self._fig_activity_t = Figure(tight_layout=True)
+        self._ax_activity_t = self._fig_activity_t.add_subplot(111)
+        self._canvas_activity_t = FigureCanvasQTAgg(self._fig_activity_t)
+        activity_t_layout.addWidget(self._canvas_activity_t)
+        self._plot_tabs.addTab(activity_t_w, "Activity t-values")
+
+        activity_p_w = QWidget()
+        activity_p_layout = QVBoxLayout(activity_p_w)
+        activity_p_layout.setContentsMargins(0, 0, 0, 0)
+        self._fig_activity_p = Figure(tight_layout=True)
+        self._ax_activity_p = self._fig_activity_p.add_subplot(111)
+        self._canvas_activity_p = FigureCanvasQTAgg(self._fig_activity_p)
+        activity_p_layout.addWidget(self._canvas_activity_p)
+        self._plot_tabs.addTab(activity_p_w, "Activity p-values")
+
+        activity_matrix_w = QWidget()
+        activity_matrix_layout = QVBoxLayout(activity_matrix_w)
+        activity_matrix_layout.setContentsMargins(0, 0, 0, 0)
+        self._fig_activity_matrix = Figure(tight_layout=True)
+        self._ax_activity_matrix = self._fig_activity_matrix.add_subplot(111)
+        self._canvas_activity_matrix = FigureCanvasQTAgg(self._fig_activity_matrix)
+        activity_matrix_layout.addWidget(self._canvas_activity_matrix)
+        self._plot_tabs.addTab(activity_matrix_w, "Activity matrix")
 
         slope_w = QWidget()
         slope_layout = QVBoxLayout(slope_w)
@@ -86,7 +113,7 @@ class GroupPlotPanel(QWidget):
         self._ax_t = self._fig_t.add_subplot(111)
         self._canvas_t = FigureCanvasQTAgg(self._fig_t)
         t_layout.addWidget(self._canvas_t)
-        self._plot_tabs.addTab(t_w, "T-values")
+        self._plot_tabs.addTab(t_w, "Slope t-values")
 
         p_w = QWidget()
         p_layout = QVBoxLayout(p_w)
@@ -95,7 +122,7 @@ class GroupPlotPanel(QWidget):
         self._ax_p = self._fig_p.add_subplot(111)
         self._canvas_p = FigureCanvasQTAgg(self._fig_p)
         p_layout.addWidget(self._canvas_p)
-        self._plot_tabs.addTab(p_w, "P-values")
+        self._plot_tabs.addTab(p_w, "Slope p-values")
 
         matrix_w = QWidget()
         matrix_layout = QVBoxLayout(matrix_w)
@@ -104,7 +131,16 @@ class GroupPlotPanel(QWidget):
         self._ax_matrix = self._fig_matrix.add_subplot(111)
         self._canvas_matrix = FigureCanvasQTAgg(self._fig_matrix)
         matrix_layout.addWidget(self._canvas_matrix)
-        self._plot_tabs.addTab(matrix_w, "Channel Matrix")
+        self._plot_tabs.addTab(matrix_w, "Slope matrix")
+
+        scatter_w = QWidget()
+        scatter_layout = QVBoxLayout(scatter_w)
+        scatter_layout.setContentsMargins(0, 0, 0, 0)
+        self._fig_scatter = Figure(tight_layout=True)
+        self._ax_scatter = self._fig_scatter.add_subplot(111)
+        self._canvas_scatter = FigureCanvasQTAgg(self._fig_scatter)
+        scatter_layout.addWidget(self._canvas_scatter)
+        self._plot_tabs.addTab(scatter_w, "Scatter")
 
         right_layout.addWidget(self._plot_tabs)
         splitter.addWidget(right)
@@ -130,20 +166,26 @@ class GroupPlotPanel(QWidget):
         """Redraw all plots for *roi_idx*."""
         self._current_result = result
         if _is_slope_group_result(result):
-            self._plot_tabs.setTabVisible(1, True)
-            self._plot_tabs.setTabText(0, "Activity")
-            self._plot_tabs.setTabText(1, "Slope mean")
-            self._plot_tabs.setTabText(2, "Slope t-values")
-            self._plot_tabs.setTabText(3, "Slope p-values")
-            self._plot_tabs.setTabText(4, "Slope Matrix")
+            # Show all 9 tabs for slope results
+            for i in range(self._plot_tabs.count()):
+                self._plot_tabs.setTabVisible(i, True)
         else:
-            self._plot_tabs.setTabVisible(1, False)
-            if self._plot_tabs.currentIndex() == 1:
-                self._plot_tabs.setCurrentIndex(0)
+            # For classic ttest results: hide the 4 activity-specific tabs (indices 1-3)
+            # and the slope mean tab (index 4); show activity mean (0), t (5→1), p (6→2), matrix (7→3)
+            self._plot_tabs.setTabVisible(1, False)   # Activity t-values
+            self._plot_tabs.setTabVisible(2, False)   # Activity p-values
+            self._plot_tabs.setTabVisible(3, False)   # Activity matrix
+            self._plot_tabs.setTabVisible(4, False)   # Slope mean
+            self._plot_tabs.setTabVisible(5, True)
+            self._plot_tabs.setTabVisible(6, True)
+            self._plot_tabs.setTabVisible(7, True)
+            self._plot_tabs.setTabVisible(8, False)   # Scatter (slope only)
             self._plot_tabs.setTabText(0, "Activity")
-            self._plot_tabs.setTabText(2, "T-values")
-            self._plot_tabs.setTabText(3, "P-values")
-            self._plot_tabs.setTabText(4, "Channel Matrix")
+            self._plot_tabs.setTabText(5, "T-values")
+            self._plot_tabs.setTabText(6, "P-values")
+            self._plot_tabs.setTabText(7, "Channel Matrix")
+            if self._plot_tabs.currentIndex() in (1, 2, 3, 4, 8):
+                self._plot_tabs.setCurrentIndex(0)
 
         self._roi_list.blockSignals(True)
         self._roi_list.clear()
@@ -349,7 +391,9 @@ class GroupPlotPanel(QWidget):
             else np.empty((0, len(t)), dtype=np.float64)
         )
         labels = result.contribution_labels[roi_idx] if has_contrib else []
-        self._draw_matrix(
+        self._draw_matrix_on(
+            fig=self._fig_matrix,
+            canvas=self._canvas_matrix,
             rows_a=rows_a,
             rows_b=rows_b,
             labels=labels,
@@ -375,19 +419,32 @@ class GroupPlotPanel(QWidget):
         cond_a_label = result.condition_labels[0]
         cond_b_label = result.condition_labels[1]
 
-        sig_a = (
-            result.condition_a_slope_significant_mask[roi_idx].astype(bool)
-            if result.condition_a_slope_significant_mask.size > 0
+        sig_slope = (
+            result.slope_significant_mask[roi_idx].astype(bool)
+            if result.slope_significant_mask.size > 0
             else np.zeros(len(t), dtype=bool)
         )
-        sig_b = (
-            result.condition_b_slope_significant_mask[roi_idx].astype(bool)
-            if result.condition_b_slope_significant_mask.size > 0
+        sig_activity = (
+            result.activity_significant_mask[roi_idx].astype(bool)
+            if result.activity_significant_mask.size > 0
             else np.zeros(len(t), dtype=bool)
         )
-        sig_any = sig_a | sig_b
 
-        # Activity means ± SEM
+        n_ch = (
+            int(result.roi_channel_counts[roi_idx])
+            if result.roi_channel_counts.size > roi_idx
+            else "?"
+        )
+        n_subj = (
+            int(result.roi_subject_counts[roi_idx])
+            if result.roi_subject_counts.size > roi_idx
+            else "?"
+        )
+        title_base = f"{roi_label}  —  {n_ch} channel(s) / {n_subj} subject(s)"
+        method = result.p_value_correction_method
+        has_correction = bool(method) and method.lower() not in ("none", "")
+
+        # ---- Activity means ± SEM ----
         ax = self._ax_means
         ax.clear()
         has_activity = (
@@ -407,58 +464,90 @@ class GroupPlotPanel(QWidget):
             if np.nanmin(all_means) < 0 < np.nanmax(all_means):
                 ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
         else:
-            ax.text(
-                0.5,
-                0.5,
-                "No activity means available",
-                transform=ax.transAxes,
-                ha="center",
-                va="center",
-                fontsize=9,
-                color="gray",
-            )
+            ax.text(0.5, 0.5, "No activity means available", transform=ax.transAxes,
+                    ha="center", va="center", fontsize=9, color="gray")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
         ax.set_ylabel("mean region activity")
-        n_ch = (
-            int(result.roi_channel_counts[roi_idx])
-            if result.roi_channel_counts.size > roi_idx
-            else "?"
-        )
-        n_subj = (
-            int(result.roi_subject_counts[roi_idx])
-            if result.roi_subject_counts.size > roi_idx
-            else "?"
-        )
-        ax.set_title(
-            f"{roi_label}  —  {n_ch} channel(s) / {n_subj} subject(s)",
-            fontsize=9,
-        )
+        ax.set_title(title_base, fontsize=9)
+        if sig_activity.any():
+            ax.fill_between(t, 0.005, 0.025, where=sig_activity, alpha=0.75, color="red",
+                            transform=ax.get_xaxis_transform(), zorder=5)
         _safe_legend(ax)
-        if sig_a.any():
-            ax.fill_between(
-                t,
-                0.005,
-                0.025,
-                where=sig_a,
-                alpha=0.75,
-                color="red",
-                transform=ax.get_xaxis_transform(),
-                zorder=5,
-            )
-        if sig_b.any():
-            ax.fill_between(
-                t,
-                0.03,
-                0.05,
-                where=sig_b,
-                alpha=0.75,
-                color="orange",
-                transform=ax.get_xaxis_transform(),
-                zorder=5,
-            )
         self._canvas_means.draw_idle()
 
-        # Slope means ± SEM
+        # ---- Activity t-values ----
+        ax = self._ax_activity_t
+        ax.clear()
+        if result.activity_t_values.size > 0:
+            t_act = result.activity_t_values[roi_idx]
+            ax.plot(t, t_act, color="darkorchid",
+                    label=f"{cond_a_label} vs {cond_b_label}")
+            if np.nanmin(t_act) < 0 < np.nanmax(t_act):
+                ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
+        ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
+        if sig_activity.any():
+            ax.fill_between(t, 0, 1, where=sig_activity, alpha=0.18, color="red",
+                            transform=ax.get_xaxis_transform())
+        ax.set_ylabel("activity t-value")
+        ax.set_title(f"{roi_label} — activity ({cond_a_label} vs {cond_b_label})", fontsize=9)
+        _safe_legend(ax)
+        self._canvas_activity_t.draw_idle()
+
+        # ---- Activity p-values ----
+        ax = self._ax_activity_p
+        ax.clear()
+        plotted_p_act: list[np.ndarray] = []
+        if result.activity_p_values.size > 0:
+            p_act = result.activity_p_values[roi_idx]
+            plotted_p_act.append(p_act)
+            corr_label = f"p ({method})" if has_correction else "p-value"
+            ax.plot(t, p_act, color="darkorchid", label=corr_label)
+            if has_correction and result.activity_p_values_uncorrected.size > 0:
+                p_act_unc = result.activity_p_values_uncorrected[roi_idx]
+                plotted_p_act.append(p_act_unc)
+                ax.plot(t, p_act_unc, color="darkorchid", linewidth=0.9, linestyle="--",
+                        alpha=0.6, label="p (uncorr)")
+        ax.axhline(alpha, color="red", linewidth=0.8, linestyle="--", label=f"α = {alpha}")
+        if sig_activity.any():
+            ax.fill_between(t, 0, 1, where=sig_activity, alpha=0.18, color="red",
+                            transform=ax.get_xaxis_transform())
+        if plotted_p_act:
+            p_max = float(np.nanmax(np.concatenate(plotted_p_act)))
+            ax.set_ylim(bottom=0.0, top=max(1.05, p_max * 1.05))
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("activity p-value")
+        _safe_legend(ax)
+        self._canvas_activity_p.draw_idle()
+
+        # ---- Activity matrix ----
+        has_act_contrib = bool(result.condition_a_activity_contributions) and roi_idx < len(
+            result.condition_a_activity_contributions
+        )
+        rows_act_a = (
+            result.condition_a_activity_contributions[roi_idx]
+            if has_act_contrib
+            else np.empty((0, len(t)), dtype=np.float64)
+        )
+        rows_act_b = (
+            result.condition_b_activity_contributions[roi_idx]
+            if has_act_contrib
+            else np.empty((0, len(t)), dtype=np.float64)
+        )
+        contrib_labels = result.contribution_labels[roi_idx] if has_act_contrib else []
+        self._draw_matrix_on(
+            fig=self._fig_activity_matrix,
+            canvas=self._canvas_activity_matrix,
+            rows_a=rows_act_a,
+            rows_b=rows_act_b,
+            labels=contrib_labels,
+            time_axis=t,
+            roi_label=roi_label,
+            cond_a_label=f"activity {cond_a_label}",
+            cond_b_label=f"activity {cond_b_label}",
+            title_suffix=" (activity contributions)",
+        )
+
+        # ---- Slope means ± SEM ----
         ax = self._ax_slope
         ax.clear()
         has_slope_mean = (
@@ -471,169 +560,90 @@ class GroupPlotPanel(QWidget):
             slope_mean_b = result.condition_b_slope_mean[roi_idx]
             slope_sem_b = result.condition_b_slope_sem[roi_idx]
             ax.plot(t, slope_mean_a, color="steelblue", label=cond_a_label)
-            ax.fill_between(
-                t,
-                slope_mean_a - slope_sem_a,
-                slope_mean_a + slope_sem_a,
-                alpha=0.25,
-                color="steelblue",
-            )
+            ax.fill_between(t, slope_mean_a - slope_sem_a, slope_mean_a + slope_sem_a,
+                            alpha=0.25, color="steelblue")
             ax.plot(t, slope_mean_b, color="tomato", label=cond_b_label)
-            ax.fill_between(
-                t,
-                slope_mean_b - slope_sem_b,
-                slope_mean_b + slope_sem_b,
-                alpha=0.25,
-                color="tomato",
-            )
+            ax.fill_between(t, slope_mean_b - slope_sem_b, slope_mean_b + slope_sem_b,
+                            alpha=0.25, color="tomato")
             all_slopes = np.concatenate([slope_mean_a, slope_mean_b])
             if np.nanmin(all_slopes) < 0 < np.nanmax(all_slopes):
                 ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
         else:
-            ax.text(
-                0.5,
-                0.5,
-                "No slope means available",
-                transform=ax.transAxes,
-                ha="center",
-                va="center",
-                fontsize=9,
-                color="gray",
-            )
+            ax.text(0.5, 0.5, "No slope means available", transform=ax.transAxes,
+                    ha="center", va="center", fontsize=9, color="gray")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
         ax.set_ylabel("mean slope")
-        if sig_a.any():
-            ax.fill_between(
-                t,
-                0.005,
-                0.025,
-                where=sig_a,
-                alpha=0.75,
-                color="red",
-                transform=ax.get_xaxis_transform(),
-                zorder=5,
-            )
-        if sig_b.any():
-            ax.fill_between(
-                t,
-                0.03,
-                0.05,
-                where=sig_b,
-                alpha=0.75,
-                color="orange",
-                transform=ax.get_xaxis_transform(),
-                zorder=5,
-            )
+        if sig_slope.any():
+            ax.fill_between(t, 0.005, 0.025, where=sig_slope, alpha=0.75, color="red",
+                            transform=ax.get_xaxis_transform(), zorder=5)
         _safe_legend(ax)
         self._canvas_slope.draw_idle()
 
+        # ---- Slope t-values ----
         ax = self._ax_t
         ax.clear()
-        if result.condition_a_slope_t_values.size > 0:
-            t_a = result.condition_a_slope_t_values[roi_idx]
-            ax.plot(t, t_a, color="steelblue", label=f"t slope {cond_a_label}")
-        else:
-            t_a = np.empty(0, dtype=np.float64)
-        if result.condition_b_slope_t_values.size > 0:
-            t_b = result.condition_b_slope_t_values[roi_idx]
-            ax.plot(t, t_b, color="tomato", label=f"t slope {cond_b_label}")
-        else:
-            t_b = np.empty(0, dtype=np.float64)
-        if t_a.size > 0 or t_b.size > 0:
-            combined_t = np.concatenate([arr for arr in (t_a, t_b) if arr.size > 0])
-            if np.nanmin(combined_t) < 0 < np.nanmax(combined_t):
+        if result.slope_t_values.size > 0:
+            t_slope = result.slope_t_values[roi_idx]
+            ax.plot(t, t_slope, color="darkorange",
+                    label=f"{cond_a_label} vs {cond_b_label}")
+            if np.nanmin(t_slope) < 0 < np.nanmax(t_slope):
                 ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
-        if sig_any.any():
-            ax.fill_between(
-                t,
-                0,
-                1,
-                where=sig_any,
-                alpha=0.18,
-                color="red",
-                transform=ax.get_xaxis_transform(),
-            )
+        if sig_slope.any():
+            ax.fill_between(t, 0, 1, where=sig_slope, alpha=0.18, color="red",
+                            transform=ax.get_xaxis_transform())
         ax.set_ylabel("slope t-value")
+        ax.set_title(f"{roi_label} — slope ({cond_a_label} vs {cond_b_label})", fontsize=9)
         _safe_legend(ax)
         self._canvas_t.draw_idle()
 
+        # ---- Slope p-values ----
         ax = self._ax_p
         ax.clear()
-        method = result.p_value_correction_method
-        has_correction = bool(method) and method.lower() not in ("none", "")
-        plotted_arrays: list[np.ndarray] = []
-
-        if result.condition_a_slope_p_values.size > 0:
-            p_a = result.condition_a_slope_p_values[roi_idx]
-            plotted_arrays.append(p_a)
-            ax.plot(t, p_a, color="steelblue", label=f"p {cond_a_label}")
-            if has_correction and result.condition_a_slope_p_values_uncorrected.size > 0:
-                p_a_unc = result.condition_a_slope_p_values_uncorrected[roi_idx]
-                plotted_arrays.append(p_a_unc)
-                ax.plot(
-                    t,
-                    p_a_unc,
-                    color="steelblue",
-                    linewidth=0.9,
-                    linestyle="--",
-                    alpha=0.6,
-                    label=f"p {cond_a_label} (uncorr)",
-                )
-        if result.condition_b_slope_p_values.size > 0:
-            p_b = result.condition_b_slope_p_values[roi_idx]
-            plotted_arrays.append(p_b)
-            ax.plot(t, p_b, color="tomato", label=f"p {cond_b_label}")
-            if has_correction and result.condition_b_slope_p_values_uncorrected.size > 0:
-                p_b_unc = result.condition_b_slope_p_values_uncorrected[roi_idx]
-                plotted_arrays.append(p_b_unc)
-                ax.plot(
-                    t,
-                    p_b_unc,
-                    color="tomato",
-                    linewidth=0.9,
-                    linestyle="--",
-                    alpha=0.6,
-                    label=f"p {cond_b_label} (uncorr)",
-                )
-
+        plotted_p_slope: list[np.ndarray] = []
+        if result.slope_p_values.size > 0:
+            p_slope = result.slope_p_values[roi_idx]
+            plotted_p_slope.append(p_slope)
+            corr_label = f"p ({method})" if has_correction else "p-value"
+            ax.plot(t, p_slope, color="darkorange", label=corr_label)
+            if has_correction and result.slope_p_values_uncorrected.size > 0:
+                p_slope_unc = result.slope_p_values_uncorrected[roi_idx]
+                plotted_p_slope.append(p_slope_unc)
+                ax.plot(t, p_slope_unc, color="darkorange", linewidth=0.9, linestyle="--",
+                        alpha=0.6, label="p (uncorr)")
         ax.axhline(alpha, color="red", linewidth=0.8, linestyle="--", label=f"α = {alpha}")
-        if sig_any.any():
-            ax.fill_between(
-                t,
-                0,
-                1,
-                where=sig_any,
-                alpha=0.18,
-                color="red",
-                transform=ax.get_xaxis_transform(),
-            )
-        if plotted_arrays:
-            p_max = float(np.nanmax(np.concatenate(plotted_arrays)))
+        if sig_slope.any():
+            ax.fill_between(t, 0, 1, where=sig_slope, alpha=0.18, color="red",
+                            transform=ax.get_xaxis_transform())
+        if plotted_p_slope:
+            p_max = float(np.nanmax(np.concatenate(plotted_p_slope)))
             ax.set_ylim(bottom=0.0, top=max(1.05, p_max * 1.05))
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("slope p-value")
         _safe_legend(ax)
         self._canvas_p.draw_idle()
 
-        has_contrib = bool(result.condition_a_slope_contributions) and roi_idx < len(
+        # ---- Slope matrix ----
+        has_slope_contrib = bool(result.condition_a_slope_contributions) and roi_idx < len(
             result.condition_a_slope_contributions
         )
-        rows_a = (
+        rows_slope_a = (
             result.condition_a_slope_contributions[roi_idx]
-            if has_contrib
+            if has_slope_contrib
             else np.empty((0, len(t)), dtype=np.float64)
         )
-        rows_b = (
+        rows_slope_b = (
             result.condition_b_slope_contributions[roi_idx]
-            if has_contrib
+            if has_slope_contrib
             else np.empty((0, len(t)), dtype=np.float64)
         )
-        labels = result.contribution_labels[roi_idx] if has_contrib else []
-        self._draw_matrix(
-            rows_a=rows_a,
-            rows_b=rows_b,
-            labels=labels,
+        slope_labels = result.contribution_labels[roi_idx] if has_slope_contrib else []
+        self._draw_matrix_on(
+            fig=self._fig_matrix,
+            canvas=self._canvas_matrix,
+            rows_a=rows_slope_a,
+            rows_b=rows_slope_b,
+            labels=slope_labels,
             time_axis=t,
             roi_label=roi_label,
             cond_a_label=f"slope {cond_a_label}",
@@ -641,13 +651,41 @@ class GroupPlotPanel(QWidget):
             title_suffix=" (slope contributions)",
         )
 
+        # ---- Scatter (predictor vs epoch-mean brain activity) ----
+        has_scatter_a = (
+            bool(result.condition_a_scatter_predictor)
+            and roi_idx < len(result.condition_a_scatter_predictor)
+        )
+        has_scatter_b = (
+            bool(result.condition_b_scatter_predictor)
+            and roi_idx < len(result.condition_b_scatter_predictor)
+        )
+        pred_a = result.condition_a_scatter_predictor[roi_idx] if has_scatter_a else np.empty(0)
+        act_a = result.condition_a_scatter_activity[roi_idx] if has_scatter_a else np.empty(0)
+        pred_b = result.condition_b_scatter_predictor[roi_idx] if has_scatter_b else np.empty(0)
+        act_b = result.condition_b_scatter_activity[roi_idx] if has_scatter_b else np.empty(0)
+        self._draw_scatter_on(
+            fig=self._fig_scatter,
+            canvas=self._canvas_scatter,
+            pred_a=pred_a,
+            act_a=act_a,
+            pred_b=pred_b,
+            act_b=act_b,
+            roi_label=roi_label,
+            cond_a_label=cond_a_label,
+            cond_b_label=cond_b_label,
+            sig_slope=sig_slope,
+        )
+
     # ------------------------------------------------------------------
     # Shared helpers
     # ------------------------------------------------------------------
 
-    def _draw_matrix(
+    def _draw_matrix_on(
         self,
         *,
+        fig: "Figure",
+        canvas: "FigureCanvasQTAgg",
         rows_a: np.ndarray,
         rows_b: np.ndarray,
         labels: list[str],
@@ -657,9 +695,8 @@ class GroupPlotPanel(QWidget):
         cond_b_label: str,
         title_suffix: str,
     ) -> None:
-        self._fig_matrix.clear()
-        self._ax_matrix = self._fig_matrix.add_subplot(111)
-        ax = self._ax_matrix
+        fig.clear()
+        ax = fig.add_subplot(111)
 
         if rows_a.size == 0 and rows_b.size == 0:
             ax.text(
@@ -673,7 +710,7 @@ class GroupPlotPanel(QWidget):
                 fontsize=10,
             )
             ax.set_xlabel("Time (s)")
-            self._canvas_matrix.draw_idle()
+            canvas.draw_idle()
             return
 
         n_t = len(time_axis)
@@ -695,7 +732,7 @@ class GroupPlotPanel(QWidget):
             extent=[time_axis[0], time_axis[-1], n_a + n_b - 0.5, -0.5],
             interpolation="nearest",
         )
-        self._fig_matrix.colorbar(im, ax=ax, location="right", shrink=0.8)
+        fig.colorbar(im, ax=ax, location="right", shrink=0.8)
 
         if n_a > 0 and n_b > 0:
             ax.axhline(n_a - 0.5, color="white", linewidth=1.5)
@@ -722,19 +759,87 @@ class GroupPlotPanel(QWidget):
 
         ax.set_title(f"{roi_label}{title_suffix}", fontsize=9)
         ax.set_xlabel("Time (s)")
-        self._canvas_matrix.draw_idle()
+        canvas.draw_idle()
+
+    def _draw_scatter_on(
+        self,
+        *,
+        fig: "Figure",
+        canvas: "FigureCanvasQTAgg",
+        pred_a: np.ndarray,
+        act_a: np.ndarray,
+        pred_b: np.ndarray,
+        act_b: np.ndarray,
+        roi_label: str,
+        cond_a_label: str,
+        cond_b_label: str,
+        sig_slope: np.ndarray,
+    ) -> None:
+        """Draw a predictor-vs-activity scatter plot with per-condition regression lines."""
+        fig.clear()
+        ax = fig.add_subplot(111)
+
+        pred_a = np.asarray(pred_a, dtype=np.float64).ravel()
+        act_a = np.asarray(act_a, dtype=np.float64).ravel()
+        pred_b = np.asarray(pred_b, dtype=np.float64).ravel()
+        act_b = np.asarray(act_b, dtype=np.float64).ravel()
+
+        has_data = pred_a.size > 0 or pred_b.size > 0
+        if not has_data:
+            ax.text(0.5, 0.5, "No scatter data available", transform=ax.transAxes,
+                    ha="center", va="center", fontsize=9, color="gray")
+            ax.set_title(f"{roi_label} — scatter", fontsize=9)
+            canvas.draw_idle()
+            return
+
+        any_significant = bool(sig_slope.any()) if sig_slope.size > 0 else False
+        reg_ls = "-" if any_significant else "--"
+
+        if pred_a.size > 0:
+            ax.scatter(pred_a, act_a, color="steelblue", alpha=0.35, s=18,
+                       label=cond_a_label, linewidths=0)
+            if pred_a.size >= 2:
+                valid_a = np.isfinite(pred_a) & np.isfinite(act_a)
+                if valid_a.sum() >= 2:
+                    coefs_a = np.polyfit(pred_a[valid_a], act_a[valid_a], 1)
+                    x_range_a = np.array([pred_a[valid_a].min(), pred_a[valid_a].max()])
+                    ax.plot(x_range_a, np.polyval(coefs_a, x_range_a),
+                            color="steelblue", linewidth=1.5, linestyle=reg_ls)
+
+        if pred_b.size > 0:
+            ax.scatter(pred_b, act_b, color="tomato", alpha=0.35, s=18,
+                       label=cond_b_label, linewidths=0)
+            if pred_b.size >= 2:
+                valid_b = np.isfinite(pred_b) & np.isfinite(act_b)
+                if valid_b.sum() >= 2:
+                    coefs_b = np.polyfit(pred_b[valid_b], act_b[valid_b], 1)
+                    x_range_b = np.array([pred_b[valid_b].min(), pred_b[valid_b].max()])
+                    ax.plot(x_range_b, np.polyval(coefs_b, x_range_b),
+                            color="tomato", linewidth=1.5, linestyle=reg_ls)
+
+        ax.set_xlabel("Predictor value")
+        ax.set_ylabel("Epoch mean activity")
+        ax.set_title(f"{roi_label} — predictor vs activity", fontsize=9)
+        _safe_legend(ax)
+        canvas.draw_idle()
 
     def _draw_placeholder(self, message: str = "") -> None:
-        for ax in [self._ax_means, self._ax_slope, self._ax_t, self._ax_p]:
+        for ax in [self._ax_means, self._ax_activity_t, self._ax_activity_p, self._ax_slope, self._ax_t, self._ax_p, self._ax_scatter]:
             ax.clear()
             ax.set_facecolor("#f4f4f4")
             ax.set_xticks([])
             ax.set_yticks([])
-        self._fig_matrix.clear()
-        self._ax_matrix = self._fig_matrix.add_subplot(111)
-        self._ax_matrix.set_facecolor("#f4f4f4")
-        self._ax_matrix.set_xticks([])
-        self._ax_matrix.set_yticks([])
+        for fig, ax_attr in [
+            (self._fig_activity_matrix, "_ax_activity_matrix"),
+            (self._fig_matrix, "_ax_matrix"),
+            (self._fig_scatter, "_ax_scatter"),
+        ]:
+            fig.clear()
+            new_ax = fig.add_subplot(111)
+            setattr(self, ax_attr, new_ax)
+            new_ax.set_facecolor("#f4f4f4")
+            new_ax.set_xticks([])
+            new_ax.set_yticks([])
         if message:
             self._ax_means.text(
                 0.5,
@@ -748,10 +853,14 @@ class GroupPlotPanel(QWidget):
             )
         for canvas in [
             self._canvas_means,
+            self._canvas_activity_t,
+            self._canvas_activity_p,
+            self._canvas_activity_matrix,
             self._canvas_slope,
             self._canvas_t,
             self._canvas_p,
             self._canvas_matrix,
+            self._canvas_scatter,
         ]:
             canvas.draw_idle()
 
@@ -763,4 +872,4 @@ def _safe_legend(ax) -> None:
 
 
 def _is_slope_group_result(result: object) -> bool:
-    return hasattr(result, "condition_a_slope_t_values")
+    return hasattr(result, "slope_t_values")

@@ -256,6 +256,17 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
                 )
                 epochs_grp.create_dataset("time_s", data=result.time_axis_s.astype(np.float64))
 
+            if result.condition_a_epoch_means.ndim == 2 and result.condition_a_epoch_means.size > 0:
+                scatter_grp = fh.create_group("scatter")
+                scatter_grp.create_dataset(
+                    "condition_a_epoch_means",
+                    data=result.condition_a_epoch_means.astype(np.float64),
+                )
+                scatter_grp.create_dataset(
+                    "condition_b_epoch_means",
+                    data=result.condition_b_epoch_means.astype(np.float64),
+                )
+
             prov_grp = fh.create_group("provenance")
             prov_grp.create_dataset(
                 "source_ieeg_files",
@@ -422,6 +433,17 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
                 time_s=np.array([], dtype=np.float64),
             )
 
+        if result.condition_a_epoch_means.ndim == 2 and result.condition_a_epoch_means.size > 0:
+            scatter_struct: object = make_struct(
+                condition_a_epoch_means=result.condition_a_epoch_means.astype(np.float64),
+                condition_b_epoch_means=result.condition_b_epoch_means.astype(np.float64),
+            )
+        else:
+            scatter_struct = make_struct(
+                condition_a_epoch_means=np.empty((0, 0), dtype=np.float64),
+                condition_b_epoch_means=np.empty((0, 0), dtype=np.float64),
+            )
+
         data = make_struct(
             regression=regression_struct,
             predictor=predictor_struct,
@@ -431,6 +453,7 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
             meta=meta_struct,
             trials=trials_struct,
             epochs=epochs_struct,
+            scatter=scatter_struct,
             provenance=prov_struct,
         )
         savemat(str(output_path), {"data": data}, do_compression=True)

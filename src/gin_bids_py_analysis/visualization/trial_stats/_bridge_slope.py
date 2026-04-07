@@ -103,6 +103,25 @@ def _write_hdf5_structure(
         dtype=str_dt,
     )
 
+    # predictor values (required for scatter)
+    pred_grp = fh.create_group("predictor")
+    pred_grp.create_dataset(
+        "condition_a_values",
+        data=np.asarray(result.condition_a_predictor_values, dtype=np.float64),
+    )
+    pred_grp.create_dataset(
+        "condition_b_values",
+        data=np.asarray(result.condition_b_predictor_values, dtype=np.float64),
+    )
+
+    # epoch means (required for scatter)
+    em_a = np.asarray(result.condition_a_epoch_means, dtype=np.float64)
+    em_b = np.asarray(result.condition_b_epoch_means, dtype=np.float64)
+    if em_a.ndim == 2 and em_a.size > 0 and em_b.ndim == 2 and em_b.size > 0:
+        scatter_grp = fh.create_group("scatter")
+        scatter_grp.create_dataset("condition_a_epoch_means", data=em_a)
+        scatter_grp.create_dataset("condition_b_epoch_means", data=em_b)
+
 
 def _build_in_memory_bids_file_with_handle(
     result: "TrialSlopeStatsProcessingResult",

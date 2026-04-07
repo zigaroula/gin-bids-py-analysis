@@ -169,3 +169,67 @@ def test_process_group_excludes_invalid_predictor_trials(tmp_path: Path) -> None
     assert any(trial.exclusion_reason == "invalid_predictor_value" for trial in result.resolved_trials)
 
 
+def test_process_group_experiment_start_code_filters_early_anchors(tmp_path: Path) -> None:
+    """Anchors at or before experiment_start_event_code are excluded before slope regression."""
+    sfreq = 10.0
+    ch_names = ["A1"]
+    # anchor at t=1 (before start → excluded), start at t=2,
+    # anchors at t=3,4,5,6,7,8 (after start → 3 accepted + 3 rejected)
+    data = np.zeros((1, 100), dtype=np.float32)
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    # Marker "1" = start code, "10" = anchor code
+    annotations = Annotations(
+        onset=[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+        duration=[0.0] * 8,
+        description=[
+            "Stimulus/S  10",  # excluded (before start)
+            "Stimulus/S  1",   # start marker
+            "Stimulus/S  10",
+            "Stimulus/S  10",
+            "Stimulus/S  10",
+            "Stimulus/S  10",
+            "Stimulus/S  10",
+            "Stimulus/S  10",
+        ],
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    # 6 anchors after filtering → labels and predictors for those 6 only
+    labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
+    predictors = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
+
+    processor = TrialSlopeStatsProcessing(
+        TrialSlopeStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            predictor="predictor_value",
+            min_trials_per_condition=3,
+            p_value_correction_method="none",
+            experiment_start_event_code="1",
+        ),
+        resolver=_SlopeResolver(labels, predictors),
+    )
+
+    result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
+
+    # All 6 filtered anchors must be present; the early one must not appear.
+    assert len(result.resolved_trials) == 6
+    assert all(t.anchor_onset_s > 2.0 for t in result.resolved_trials)
+    assert result.condition_a_trial_count == 3
+    assert result.condition_b_trial_count == 3
+    assert result.condition_a_stats_valid is True
+    assert result.metadata["experiment_start_event_code"] == "1"
+    assert result.metadata["experiment_end_event_code"] is None

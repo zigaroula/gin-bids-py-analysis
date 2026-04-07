@@ -35,6 +35,7 @@ SECONDARY_FILTERS = [
 
 PARAMS = TrialSlopeStatsParams(
     anchor_event_codes=["11", "12"],
+    experiment_start_event_code="5",
     tmin_s=-1.0,
     tmax_s=6.0,
     condition_a="pleasant",

@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.stats import ttest_1samp
+from scipy.stats import ttest_1samp, ttest_ind
 
 
 @dataclass(frozen=True)
@@ -139,3 +139,77 @@ def _nansem(values: np.ndarray, axis: int = 0) -> np.ndarray:
     std = np.nanstd(arr, axis=axis, ddof=1, dtype=np.float64)
     sem = std / np.sqrt(np.maximum(count, 1))
     return np.where(count >= 2, sem, np.nan)
+
+
+def compute_two_sample_timecourse(
+    samples_a: np.ndarray,
+    samples_b: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute two-sample (a vs b) t-test statistics for two ``[n_samples, n_times]`` matrices.
+
+    Parameters
+    ----------
+    samples_a, samples_b:
+        2D arrays of shape ``(n_samples_a, n_times)`` and ``(n_samples_b, n_times)``.
+
+    Returns
+    -------
+    t_values, p_values
+        Both shape ``(n_times,)``.  All-NaN arrays are returned when either
+        group has fewer than 2 samples.
+    """
+    a = np.asarray(samples_a, dtype=np.float64)
+    b = np.asarray(samples_b, dtype=np.float64)
+    if a.ndim != 2 or b.ndim != 2:
+        raise ValueError("samples_a and samples_b must be 2D arrays of shape [n_samples, n_times].")
+    n_times = int(a.shape[1])
+    if a.shape[0] < 2 or b.shape[0] < 2:
+        empty = np.full((n_times,), np.nan, dtype=np.float64)
+        return empty.copy(), empty.copy()
+
+    stats = ttest_ind(a, b, axis=0, equal_var=False, nan_policy="omit")
+    t_values = np.asarray(stats.statistic, dtype=np.float64)
+    p_values = np.asarray(stats.pvalue, dtype=np.float64)
+    return t_values, p_values
+
+
+def compute_two_sample_epoch_summary(
+    samples_a: np.ndarray,
+    samples_b: np.ndarray,
+) -> tuple[float, float, float]:
+    """Summarize one ROI on the full epoch by testing group A vs group B over the mean time.
+
+    Each channel timecourse is first averaged across time, then the two groups are
+    compared with a two-sample t-test.
+
+    Parameters
+    ----------
+    samples_a, samples_b:
+        2D arrays of shape ``(n_samples_a, n_times)`` and ``(n_samples_b, n_times)``.
+
+    Returns
+    -------
+    t_value, p_value, df
+        All scalars.  NaN when there are insufficient finite values.
+    """
+    a = np.asarray(samples_a, dtype=np.float64)
+    b = np.asarray(samples_b, dtype=np.float64)
+    if a.ndim != 2 or b.ndim != 2:
+        raise ValueError("samples_a and samples_b must be 2D arrays of shape [n_samples, n_times].")
+    if a.shape[0] == 0 or b.shape[0] == 0:
+        return np.nan, np.nan, np.nan
+
+    means_a = np.nanmean(a, axis=1, dtype=np.float64)
+    means_b = np.nanmean(b, axis=1, dtype=np.float64)
+    valid_a = means_a[np.isfinite(means_a)]
+    valid_b = means_b[np.isfinite(means_b)]
+    if valid_a.size < 2 or valid_b.size < 2:
+        return np.nan, np.nan, np.nan
+
+    stats = ttest_ind(valid_a, valid_b, equal_var=False, nan_policy="omit")
+    df = float(valid_a.size + valid_b.size - 2)
+    return (
+        float(np.asarray(stats.statistic, dtype=np.float64)),
+        float(np.asarray(stats.pvalue, dtype=np.float64)),
+        df,
+    )

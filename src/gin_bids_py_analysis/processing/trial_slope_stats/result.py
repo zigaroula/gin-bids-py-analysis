@@ -71,4 +71,15 @@ class TrialSlopeStatsProcessingResult(BaseProcessingResult):
     condition_b_epochs: np.ndarray = field(default_factory=lambda: np.array([]))
     """Individual trial epochs for condition B (n_trials, n_channels, n_times)."""
 
+    condition_a_epoch_means: np.ndarray = field(default_factory=lambda: np.array([]))
+    """Per-trial mean activity over the epoch time window, condition A.
+    Shape ``(n_channels, n_trials_a)``.  Always computed; does not require
+    ``include_epochs=True`` in the writer params.
+    """
+
+    condition_b_epoch_means: np.ndarray = field(default_factory=lambda: np.array([]))
+    """Per-trial mean activity over the epoch time window, condition B.
+    Shape ``(n_channels, n_trials_b)``.
+    """
+
 
