@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox,
@@ -19,6 +21,9 @@ from PySide6.QtWidgets import (
 )
 from pydantic import ValidationError
 
+from gin_bids_py_analysis.processing.trial_slope_stats_group.params import (
+    TrialSlopeStatsGroupParams,
+)
 from gin_bids_py_analysis.processing.trial_stats_group.params import (
     TrialStatsGroupParams,
 )
@@ -42,12 +47,18 @@ class GroupParamsPanel(QWidget):
 
     def __init__(
         self,
-        params: TrialStatsGroupParams,
+        params: TrialStatsGroupParams | TrialSlopeStatsGroupParams,
         subject_ids: list[str] | None = None,
+        analysis_mode: Literal["ttest", "slope"] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._subject_ids: list[str] = list(subject_ids) if subject_ids else []
+        self._analysis_mode: Literal["ttest", "slope"] = (
+            analysis_mode
+            if analysis_mode is not None
+            else ("slope" if isinstance(params, TrialSlopeStatsGroupParams) else "ttest")
+        )
         self.setMinimumWidth(280)
         self.setMaximumWidth(400)
 
@@ -67,11 +78,17 @@ class GroupParamsPanel(QWidget):
         self._source_metric = QComboBox()
         for m in ("mean_difference", "t_values", "condition_a_mean", "condition_b_mean"):
             self._source_metric.addItem(m)
-        form.addRow("Source metric", self._source_metric)
+        self._source_metric_label = QLabel("Source metric")
+        form.addRow(self._source_metric_label, self._source_metric)
 
         # p_value_correction_method
         self._correction = QComboBox()
-        for m in ("none", "fdr_bh", "bonferroni", "cluster_permutation"):
+        correction_modes = (
+            ("none", "fdr_bh", "bonferroni")
+            if self._analysis_mode == "slope"
+            else ("none", "fdr_bh", "bonferroni", "cluster_permutation")
+        )
+        for m in correction_modes:
             self._correction.addItem(m)
         form.addRow("p-value correction", self._correction)
 
@@ -79,7 +96,8 @@ class GroupParamsPanel(QWidget):
         self._cluster_method = QComboBox()
         for m in ("custom", "mne"):
             self._cluster_method.addItem(m)
-        form.addRow("Cluster method", self._cluster_method)
+        self._cluster_method_label = QLabel("Cluster method")
+        form.addRow(self._cluster_method_label, self._cluster_method)
 
         # significance_alpha
         self._alpha = QDoubleSpinBox()
@@ -149,14 +167,15 @@ class GroupParamsPanel(QWidget):
 
         # Store initial params so get_params() can round-trip manual_region_channels
         self._manual_region_channels: dict = {}
+        self._apply_analysis_mode_visibility()
         self.set_params(params)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def get_params(self) -> TrialStatsGroupParams:
-        """Parse current widget values into a ``TrialStatsGroupParams``.
+    def get_params(self) -> TrialStatsGroupParams | TrialSlopeStatsGroupParams:
+        """Parse current widget values into a group-params model.
 
         Raises
         ------
@@ -165,6 +184,16 @@ class GroupParamsPanel(QWidget):
         """
         atlas_name = self._atlas_name.text().strip() or None
         try:
+            if self._analysis_mode == "slope":
+                return TrialSlopeStatsGroupParams(
+                    p_value_correction_method=self._correction.currentText(),
+                    significance_alpha=self._alpha.value(),
+                    roi_mode=self._roi_mode.currentText(),
+                    atlas_name=atlas_name,
+                    manual_region_channels=self._manual_region_channels,
+                    min_channels_per_roi=self._min_channels.value(),
+                    min_subjects_per_roi=self._min_subjects.value(),
+                )
             return TrialStatsGroupParams(
                 source_metric=self._source_metric.currentText(),
                 p_value_correction_method=self._correction.currentText(),
@@ -180,11 +209,12 @@ class GroupParamsPanel(QWidget):
             QMessageBox.warning(self, "Invalid parameters", str(exc))
             raise ValueError(str(exc)) from exc
 
-    def set_params(self, params: TrialStatsGroupParams) -> None:
+    def set_params(self, params: TrialStatsGroupParams | TrialSlopeStatsGroupParams) -> None:
         """Populate all widgets from *params*."""
-        _set_combo(self._source_metric, params.source_metric)
+        source_metric = getattr(params, "source_metric", "t_values")
+        _set_combo(self._source_metric, source_metric)
         _set_combo(self._correction, params.p_value_correction_method)
-        _set_combo(self._cluster_method, params.cluster_permutation_method)
+        _set_combo(self._cluster_method, getattr(params, "cluster_permutation_method", "custom"))
         self._alpha.setValue(params.significance_alpha)
         _set_combo(self._roi_mode, params.roi_mode)
         self._atlas_name.setText(params.atlas_name or "")
@@ -192,6 +222,14 @@ class GroupParamsPanel(QWidget):
         self._min_subjects.setValue(params.min_subjects_per_roi)
         self._manual_region_channels = dict(params.manual_region_channels)
         self._update_regions_summary()
+
+    def set_analysis_mode(self, analysis_mode: Literal["ttest", "slope"]) -> None:
+        """Switch panel behavior between ttest and slope group-params schemas."""
+        if analysis_mode == self._analysis_mode:
+            return
+        self._analysis_mode = analysis_mode
+        self._rebuild_correction_options()
+        self._apply_analysis_mode_visibility()
 
     def set_computing(self, computing: bool) -> None:
         """Disable/enable the Compute button while a computation is running."""
@@ -236,6 +274,27 @@ class GroupParamsPanel(QWidget):
         self._regions_summary.setText(
             f"{n_regions} {region_word}, {n_assignments} {subj_word} with channels"
         )
+
+    def _rebuild_correction_options(self) -> None:
+        current = self._correction.currentText().strip()
+        self._correction.blockSignals(True)
+        self._correction.clear()
+        options = (
+            ("none", "fdr_bh", "bonferroni")
+            if self._analysis_mode == "slope"
+            else ("none", "fdr_bh", "bonferroni", "cluster_permutation")
+        )
+        for option in options:
+            self._correction.addItem(option)
+        _set_combo(self._correction, current if current else "none")
+        self._correction.blockSignals(False)
+
+    def _apply_analysis_mode_visibility(self) -> None:
+        is_ttest = self._analysis_mode == "ttest"
+        self._source_metric_label.setVisible(is_ttest)
+        self._source_metric.setVisible(is_ttest)
+        self._cluster_method_label.setVisible(is_ttest)
+        self._cluster_method.setVisible(is_ttest)
 
 
 # ---------------------------------------------------------------------------

@@ -23,6 +23,12 @@ from gin_bids_py_analysis.processing.trial_slope_stats import (
     TrialSlopeStatsProcessingWriter,
     TrialSlopeStatsWriterParams,
 )
+from gin_bids_py_analysis.processing.trial_slope_stats_group import (
+    TrialSlopeStatsGroupParams,
+    TrialSlopeStatsGroupProcessingResult,
+    TrialSlopeStatsGroupProcessingWriter,
+    TrialSlopeStatsGroupWriterParams,
+)
 from gin_bids_py_analysis.processing.trial_stats import (
     TrialResolver,
     TrialStatsParams,
@@ -46,9 +52,6 @@ if TYPE_CHECKING:
     )
     from gin_bids_py_analysis.processing.trial_stats_group.result import (
         TrialStatsGroupProcessingResult,
-    )
-    from gin_bids_py_analysis.processing.trial_stats_group.writer import (
-        TrialStatsGroupProcessingWriter,
     )
 
 
@@ -89,6 +92,7 @@ class TrialStatsWindow(QMainWindow):
         default_params: TrialStatsParams,
         resolver: TrialResolver,
         group_params: "TrialStatsGroupParams | None" = None,
+        slope_group_params: TrialSlopeStatsGroupParams | None = None,
         bids_root: Path | None = None,
         default_slope_params: TrialSlopeStatsParams | None = None,
         default_mode: str = "ttest",
@@ -107,7 +111,8 @@ class TrialStatsWindow(QMainWindow):
         self._compute_generation: int = 0
         self._preload_worker: PreloadWorker | None = None
         self._group_params = group_params
-        self._group_result: TrialStatsGroupProcessingResult | None = None
+        self._slope_group_params = slope_group_params
+        self._group_result: TrialStatsGroupProcessingResult | TrialSlopeStatsGroupProcessingResult | None = None
         self._group_worker: GroupComputeWorker | None = None
         self._write_worker: WriteAllWorker | None = None
         self._write_group_worker: WriteGroupWorker | None = None
@@ -146,11 +151,28 @@ class TrialStatsWindow(QMainWindow):
         # Group tab panels
         # ------------------------------------------------------------------
         self._group_plot_panel = GroupPlotPanel()
-        if group_params is not None:
-            self._group_params_panel = GroupParamsPanel(group_params, subject_ids=subject_ids)
-        else:
+        if self._analysis_mode == "slope":
+            active_group_params: TrialStatsGroupParams | TrialSlopeStatsGroupParams
+            if self._slope_group_params is not None:
+                active_group_params = self._slope_group_params
+            elif self._group_params is not None:
+                active_group_params = _coerce_slope_group_params_from_ttest(self._group_params)
+            else:
+                active_group_params = _make_placeholder_slope_group_params()
             self._group_params_panel = GroupParamsPanel(
-                _make_placeholder_group_params(), subject_ids=subject_ids
+                active_group_params,
+                subject_ids=subject_ids,
+                analysis_mode="slope",
+            )
+        else:
+            if self._group_params is not None:
+                active_group_params = self._group_params
+            else:
+                active_group_params = _make_placeholder_group_params()
+            self._group_params_panel = GroupParamsPanel(
+                active_group_params,
+                subject_ids=subject_ids,
+                analysis_mode="ttest",
             )
 
         group_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -279,6 +301,18 @@ class TrialStatsWindow(QMainWindow):
         if mode is None:
             mode = self._params_panel.analysis_mode
         self._analysis_mode = mode if mode in {"ttest", "slope"} else "ttest"
+        self._group_params_panel.set_analysis_mode(
+            "slope" if self._analysis_mode == "slope" else "ttest"
+        )
+        if self._analysis_mode == "slope":
+            if self._slope_group_params is not None:
+                self._group_params_panel.set_params(self._slope_group_params)
+            elif self._group_params is not None:
+                self._group_params_panel.set_params(
+                    _coerce_slope_group_params_from_ttest(self._group_params)
+                )
+        elif self._group_params is not None:
+            self._group_params_panel.set_params(self._group_params)
 
         # Bump generation so any in-flight result from a previous run is discarded
         self._compute_generation += 1
@@ -373,12 +407,17 @@ class TrialStatsWindow(QMainWindow):
         if current in results and self._current_result is not results.get(current):
             self._display_subject_result(current, results[current])
 
-        # Enable Group tab only for classic t-test mode.
         if self._analysis_mode == "slope":
-            self._tabs.setTabEnabled(1, False)
-            self._group_params_panel.set_status(
-                "Group tab disabled in slope mode (V1)."
-            )
+            if self._slope_group_params is not None or self._group_params is not None:
+                self._tabs.setTabEnabled(1, True)
+                self._group_params_panel.set_status(
+                    f"{n} subject(s) ready — click 'Compute group stats'"
+                )
+            else:
+                self._tabs.setTabEnabled(1, False)
+                self._group_params_panel.set_status(
+                    "Set slope-group parameters to enable Group compute."
+                )
         elif self._group_params is not None and n > 0:
             self._tabs.setTabEnabled(1, True)
             self._group_params_panel.set_status(
@@ -418,11 +457,6 @@ class TrialStatsWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_group_compute_requested(self) -> None:
-        if self._analysis_mode == "slope":
-            self._group_params_panel.set_status(
-                "Group statistics are unavailable in slope mode (V1)."
-            )
-            return
         if not self._all_results:
             self._group_params_panel.set_status("No subject results available yet.")
             return
@@ -430,9 +464,21 @@ class TrialStatsWindow(QMainWindow):
             params = self._group_params_panel.get_params()
         except ValueError:
             return
+        if self._analysis_mode == "slope":
+            if isinstance(params, TrialSlopeStatsGroupParams):
+                self._slope_group_params = params
+            else:
+                self._slope_group_params = _coerce_slope_group_params_from_ttest(params)
+                params = self._slope_group_params
+        else:
+            assert isinstance(params, TrialStatsGroupParams)
+            self._group_params = params
         self._start_group_compute(params)
 
-    def _start_group_compute(self, params: "TrialStatsGroupParams") -> None:
+    def _start_group_compute(
+        self,
+        params: TrialStatsGroupParams | TrialSlopeStatsGroupParams,
+    ) -> None:
         # Disconnect previous group worker
         if self._group_worker is not None:
             try:
@@ -455,7 +501,10 @@ class TrialStatsWindow(QMainWindow):
         worker.error.connect(self._on_group_error)
         worker.start()
 
-    def _on_group_result_ready(self, result: "TrialStatsGroupProcessingResult") -> None:
+    def _on_group_result_ready(
+        self,
+        result: TrialStatsGroupProcessingResult | TrialSlopeStatsGroupProcessingResult,
+    ) -> None:
         self._group_result = result
         self._group_params_panel.set_computing(False)
         n_rois = len(result.region_names)
@@ -557,16 +606,31 @@ class TrialStatsWindow(QMainWindow):
             )
             return
 
-        dlg = SaveTrialStatsGroupDialog(self._bids_root, parent=self)
+        if self._analysis_mode == "slope":
+            default_pipeline_label = "trial_slope_stats_group"
+            default_output_description = "trialslopestatsgroup"
+        else:
+            default_pipeline_label = "trial_stats_group"
+            default_output_description = "trialstatsgroup"
+
+        dlg = SaveTrialStatsGroupDialog(
+            self._bids_root,
+            parent=self,
+            default_pipeline_label=default_pipeline_label,
+            default_output_description=default_output_description,
+        )
         if dlg.exec() != SaveTrialStatsGroupDialog.DialogCode.Accepted:
             return
 
-        writer_params = dlg.get_writer_params()
-
-        from gin_bids_py_analysis.processing.trial_stats_group import (
-            TrialStatsGroupProcessingWriter,
-        )
-        writer = TrialStatsGroupProcessingWriter(writer_params)
+        if self._analysis_mode == "slope":
+            writer_params = TrialSlopeStatsGroupWriterParams(**dlg.get_common_writer_kwargs())
+            writer = TrialSlopeStatsGroupProcessingWriter(writer_params)
+        else:
+            writer_params = dlg.get_writer_params()
+            from gin_bids_py_analysis.processing.trial_stats_group import (
+                TrialStatsGroupProcessingWriter,
+            )
+            writer = TrialStatsGroupProcessingWriter(writer_params)
 
         self._group_params_panel.set_save_enabled(False)
         self._group_params_panel.set_status("Saving group result…")
@@ -608,4 +672,32 @@ def _make_placeholder_group_params() -> "TrialStatsGroupParams":
     return TrialStatsGroupParams(
         roi_mode="manual",
         manual_region_channels={"placeholder": {"01": ["CH1"]}},
+    )
+
+
+def _make_placeholder_slope_group_params() -> TrialSlopeStatsGroupParams:
+    return TrialSlopeStatsGroupParams(
+        roi_mode="manual",
+        manual_region_channels={"placeholder": {"01": ["CH1"]}},
+    )
+
+
+def _coerce_slope_group_params_from_ttest(
+    params: TrialStatsGroupParams | TrialSlopeStatsGroupParams,
+) -> TrialSlopeStatsGroupParams:
+    if isinstance(params, TrialSlopeStatsGroupParams):
+        return params
+
+    correction_method = params.p_value_correction_method
+    if correction_method == "cluster_permutation":
+        correction_method = "none"
+
+    return TrialSlopeStatsGroupParams(
+        p_value_correction_method=correction_method,
+        significance_alpha=params.significance_alpha,
+        roi_mode=params.roi_mode,
+        atlas_name=params.atlas_name,
+        manual_region_channels=params.manual_region_channels,
+        min_channels_per_roi=params.min_channels_per_roi,
+        min_subjects_per_roi=params.min_subjects_per_roi,
     )

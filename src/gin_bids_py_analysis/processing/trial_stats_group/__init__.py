@@ -7,7 +7,9 @@ from .processor import (
     TrialStatsGroupProcessing,
     build_trial_stats_compatible_groups,
 )
-from .result import ROIChannelContribution, TrialStatsGroupProcessingResult
+from gin_bids_py_analysis.processing.utils.group_stats import ROIChannelContribution
+
+from .result import TrialStatsGroupProcessingResult
 from .writer import TrialStatsGroupProcessingWriter
 
 __all__ = [

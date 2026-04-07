@@ -1,8 +1,6 @@
 """
-Trial slope statistics visualization script.
-Edit parameters below, then run:
-
-    python scripts/visualize_trial_slope_stats.py
+Group-level ROI statistics on trial_slope_stats outputs - run script.
+Edit the parameters below and run: python scripts/run_trial_slope_stats_group.py
 """
 
 from __future__ import annotations
@@ -11,50 +9,44 @@ import csv
 import re
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
+from gin_bids_py_analysis.bids import BIDSDataset, BIDSFile, BIDSFileGroup
 from gin_bids_py_analysis.bids.helpers import normalize_subject_value
-from gin_bids_py_analysis.processing.trial_slope_stats import TrialSlopeStatsParams
-from gin_bids_py_analysis.processing.trial_slope_stats_group import TrialSlopeStatsGroupParams
-from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
-from gin_bids_py_analysis.visualization.trial_stats import launch_slope
+from gin_bids_py_analysis.processing.trial_slope_stats_group import (
+    TrialSlopeStatsGroupParams,
+    TrialSlopeStatsGroupProcessing,
+    TrialSlopeStatsGroupProcessingWriter,
+    TrialSlopeStatsGroupWriterParams,
+    build_trial_slope_stats_compatible_groups,
+)
 
 # ---------------------------------------------------------------------------
 # Parameters
 # ---------------------------------------------------------------------------
 
-# Kept aligned with scripts/run_trial_slope_stats.py inputs.
 BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
 
+# Kept aligned with scripts/run_trial_slope_stats.py inputs.
 IEEG_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
     "desc": "gammasm250",
 }
 
+# Kept aligned with scripts/run_trial_slope_stats.py inputs.
 SECONDARY_FILTERS = [
     {"scope": "raw", "datatype": "beh", "suffix": "beh", "extension": ".tsv"},
     {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
 ]
 
-PARAMS = TrialSlopeStatsParams(
-    anchor_event_codes=["11", "12"],
-    tmin_s=-1.0,
-    tmax_s=6.0,
-    condition_a="pleasant",
-    condition_b="unpleasant",
-    predictor="rating",
-    p_value_correction_method="none",
-    significance_alpha=0.05,
-)
-
-RESOLVER = TableTrialResolver(
-    label_column="pleasant",
-    label_map={
-        "1.0": "unpleasant",
-        "2.0": "pleasant",
-    },
-    extract_columns=["rating"],
-)
+# Query trial_slope_stats channel-level outputs from derivatives/trial_slope_stats.
+# desc must match TrialSlopeStatsWriterParams(output_description=...) used upstream.
+TRIAL_SLOPE_STATS_FILTERS = {
+    "scope": "trial_slope_stats",
+    "suffix": "stats",
+    "extension": ".h5",
+    "desc": "correlation",
+    # "task": "decid",
+}
 
 ROI_CSV_FILES = {
     "vmPFC": Path(r"C:\Users\Benjamin BONTEMPS\Downloads\PFCvm_elecs_tbl.csv"),
@@ -68,6 +60,13 @@ GROUP_PARAM_KWARGS = {
     "roi_mode": "manual",
 }
 
+WRITER_PARAMS = TrialSlopeStatsGroupWriterParams(
+    bids_root=BIDS_ROOT,
+    output_format="hdf5",
+    output_description="none",
+)
+
+N_JOBS = 1
 _NA_LIKE_TOKENS = frozenset({"nan", "na", "n/a", "none", "null"})
 _FIRST_CONTACT_PATTERN = re.compile(r"^([A-Za-z]+[0-9]+)")
 
@@ -128,10 +127,10 @@ def _load_roi_channels_from_csv(csv_paths_by_roi: dict[str, Path]) -> dict[str, 
                     continue
 
                 subject_seen = seen_channels.setdefault(subject, set())
-                channel_key = channel.casefold()
-                if channel_key in subject_seen:
+                normalized_channel = channel.casefold()
+                if normalized_channel in subject_seen:
                     continue
-                subject_seen.add(channel_key)
+                subject_seen.add(normalized_channel)
                 roi_subject_channels.setdefault(subject, []).append(channel)
 
             if roi_subject_channels:
@@ -160,24 +159,37 @@ def _print_roi_summary(manual_region_channels: dict[str, dict[str, list[str]]]) 
         print(f"ROI {roi_name}: {n_channels} channel(s) across {n_subjects} subject(s).")
 
 
-def _build_subject_groups(dataset: BIDSDataset) -> dict[str, BIDSFileGroup]:
-    groups = build_subject_groups(dataset, IEEG_FILTERS, SECONDARY_FILTERS)
-    return {group.primary.get("subject"): group for group in groups}
+def _load_trial_slope_stats_files(dataset: BIDSDataset) -> list[BIDSFile]:
+    files = dataset.get_files(**TRIAL_SLOPE_STATS_FILTERS)
+    return sorted(files, key=lambda file: str(file.path))
+
+
+def _build_groups(files: list[BIDSFile]) -> list[BIDSFileGroup]:
+    return build_trial_slope_stats_compatible_groups(files)
+
+
+def main() -> list[Path]:
+    params = _build_group_params()
+    _print_roi_summary(params.manual_region_channels)
+
+    ds = BIDSDataset(BIDS_ROOT)
+    files = _load_trial_slope_stats_files(ds)
+    groups = _build_groups(files)
+    print(
+        f"Found {len(files)} trial_slope_stats file(s) grouped into {len(groups)} "
+        f"compatible run(s). Running with n_jobs={N_JOBS}."
+    )
+
+    if not groups:
+        return []
+
+    processor = TrialSlopeStatsGroupProcessing(params)
+    writer = TrialSlopeStatsGroupProcessingWriter(WRITER_PARAMS)
+    out_paths = processor.run(groups, writer, n_jobs=N_JOBS)
+    for path in out_paths:
+        print(f"Wrote {path}")
+    return out_paths
 
 
 if __name__ == "__main__":
-    group_params = _build_group_params()
-    _print_roi_summary(group_params.manual_region_channels)
-
-    ds = BIDSDataset(BIDS_ROOT)
-    subject_groups = _build_subject_groups(ds)
-    print(f"Found {len(subject_groups)} subject(s).")
-
-    launch_slope(
-        subject_groups,
-        PARAMS,
-        RESOLVER,
-        group_params=group_params,
-        bids_root=BIDS_ROOT,
-    )
-
+    main()

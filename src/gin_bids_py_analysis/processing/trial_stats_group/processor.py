@@ -32,15 +32,18 @@ from gin_bids_py_analysis.processing.utils.matlab import (
 )
 from gin_bids_py_analysis.processing.utils.tables import select_column
 
+from gin_bids_py_analysis.processing.utils.group_stats import (
+    compute_condition_group_stats,
+    compute_one_sample_epoch_summary,
+    compute_one_sample_timecourse,
+)
+
 from .params import TrialStatsGroupParams
 from .result import ROIChannelContribution, TrialStatsGroupProcessingResult
 from .stats import (
     compute_cluster_null_distribution,
     compute_mne_cluster_permutation,
     compute_cluster_permutation_pvalue,
-    compute_condition_group_stats,
-    compute_one_sample_epoch_summary,
-    compute_one_sample_timecourse,
     correct_p_values,
     find_temporal_clusters,
 )

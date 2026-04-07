@@ -5,16 +5,9 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from gin_bids_py_analysis.processing.base import BaseProcessingResult
+from gin_bids_py_analysis.processing.utils.group_stats import ROIChannelContribution
 
-
-@dataclass(frozen=True)
-class ROIChannelContribution:
-    """One channel contribution used for one ROI in the group-level analysis."""
-
-    roi: str
-    subject: str
-    channel: str
-    source_stats_file: str
+__all__ = ["TrialStatsGroupProcessingResult"]
 
 
 @dataclass

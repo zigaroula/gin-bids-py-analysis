@@ -1,0 +1,581 @@
+"""Load a pre-computed ``TrialSlopeStatsGroupProcessingResult`` from disk.
+
+Supports the HDF5 (``.h5`` / ``.hdf5``) and MATLAB (``.mat``) formats written
+by ``TrialSlopeStatsGroupProcessingWriter``.  The returned result can be fed directly
+to the visualization layer without re-running the group processing pipeline.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import h5py
+import numpy as np
+
+from gin_bids_py_analysis.bids.file import BIDSFile
+from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
+from gin_bids_py_analysis.processing.utils.hdf5 import (
+    dataset_or_none,
+    decode_str_array,
+    float_scalar,
+    int_scalar,
+    str_scalar,
+)
+
+from .result import ROIChannelContribution, TrialSlopeStatsGroupProcessingResult
+
+
+def load_trial_slope_stats_group_result(
+    path: Path | str,
+) -> TrialSlopeStatsGroupProcessingResult:
+    """Load a pre-computed ``TrialSlopeStatsGroupProcessingResult`` from *path*.
+
+    Parameters
+    ----------
+    path:
+        Path to an ``.h5``/``.hdf5`` or ``.mat`` group slope-stats file written by
+        ``TrialSlopeStatsGroupProcessingWriter``.
+
+    Returns
+    -------
+    TrialSlopeStatsGroupProcessingResult
+        A fully populated result object ready for visualization.
+
+    Raises
+    ------
+    FileNotFoundError
+        If *path* does not exist.
+    ValueError
+        If the file cannot be interpreted as a valid group slope-stats output.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Group slope-stats file not found: {path}")
+    ext = path.suffix.lower()
+    if ext == ".mat":
+        return _load_from_matlab(path)
+    return _load_from_hdf5(path)
+
+
+# ---------------------------------------------------------------------------
+# HDF5 loader
+# ---------------------------------------------------------------------------
+
+
+def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
+    with h5py.File(path, "r") as fh:
+        # --- axes ---
+        if "axes" not in fh or "region" not in fh["axes"]:
+            raise ValueError(
+                f"{path.name}: axes/region dataset is required for group slope-stats."
+            )
+        region_names = decode_str_array(np.asarray(fh["axes"]["region"][:]))
+        time_axis_s = np.asarray(fh["axes"]["time_s"][:], dtype=np.float64)
+        n_rois = len(region_names)
+        n_t = len(time_axis_s)
+
+        significance_alpha = float_scalar(
+            dataset_or_none(fh, "meta/significance_alpha"), default=0.05
+        )
+
+        def _read_2d(key: str, fill: float = 0.0) -> np.ndarray:
+            ds = dataset_or_none(fh, key)
+            if ds is None:
+                return np.full((n_rois, n_t), fill, dtype=np.float64)
+            return np.asarray(ds[:], dtype=np.float64).reshape(n_rois, n_t)
+
+        def _read_1d(key: str, fill: float = 0.0) -> np.ndarray:
+            ds = dataset_or_none(fh, key)
+            if ds is None:
+                return np.full(n_rois, fill, dtype=np.float64)
+            return np.asarray(ds[:], dtype=np.float64).ravel()
+
+        def _read_1d_int(key: str) -> np.ndarray:
+            ds = dataset_or_none(fh, key)
+            if ds is None:
+                return np.zeros(n_rois, dtype=np.int64)
+            return np.asarray(ds[:], dtype=np.int64).ravel()
+
+        # --- regression (per condition) ---
+        def _read_sig(key: str, p_key: str) -> np.ndarray:
+            ds = dataset_or_none(fh, key)
+            if ds is None:
+                p = _read_2d(p_key, fill=1.0)
+                return np.isfinite(p) & (p < significance_alpha)
+            loaded = np.asarray(ds[:], dtype=bool)
+            if loaded.shape == (n_rois, n_t):
+                return loaded
+            p = _read_2d(p_key, fill=1.0)
+            return np.isfinite(p) & (p < significance_alpha)
+
+        ca_t = _read_2d("regression/condition_a/t_values")
+        ca_p = _read_2d("regression/condition_a/p_values", fill=1.0)
+        ca_p_uncorr = _read_2d("regression/condition_a/p_values_uncorrected", fill=1.0)
+        ca_sig = _read_sig("regression/condition_a/significant_mask", "regression/condition_a/p_values")
+        ca_slope_mean = _read_2d("regression/condition_a/slope_mean")
+        ca_slope_sem = _read_2d("regression/condition_a/slope_sem")
+
+        cb_t = _read_2d("regression/condition_b/t_values")
+        cb_p = _read_2d("regression/condition_b/p_values", fill=1.0)
+        cb_p_uncorr = _read_2d("regression/condition_b/p_values_uncorrected", fill=1.0)
+        cb_sig = _read_sig("regression/condition_b/significant_mask", "regression/condition_b/p_values")
+        cb_slope_mean = _read_2d("regression/condition_b/slope_mean")
+        cb_slope_sem = _read_2d("regression/condition_b/slope_sem")
+
+        # epoch summaries
+        ca_ep_t = _read_1d("regression/condition_a/epoch_summary/t")
+        ca_ep_p = _read_1d("regression/condition_a/epoch_summary/p", fill=1.0)
+        ca_ep_df = _read_1d("regression/condition_a/epoch_summary/df")
+        ca_ep_mean = _read_1d("regression/condition_a/epoch_summary/mean")
+        ca_ep_sem = _read_1d("regression/condition_a/epoch_summary/sem")
+
+        cb_ep_t = _read_1d("regression/condition_b/epoch_summary/t")
+        cb_ep_p = _read_1d("regression/condition_b/epoch_summary/p", fill=1.0)
+        cb_ep_df = _read_1d("regression/condition_b/epoch_summary/df")
+        cb_ep_mean = _read_1d("regression/condition_b/epoch_summary/mean")
+        cb_ep_sem = _read_1d("regression/condition_b/epoch_summary/sem")
+
+        # --- means (activity) ---
+        ca_act_mean = _read_2d("means/condition_a_mean")
+        ca_act_sem = _read_2d("means/condition_a_sem")
+        cb_act_mean = _read_2d("means/condition_b_mean")
+        cb_act_sem = _read_2d("means/condition_b_sem")
+
+        # --- r_values ---
+        ca_r_mean = _read_2d("r_values/condition_a_mean")
+        ca_r_sem = _read_2d("r_values/condition_a_sem")
+        cb_r_mean = _read_2d("r_values/condition_b_mean")
+        cb_r_sem = _read_2d("r_values/condition_b_sem")
+
+        # --- roi counts ---
+        roi_channel_counts = _read_1d_int("meta/roi_channel_counts")
+        roi_subject_counts = _read_1d_int("meta/roi_subject_counts")
+
+        # --- meta ---
+        labels_ds = dataset_or_none(fh, "meta/condition_labels")
+        if labels_ds is not None:
+            labels = decode_str_array(np.asarray(labels_ds[:], dtype=object))
+            condition_labels: tuple[str, str] = (
+                labels[0] if len(labels) >= 1 else "condition_a",
+                labels[1] if len(labels) >= 2 else "condition_b",
+            )
+        else:
+            condition_labels = ("condition_a", "condition_b")
+        p_value_correction_method = str_scalar(
+            dataset_or_none(fh, "meta/p_value_correction_method"), default="none"
+        )
+        roi_mode = str_scalar(dataset_or_none(fh, "meta/roi_mode"), default="manual")
+        atlas_name_raw = str_scalar(dataset_or_none(fh, "meta/atlas_name"), default="")
+        atlas_name: str | None = atlas_name_raw.strip() or None
+
+        metadata: dict = {
+            "p_value_correction_method": p_value_correction_method,
+            "significance_alpha": significance_alpha,
+            "roi_mode": roi_mode,
+            "atlas_name": atlas_name,
+        }
+        for key in ("binning_mode", "window_ms", "n_bins", "effective_n_bins"):
+            ds = dataset_or_none(fh, f"meta/{key}")
+            if ds is None:
+                continue
+            val = ds[()]
+            if isinstance(val, (bytes, np.bytes_)):
+                metadata[key] = val.decode("utf-8")
+            elif isinstance(val, (np.floating, float)):
+                metadata[key] = float(val)
+            else:
+                metadata[key] = int(val)
+
+        # --- excluded ROIs ---
+        ex_name_ds = dataset_or_none(fh, "excluded_rois/name")
+        ex_reason_ds = dataset_or_none(fh, "excluded_rois/reason")
+        if ex_name_ds is not None and ex_reason_ds is not None:
+            ex_names = decode_str_array(np.asarray(ex_name_ds[:], dtype=object))
+            ex_reasons = decode_str_array(np.asarray(ex_reason_ds[:], dtype=object))
+            excluded_rois: dict[str, str] = dict(zip(ex_names, ex_reasons))
+        else:
+            excluded_rois = {}
+
+        # --- contributions ---
+        contributions: list[ROIChannelContribution] = []
+        if "contributions" in fh:
+            cg = fh["contributions"]
+            if all(k in cg for k in ["roi", "subject", "channel", "source_stats_file"]):
+                rois = decode_str_array(np.asarray(cg["roi"][:], dtype=object))
+                subjs = decode_str_array(np.asarray(cg["subject"][:], dtype=object))
+                chs = decode_str_array(np.asarray(cg["channel"][:], dtype=object))
+                srcs = decode_str_array(np.asarray(cg["source_stats_file"][:], dtype=object))
+                contributions = [
+                    ROIChannelContribution(roi=r, subject=s, channel=c, source_stats_file=f)
+                    for r, s, c, f in zip(rois, subjs, chs, srcs)
+                ]
+
+        # --- contribution samples (ragged, indexed by ROI index) ---
+        slope_a_contribs: list[np.ndarray] = []
+        slope_b_contribs: list[np.ndarray] = []
+        activity_a_contribs: list[np.ndarray] = []
+        activity_b_contribs: list[np.ndarray] = []
+        contrib_labels: list[list[str]] = []
+        if "contribution_samples" in fh:
+            cs_grp = fh["contribution_samples"]
+            for roi_idx in range(n_rois):
+                roi_key = str(roi_idx)
+                if roi_key in cs_grp:
+                    roi_grp = cs_grp[roi_key]
+                    sa = (
+                        np.asarray(roi_grp["condition_a_slope"][:], dtype=np.float64)
+                        if "condition_a_slope" in roi_grp
+                        else np.empty((0, n_t), dtype=np.float64)
+                    )
+                    sb = (
+                        np.asarray(roi_grp["condition_b_slope"][:], dtype=np.float64)
+                        if "condition_b_slope" in roi_grp
+                        else np.empty((0, n_t), dtype=np.float64)
+                    )
+                    aa = (
+                        np.asarray(roi_grp["condition_a_activity"][:], dtype=np.float64)
+                        if "condition_a_activity" in roi_grp
+                        else np.empty((0, n_t), dtype=np.float64)
+                    )
+                    ab = (
+                        np.asarray(roi_grp["condition_b_activity"][:], dtype=np.float64)
+                        if "condition_b_activity" in roi_grp
+                        else np.empty((0, n_t), dtype=np.float64)
+                    )
+                    lbl = (
+                        decode_str_array(np.asarray(roi_grp["labels"][:], dtype=object))
+                        if "labels" in roi_grp
+                        else []
+                    )
+                    slope_a_contribs.append(sa)
+                    slope_b_contribs.append(sb)
+                    activity_a_contribs.append(aa)
+                    activity_b_contribs.append(ab)
+                    contrib_labels.append(lbl)
+
+        # --- provenance ---
+        source_trial_slope_stats_files: list[str] = []
+        source_electrodes_files: list[str] = []
+        if "provenance" in fh:
+            prov = fh["provenance"]
+            if "source_trial_slope_stats_files" in prov:
+                source_trial_slope_stats_files = decode_str_array(
+                    np.asarray(prov["source_trial_slope_stats_files"][:], dtype=object)
+                )
+            if "source_electrodes_files" in prov:
+                source_electrodes_files = decode_str_array(
+                    np.asarray(prov["source_electrodes_files"][:], dtype=object)
+                )
+
+    source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
+    return TrialSlopeStatsGroupProcessingResult(
+        source_group=source_group,
+        metadata=metadata,
+        condition_a_slope_t_values=ca_t,
+        condition_a_slope_p_values=ca_p,
+        condition_a_slope_p_values_uncorrected=ca_p_uncorr,
+        condition_a_slope_significant_mask=ca_sig,
+        condition_a_slope_mean=ca_slope_mean,
+        condition_a_slope_sem=ca_slope_sem,
+        condition_a_epoch_slope_t=ca_ep_t,
+        condition_a_epoch_slope_p=ca_ep_p,
+        condition_a_epoch_slope_df=ca_ep_df,
+        condition_a_epoch_slope_mean=ca_ep_mean,
+        condition_a_epoch_slope_sem=ca_ep_sem,
+        condition_b_slope_t_values=cb_t,
+        condition_b_slope_p_values=cb_p,
+        condition_b_slope_p_values_uncorrected=cb_p_uncorr,
+        condition_b_slope_significant_mask=cb_sig,
+        condition_b_slope_mean=cb_slope_mean,
+        condition_b_slope_sem=cb_slope_sem,
+        condition_b_epoch_slope_t=cb_ep_t,
+        condition_b_epoch_slope_p=cb_ep_p,
+        condition_b_epoch_slope_df=cb_ep_df,
+        condition_b_epoch_slope_mean=cb_ep_mean,
+        condition_b_epoch_slope_sem=cb_ep_sem,
+        condition_a_activity_mean=ca_act_mean,
+        condition_a_activity_sem=ca_act_sem,
+        condition_b_activity_mean=cb_act_mean,
+        condition_b_activity_sem=cb_act_sem,
+        condition_a_r_value_mean=ca_r_mean,
+        condition_a_r_value_sem=ca_r_sem,
+        condition_b_r_value_mean=cb_r_mean,
+        condition_b_r_value_sem=cb_r_sem,
+        time_axis_s=time_axis_s,
+        region_names=region_names,
+        condition_labels=condition_labels,
+        roi_channel_counts=roi_channel_counts,
+        roi_subject_counts=roi_subject_counts,
+        contributions=contributions,
+        condition_a_slope_contributions=slope_a_contribs,
+        condition_b_slope_contributions=slope_b_contribs,
+        condition_a_activity_contributions=activity_a_contribs,
+        condition_b_activity_contributions=activity_b_contribs,
+        contribution_labels=contrib_labels,
+        p_value_correction_method=p_value_correction_method,
+        significance_alpha=significance_alpha,
+        roi_mode=roi_mode,
+        atlas_name=atlas_name,
+        source_trial_slope_stats_files=source_trial_slope_stats_files,
+        source_electrodes_files=source_electrodes_files,
+        excluded_rois=excluded_rois,
+    )
+
+
+# ---------------------------------------------------------------------------
+# MATLAB loader
+# ---------------------------------------------------------------------------
+
+
+def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
+    from gin_bids_py_analysis.processing.utils.matlab import (
+        mat_float,
+        mat_str,
+        mat_str_list,
+    )
+    from scipy.io import loadmat
+
+    mat = loadmat(str(path), squeeze_me=False, struct_as_record=False)
+    data = mat["data"]
+    axes = data.axes
+    regression = data.regression
+    means = data.means
+    r_values = getattr(data, "r_values", None)
+    meta = data.meta
+    contribs_raw = getattr(data, "contributions", None)
+    prov = getattr(data, "provenance", None)
+
+    region_names = mat_str_list(getattr(axes, "region", None))
+    if not region_names:
+        raise ValueError(f"{path.name}: axes.region is required in .mat group slope-stats file.")
+    time_axis_s = np.asarray(axes.time_s, dtype=np.float64).ravel()
+    n_rois = len(region_names)
+    n_t = len(time_axis_s)
+
+    def _mat_2d(obj: object, attr: str, fill: float = 0.0) -> np.ndarray:
+        raw = getattr(obj, attr, None) if obj is not None else None
+        if raw is None:
+            return np.full((n_rois, n_t), fill, dtype=np.float64)
+        arr = np.asarray(raw, dtype=np.float64)
+        if arr.shape == (n_t, n_rois):
+            arr = arr.T
+        return arr.reshape(n_rois, n_t)
+
+    def _mat_1d(obj: object, attr: str, fill: float = 0.0) -> np.ndarray:
+        raw = getattr(obj, attr, None) if obj is not None else None
+        if raw is None:
+            return np.full(n_rois, fill, dtype=np.float64)
+        return np.asarray(raw, dtype=np.float64).ravel()
+
+    def _mat_1d_int(obj: object, attr: str) -> np.ndarray:
+        raw = getattr(obj, attr, None) if obj is not None else None
+        if raw is None:
+            return np.zeros(n_rois, dtype=np.int64)
+        return np.asarray(raw, dtype=np.int64).ravel()
+
+    # regression condition_a
+    cond_a_reg = getattr(regression, "condition_a", None)
+    cond_b_reg = getattr(regression, "condition_b", None)
+    ca_ep = getattr(cond_a_reg, "epoch_summary", None) if cond_a_reg is not None else None
+    cb_ep = getattr(cond_b_reg, "epoch_summary", None) if cond_b_reg is not None else None
+
+    significance_alpha = mat_float(getattr(meta, "significance_alpha", None), default=0.05)
+
+    ca_t = _mat_2d(cond_a_reg, "t_values")
+    ca_p = _mat_2d(cond_a_reg, "p_values", fill=1.0)
+    ca_p_uncorr = _mat_2d(cond_a_reg, "p_values_uncorrected", fill=1.0)
+    sig_raw_a = getattr(cond_a_reg, "significant_mask", None) if cond_a_reg is not None else None
+    ca_sig = (
+        np.asarray(sig_raw_a, dtype=bool).reshape(n_rois, n_t)
+        if sig_raw_a is not None
+        else np.isfinite(ca_p) & (ca_p < significance_alpha)
+    )
+    ca_slope_mean = _mat_2d(cond_a_reg, "slope_mean")
+    ca_slope_sem = _mat_2d(cond_a_reg, "slope_sem")
+    ca_ep_t = _mat_1d(ca_ep, "t")
+    ca_ep_p = _mat_1d(ca_ep, "p", fill=1.0)
+    ca_ep_df = _mat_1d(ca_ep, "df")
+    ca_ep_mean = _mat_1d(ca_ep, "mean")
+    ca_ep_sem = _mat_1d(ca_ep, "sem")
+
+    cb_t = _mat_2d(cond_b_reg, "t_values")
+    cb_p = _mat_2d(cond_b_reg, "p_values", fill=1.0)
+    cb_p_uncorr = _mat_2d(cond_b_reg, "p_values_uncorrected", fill=1.0)
+    sig_raw_b = getattr(cond_b_reg, "significant_mask", None) if cond_b_reg is not None else None
+    cb_sig = (
+        np.asarray(sig_raw_b, dtype=bool).reshape(n_rois, n_t)
+        if sig_raw_b is not None
+        else np.isfinite(cb_p) & (cb_p < significance_alpha)
+    )
+    cb_slope_mean = _mat_2d(cond_b_reg, "slope_mean")
+    cb_slope_sem = _mat_2d(cond_b_reg, "slope_sem")
+    cb_ep_t = _mat_1d(cb_ep, "t")
+    cb_ep_p = _mat_1d(cb_ep, "p", fill=1.0)
+    cb_ep_df = _mat_1d(cb_ep, "df")
+    cb_ep_mean = _mat_1d(cb_ep, "mean")
+    cb_ep_sem = _mat_1d(cb_ep, "sem")
+
+    # means
+    ca_act_mean = _mat_2d(means, "condition_a_mean")
+    ca_act_sem = _mat_2d(means, "condition_a_sem")
+    cb_act_mean = _mat_2d(means, "condition_b_mean")
+    cb_act_sem = _mat_2d(means, "condition_b_sem")
+
+    # r_values
+    ca_r_mean = _mat_2d(r_values, "condition_a_mean")
+    ca_r_sem = _mat_2d(r_values, "condition_a_sem")
+    cb_r_mean = _mat_2d(r_values, "condition_b_mean")
+    cb_r_sem = _mat_2d(r_values, "condition_b_sem")
+
+    # roi counts
+    roi_channel_counts = _mat_1d_int(meta, "roi_channel_counts")
+    roi_subject_counts = _mat_1d_int(meta, "roi_subject_counts")
+
+    # meta
+    labels_raw = getattr(meta, "condition_labels", None)
+    if labels_raw is not None:
+        labels = mat_str_list(labels_raw)
+        condition_labels: tuple[str, str] = (
+            labels[0] if len(labels) >= 1 else "condition_a",
+            labels[1] if len(labels) >= 2 else "condition_b",
+        )
+    else:
+        condition_labels = ("condition_a", "condition_b")
+    p_value_correction_method = mat_str(
+        getattr(meta, "p_value_correction_method", None), default="none"
+    )
+    roi_mode = mat_str(getattr(meta, "roi_mode", None), default="manual")
+    atlas_name_raw = mat_str(getattr(meta, "atlas_name", None), default="")
+    atlas_name: str | None = atlas_name_raw.strip() or None
+
+    metadata: dict = {
+        "p_value_correction_method": p_value_correction_method,
+        "significance_alpha": significance_alpha,
+        "roi_mode": roi_mode,
+        "atlas_name": atlas_name,
+    }
+
+    # excluded ROIs
+    excl_raw = getattr(meta, "excluded_rois", None)
+    if excl_raw is not None:
+        ex_names = mat_str_list(getattr(excl_raw, "name", None))
+        ex_reasons = mat_str_list(getattr(excl_raw, "reason", None))
+        excluded_rois: dict[str, str] = dict(zip(ex_names, ex_reasons))
+    else:
+        excluded_rois = {}
+
+    # contributions
+    contributions: list[ROIChannelContribution] = []
+    if contribs_raw is not None:
+        roi_raw = getattr(contribs_raw, "roi", None)
+        subj_raw = getattr(contribs_raw, "subject", None)
+        ch_raw = getattr(contribs_raw, "channel", None)
+        src_raw = getattr(contribs_raw, "source_stats_file", None)
+        if all(v is not None for v in [roi_raw, subj_raw, ch_raw, src_raw]):
+            rois = mat_str_list(roi_raw)
+            subjs = mat_str_list(subj_raw)
+            chs = mat_str_list(ch_raw)
+            srcs = mat_str_list(src_raw)
+            contributions = [
+                ROIChannelContribution(roi=r, subject=s, channel=c, source_stats_file=f)
+                for r, s, c, f in zip(rois, subjs, chs, srcs)
+            ]
+
+    # contribution samples (cell arrays)
+    slope_a_contribs: list[np.ndarray] = []
+    slope_b_contribs: list[np.ndarray] = []
+    activity_a_contribs: list[np.ndarray] = []
+    activity_b_contribs: list[np.ndarray] = []
+    contrib_labels: list[list[str]] = []
+    cs_raw = getattr(data, "contribution_samples", None)
+    if cs_raw is not None:
+        sa_raw = getattr(cs_raw, "condition_a_slope", None)
+        sb_raw = getattr(cs_raw, "condition_b_slope", None)
+        aa_raw = getattr(cs_raw, "condition_a_activity", None)
+        ab_raw = getattr(cs_raw, "condition_b_activity", None)
+        lbl_raw = getattr(cs_raw, "labels", None)
+        if sa_raw is not None:
+            cell: np.ndarray = np.asarray(sa_raw).ravel()
+            for i in range(min(n_rois, len(cell))):
+                slope_a_contribs.append(np.asarray(cell[i], dtype=np.float64))
+        if sb_raw is not None:
+            cell = np.asarray(sb_raw).ravel()
+            for i in range(min(n_rois, len(cell))):
+                slope_b_contribs.append(np.asarray(cell[i], dtype=np.float64))
+        if aa_raw is not None:
+            cell = np.asarray(aa_raw).ravel()
+            for i in range(min(n_rois, len(cell))):
+                activity_a_contribs.append(np.asarray(cell[i], dtype=np.float64))
+        if ab_raw is not None:
+            cell = np.asarray(ab_raw).ravel()
+            for i in range(min(n_rois, len(cell))):
+                activity_b_contribs.append(np.asarray(cell[i], dtype=np.float64))
+        if lbl_raw is not None:
+            cell = np.asarray(lbl_raw).ravel()
+            for i in range(min(n_rois, len(cell))):
+                contrib_labels.append(mat_str_list(cell[i]))
+
+    # provenance
+    source_trial_slope_stats_files: list[str] = []
+    source_electrodes_files: list[str] = []
+    if prov is not None:
+        src_raw_prov = getattr(prov, "source_trial_slope_stats_files", None)
+        if src_raw_prov is not None:
+            source_trial_slope_stats_files = mat_str_list(src_raw_prov)
+        elec_raw = getattr(prov, "source_electrodes_files", None)
+        if elec_raw is not None:
+            source_electrodes_files = mat_str_list(elec_raw)
+
+    source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
+    return TrialSlopeStatsGroupProcessingResult(
+        source_group=source_group,
+        metadata=metadata,
+        condition_a_slope_t_values=ca_t,
+        condition_a_slope_p_values=ca_p,
+        condition_a_slope_p_values_uncorrected=ca_p_uncorr,
+        condition_a_slope_significant_mask=ca_sig,
+        condition_a_slope_mean=ca_slope_mean,
+        condition_a_slope_sem=ca_slope_sem,
+        condition_a_epoch_slope_t=ca_ep_t,
+        condition_a_epoch_slope_p=ca_ep_p,
+        condition_a_epoch_slope_df=ca_ep_df,
+        condition_a_epoch_slope_mean=ca_ep_mean,
+        condition_a_epoch_slope_sem=ca_ep_sem,
+        condition_b_slope_t_values=cb_t,
+        condition_b_slope_p_values=cb_p,
+        condition_b_slope_p_values_uncorrected=cb_p_uncorr,
+        condition_b_slope_significant_mask=cb_sig,
+        condition_b_slope_mean=cb_slope_mean,
+        condition_b_slope_sem=cb_slope_sem,
+        condition_b_epoch_slope_t=cb_ep_t,
+        condition_b_epoch_slope_p=cb_ep_p,
+        condition_b_epoch_slope_df=cb_ep_df,
+        condition_b_epoch_slope_mean=cb_ep_mean,
+        condition_b_epoch_slope_sem=cb_ep_sem,
+        condition_a_activity_mean=ca_act_mean,
+        condition_a_activity_sem=ca_act_sem,
+        condition_b_activity_mean=cb_act_mean,
+        condition_b_activity_sem=cb_act_sem,
+        condition_a_r_value_mean=ca_r_mean,
+        condition_a_r_value_sem=ca_r_sem,
+        condition_b_r_value_mean=cb_r_mean,
+        condition_b_r_value_sem=cb_r_sem,
+        time_axis_s=time_axis_s,
+        region_names=region_names,
+        condition_labels=condition_labels,
+        roi_channel_counts=roi_channel_counts,
+        roi_subject_counts=roi_subject_counts,
+        contributions=contributions,
+        condition_a_slope_contributions=slope_a_contribs,
+        condition_b_slope_contributions=slope_b_contribs,
+        condition_a_activity_contributions=activity_a_contribs,
+        condition_b_activity_contributions=activity_b_contribs,
+        contribution_labels=contrib_labels,
+        p_value_correction_method=p_value_correction_method,
+        significance_alpha=significance_alpha,
+        roi_mode=roi_mode,
+        atlas_name=atlas_name,
+        source_trial_slope_stats_files=source_trial_slope_stats_files,
+        source_electrodes_files=source_electrodes_files,
+        excluded_rois=excluded_rois,
+    )

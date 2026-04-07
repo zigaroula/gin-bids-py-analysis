@@ -1,0 +1,25 @@
+"""Group-level ROI statistics built from trial_slope_stats channel-level outputs."""
+
+__version__ = "0.1.0"
+
+from .params import TrialSlopeStatsGroupParams, TrialSlopeStatsGroupWriterParams
+from .processor import (
+    TrialSlopeStatsGroupProcessing,
+    build_trial_slope_stats_compatible_groups,
+)
+from gin_bids_py_analysis.processing.utils.group_stats import ROIChannelContribution
+
+from .result import TrialSlopeStatsGroupProcessingResult
+from .result_loader import load_trial_slope_stats_group_result
+from .writer import TrialSlopeStatsGroupProcessingWriter
+
+__all__ = [
+    "ROIChannelContribution",
+    "TrialSlopeStatsGroupParams",
+    "TrialSlopeStatsGroupProcessing",
+    "TrialSlopeStatsGroupProcessingResult",
+    "TrialSlopeStatsGroupProcessingWriter",
+    "TrialSlopeStatsGroupWriterParams",
+    "build_trial_slope_stats_compatible_groups",
+    "load_trial_slope_stats_group_result",
+]

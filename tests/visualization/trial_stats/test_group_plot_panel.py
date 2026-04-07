@@ -6,6 +6,9 @@ import numpy as np
 import pytest
 
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
+from gin_bids_py_analysis.processing.trial_slope_stats_group.result import (
+    TrialSlopeStatsGroupProcessingResult,
+)
 from gin_bids_py_analysis.processing.trial_stats_group.result import (
     TrialStatsGroupProcessingResult,
 )
@@ -125,3 +128,123 @@ class TestGroupPlotPanelUpdatePlots:
 
         assert panel.current_roi_index == 1
         assert panel.current_roi_name == "regionB"
+
+
+@pytest.fixture()
+def synthetic_slope_group_result(synthetic_result) -> TrialSlopeStatsGroupProcessingResult:
+    n_roi, n_t = 2, 60
+    time_axis = np.linspace(-1.0, 2.0, n_t)
+    shape = (n_roi, n_t)
+    cond_labels = ("pleasant", "unpleasant")
+
+    return TrialSlopeStatsGroupProcessingResult(
+        source_group=BIDSFileGroup(primary=synthetic_result.source_group.primary),
+        metadata={},
+        output_entities=None,
+        condition_a_slope_t_values=np.full(shape, 2.0, dtype=np.float64),
+        condition_a_slope_p_values=np.full(shape, 0.02, dtype=np.float64),
+        condition_a_slope_p_values_uncorrected=np.full(shape, 0.03, dtype=np.float64),
+        condition_a_slope_significant_mask=np.ones(shape, dtype=bool),
+        condition_b_slope_t_values=np.full(shape, -1.5, dtype=np.float64),
+        condition_b_slope_p_values=np.full(shape, 0.04, dtype=np.float64),
+        condition_b_slope_p_values_uncorrected=np.full(shape, 0.05, dtype=np.float64),
+        condition_b_slope_significant_mask=np.zeros(shape, dtype=bool),
+        condition_a_slope_mean=np.full(shape, 0.8, dtype=np.float64),
+        condition_a_slope_sem=np.full(shape, 0.1, dtype=np.float64),
+        condition_b_slope_mean=np.full(shape, -0.6, dtype=np.float64),
+        condition_b_slope_sem=np.full(shape, 0.1, dtype=np.float64),
+        condition_a_activity_mean=np.full(shape, 1.0, dtype=np.float64),
+        condition_a_activity_sem=np.full(shape, 0.2, dtype=np.float64),
+        condition_b_activity_mean=np.full(shape, 0.8, dtype=np.float64),
+        condition_b_activity_sem=np.full(shape, 0.2, dtype=np.float64),
+        condition_a_r_value_mean=np.full(shape, 0.2, dtype=np.float64),
+        condition_a_r_value_sem=np.full(shape, 0.05, dtype=np.float64),
+        condition_b_r_value_mean=np.full(shape, -0.1, dtype=np.float64),
+        condition_b_r_value_sem=np.full(shape, 0.05, dtype=np.float64),
+        condition_a_epoch_slope_t=np.full(n_roi, 2.0, dtype=np.float64),
+        condition_a_epoch_slope_p=np.full(n_roi, 0.02, dtype=np.float64),
+        condition_a_epoch_slope_df=np.full(n_roi, 10.0, dtype=np.float64),
+        condition_a_epoch_slope_mean=np.full(n_roi, 0.8, dtype=np.float64),
+        condition_a_epoch_slope_sem=np.full(n_roi, 0.1, dtype=np.float64),
+        condition_b_epoch_slope_t=np.full(n_roi, -1.5, dtype=np.float64),
+        condition_b_epoch_slope_p=np.full(n_roi, 0.04, dtype=np.float64),
+        condition_b_epoch_slope_df=np.full(n_roi, 10.0, dtype=np.float64),
+        condition_b_epoch_slope_mean=np.full(n_roi, -0.6, dtype=np.float64),
+        condition_b_epoch_slope_sem=np.full(n_roi, 0.1, dtype=np.float64),
+        time_axis_s=time_axis,
+        region_names=["slope_roi_a", "slope_roi_b"],
+        condition_labels=cond_labels,
+        roi_channel_counts=np.array([4, 3], dtype=np.int64),
+        roi_subject_counts=np.array([2, 2], dtype=np.int64),
+        contributions=[],
+        condition_a_slope_contributions=[
+            np.ones((3, n_t), dtype=np.float64),
+            np.ones((2, n_t), dtype=np.float64),
+        ],
+        condition_b_slope_contributions=[
+            -np.ones((3, n_t), dtype=np.float64),
+            -np.ones((2, n_t), dtype=np.float64),
+        ],
+        condition_a_activity_contributions=[
+            np.full((3, n_t), 1.0, dtype=np.float64),
+            np.full((2, n_t), 0.9, dtype=np.float64),
+        ],
+        condition_b_activity_contributions=[
+            np.full((3, n_t), 0.8, dtype=np.float64),
+            np.full((2, n_t), 0.7, dtype=np.float64),
+        ],
+        contribution_labels=[
+            ["01/A1", "01/A2", "02/A1"],
+            ["01/B1", "02/B1"],
+        ],
+        p_value_correction_method="none",
+        significance_alpha=0.05,
+        roi_mode="manual",
+        atlas_name=None,
+        source_trial_slope_stats_files=[],
+        source_electrodes_files=[],
+        excluded_rois={},
+    )
+
+
+class TestGroupPlotPanelSlopeUpdate:
+    def test_update_plots_with_slope_group_result(self, qtbot, synthetic_slope_group_result):
+        panel = GroupPlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_group_result, 0)
+
+        assert panel._roi_list.count() == 2
+        assert panel.current_roi_name == "slope_roi_a"
+        assert panel._plot_tabs.tabText(0) == "Activity"
+        assert panel._plot_tabs.tabText(1) == "Slope mean"
+
+    def test_activity_means_are_plotted_in_activity_axis(self, qtbot, synthetic_slope_group_result):
+        panel = GroupPlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_group_result, 0)
+
+        labeled_lines = {
+            line.get_label(): line
+            for line in panel._ax_means.lines
+            if line.get_label() in synthetic_slope_group_result.condition_labels
+        }
+        assert set(labeled_lines) == set(synthetic_slope_group_result.condition_labels)
+        assert np.allclose(labeled_lines["pleasant"].get_ydata(), 1.0)
+        assert np.allclose(labeled_lines["unpleasant"].get_ydata(), 0.8)
+
+    def test_slope_means_are_plotted_in_slope_axis(self, qtbot, synthetic_slope_group_result):
+        panel = GroupPlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_group_result, 0)
+
+        labeled_lines = {
+            line.get_label(): line
+            for line in panel._ax_slope.lines
+            if line.get_label() in synthetic_slope_group_result.condition_labels
+        }
+        assert set(labeled_lines) == set(synthetic_slope_group_result.condition_labels)
+        assert np.allclose(labeled_lines["pleasant"].get_ydata(), 0.8)
+        assert np.allclose(labeled_lines["unpleasant"].get_ydata(), -0.6)

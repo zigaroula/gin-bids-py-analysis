@@ -33,7 +33,14 @@ class SaveTrialStatsGroupDialog(QDialog):
         Optional parent widget.
     """
 
-    def __init__(self, bids_root: Path, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        bids_root: Path,
+        parent: QWidget | None = None,
+        *,
+        default_pipeline_label: str = "trial_stats_group",
+        default_output_description: str = "trialstatsgroup",
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Save group results")
         self.setMinimumWidth(380)
@@ -54,7 +61,7 @@ class SaveTrialStatsGroupDialog(QDialog):
         form.addRow("BIDS root", self._root_edit)
 
         # pipeline_label
-        self._pipeline_label = QLineEdit("trial_stats_group")
+        self._pipeline_label = QLineEdit(default_pipeline_label)
         form.addRow("Pipeline label", self._pipeline_label)
 
         # output_modality
@@ -66,7 +73,7 @@ class SaveTrialStatsGroupDialog(QDialog):
         form.addRow("Output suffix", self._output_suffix)
 
         # output_description
-        self._output_description = QLineEdit("trialstatsgroup")
+        self._output_description = QLineEdit(default_output_description)
         form.addRow("Output description", self._output_description)
 
         # output_format
@@ -99,13 +106,17 @@ class SaveTrialStatsGroupDialog(QDialog):
     # Public API
     # ------------------------------------------------------------------
 
+    def get_common_writer_kwargs(self) -> dict:
+        """Return common writer kwargs shared by group writer params models."""
+        return {
+            "bids_root": self._bids_root,
+            "pipeline_label": self._pipeline_label.text().strip(),
+            "output_modality": self._output_modality.text().strip(),
+            "output_suffix": self._output_suffix.text().strip(),
+            "output_description": self._output_description.text().strip(),
+            "output_format": self._format_combo.currentText(),
+        }
+
     def get_writer_params(self) -> TrialStatsGroupWriterParams:
         """Build a :class:`TrialStatsGroupWriterParams` from the current dialog values."""
-        return TrialStatsGroupWriterParams(
-            bids_root=self._bids_root,
-            pipeline_label=self._pipeline_label.text().strip(),
-            output_modality=self._output_modality.text().strip(),
-            output_suffix=self._output_suffix.text().strip(),
-            output_description=self._output_description.text().strip(),
-            output_format=self._format_combo.currentText(),
-        )
+        return TrialStatsGroupWriterParams(**self.get_common_writer_kwargs())

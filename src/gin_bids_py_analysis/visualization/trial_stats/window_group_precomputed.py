@@ -47,7 +47,10 @@ def _make_placeholder_group_params() -> "TrialStatsGroupParams":
         TrialStatsGroupParams,
     )
 
-    return TrialStatsGroupParams(roi_mode="manual")
+    return TrialStatsGroupParams(
+        roi_mode="manual",
+        manual_region_channels={"placeholder": {"01": ["CH1"]}},
+    )
 
 
 class TrialStatsGroupPrecomputedWindow(QMainWindow):

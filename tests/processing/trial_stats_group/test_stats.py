@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import numpy as np
 
+from gin_bids_py_analysis.processing.utils.group_stats import (
+    compute_one_sample_epoch_summary,
+    compute_one_sample_timecourse,
+)
 from gin_bids_py_analysis.processing.trial_stats_group.stats import (
     compute_cluster_null_distribution,
     compute_cluster_null_distribution_sign_flip,
     compute_mne_cluster_permutation,
     compute_cluster_permutation_pvalue,
-    compute_one_sample_epoch_summary,
-    compute_one_sample_timecourse,
     correct_p_values,
     find_temporal_clusters,
 )

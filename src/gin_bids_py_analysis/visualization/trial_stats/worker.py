@@ -18,6 +18,18 @@ from gin_bids_py_analysis.processing.trial_stats import (
 )
 
 if TYPE_CHECKING:
+    from gin_bids_py_analysis.processing.trial_slope_stats.result import (
+        TrialSlopeStatsProcessingResult,
+    )
+    from gin_bids_py_analysis.processing.trial_slope_stats_group.params import (
+        TrialSlopeStatsGroupParams,
+    )
+    from gin_bids_py_analysis.processing.trial_slope_stats_group.result import (
+        TrialSlopeStatsGroupProcessingResult,
+    )
+    from gin_bids_py_analysis.processing.trial_slope_stats_group.writer import (
+        TrialSlopeStatsGroupProcessingWriter,
+    )
     from gin_bids_py_analysis.processing.trial_stats.result import (
         TrialStatsProcessingResult,
     )
@@ -196,8 +208,8 @@ class GroupComputeWorker(QThread):
 
     def __init__(
         self,
-        all_results: dict[str, "TrialStatsProcessingResult"],
-        group_params: "TrialStatsGroupParams",
+        all_results: dict[str, "TrialStatsProcessingResult | TrialSlopeStatsProcessingResult"],
+        group_params: "TrialStatsGroupParams | TrialSlopeStatsGroupParams",
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -206,18 +218,29 @@ class GroupComputeWorker(QThread):
 
     def run(self) -> None:
         try:
-            from gin_bids_py_analysis.processing.trial_stats_group import (
-                TrialStatsGroupProcessing,
-            )
+            if _is_slope_group_params(self._group_params):
+                from gin_bids_py_analysis.processing.trial_slope_stats_group import (
+                    TrialSlopeStatsGroupProcessing,
+                )
 
-            from ._bridge import group_file_group_context
+                from ._bridge_slope import group_file_group_context_slope
 
-            processor = TrialStatsGroupProcessing(self._group_params)
-            with group_file_group_context(
-                self._all_results,
-                source_metric=self._group_params.source_metric,
-            ) as group:
-                result = processor.process_group(group)
+                processor = TrialSlopeStatsGroupProcessing(self._group_params)
+                with group_file_group_context_slope(self._all_results) as group:
+                    result = processor.process_group(group)
+            else:
+                from gin_bids_py_analysis.processing.trial_stats_group import (
+                    TrialStatsGroupProcessing,
+                )
+
+                from ._bridge import group_file_group_context
+
+                processor = TrialStatsGroupProcessing(self._group_params)
+                with group_file_group_context(
+                    self._all_results,
+                    source_metric=self._group_params.source_metric,
+                ) as group:
+                    result = processor.process_group(group)
             self.result_ready.emit(result)
         except Exception as exc:  # noqa: BLE001
             self.error.emit(str(exc))
@@ -364,17 +387,18 @@ class LoadSubjectResultsWorker(QThread):
 
 
 class LoadGroupResultWorker(QThread):
-    """Load a pre-computed group result from a file in a background thread.
+    """Load a pre-computed group result (ttest or slope) from a file.
 
     Parameters
     ----------
     group_file:
         Path to the ``.h5``/``.hdf5`` or ``.mat`` group stats file written by
-        ``TrialStatsGroupProcessingWriter``.
+        ``TrialStatsGroupProcessingWriter`` or
+        ``TrialSlopeStatsGroupProcessingWriter``.
 
     Signals
     -------
-    result_ready : emitted with the ``TrialStatsGroupProcessingResult`` on success.
+    result_ready : emitted with the loaded group result on success.
     error        : str — emitted with the exception message on failure.
     """
 
@@ -391,11 +415,18 @@ class LoadGroupResultWorker(QThread):
 
     def run(self) -> None:
         try:
+            from gin_bids_py_analysis.processing.trial_slope_stats_group.result_loader import (
+                load_trial_slope_stats_group_result,
+            )
             from gin_bids_py_analysis.processing.trial_stats_group.result_loader import (
                 load_trial_stats_group_result,
             )
 
-            result = load_trial_stats_group_result(self._group_file)
+            result = _load_group_result_auto(
+                self._group_file,
+                load_trial_stats_group_result=load_trial_stats_group_result,
+                load_trial_slope_stats_group_result=load_trial_slope_stats_group_result,
+            )
             self.result_ready.emit(result)
         except Exception as exc:  # noqa: BLE001
             self.error.emit(str(exc))
@@ -434,3 +465,56 @@ def _load_subject_result_auto(
         return load_trial_slope_stats_result(path)
     except Exception:
         return load_trial_stats_result(path)
+
+
+def _load_group_result_auto(
+    path: Path,
+    *,
+    load_trial_stats_group_result,
+    load_trial_slope_stats_group_result,
+):
+    suffix = path.suffix.lower()
+    if suffix in {".h5", ".hdf5"}:
+        try:
+            import h5py
+
+            with h5py.File(path, "r") as fh:
+                # Classic trial_stats_group layout.
+                if "stats" in fh and "t_values" in fh["stats"]:
+                    return load_trial_stats_group_result(path)
+
+                # slope trial_slope_stats_group layout.
+                if (
+                    "regression" in fh
+                    and "condition_a" in fh["regression"]
+                    and "slope_mean" in fh["regression"]["condition_a"]
+                ):
+                    return load_trial_slope_stats_group_result(path)
+
+                # Provenance fallback.
+                pipeline_name = ""
+                if "provenance" in fh and "pipeline_name" in fh["provenance"]:
+                    try:
+                        pipeline_name = str(
+                            fh["provenance"]["pipeline_name"].asstr()[()]
+                        ).strip()
+                    except Exception:
+                        pipeline_name = ""
+                if pipeline_name == "trial_stats_group":
+                    return load_trial_stats_group_result(path)
+                if pipeline_name == "trial_slope_stats_group":
+                    return load_trial_slope_stats_group_result(path)
+        except Exception:
+            pass
+
+    # Conservative fallback order: trial_stats_group first, then slope group.
+    # The slope-group loader can decode some ttest files with default-filled
+    # arrays, so we only use it as second choice.
+    try:
+        return load_trial_stats_group_result(path)
+    except Exception:
+        return load_trial_slope_stats_group_result(path)
+
+
+def _is_slope_group_params(group_params: object) -> bool:
+    return not hasattr(group_params, "source_metric")

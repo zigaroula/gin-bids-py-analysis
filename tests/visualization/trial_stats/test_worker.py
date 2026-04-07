@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import h5py
 import pytest
 
 from gin_bids_py_analysis.visualization.trial_stats.worker import (
     ComputeAllWorker,
     ComputeWorker,
     GroupComputeWorker,
+    _load_group_result_auto,
 )
 
 
@@ -144,3 +146,65 @@ class TestGroupComputeWorker:
                 worker.start()
 
         assert "bridge error" in blocker.args[0]
+
+    def test_result_ready_signal_in_slope_mode(self, qtbot, synthetic_slope_result):
+        from gin_bids_py_analysis.processing.trial_slope_stats_group import (
+            TrialSlopeStatsGroupParams,
+        )
+
+        params = TrialSlopeStatsGroupParams(
+            roi_mode="manual",
+            manual_region_channels={"roi1": {"01": ["A1", "A2"]}},
+            p_value_correction_method="none",
+            significance_alpha=0.05,
+        )
+        worker = GroupComputeWorker({"01": synthetic_slope_result}, params)
+
+        with qtbot.waitSignal(worker.result_ready, timeout=5000) as blocker:
+            worker.start()
+
+        result = blocker.args[0]
+        assert result.region_names == ["roi1"]
+        assert result.condition_labels == ("accepted", "rejected")
+        assert result.roi_channel_counts.tolist() == [2]
+
+
+class TestLoadGroupResultAuto:
+    def test_detects_trial_stats_group_hdf5_layout(self, tmp_path) -> None:
+        file_path = tmp_path / "group_stats.h5"
+        with h5py.File(file_path, "w") as fh:
+            stats = fh.create_group("stats")
+            stats.create_dataset("t_values", data=[[1.0]])
+
+        load_ttest = MagicMock(return_value="ttest_result")
+        load_slope = MagicMock(return_value="slope_result")
+
+        result = _load_group_result_auto(
+            file_path,
+            load_trial_stats_group_result=load_ttest,
+            load_trial_slope_stats_group_result=load_slope,
+        )
+
+        assert result == "ttest_result"
+        load_ttest.assert_called_once_with(file_path)
+        load_slope.assert_not_called()
+
+    def test_detects_trial_slope_stats_group_hdf5_layout(self, tmp_path) -> None:
+        file_path = tmp_path / "group_slope_stats.h5"
+        with h5py.File(file_path, "w") as fh:
+            reg = fh.create_group("regression")
+            cond_a = reg.create_group("condition_a")
+            cond_a.create_dataset("slope_mean", data=[[0.1]])
+
+        load_ttest = MagicMock(return_value="ttest_result")
+        load_slope = MagicMock(return_value="slope_result")
+
+        result = _load_group_result_auto(
+            file_path,
+            load_trial_stats_group_result=load_ttest,
+            load_trial_slope_stats_group_result=load_slope,
+        )
+
+        assert result == "slope_result"
+        load_slope.assert_called_once_with(file_path)
+        load_ttest.assert_not_called()

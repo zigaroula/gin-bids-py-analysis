@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from gin_bids_py_analysis.bids import BIDSFileGroup
+    from gin_bids_py_analysis.processing.trial_slope_stats_group import (
+        TrialSlopeStatsGroupParams,
+    )
     from gin_bids_py_analysis.processing.trial_slope_stats import (
         TrialSlopeStatsParams,
     )
@@ -70,6 +73,7 @@ def launch_slope(
     subject_groups: dict[str, "BIDSFileGroup"],
     params: "TrialSlopeStatsParams",
     resolver: "TrialResolver",
+    group_params: "TrialSlopeStatsGroupParams | None" = None,
     bids_root: Path | None = None,
 ) -> None:
     """Launch the trial statistics visualization window in slope mode."""
@@ -109,6 +113,7 @@ def launch_slope(
         fallback_ttest_params,
         resolver,
         group_params=None,
+        slope_group_params=group_params,
         bids_root=bids_root,
         default_slope_params=params,
         default_mode="slope",
@@ -175,10 +180,10 @@ def launch_group_precomputed(
 ) -> None:
     """Launch a group-only viewer loading a pre-computed group stats file.
 
-    Use this entry point when you only have a group stats file written by
-    ``TrialStatsGroupProcessingWriter`` and do not need to visualize individual
-    subjects.  The window shows the ``GroupPlotPanel`` immediately after the
-    file is loaded.
+    Supports both ``trial_stats_group`` and ``trial_slope_stats_group`` outputs.
+    Use this entry point when you only have a pre-computed group file and do
+    not need to visualize individual subjects. The window shows the
+    ``GroupPlotPanel`` immediately after the file is loaded.
 
     Parameters
     ----------
