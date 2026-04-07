@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from gin_bids_py_analysis.processing.base import BaseProcessingResult
-from gin_bids_py_analysis.processing.trial_stats.resolver import ResolvedTrial
+from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 
 
 @dataclass

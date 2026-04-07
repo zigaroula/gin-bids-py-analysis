@@ -9,11 +9,11 @@ from mne.io import RawArray
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.trial_stats import (
-    ResolvedTrial,
     TrialStatsParams,
     TrialStatsProcessing,
 )
-import gin_bids_py_analysis.processing.trial_stats.processor as processor_module
+import gin_bids_py_analysis.processing.utils.epoching as epoching_module
+from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 
 
 class _MockPyBIDSFile:
@@ -395,10 +395,10 @@ def test_temporal_bin_epochs_merges_single_sample_tail() -> None:
     epochs = np.array([[[1.0, 2.0, 3.0, 4.0, 5.0]]], dtype=np.float32)
     time_axis_s = np.array([-1.0, -0.5, 0.0, 0.5, 1.0], dtype=np.float64)
 
-    binned, binned_time = processor_module._temporal_bin_epochs(
+    binned, binned_time = epoching_module.temporal_bin_epochs(
         epochs,
         time_axis_s,
-        window_samples=2,
+        window_samples_count=2,
     )
 
     assert binned.shape == (1, 1, 2)
@@ -417,7 +417,7 @@ def test_temporal_bin_epochs_by_n_bins_respects_requested_count() -> None:
     epochs = np.array([[[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]]], dtype=np.float32)
     time_axis_s = np.array([-0.5, -0.3, -0.1, 0.1, 0.3, 0.5], dtype=np.float64)
 
-    binned, binned_time = processor_module._temporal_bin_epochs_by_n_bins(
+    binned, binned_time = epoching_module.temporal_bin_epochs_by_n_bins(
         epochs,
         time_axis_s,
         n_bins=2,

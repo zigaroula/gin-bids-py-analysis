@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
 from gin_bids_py_analysis.processing.trial_slope_stats.stats import (
     compute_linear_regression_maps,
-    correct_p_values,
 )
 
 

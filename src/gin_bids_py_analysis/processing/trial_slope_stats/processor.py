@@ -9,21 +9,28 @@ import numpy as np
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.bids.matching import files_matching_entities, shared_entities
 from gin_bids_py_analysis.processing.base import BaseProcessing
-from gin_bids_py_analysis.processing.trial_stats.processor import (
-    _aggregate_epochs_with_mne,
-    _extract_anchor_events_with_mne,
-    _extract_epochs_with_mne,
-    _resolve_atlas_grouping,
-    _stack_epochs,
-    _temporal_bin_epochs,
-    _temporal_bin_epochs_by_n_bins,
-    _window_samples,
+from gin_bids_py_analysis.processing.utils.atlas import (
+    aggregate_epochs_with_mne,
+    resolve_atlas_grouping,
 )
-from gin_bids_py_analysis.processing.trial_stats.resolver import ResolvedTrial, TrialLabelResolver
+from gin_bids_py_analysis.processing.utils.epoching import (
+    extract_anchor_events_with_mne,
+    extract_epochs_with_mne,
+    stack_epochs,
+    temporal_bin_epochs,
+    temporal_bin_epochs_by_n_bins,
+    window_samples as compute_window_samples,
+)
+from gin_bids_py_analysis.processing.utils.statistics import (
+    compute_condition_mean,
+    compute_condition_sem,
+    correct_p_values,
+)
+from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialLabelResolver
 
 from .params import TrialSlopeStatsParams
 from .result import TrialSlopeStatsProcessingResult
-from .stats import compute_linear_regression_maps, correct_p_values
+from .stats import compute_linear_regression_maps
 
 
 class TrialSlopeStatsProcessing(BaseProcessing):
@@ -107,7 +114,7 @@ class TrialSlopeStatsProcessing(BaseProcessing):
 
                 if atlas_mode:
                     assert self.params.atlas_name is not None
-                    grouping = _resolve_atlas_grouping(
+                    grouping = resolve_atlas_grouping(
                         ieeg_file=ieeg_file,
                         electrodes_files=electrodes_files,
                         channel_names=channel_names,
@@ -126,7 +133,7 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                             f"Got {grouping.feature_names} for {ieeg_file.path.name} but expected {feature_names_ref}."
                         )
 
-                anchor_events, anchor_samples = _extract_anchor_events_with_mne(
+                anchor_events, anchor_samples = extract_anchor_events_with_mne(
                     raw,
                     anchor_codes=anchor_codes,
                 )
@@ -138,7 +145,7 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                     )
 
                 normalized_trials = self._normalize_trials_for_slope(resolved_trials)
-                extraction = _extract_epochs_with_mne(
+                extraction = extract_epochs_with_mne(
                     raw,
                     anchor_samples=anchor_samples,
                     trials=normalized_trials,
@@ -163,7 +170,7 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 if atlas_mode and extraction.epochs.shape[0] > 0:
                     assert feature_names_ref is not None
                     assert feature_indices_ref is not None
-                    epochs_for_stats = _aggregate_epochs_with_mne(
+                    epochs_for_stats = aggregate_epochs_with_mne(
                         epochs_for_stats,
                         channel_names=channel_names,
                         feature_names=feature_names_ref,
@@ -190,28 +197,28 @@ class TrialSlopeStatsProcessing(BaseProcessing):
         feature_names = feature_names_ref if atlas_mode else channel_names_ref
         assert feature_names is not None
 
-        epochs_a_array = _stack_epochs(epochs_a, len(feature_names), len(time_axis_ref))
-        epochs_b_array = _stack_epochs(epochs_b, len(feature_names), len(time_axis_ref))
+        epochs_a_array = stack_epochs(epochs_a, len(feature_names), len(time_axis_ref))
+        epochs_b_array = stack_epochs(epochs_b, len(feature_names), len(time_axis_ref))
 
         predictor_a_array = np.asarray(predictor_a, dtype=np.float64)
         predictor_b_array = np.asarray(predictor_b, dtype=np.float64)
 
         time_axis_eval = time_axis_ref
         binning_mode = "none"
-        window_samples = 0
+        window_sample_count = 0
         effective_n_bins = int(len(time_axis_ref))
         if self.params.window_ms > 0:
             binning_mode = "window_ms"
-            window_samples = _window_samples(sfreq_ref, self.params.window_ms)
-            epochs_a_array, time_axis_eval = _temporal_bin_epochs(
+            window_sample_count = compute_window_samples(sfreq_ref, self.params.window_ms)
+            epochs_a_array, time_axis_eval = temporal_bin_epochs(
                 epochs_a_array,
                 time_axis_ref,
-                window_samples,
+                window_sample_count,
             )
-            epochs_b_array, _ = _temporal_bin_epochs(
+            epochs_b_array, _ = temporal_bin_epochs(
                 epochs_b_array,
                 time_axis_ref,
-                window_samples,
+                window_sample_count,
             )
             effective_n_bins = int(len(time_axis_eval))
         elif self.params.n_bins > 0:
@@ -221,34 +228,34 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                     f"({len(time_axis_ref)})."
                 )
             binning_mode = "n_bins"
-            epochs_a_array, time_axis_eval = _temporal_bin_epochs_by_n_bins(
+            epochs_a_array, time_axis_eval = temporal_bin_epochs_by_n_bins(
                 epochs_a_array,
                 time_axis_ref,
                 self.params.n_bins,
             )
-            epochs_b_array, _ = _temporal_bin_epochs_by_n_bins(
+            epochs_b_array, _ = temporal_bin_epochs_by_n_bins(
                 epochs_b_array,
                 time_axis_ref,
                 self.params.n_bins,
             )
             effective_n_bins = int(len(time_axis_eval))
 
-        condition_a_mean = _compute_condition_mean(
+        condition_a_mean = compute_condition_mean(
             epochs_a_array,
             n_features=len(feature_names),
             n_times=len(time_axis_eval),
         )
-        condition_b_mean = _compute_condition_mean(
+        condition_b_mean = compute_condition_mean(
             epochs_b_array,
             n_features=len(feature_names),
             n_times=len(time_axis_eval),
         )
-        condition_a_sem = _compute_condition_sem(
+        condition_a_sem = compute_condition_sem(
             epochs_a_array,
             n_features=len(feature_names),
             n_times=len(time_axis_eval),
         )
-        condition_b_sem = _compute_condition_sem(
+        condition_b_sem = compute_condition_sem(
             epochs_b_array,
             n_features=len(feature_names),
             n_times=len(time_axis_eval),
@@ -327,7 +334,7 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 "atlas_regions_missing": sorted(missing_atlas_regions),
                 "window_ms": self.params.window_ms,
                 "n_bins": self.params.n_bins,
-                "window_samples": window_samples,
+                "window_samples": window_sample_count,
                 "effective_n_bins": effective_n_bins,
                 "binning_mode": binning_mode,
             },
@@ -451,25 +458,3 @@ def _to_float_or_nan(value: object) -> float:
         return float("nan")
     return out if np.isfinite(out) else float("nan")
 
-
-def _compute_condition_mean(
-    epochs: np.ndarray,
-    *,
-    n_features: int,
-    n_times: int,
-) -> np.ndarray:
-    if epochs.shape[0] == 0:
-        return np.full((n_features, n_times), np.nan, dtype=np.float64)
-    return np.nanmean(epochs, axis=0, dtype=np.float64)
-
-
-def _compute_condition_sem(
-    epochs: np.ndarray,
-    *,
-    n_features: int,
-    n_times: int,
-) -> np.ndarray:
-    if epochs.shape[0] < 2:
-        return np.full((n_features, n_times), np.nan, dtype=np.float64)
-    std = np.nanstd(epochs, axis=0, ddof=1, dtype=np.float64)
-    return std / np.sqrt(float(epochs.shape[0]))

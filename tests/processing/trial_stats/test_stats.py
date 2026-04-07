@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.processing.trial_stats.resolver import ResolvedTrial
+from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 from gin_bids_py_analysis.processing.trial_stats.params import TrialStatsParams
 from gin_bids_py_analysis.processing.trial_stats.stats import (
     compute_bootstrap_difference_ci95,
@@ -12,9 +12,9 @@ from gin_bids_py_analysis.processing.trial_stats.stats import (
     compute_permutation_p_values,
     compute_permuted_statistics,
     compute_single_bin_channel_significance,
-    correct_p_values,
     extract_epochs,
 )
+from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
 
 
 def _trial(onset_s: float, *, keep: bool = True) -> ResolvedTrial:

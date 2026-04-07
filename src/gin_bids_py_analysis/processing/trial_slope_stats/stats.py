@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Literal
-
-from mne.stats import bonferroni_correction, fdr_correction
 import numpy as np
 from scipy.stats import t as student_t
+
+from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
 
 
 def compute_linear_regression_maps(
@@ -88,32 +87,4 @@ def compute_linear_regression_maps(
         r_flat.reshape(n_features, n_times),
         p_flat.reshape(n_features, n_times),
         True,
-    )
-
-
-def correct_p_values(
-    p_values: np.ndarray,
-    *,
-    method: Literal["none", "fdr_bh", "bonferroni"] = "fdr_bh",
-) -> np.ndarray:
-    """Apply multiple-comparisons correction to p-values."""
-    corrected = np.asarray(p_values, dtype=np.float64).copy()
-    finite_mask = np.isfinite(corrected)
-    if not finite_mask.any() or method == "none":
-        return corrected
-
-    flat = corrected[finite_mask]
-    if method == "bonferroni":
-        _, corrected_flat = bonferroni_correction(flat, alpha=0.05)
-        corrected[finite_mask] = np.asarray(corrected_flat, dtype=np.float64)
-        return corrected
-
-    if method == "fdr_bh":
-        _, corrected_flat = fdr_correction(flat, alpha=0.05, method="indep")
-        corrected[finite_mask] = np.asarray(corrected_flat, dtype=np.float64)
-        return corrected
-
-    raise ValueError(
-        f"Unsupported p-value correction method: {method!r}. "
-        "Valid methods are 'none', 'fdr_bh', 'bonferroni'."
     )

@@ -14,7 +14,7 @@ from gin_bids_py_analysis.processing.trial_slope_stats import (
     TrialSlopeStatsWriterParams,
     load_trial_slope_stats_result,
 )
-from gin_bids_py_analysis.processing.trial_stats import ResolvedTrial
+from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 
 
 class _MockPyBIDSFile:

@@ -10,8 +10,8 @@ import scipy.io
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
+from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 from gin_bids_py_analysis.processing.trial_stats import (
-    ResolvedTrial,
     TrialStatsProcessingResult,
     TrialStatsProcessingWriter,
     TrialStatsWriterParams,

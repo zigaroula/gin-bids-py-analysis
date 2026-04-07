@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Literal
 
-from mne.stats import bonferroni_correction, fdr_correction
 import numpy as np
 from scipy.stats import ttest_ind
 
-from .resolver import ResolvedTrial
+from gin_bids_py_analysis.processing.utils.epoching import (
+    EpochExtractionResult,
+    build_time_axis_s,
+    _sample_offsets,
+)
+from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
+from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 
 
 def compute_permuted_statistics(
@@ -147,22 +152,6 @@ def compute_bootstrap_difference_ci95(
     return np.asarray(low, dtype=np.float64), np.asarray(high, dtype=np.float64)
 
 
-@dataclass
-class EpochExtractionResult:
-    """Epoch extraction outputs for one recording."""
-
-    epochs: np.ndarray
-    kept_trials: list[ResolvedTrial]
-    updated_trials: list[ResolvedTrial]
-    time_axis_s: np.ndarray
-
-
-def build_time_axis_s(sfreq: float, tmin_s: float, tmax_s: float) -> np.ndarray:
-    """Return the inclusive epoch time axis for the given sampling rate and window."""
-    sample_offsets = _sample_offsets(sfreq, tmin_s, tmax_s)
-    return sample_offsets.astype(np.float64) / sfreq
-
-
 def extract_epochs(
     data: np.ndarray,
     sfreq: float,
@@ -258,38 +247,6 @@ def compute_condition_statistics(
     t_values = np.asarray(stats.statistic, dtype=np.float64)
     p_values = np.asarray(stats.pvalue, dtype=np.float64)
     return t_values, p_values, mean_a, mean_b, mean_difference
-
-
-def correct_p_values(
-    p_values: np.ndarray,
-    *,
-    method: Literal["none", "fdr_bh", "bonferroni", "permutation"] = "fdr_bh",
-) -> np.ndarray:
-    """Apply a multiple-comparisons correction to p-values.
-
-    The ``"permutation"`` method is a special value accepted in the params but
-    handled in the processor via :func:`compute_permutation_p_values`.  Passing
-    it here is equivalent to ``"none"`` and is preserved for the raw p-values
-    path only.
-    """
-    corrected = np.asarray(p_values, dtype=np.float64).copy()
-    finite_mask = np.isfinite(corrected)
-    if not finite_mask.any() or method in ("none", "permutation"):
-        return corrected
-
-    flat = corrected[finite_mask]
-    if method == "bonferroni":
-        _, corrected_flat = bonferroni_correction(flat, alpha=0.05)
-        corrected[finite_mask] = np.asarray(corrected_flat, dtype=np.float64)
-        return corrected
-
-    if method == "fdr_bh":
-        _, corrected_flat = fdr_correction(flat, alpha=0.05, method="indep")
-        corrected[finite_mask] = np.asarray(corrected_flat, dtype=np.float64)
-        return corrected
-
-    raise ValueError(f"Unsupported p-value correction method: {method!r}. "
-                     "Valid methods are 'none', 'fdr_bh', 'bonferroni', 'permutation'.")
 
 
 def compute_single_bin_channel_significance(
@@ -434,7 +391,4 @@ def compute_duration_channel_significance(
     return duration_ms >= threshold_ms
 
 
-def _sample_offsets(sfreq: float, tmin_s: float, tmax_s: float) -> np.ndarray:
-    start = int(round(tmin_s * sfreq))
-    stop = int(round(tmax_s * sfreq))
-    return np.arange(start, stop + 1, dtype=np.int64)
+

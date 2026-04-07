@@ -14,7 +14,7 @@ from gin_bids_py_analysis.processing.trial_slope_stats import (
     TrialSlopeStatsProcessingWriter,
     TrialSlopeStatsWriterParams,
 )
-from gin_bids_py_analysis.processing.trial_stats import TableTrialLabelResolver
+from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialLabelResolver
 
 # ---------------------------------------------------------------------------
 # Parameters

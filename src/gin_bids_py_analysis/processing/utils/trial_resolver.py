@@ -1,4 +1,4 @@
-"""Trial-label resolution for the trial_stats processing pipeline.
+"""Trial-label resolution utilities shared across processing pipelines.
 
 Provides the ``TrialLabelResolver`` protocol and a table-driven implementation
 (``TableTrialLabelResolver``) that matches iEEG anchor events to trial labels
