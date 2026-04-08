@@ -86,6 +86,23 @@ class TestGroupParamsPanelRoundTrip:
         panel.set_status("Test status message")
         assert panel._status_label.text() == "Test status message"
 
+    def test_round_trip_preserves_script_only_ttest_fields(self, qtbot, default_group_params):
+        params = default_group_params.model_copy(
+            update={
+                "n_group_permutations": 500,
+                "cluster_threshold_alpha": 0.01,
+                "permutation_seed": 321,
+            }
+        )
+        panel = GroupParamsPanel(params)
+        qtbot.addWidget(panel)
+
+        recovered = panel.get_params()
+
+        assert recovered.n_group_permutations == 500
+        assert recovered.cluster_threshold_alpha == pytest.approx(0.01)
+        assert recovered.permutation_seed == 321
+
     def test_compute_requested_signal_emitted(self, qtbot, default_group_params):
         panel = GroupParamsPanel(default_group_params)
         qtbot.addWidget(panel)

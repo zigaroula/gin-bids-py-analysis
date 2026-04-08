@@ -50,6 +50,10 @@ def _write_slope_stats_h5(
     condition_b_mean: np.ndarray | None = None,
     condition_a_r_value: np.ndarray | None = None,
     condition_b_r_value: np.ndarray | None = None,
+    condition_a_slope_standardized_predictor: np.ndarray | None = None,
+    condition_b_slope_standardized_predictor: np.ndarray | None = None,
+    condition_a_slope_standardized_full: np.ndarray | None = None,
+    condition_b_slope_standardized_full: np.ndarray | None = None,
     condition_labels: tuple[str, str] = ("accepted", "rejected"),
     activity_scaling: str = "none",
     activity_baseline_tmin_s: float = -0.2,
@@ -69,15 +73,39 @@ def _write_slope_stats_h5(
         condition_a_r_value = np.full((n_ch, n_t), 0.5, dtype=np.float64)
     if condition_b_r_value is None:
         condition_b_r_value = np.full((n_ch, n_t), 0.4, dtype=np.float64)
+    if condition_a_slope_standardized_predictor is None:
+        condition_a_slope_standardized_predictor = condition_a_slope.astype(np.float64)
+    if condition_b_slope_standardized_predictor is None:
+        condition_b_slope_standardized_predictor = condition_b_slope.astype(np.float64)
+    if condition_a_slope_standardized_full is None:
+        condition_a_slope_standardized_full = condition_a_slope.astype(np.float64)
+    if condition_b_slope_standardized_full is None:
+        condition_b_slope_standardized_full = condition_b_slope.astype(np.float64)
 
     with h5py.File(path, "w") as fh:
         reg = fh.create_group("regression")
         ca = reg.create_group("condition_a")
         ca.create_dataset("slope", data=condition_a_slope.astype(np.float64))
+        ca.create_dataset(
+            "slope_standardized_predictor",
+            data=condition_a_slope_standardized_predictor.astype(np.float64),
+        )
+        ca.create_dataset(
+            "slope_standardized_full",
+            data=condition_a_slope_standardized_full.astype(np.float64),
+        )
         ca.create_dataset("r_value", data=condition_a_r_value.astype(np.float64))
         ca.create_dataset("p_value", data=np.full((n_ch, n_t), 0.01, dtype=np.float64))
         cb = reg.create_group("condition_b")
         cb.create_dataset("slope", data=condition_b_slope.astype(np.float64))
+        cb.create_dataset(
+            "slope_standardized_predictor",
+            data=condition_b_slope_standardized_predictor.astype(np.float64),
+        )
+        cb.create_dataset(
+            "slope_standardized_full",
+            data=condition_b_slope_standardized_full.astype(np.float64),
+        )
         cb.create_dataset("r_value", data=condition_b_r_value.astype(np.float64))
         cb.create_dataset("p_value", data=np.full((n_ch, n_t), 0.05, dtype=np.float64))
 

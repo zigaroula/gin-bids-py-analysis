@@ -33,6 +33,8 @@ from gin_bids_py_analysis.processing.utils.tables import select_column
 
 from gin_bids_py_analysis.processing.utils.group_stats import (
     compute_condition_group_stats,
+    compute_paired_epoch_summary,
+    compute_paired_timecourse,
     compute_two_sample_epoch_summary,
     compute_two_sample_timecourse,
 )
@@ -51,15 +53,24 @@ class _RawSlopeStatsData:
     """Format-agnostic in-memory representation of one trial_slope_stats file."""
 
     analysis_level: str
+    available_metrics: frozenset[str]
     channels: list[str]
     time_axis_s: np.ndarray
     condition_labels: tuple[str, str]
-    condition_a_slope: np.ndarray       # (n_channels, n_times)
-    condition_b_slope: np.ndarray       # (n_channels, n_times)
+    condition_a_raw_slope: np.ndarray       # (n_channels, n_times)
+    condition_b_raw_slope: np.ndarray       # (n_channels, n_times)
+    condition_a_standardized_slope_predictor: np.ndarray
+    condition_b_standardized_slope_predictor: np.ndarray
+    condition_a_standardized_slope_full: np.ndarray
+    condition_b_standardized_slope_full: np.ndarray
     condition_a_mean: np.ndarray        # (n_channels, n_times)
     condition_b_mean: np.ndarray        # (n_channels, n_times)
     condition_a_r_value: np.ndarray     # (n_channels, n_times)
     condition_b_r_value: np.ndarray     # (n_channels, n_times)
+    condition_a_predictor_raw_values: np.ndarray  # (n_trials_a,)
+    condition_b_predictor_raw_values: np.ndarray  # (n_trials_b,)
+    condition_a_predictor_transformed_values: np.ndarray  # (n_trials_a,)
+    condition_b_predictor_transformed_values: np.ndarray  # (n_trials_b,)
     condition_a_predictor_values: np.ndarray  # (n_trials_a,)
     condition_b_predictor_values: np.ndarray  # (n_trials_b,)
     condition_a_epoch_means: np.ndarray       # (n_channels, n_trials_a)  or empty
@@ -117,15 +128,24 @@ class _SlopeStatsSnapshot:
     task: str
     source_desc: str
     condition_labels: tuple[str, str]
+    available_metrics: frozenset[str]
     channel_names: list[str]
     channel_index_by_norm: dict[str, int]
     time_axis_s: np.ndarray
-    condition_a_slope: np.ndarray
-    condition_b_slope: np.ndarray
+    condition_a_raw_slope: np.ndarray
+    condition_b_raw_slope: np.ndarray
+    condition_a_standardized_slope_predictor: np.ndarray
+    condition_b_standardized_slope_predictor: np.ndarray
+    condition_a_standardized_slope_full: np.ndarray
+    condition_b_standardized_slope_full: np.ndarray
     condition_a_mean: np.ndarray
     condition_b_mean: np.ndarray
     condition_a_r_value: np.ndarray
     condition_b_r_value: np.ndarray
+    condition_a_predictor_raw_values: np.ndarray
+    condition_b_predictor_raw_values: np.ndarray
+    condition_a_predictor_transformed_values: np.ndarray
+    condition_b_predictor_transformed_values: np.ndarray
     condition_a_predictor_values: np.ndarray   # (n_trials_a,)
     condition_b_predictor_values: np.ndarray   # (n_trials_b,)
     condition_a_epoch_means: np.ndarray        # (n_channels, n_trials_a) or empty
@@ -149,12 +169,20 @@ class _ContributionRecord:
     subject: str
     channel: str
     source_stats_file: str
-    slope_a_values: np.ndarray      # (n_times,)
-    slope_b_values: np.ndarray      # (n_times,)
+    raw_slope_a_values: np.ndarray      # (n_times,)
+    raw_slope_b_values: np.ndarray      # (n_times,)
+    standardized_slope_predictor_a_values: np.ndarray
+    standardized_slope_predictor_b_values: np.ndarray
+    standardized_slope_full_a_values: np.ndarray
+    standardized_slope_full_b_values: np.ndarray
     mean_a_values: np.ndarray       # (n_times,)
     mean_b_values: np.ndarray       # (n_times,)
     r_value_a_values: np.ndarray    # (n_times,)
     r_value_b_values: np.ndarray    # (n_times,)
+    predictor_a_raw_values: np.ndarray  # (n_trials_a,)
+    predictor_b_raw_values: np.ndarray  # (n_trials_b,)
+    predictor_a_transformed_values: np.ndarray  # (n_trials_a,)
+    predictor_b_transformed_values: np.ndarray  # (n_trials_b,)
     predictor_a_values: np.ndarray  # (n_trials_a,)
     predictor_b_values: np.ndarray  # (n_trials_b,)
     epoch_means_a: np.ndarray       # (n_trials_a,)  mean activity per trial for this channel
@@ -208,6 +236,10 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
 
         snapshots = [_load_slope_stats_snapshot(file) for file in files]
         _validate_group_compatibility(snapshots)
+        _validate_source_metric_availability(
+            snapshots,
+            source_metric=self.params.source_metric,
+        )
 
         first = snapshots[0]
         excluded_rois: dict[str, str] = {}
@@ -286,11 +318,27 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
                 )
                 continue
 
-            samples_slope_a = np.stack(
-                [r.slope_a_values for r in records], axis=0
+            samples_metric_a = np.stack(
+                [
+                    _metric_values_for_record(
+                        r,
+                        source_metric=self.params.source_metric,
+                        condition="a",
+                    )
+                    for r in records
+                ],
+                axis=0,
             ).astype(np.float64)
-            samples_slope_b = np.stack(
-                [r.slope_b_values for r in records], axis=0
+            samples_metric_b = np.stack(
+                [
+                    _metric_values_for_record(
+                        r,
+                        source_metric=self.params.source_metric,
+                        condition="b",
+                    )
+                    for r in records
+                ],
+                axis=0,
             ).astype(np.float64)
             samples_mean_a = np.stack(
                 [r.mean_a_values for r in records], axis=0
@@ -305,12 +353,30 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
                 [r.r_value_b_values for r in records], axis=0
             ).astype(np.float64)
 
-            t_slope, p_slope_raw = compute_two_sample_timecourse(samples_slope_a, samples_slope_b)
-            ep_slope_t, ep_slope_p, ep_slope_df = compute_two_sample_epoch_summary(samples_slope_a, samples_slope_b)
-            t_activity, p_activity_raw = compute_two_sample_timecourse(samples_mean_a, samples_mean_b)
-            ep_act_t, ep_act_p, ep_act_df = compute_two_sample_epoch_summary(samples_mean_a, samples_mean_b)
-            slope_mean_a, slope_sem_a = compute_condition_group_stats(samples_slope_a)
-            slope_mean_b, slope_sem_b = compute_condition_group_stats(samples_slope_b)
+            if self.params.contrast_mode == "paired":
+                t_slope, p_slope_raw = compute_paired_timecourse(samples_metric_a, samples_metric_b)
+                ep_slope_t, ep_slope_p, ep_slope_df = compute_paired_epoch_summary(
+                    samples_metric_a,
+                    samples_metric_b,
+                )
+                t_activity, p_activity_raw = compute_paired_timecourse(samples_mean_a, samples_mean_b)
+                ep_act_t, ep_act_p, ep_act_df = compute_paired_epoch_summary(
+                    samples_mean_a,
+                    samples_mean_b,
+                )
+            else:
+                t_slope, p_slope_raw = compute_two_sample_timecourse(samples_metric_a, samples_metric_b)
+                ep_slope_t, ep_slope_p, ep_slope_df = compute_two_sample_epoch_summary(
+                    samples_metric_a,
+                    samples_metric_b,
+                )
+                t_activity, p_activity_raw = compute_two_sample_timecourse(samples_mean_a, samples_mean_b)
+                ep_act_t, ep_act_p, ep_act_df = compute_two_sample_epoch_summary(
+                    samples_mean_a,
+                    samples_mean_b,
+                )
+            slope_mean_a, slope_sem_a = compute_condition_group_stats(samples_metric_a)
+            slope_mean_b, slope_sem_b = compute_condition_group_stats(samples_metric_b)
             act_mean_a, act_sem_a = compute_condition_group_stats(samples_mean_a)
             act_mean_b, act_sem_b = compute_condition_group_stats(samples_mean_b)
             r_mean_a, r_sem_a = compute_condition_group_stats(samples_r_a)
@@ -341,8 +407,8 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
             epoch_activity_df.append(ep_act_df)
             roi_channel_counts.append(channel_count)
             roi_subject_counts.append(subject_count)
-            slope_a_contribution_samples.append(samples_slope_a)
-            slope_b_contribution_samples.append(samples_slope_b)
+            slope_a_contribution_samples.append(samples_metric_a)
+            slope_b_contribution_samples.append(samples_metric_b)
             activity_a_contribution_samples.append(samples_mean_a)
             activity_b_contribution_samples.append(samples_mean_b)
             contribution_label_rows.append([f"{r.subject}/{r.channel}" for r in records])
@@ -403,6 +469,8 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
             metadata={
                 "p_value_correction_method": method,
                 "significance_alpha": alpha,
+                "source_metric": self.params.source_metric,
+                "contrast_mode": self.params.contrast_mode,
                 "roi_mode": self.params.roi_mode,
                 "atlas_name": self.params.atlas_name,
                 "binning_mode": first.binning_mode,
@@ -455,6 +523,8 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
             condition_a_scatter_activity=scatter_a_activity,
             condition_b_scatter_predictor=scatter_b_predictor,
             condition_b_scatter_activity=scatter_b_activity,
+            source_metric=self.params.source_metric,
+            contrast_mode=self.params.contrast_mode,
             p_value_correction_method=method,
             significance_alpha=alpha,
             roi_mode=self.params.roi_mode,
@@ -483,6 +553,33 @@ def _apply_correction_2d(
     return corrected_flat.reshape(p_values.shape)
 
 
+def _metric_values_for_record(
+    record: _ContributionRecord,
+    *,
+    source_metric: str,
+    condition: str,
+) -> np.ndarray:
+    if condition not in {"a", "b"}:
+        raise ValueError(f"Unsupported condition key {condition!r}.")
+
+    suffix = "a" if condition == "a" else "b"
+    if source_metric == "raw_slope":
+        return np.asarray(getattr(record, f"raw_slope_{suffix}_values"), dtype=np.float64)
+    if source_metric == "r_value":
+        return np.asarray(getattr(record, f"r_value_{suffix}_values"), dtype=np.float64)
+    if source_metric == "standardized_slope_predictor":
+        return np.asarray(
+            getattr(record, f"standardized_slope_predictor_{suffix}_values"),
+            dtype=np.float64,
+        )
+    if source_metric == "standardized_slope_full":
+        return np.asarray(
+            getattr(record, f"standardized_slope_full_{suffix}_values"),
+            dtype=np.float64,
+        )
+    raise ValueError(f"Unsupported source_metric={source_metric!r}.")
+
+
 # ---------------------------------------------------------------------------
 # ROI record collection
 # ---------------------------------------------------------------------------
@@ -509,12 +606,20 @@ def _collect_manual_roi_records(
                         subject=subject_key,
                         channel=snapshot.channel_names[idx],
                         source_stats_file=str(snapshot.stats_file.path),
-                        slope_a_values=np.asarray(snapshot.condition_a_slope[idx, :], dtype=np.float64),
-                        slope_b_values=np.asarray(snapshot.condition_b_slope[idx, :], dtype=np.float64),
+                        raw_slope_a_values=np.asarray(snapshot.condition_a_raw_slope[idx, :], dtype=np.float64),
+                        raw_slope_b_values=np.asarray(snapshot.condition_b_raw_slope[idx, :], dtype=np.float64),
+                        standardized_slope_predictor_a_values=np.asarray(snapshot.condition_a_standardized_slope_predictor[idx, :], dtype=np.float64),
+                        standardized_slope_predictor_b_values=np.asarray(snapshot.condition_b_standardized_slope_predictor[idx, :], dtype=np.float64),
+                        standardized_slope_full_a_values=np.asarray(snapshot.condition_a_standardized_slope_full[idx, :], dtype=np.float64),
+                        standardized_slope_full_b_values=np.asarray(snapshot.condition_b_standardized_slope_full[idx, :], dtype=np.float64),
                         mean_a_values=np.asarray(snapshot.condition_a_mean[idx, :], dtype=np.float64),
                         mean_b_values=np.asarray(snapshot.condition_b_mean[idx, :], dtype=np.float64),
                         r_value_a_values=np.asarray(snapshot.condition_a_r_value[idx, :], dtype=np.float64),
                         r_value_b_values=np.asarray(snapshot.condition_b_r_value[idx, :], dtype=np.float64),
+                        predictor_a_raw_values=np.asarray(snapshot.condition_a_predictor_raw_values, dtype=np.float64),
+                        predictor_b_raw_values=np.asarray(snapshot.condition_b_predictor_raw_values, dtype=np.float64),
+                        predictor_a_transformed_values=np.asarray(snapshot.condition_a_predictor_transformed_values, dtype=np.float64),
+                        predictor_b_transformed_values=np.asarray(snapshot.condition_b_predictor_transformed_values, dtype=np.float64),
                         predictor_a_values=np.asarray(snapshot.condition_a_predictor_values, dtype=np.float64),
                         predictor_b_values=np.asarray(snapshot.condition_b_predictor_values, dtype=np.float64),
                         epoch_means_a=(
@@ -560,12 +665,20 @@ def _collect_atlas_roi_records(
                         subject=snapshot.subject,
                         channel=snapshot.channel_names[idx],
                         source_stats_file=str(snapshot.stats_file.path),
-                        slope_a_values=np.asarray(snapshot.condition_a_slope[idx, :], dtype=np.float64),
-                        slope_b_values=np.asarray(snapshot.condition_b_slope[idx, :], dtype=np.float64),
+                        raw_slope_a_values=np.asarray(snapshot.condition_a_raw_slope[idx, :], dtype=np.float64),
+                        raw_slope_b_values=np.asarray(snapshot.condition_b_raw_slope[idx, :], dtype=np.float64),
+                        standardized_slope_predictor_a_values=np.asarray(snapshot.condition_a_standardized_slope_predictor[idx, :], dtype=np.float64),
+                        standardized_slope_predictor_b_values=np.asarray(snapshot.condition_b_standardized_slope_predictor[idx, :], dtype=np.float64),
+                        standardized_slope_full_a_values=np.asarray(snapshot.condition_a_standardized_slope_full[idx, :], dtype=np.float64),
+                        standardized_slope_full_b_values=np.asarray(snapshot.condition_b_standardized_slope_full[idx, :], dtype=np.float64),
                         mean_a_values=np.asarray(snapshot.condition_a_mean[idx, :], dtype=np.float64),
                         mean_b_values=np.asarray(snapshot.condition_b_mean[idx, :], dtype=np.float64),
                         r_value_a_values=np.asarray(snapshot.condition_a_r_value[idx, :], dtype=np.float64),
                         r_value_b_values=np.asarray(snapshot.condition_b_r_value[idx, :], dtype=np.float64),
+                        predictor_a_raw_values=np.asarray(snapshot.condition_a_predictor_raw_values, dtype=np.float64),
+                        predictor_b_raw_values=np.asarray(snapshot.condition_b_predictor_raw_values, dtype=np.float64),
+                        predictor_a_transformed_values=np.asarray(snapshot.condition_a_predictor_transformed_values, dtype=np.float64),
+                        predictor_b_transformed_values=np.asarray(snapshot.condition_b_predictor_transformed_values, dtype=np.float64),
                         predictor_a_values=np.asarray(snapshot.condition_a_predictor_values, dtype=np.float64),
                         predictor_b_values=np.asarray(snapshot.condition_b_predictor_values, dtype=np.float64),
                         epoch_means_a=(
@@ -715,6 +828,24 @@ def _validate_group_compatibility(snapshots: Sequence[_SlopeStatsSnapshot]) -> N
             )
 
 
+def _validate_source_metric_availability(
+    snapshots: Sequence[_SlopeStatsSnapshot],
+    *,
+    source_metric: str,
+) -> None:
+    missing = [
+        snapshot.stats_file.path.name
+        for snapshot in snapshots
+        if source_metric not in snapshot.available_metrics
+    ]
+    if missing:
+        joined = ", ".join(missing)
+        raise ValueError(
+            f"source_metric={source_metric!r} is not available in these trial_slope_stats "
+            f"files: {joined}."
+        )
+
+
 # ---------------------------------------------------------------------------
 # Snapshot I/O helpers
 # ---------------------------------------------------------------------------
@@ -741,15 +872,24 @@ def _load_slope_stats_snapshot(stats_file: BIDSFile) -> _SlopeStatsSnapshot:
         task=str(stats_file.get("task") or ""),
         source_desc=str(stats_file.get("desc") or ""),
         condition_labels=raw.condition_labels,
+        available_metrics=raw.available_metrics,
         channel_names=raw.channels,
         channel_index_by_norm=channel_index_by_norm,
         time_axis_s=raw.time_axis_s,
-        condition_a_slope=raw.condition_a_slope,
-        condition_b_slope=raw.condition_b_slope,
+        condition_a_raw_slope=raw.condition_a_raw_slope,
+        condition_b_raw_slope=raw.condition_b_raw_slope,
+        condition_a_standardized_slope_predictor=raw.condition_a_standardized_slope_predictor,
+        condition_b_standardized_slope_predictor=raw.condition_b_standardized_slope_predictor,
+        condition_a_standardized_slope_full=raw.condition_a_standardized_slope_full,
+        condition_b_standardized_slope_full=raw.condition_b_standardized_slope_full,
         condition_a_mean=raw.condition_a_mean,
         condition_b_mean=raw.condition_b_mean,
         condition_a_r_value=raw.condition_a_r_value,
         condition_b_r_value=raw.condition_b_r_value,
+        condition_a_predictor_raw_values=raw.condition_a_predictor_raw_values,
+        condition_b_predictor_raw_values=raw.condition_b_predictor_raw_values,
+        condition_a_predictor_transformed_values=raw.condition_a_predictor_transformed_values,
+        condition_b_predictor_transformed_values=raw.condition_b_predictor_transformed_values,
         condition_a_predictor_values=raw.condition_a_predictor_values,
         condition_b_predictor_values=raw.condition_b_predictor_values,
         condition_a_epoch_means=raw.condition_a_epoch_means,
@@ -831,8 +971,29 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
                 np.asarray(ds[:], dtype=np.float64), n_features=n_ch, n_times=n_t
             )
 
-        condition_a_slope = _read_2d("regression/condition_a/slope")
-        condition_b_slope = _read_2d("regression/condition_b/slope")
+        ds_cond_a_raw_slope = dataset_or_none(fh, "regression/condition_a/slope")
+        ds_cond_b_raw_slope = dataset_or_none(fh, "regression/condition_b/slope")
+        ds_cond_a_std_pred = dataset_or_none(fh, "regression/condition_a/slope_standardized_predictor")
+        ds_cond_b_std_pred = dataset_or_none(fh, "regression/condition_b/slope_standardized_predictor")
+        ds_cond_a_std_full = dataset_or_none(fh, "regression/condition_a/slope_standardized_full")
+        ds_cond_b_std_full = dataset_or_none(fh, "regression/condition_b/slope_standardized_full")
+        ds_cond_a_r = dataset_or_none(fh, "regression/condition_a/r_value")
+        ds_cond_b_r = dataset_or_none(fh, "regression/condition_b/r_value")
+
+        condition_a_raw_slope = _read_2d("regression/condition_a/slope")
+        condition_b_raw_slope = _read_2d("regression/condition_b/slope")
+        condition_a_standardized_slope_predictor = _read_2d(
+            "regression/condition_a/slope_standardized_predictor"
+        )
+        condition_b_standardized_slope_predictor = _read_2d(
+            "regression/condition_b/slope_standardized_predictor"
+        )
+        condition_a_standardized_slope_full = _read_2d(
+            "regression/condition_a/slope_standardized_full"
+        )
+        condition_b_standardized_slope_full = _read_2d(
+            "regression/condition_b/slope_standardized_full"
+        )
         condition_a_r_value = _read_2d("regression/condition_a/r_value")
         condition_b_r_value = _read_2d("regression/condition_b/r_value")
 
@@ -876,15 +1037,45 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
 
     return _RawSlopeStatsData(
         analysis_level=analysis_level,
+        available_metrics=frozenset(
+            metric
+            for metric, present in {
+                "raw_slope": ds_cond_a_raw_slope is not None and ds_cond_b_raw_slope is not None,
+                "r_value": ds_cond_a_r is not None and ds_cond_b_r is not None,
+                "standardized_slope_predictor": ds_cond_a_std_pred is not None and ds_cond_b_std_pred is not None,
+                "standardized_slope_full": ds_cond_a_std_full is not None and ds_cond_b_std_full is not None,
+            }.items()
+            if present
+        ),
         channels=channels,
         time_axis_s=time_axis_s,
         condition_labels=condition_labels,
-        condition_a_slope=condition_a_slope,
-        condition_b_slope=condition_b_slope,
+        condition_a_raw_slope=condition_a_raw_slope,
+        condition_b_raw_slope=condition_b_raw_slope,
+        condition_a_standardized_slope_predictor=condition_a_standardized_slope_predictor,
+        condition_b_standardized_slope_predictor=condition_b_standardized_slope_predictor,
+        condition_a_standardized_slope_full=condition_a_standardized_slope_full,
+        condition_b_standardized_slope_full=condition_b_standardized_slope_full,
         condition_a_mean=condition_a_mean,
         condition_b_mean=condition_b_mean,
         condition_a_r_value=condition_a_r_value,
         condition_b_r_value=condition_b_r_value,
+        condition_a_predictor_raw_values=_read_predictor_values_hdf5(
+            stats_file,
+            "predictor/condition_a_raw_values",
+        ),
+        condition_b_predictor_raw_values=_read_predictor_values_hdf5(
+            stats_file,
+            "predictor/condition_b_raw_values",
+        ),
+        condition_a_predictor_transformed_values=_read_predictor_values_hdf5(
+            stats_file,
+            "predictor/condition_a_transformed_values",
+        ),
+        condition_b_predictor_transformed_values=_read_predictor_values_hdf5(
+            stats_file,
+            "predictor/condition_b_transformed_values",
+        ),
         condition_a_predictor_values=_read_predictor_values_hdf5(stats_file, "predictor/condition_a_values"),
         condition_b_predictor_values=_read_predictor_values_hdf5(stats_file, "predictor/condition_b_values"),
         condition_a_epoch_means=_read_epoch_means_hdf5(stats_file, "scatter/condition_a_epoch_means"),
@@ -934,8 +1125,12 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
         cond_a_reg = getattr(regression, "condition_a", None) if regression is not None else None
         cond_b_reg = getattr(regression, "condition_b", None) if regression is not None else None
 
-        condition_a_slope = _read_mat_2d(cond_a_reg, "slope") if cond_a_reg is not None else _empty.copy()
-        condition_b_slope = _read_mat_2d(cond_b_reg, "slope") if cond_b_reg is not None else _empty.copy()
+        condition_a_raw_slope = _read_mat_2d(cond_a_reg, "slope") if cond_a_reg is not None else _empty.copy()
+        condition_b_raw_slope = _read_mat_2d(cond_b_reg, "slope") if cond_b_reg is not None else _empty.copy()
+        condition_a_standardized_slope_predictor = _read_mat_2d(cond_a_reg, "slope_standardized_predictor") if cond_a_reg is not None else _empty.copy()
+        condition_b_standardized_slope_predictor = _read_mat_2d(cond_b_reg, "slope_standardized_predictor") if cond_b_reg is not None else _empty.copy()
+        condition_a_standardized_slope_full = _read_mat_2d(cond_a_reg, "slope_standardized_full") if cond_a_reg is not None else _empty.copy()
+        condition_b_standardized_slope_full = _read_mat_2d(cond_b_reg, "slope_standardized_full") if cond_b_reg is not None else _empty.copy()
         condition_a_r_value = _read_mat_2d(cond_a_reg, "r_value") if cond_a_reg is not None else _empty.copy()
         condition_b_r_value = _read_mat_2d(cond_b_reg, "r_value") if cond_b_reg is not None else _empty.copy()
 
@@ -966,14 +1161,30 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
             source_electrodes_files = mat_str_list(getattr(prov, "source_electrodes_files", None))
 
         predictor_raw = getattr(data, "predictor", None)
+        condition_a_predictor_raw_values: np.ndarray
+        condition_b_predictor_raw_values: np.ndarray
+        condition_a_predictor_transformed_values: np.ndarray
+        condition_b_predictor_transformed_values: np.ndarray
         condition_a_predictor_values: np.ndarray
         condition_b_predictor_values: np.ndarray
         if predictor_raw is not None:
+            raw_raw_a = getattr(predictor_raw, "condition_a_raw_values", None)
+            raw_raw_b = getattr(predictor_raw, "condition_b_raw_values", None)
+            raw_trans_a = getattr(predictor_raw, "condition_a_transformed_values", None)
+            raw_trans_b = getattr(predictor_raw, "condition_b_transformed_values", None)
             raw_a = getattr(predictor_raw, "condition_a_values", None)
             raw_b = getattr(predictor_raw, "condition_b_values", None)
+            condition_a_predictor_raw_values = np.asarray(raw_raw_a, dtype=np.float64).ravel() if raw_raw_a is not None else np.empty(0, dtype=np.float64)
+            condition_b_predictor_raw_values = np.asarray(raw_raw_b, dtype=np.float64).ravel() if raw_raw_b is not None else np.empty(0, dtype=np.float64)
+            condition_a_predictor_transformed_values = np.asarray(raw_trans_a, dtype=np.float64).ravel() if raw_trans_a is not None else np.empty(0, dtype=np.float64)
+            condition_b_predictor_transformed_values = np.asarray(raw_trans_b, dtype=np.float64).ravel() if raw_trans_b is not None else np.empty(0, dtype=np.float64)
             condition_a_predictor_values = np.asarray(raw_a, dtype=np.float64).ravel() if raw_a is not None else np.empty(0, dtype=np.float64)
             condition_b_predictor_values = np.asarray(raw_b, dtype=np.float64).ravel() if raw_b is not None else np.empty(0, dtype=np.float64)
         else:
+            condition_a_predictor_raw_values = np.empty(0, dtype=np.float64)
+            condition_b_predictor_raw_values = np.empty(0, dtype=np.float64)
+            condition_a_predictor_transformed_values = np.empty(0, dtype=np.float64)
+            condition_b_predictor_transformed_values = np.empty(0, dtype=np.float64)
             condition_a_predictor_values = np.empty(0, dtype=np.float64)
             condition_b_predictor_values = np.empty(0, dtype=np.float64)
 
@@ -991,15 +1202,33 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
 
     return _RawSlopeStatsData(
         analysis_level=analysis_level,
+        available_metrics=frozenset(
+            metric
+            for metric, present in {
+                "raw_slope": cond_a_reg is not None and cond_b_reg is not None and getattr(cond_a_reg, "slope", None) is not None and getattr(cond_b_reg, "slope", None) is not None,
+                "r_value": cond_a_reg is not None and cond_b_reg is not None and getattr(cond_a_reg, "r_value", None) is not None and getattr(cond_b_reg, "r_value", None) is not None,
+                "standardized_slope_predictor": cond_a_reg is not None and cond_b_reg is not None and getattr(cond_a_reg, "slope_standardized_predictor", None) is not None and getattr(cond_b_reg, "slope_standardized_predictor", None) is not None,
+                "standardized_slope_full": cond_a_reg is not None and cond_b_reg is not None and getattr(cond_a_reg, "slope_standardized_full", None) is not None and getattr(cond_b_reg, "slope_standardized_full", None) is not None,
+            }.items()
+            if present
+        ),
         channels=channels,
         time_axis_s=time_axis_s,
         condition_labels=condition_labels,
-        condition_a_slope=condition_a_slope,
-        condition_b_slope=condition_b_slope,
+        condition_a_raw_slope=condition_a_raw_slope,
+        condition_b_raw_slope=condition_b_raw_slope,
+        condition_a_standardized_slope_predictor=condition_a_standardized_slope_predictor,
+        condition_b_standardized_slope_predictor=condition_b_standardized_slope_predictor,
+        condition_a_standardized_slope_full=condition_a_standardized_slope_full,
+        condition_b_standardized_slope_full=condition_b_standardized_slope_full,
         condition_a_mean=condition_a_mean,
         condition_b_mean=condition_b_mean,
         condition_a_r_value=condition_a_r_value,
         condition_b_r_value=condition_b_r_value,
+        condition_a_predictor_raw_values=condition_a_predictor_raw_values,
+        condition_b_predictor_raw_values=condition_b_predictor_raw_values,
+        condition_a_predictor_transformed_values=condition_a_predictor_transformed_values,
+        condition_b_predictor_transformed_values=condition_b_predictor_transformed_values,
         condition_a_predictor_values=condition_a_predictor_values,
         condition_b_predictor_values=condition_b_predictor_values,
         condition_a_epoch_means=condition_a_epoch_means,

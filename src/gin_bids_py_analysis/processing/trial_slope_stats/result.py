@@ -13,12 +13,24 @@ class TrialSlopeStatsProcessingResult(BaseProcessingResult):
     """Structured outputs for subject-level trial slope statistics."""
 
     condition_a_slope: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_a_slope_standardized_predictor: np.ndarray = field(
+        default_factory=lambda: np.array([])
+    )
+    condition_a_slope_standardized_full: np.ndarray = field(
+        default_factory=lambda: np.array([])
+    )
     condition_a_intercept: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_a_r_value: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_a_p_value: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_a_p_value_corrected: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_a_significant_mask: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_slope: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_b_slope_standardized_predictor: np.ndarray = field(
+        default_factory=lambda: np.array([])
+    )
+    condition_b_slope_standardized_full: np.ndarray = field(
+        default_factory=lambda: np.array([])
+    )
     condition_b_intercept: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_r_value: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_p_value: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -40,6 +52,14 @@ class TrialSlopeStatsProcessingResult(BaseProcessingResult):
     condition_b_trials_used: int = 0
     sfreq: float = 0.0
 
+    condition_a_predictor_raw_values: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_b_predictor_raw_values: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_a_predictor_transformed_values: np.ndarray = field(
+        default_factory=lambda: np.array([])
+    )
+    condition_b_predictor_transformed_values: np.ndarray = field(
+        default_factory=lambda: np.array([])
+    )
     condition_a_predictor_values: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_predictor_values: np.ndarray = field(default_factory=lambda: np.array([]))
 
@@ -61,6 +81,7 @@ class TrialSlopeStatsProcessingResult(BaseProcessingResult):
 
     predictor: str = "predictor_value"
     predictor_scaling: str = "none"
+    predictor_transform_by_condition: dict[str, dict[str, float]] = field(default_factory=dict)
     p_value_correction_method: str = "fdr_bh"
     significance_alpha: float = 0.05
 

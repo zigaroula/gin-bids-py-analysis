@@ -3,8 +3,6 @@ from __future__ import annotations
 import numpy as np
 from scipy.stats import t as student_t
 
-from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
-
 
 def compute_linear_regression_maps(
     predictor_values: np.ndarray,
@@ -88,3 +86,50 @@ def compute_linear_regression_maps(
         p_flat.reshape(n_features, n_times),
         True,
     )
+
+
+def zscore_predictor_values(
+    predictor_values: np.ndarray,
+) -> tuple[np.ndarray, bool]:
+    """Z-score a 1-D predictor across trials.
+
+    Returns
+    -------
+    z_values, valid
+        ``valid`` is False when fewer than 3 finite trials are available or when
+        the predictor variance is not strictly positive.
+    """
+    x = np.asarray(predictor_values, dtype=np.float64).reshape(-1)
+    finite = np.isfinite(x)
+    x = x[finite]
+    if x.shape[0] < 3:
+        return np.full_like(np.asarray(predictor_values, dtype=np.float64).reshape(-1), np.nan), False
+    mean = float(np.nanmean(x))
+    std = float(np.nanstd(x, ddof=1))
+    if not np.isfinite(std) or std <= 0.0:
+        return np.full_like(np.asarray(predictor_values, dtype=np.float64).reshape(-1), np.nan), False
+    out = np.full_like(np.asarray(predictor_values, dtype=np.float64).reshape(-1), np.nan)
+    out[finite] = (x - mean) / std
+    return out, True
+
+
+def zscore_epochs_across_trials(
+    epochs: np.ndarray,
+) -> tuple[np.ndarray, bool]:
+    """Z-score a ``(n_trials, n_features, n_times)`` array across the trial axis."""
+    arr = np.asarray(epochs, dtype=np.float64)
+    if arr.ndim != 3:
+        raise ValueError("epochs must be 3-D (n_trials, n_features, n_times).")
+    if arr.shape[0] < 3:
+        return np.full_like(arr, np.nan, dtype=np.float64), False
+
+    mean = np.nanmean(arr, axis=0, dtype=np.float64)
+    std = np.nanstd(arr, axis=0, ddof=1, dtype=np.float64)
+    valid_std = np.isfinite(std) & (std > 0.0)
+    if not np.any(valid_std):
+        return np.full_like(arr, np.nan, dtype=np.float64), False
+
+    out = np.full_like(arr, np.nan, dtype=np.float64)
+    centered = arr - mean[np.newaxis, :, :]
+    out[:, valid_std] = centered[:, valid_std] / std[valid_std]
+    return out, True

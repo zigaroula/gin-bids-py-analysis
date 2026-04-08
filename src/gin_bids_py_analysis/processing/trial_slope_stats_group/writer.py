@@ -102,6 +102,8 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
                 data=np.array(list(result.condition_labels), dtype=object),
                 dtype=str_dtype,
             )
+            meta.create_dataset("source_metric", data=str(result.source_metric), dtype=str_dtype)
+            meta.create_dataset("contrast_mode", data=str(result.contrast_mode), dtype=str_dtype)
             meta.create_dataset(
                 "p_value_correction_method",
                 data=str(result.p_value_correction_method),
@@ -291,6 +293,8 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
         meta_kwargs: dict[str, object] = dict(
             analysis_level=np.str_("roi_group"),
             condition_labels=np.array(list(result.condition_labels), dtype=object),
+            source_metric=np.str_(result.source_metric),
+            contrast_mode=np.str_(result.contrast_mode),
             p_value_correction_method=np.str_(result.p_value_correction_method),
             significance_alpha=float(result.significance_alpha),
             roi_mode=np.str_(result.roi_mode),

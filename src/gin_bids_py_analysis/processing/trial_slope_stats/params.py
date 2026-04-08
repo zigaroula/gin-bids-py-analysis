@@ -2,9 +2,23 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from gin_bids_py_analysis.processing.base import BaseProcessingParams, BaseWriterParams
+
+
+class PredictorAffineTransform(BaseModel):
+    """Affine transform applied to predictor values for one condition."""
+
+    scale: float = Field(default=1.0)
+    offset: float = Field(default=0.0)
+
+    @field_validator("scale", "offset")
+    @classmethod
+    def _validate_finite(cls, value: float) -> float:
+        if not float("-inf") < float(value) < float("inf"):
+            raise ValueError("Predictor transform values must be finite.")
+        return float(value)
 
 
 class TrialSlopeStatsParams(BaseProcessingParams):
@@ -42,9 +56,20 @@ class TrialSlopeStatsParams(BaseProcessingParams):
             "the per-condition regression."
         ),
     )
-    predictor_scaling: Literal["none"] = Field(
+    predictor_transform_by_condition: dict[str, PredictorAffineTransform] = Field(
+        default_factory=dict,
+        description=(
+            "Optional affine transform applied to the predictor by trial condition. "
+            "Each entry is shaped as {condition_label: {scale: float, offset: float}}."
+        ),
+    )
+    predictor_scaling: Literal["none", "zscore_within_condition"] = Field(
         default="none",
-        description="Predictor scaling mode. V1 supports only raw values ('none').",
+        description=(
+            "Predictor scaling mode applied within each condition after the affine "
+            "transform. 'none' keeps transformed values; 'zscore_within_condition' "
+            "z-scores the predictor across kept trials within each condition."
+        ),
     )
     p_value_correction_method: Literal["none", "fdr_bh", "bonferroni"] = Field(
         default="fdr_bh",
@@ -154,6 +179,40 @@ class TrialSlopeStatsParams(BaseProcessingParams):
             return [cleaned] if cleaned else []
         return [str(item).strip() for item in value if str(item).strip()]
 
+    @field_validator("predictor_transform_by_condition", mode="before")
+    @classmethod
+    def _coerce_predictor_transform_by_condition(
+        cls,
+        value: object,
+    ) -> dict[str, dict[str, float]]:
+        if value in (None, ""):
+            return {}
+        if not isinstance(value, dict):
+            raise ValueError(
+                "predictor_transform_by_condition must be a mapping shaped as "
+                "{condition_label: {scale: float, offset: float}}."
+            )
+        cleaned: dict[str, dict[str, float]] = {}
+        for raw_condition, raw_transform in value.items():
+            condition = str(raw_condition).strip()
+            if not condition:
+                continue
+            if raw_transform is None:
+                cleaned[condition] = {}
+                continue
+            if not isinstance(raw_transform, dict):
+                raise ValueError(
+                    "Each predictor transform must be a mapping with optional "
+                    "'scale' and 'offset' keys."
+                )
+            transform_dict: dict[str, float] = {}
+            if "scale" in raw_transform:
+                transform_dict["scale"] = float(raw_transform["scale"])
+            if "offset" in raw_transform:
+                transform_dict["offset"] = float(raw_transform["offset"])
+            cleaned[condition] = transform_dict
+        return cleaned
+
     @model_validator(mode="after")
     def _validate(self) -> "TrialSlopeStatsParams":
         if not self.anchor_event_codes:
@@ -166,6 +225,11 @@ class TrialSlopeStatsParams(BaseProcessingParams):
         if not predictor_key:
             raise ValueError("predictor must be a non-empty string.")
         self.predictor = predictor_key
+        self.predictor_transform_by_condition = {
+            str(condition).strip(): transform
+            for condition, transform in self.predictor_transform_by_condition.items()
+            if str(condition).strip()
+        }
         if self.atlas_name is not None:
             self.atlas_name = self.atlas_name.strip() or None
         if self.atlas_regions and not self.atlas_name:

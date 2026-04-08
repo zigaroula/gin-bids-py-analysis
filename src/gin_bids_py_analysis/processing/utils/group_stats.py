@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.stats import ttest_1samp, ttest_ind
+from scipy.stats import ttest_1samp, ttest_ind, ttest_rel
 
 
 @dataclass(frozen=True)
@@ -173,6 +173,38 @@ def compute_two_sample_timecourse(
     return t_values, p_values
 
 
+def compute_paired_timecourse(
+    samples_a: np.ndarray,
+    samples_b: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute paired t-test statistics for two matched ``[n_samples, n_times]`` matrices."""
+    a = np.asarray(samples_a, dtype=np.float64)
+    b = np.asarray(samples_b, dtype=np.float64)
+    if a.ndim != 2 or b.ndim != 2:
+        raise ValueError("samples_a and samples_b must be 2D arrays of shape [n_samples, n_times].")
+    if a.shape != b.shape:
+        raise ValueError(
+            "Paired statistics require samples_a and samples_b to share the same shape."
+        )
+    n_times = int(a.shape[1])
+    if a.shape[0] < 2:
+        empty = np.full((n_times,), np.nan, dtype=np.float64)
+        return empty.copy(), empty.copy()
+
+    t_values = np.full((n_times,), np.nan, dtype=np.float64)
+    p_values = np.full((n_times,), np.nan, dtype=np.float64)
+    for time_idx in range(n_times):
+        a_col = a[:, time_idx]
+        b_col = b[:, time_idx]
+        valid = np.isfinite(a_col) & np.isfinite(b_col)
+        if np.sum(valid) < 2:
+            continue
+        stats = ttest_rel(a_col[valid], b_col[valid], nan_policy="omit")
+        t_values[time_idx] = float(np.asarray(stats.statistic, dtype=np.float64))
+        p_values[time_idx] = float(np.asarray(stats.pvalue, dtype=np.float64))
+    return t_values, p_values
+
+
 def compute_two_sample_epoch_summary(
     samples_a: np.ndarray,
     samples_b: np.ndarray,
@@ -208,6 +240,37 @@ def compute_two_sample_epoch_summary(
 
     stats = ttest_ind(valid_a, valid_b, equal_var=False, nan_policy="omit")
     df = float(valid_a.size + valid_b.size - 2)
+    return (
+        float(np.asarray(stats.statistic, dtype=np.float64)),
+        float(np.asarray(stats.pvalue, dtype=np.float64)),
+        df,
+    )
+
+
+def compute_paired_epoch_summary(
+    samples_a: np.ndarray,
+    samples_b: np.ndarray,
+) -> tuple[float, float, float]:
+    """Summarize one ROI on the full epoch with a paired t-test on channel means."""
+    a = np.asarray(samples_a, dtype=np.float64)
+    b = np.asarray(samples_b, dtype=np.float64)
+    if a.ndim != 2 or b.ndim != 2:
+        raise ValueError("samples_a and samples_b must be 2D arrays of shape [n_samples, n_times].")
+    if a.shape != b.shape:
+        raise ValueError(
+            "Paired statistics require samples_a and samples_b to share the same shape."
+        )
+    if a.shape[0] == 0 or a.shape[1] == 0:
+        return np.nan, np.nan, np.nan
+
+    means_a = np.nanmean(a, axis=1, dtype=np.float64)
+    means_b = np.nanmean(b, axis=1, dtype=np.float64)
+    valid = np.isfinite(means_a) & np.isfinite(means_b)
+    if np.sum(valid) < 2:
+        return np.nan, np.nan, np.nan
+
+    stats = ttest_rel(means_a[valid], means_b[valid], nan_policy="omit")
+    df = float(np.sum(valid) - 1)
     return (
         float(np.asarray(stats.statistic, dtype=np.float64)),
         float(np.asarray(stats.pvalue, dtype=np.float64)),

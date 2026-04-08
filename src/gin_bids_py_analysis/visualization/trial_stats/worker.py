@@ -517,4 +517,8 @@ def _load_group_result_auto(
 
 
 def _is_slope_group_params(group_params: object) -> bool:
-    return not hasattr(group_params, "source_metric")
+    from gin_bids_py_analysis.processing.trial_slope_stats_group.params import (
+        TrialSlopeStatsGroupParams,
+    )
+
+    return isinstance(group_params, TrialSlopeStatsGroupParams)

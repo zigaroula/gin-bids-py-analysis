@@ -57,8 +57,40 @@ def _write_hdf5_structure(
     regression = fh.create_group("regression")
     cond_a = regression.create_group("condition_a")
     cond_b = regression.create_group("condition_b")
+    cond_a_std_pred = _coerce_optional_map(
+        result.condition_a_slope_standardized_predictor,
+        result.condition_a_slope.shape,
+    )
+    cond_a_std_full = _coerce_optional_map(
+        result.condition_a_slope_standardized_full,
+        result.condition_a_slope.shape,
+    )
+    cond_b_std_pred = _coerce_optional_map(
+        result.condition_b_slope_standardized_predictor,
+        result.condition_b_slope.shape,
+    )
+    cond_b_std_full = _coerce_optional_map(
+        result.condition_b_slope_standardized_full,
+        result.condition_b_slope.shape,
+    )
     cond_a.create_dataset("slope", data=np.asarray(result.condition_a_slope, dtype=np.float64))
     cond_b.create_dataset("slope", data=np.asarray(result.condition_b_slope, dtype=np.float64))
+    cond_a.create_dataset(
+        "slope_standardized_predictor",
+        data=cond_a_std_pred,
+    )
+    cond_b.create_dataset(
+        "slope_standardized_predictor",
+        data=cond_b_std_pred,
+    )
+    cond_a.create_dataset(
+        "slope_standardized_full",
+        data=cond_a_std_full,
+    )
+    cond_b.create_dataset(
+        "slope_standardized_full",
+        data=cond_b_std_full,
+    )
     cond_a.create_dataset("r_value", data=np.asarray(result.condition_a_r_value, dtype=np.float64))
     cond_b.create_dataset("r_value", data=np.asarray(result.condition_b_r_value, dtype=np.float64))
 
@@ -106,6 +138,22 @@ def _write_hdf5_structure(
     # predictor values (required for scatter)
     pred_grp = fh.create_group("predictor")
     pred_grp.create_dataset(
+        "condition_a_raw_values",
+        data=np.asarray(result.condition_a_predictor_raw_values, dtype=np.float64),
+    )
+    pred_grp.create_dataset(
+        "condition_b_raw_values",
+        data=np.asarray(result.condition_b_predictor_raw_values, dtype=np.float64),
+    )
+    pred_grp.create_dataset(
+        "condition_a_transformed_values",
+        data=np.asarray(result.condition_a_predictor_transformed_values, dtype=np.float64),
+    )
+    pred_grp.create_dataset(
+        "condition_b_transformed_values",
+        data=np.asarray(result.condition_b_predictor_transformed_values, dtype=np.float64),
+    )
+    pred_grp.create_dataset(
         "condition_a_values",
         data=np.asarray(result.condition_a_predictor_values, dtype=np.float64),
     )
@@ -142,6 +190,17 @@ def _build_in_memory_bids_file_with_handle(
     _write_hdf5_structure(fh, result, subject_id)
     bids_file.attach_data(fh)
     return bids_file, fh
+
+
+def _coerce_optional_map(values: np.ndarray, expected_shape: tuple[int, ...]) -> np.ndarray:
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.shape == expected_shape:
+        return arr
+    if arr.size == 0:
+        return np.full(expected_shape, np.nan, dtype=np.float64)
+    raise ValueError(
+        f"Expected array shape {expected_shape!r} or empty array, got {arr.shape!r}."
+    )
 
 
 @contextmanager

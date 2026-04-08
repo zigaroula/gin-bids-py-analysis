@@ -169,6 +169,12 @@ class GroupPlotPanel(QWidget):
             # Show all 9 tabs for slope results
             for i in range(self._plot_tabs.count()):
                 self._plot_tabs.setTabVisible(i, True)
+            metric_label = _slope_source_metric_label(result)
+            metric_tab_label = "Slope" if metric_label == "slope" else metric_label
+            self._plot_tabs.setTabText(4, f"{metric_tab_label} mean")
+            self._plot_tabs.setTabText(5, f"{metric_tab_label} t-values")
+            self._plot_tabs.setTabText(6, f"{metric_tab_label} p-values")
+            self._plot_tabs.setTabText(7, f"{metric_tab_label} matrix")
         else:
             # For classic ttest results: hide the 4 activity-specific tabs (indices 1-3)
             # and the slope mean tab (index 4); show activity mean (0), t (5→1), p (6→2), matrix (7→3)
@@ -451,6 +457,8 @@ class GroupPlotPanel(QWidget):
         title_base = f"{roi_label}  —  {n_ch} channel(s) / {n_subj} subject(s)"
         method = result.p_value_correction_method
         has_correction = bool(method) and method.lower() not in ("none", "")
+        metric_label = _slope_source_metric_label(result)
+        contrast_label = _slope_contrast_label(result)
 
         # ---- Activity means ± SEM ----
         ax = self._ax_means
@@ -578,11 +586,11 @@ class GroupPlotPanel(QWidget):
             if np.nanmin(all_slopes) < 0 < np.nanmax(all_slopes):
                 ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
         else:
-            ax.text(0.5, 0.5, "No slope means available", transform=ax.transAxes,
+            ax.text(0.5, 0.5, f"No {metric_label} means available", transform=ax.transAxes,
                     ha="center", va="center", fontsize=9, color="gray")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
-        ax.set_ylabel("mean slope")
-        ax.set_title(f"{title_base} - slope mean", fontsize=9)
+        ax.set_ylabel(f"mean {metric_label}")
+        ax.set_title(f"{title_base} - {metric_label} mean", fontsize=9)
         if sig_slope.any():
             ax.fill_between(t, 0.005, 0.025, where=sig_slope, alpha=0.75, color="red",
                             transform=ax.get_xaxis_transform(), zorder=5)
@@ -594,16 +602,15 @@ class GroupPlotPanel(QWidget):
         ax.clear()
         if result.slope_t_values.size > 0:
             t_slope = result.slope_t_values[roi_idx]
-            ax.plot(t, t_slope, color="darkorange",
-                    label=f"{cond_a_label} vs {cond_b_label}")
+            ax.plot(t, t_slope, color="darkorange", label=contrast_label)
             if np.nanmin(t_slope) < 0 < np.nanmax(t_slope):
                 ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
         if sig_slope.any():
             ax.fill_between(t, 0, 1, where=sig_slope, alpha=0.18, color="red",
                             transform=ax.get_xaxis_transform())
-        ax.set_ylabel("slope t-value")
-        ax.set_title(f"{roi_label} — slope ({cond_a_label} vs {cond_b_label})", fontsize=9)
+        ax.set_ylabel(f"{metric_label} t-value")
+        ax.set_title(f"{roi_label} — {metric_label} ({contrast_label})", fontsize=9)
         _safe_legend(ax)
         self._canvas_t.draw_idle()
 
@@ -629,8 +636,8 @@ class GroupPlotPanel(QWidget):
             p_max = float(np.nanmax(np.concatenate(plotted_p_slope)))
             ax.set_ylim(bottom=0.0, top=max(1.05, p_max * 1.05))
         ax.set_xlabel("Time (s)")
-        ax.set_ylabel("slope p-value")
-        ax.set_title(f"{title_base} - slope p-values", fontsize=9)
+        ax.set_ylabel(f"{metric_label} p-value")
+        ax.set_title(f"{title_base} - {metric_label} p-values", fontsize=9)
         _safe_legend(ax)
         self._canvas_p.draw_idle()
 
@@ -657,9 +664,9 @@ class GroupPlotPanel(QWidget):
             labels=slope_labels,
             time_axis=t,
             roi_label=roi_label,
-            cond_a_label=f"slope {cond_a_label}",
-            cond_b_label=f"slope {cond_b_label}",
-            title_suffix=" (slope contributions)",
+            cond_a_label=f"{metric_label} {cond_a_label}",
+            cond_b_label=f"{metric_label} {cond_b_label}",
+            title_suffix=f" ({metric_label} contributions)",
         )
 
         # ---- Scatter (predictor vs epoch-mean brain activity) ----
@@ -913,3 +920,22 @@ def _group_activity_scaling(result: object) -> str:
 
 def _is_group_zscore_activity_scaling(activity_scaling: str) -> bool:
     return str(activity_scaling).strip().lower().startswith("zscore")
+
+
+def _slope_source_metric_label(result: object) -> str:
+    metric = str(getattr(result, "source_metric", "raw_slope")).strip().lower()
+    if metric == "r_value":
+        return "r"
+    if metric == "standardized_slope_predictor":
+        return "std slope (x)"
+    if metric == "standardized_slope_full":
+        return "std slope (x+y)"
+    return "slope"
+
+
+def _slope_contrast_label(result: object) -> str:
+    labels = getattr(result, "condition_labels", ("condition_a", "condition_b"))
+    cond_a = labels[0] if len(labels) >= 1 else "condition_a"
+    cond_b = labels[1] if len(labels) >= 2 else "condition_b"
+    mode = str(getattr(result, "contrast_mode", "paired")).strip().lower()
+    return f"{cond_a} vs {cond_b} ({mode})"

@@ -24,6 +24,13 @@ from gin_bids_py_analysis.processing.trial_slope_stats import TrialSlopeStatsPar
 from gin_bids_py_analysis.processing.trial_stats import TrialStatsParams
 
 
+def _merge_model_params(model: TrialStatsParams | TrialSlopeStatsParams, **updates: object) -> TrialStatsParams | TrialSlopeStatsParams:
+    """Return a validated copy of *model* with widget-driven updates applied."""
+    payload = model.model_dump()
+    payload.update(updates)
+    return model.__class__(**payload)
+
+
 class ParamsPanel(QWidget):
     """Right panel with all ``TrialStatsParams`` fields and a Compute button.
 
@@ -46,6 +53,23 @@ class ParamsPanel(QWidget):
         super().__init__(parent)
         self.setMinimumWidth(280)
         self.setMaximumWidth(400)
+        self._ttest_params = params
+        self._slope_params = slope_params or TrialSlopeStatsParams(
+            anchor_event_codes=list(params.anchor_event_codes),
+            tmin_s=params.tmin_s,
+            tmax_s=params.tmax_s,
+            condition_a=params.condition_a,
+            condition_b=params.condition_b,
+            min_trials_per_condition=max(3, params.min_trials_per_condition),
+            drop_partial_epochs=params.drop_partial_epochs,
+            atlas_name=params.atlas_name,
+            atlas_regions=list(params.atlas_regions),
+            window_ms=params.window_ms,
+            n_bins=params.n_bins,
+            activity_scaling=params.activity_scaling,
+            activity_baseline_tmin_s=params.activity_baseline_tmin_s,
+            activity_baseline_tmax_s=params.activity_baseline_tmax_s,
+        )
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -98,6 +122,7 @@ class ParamsPanel(QWidget):
 
         self._predictor_scaling = QComboBox()
         self._predictor_scaling.addItem("none")
+        self._predictor_scaling.addItem("zscore_within_condition")
         form.addRow("Predictor scaling", self._predictor_scaling)
 
         # min_trials_per_condition
@@ -223,22 +248,6 @@ class ParamsPanel(QWidget):
 
         # Populate initial values
         self.set_params(params)
-        self._slope_params = slope_params or TrialSlopeStatsParams(
-            anchor_event_codes=list(params.anchor_event_codes),
-            tmin_s=params.tmin_s,
-            tmax_s=params.tmax_s,
-            condition_a=params.condition_a,
-            condition_b=params.condition_b,
-            min_trials_per_condition=max(3, params.min_trials_per_condition),
-            drop_partial_epochs=params.drop_partial_epochs,
-            atlas_name=params.atlas_name,
-            atlas_regions=list(params.atlas_regions),
-            window_ms=params.window_ms,
-            n_bins=params.n_bins,
-            activity_scaling=params.activity_scaling,
-            activity_baseline_tmin_s=params.activity_baseline_tmin_s,
-            activity_baseline_tmax_s=params.activity_baseline_tmax_s,
-        )
         self._predictor.setText(self._slope_params.predictor)
         idx_scale = self._predictor_scaling.findText(self._slope_params.predictor_scaling)
         if idx_scale >= 0:
@@ -275,7 +284,8 @@ class ParamsPanel(QWidget):
             if r.strip()
         ]
         try:
-            return TrialStatsParams(
+            params = _merge_model_params(
+                self._ttest_params,
                 anchor_event_codes=anchor_codes,
                 tmin_s=self._tmin.value(),
                 tmax_s=self._tmax.value(),
@@ -296,6 +306,9 @@ class ParamsPanel(QWidget):
                 channel_significance_mode=self._sig_mode.currentText(),
                 channel_significance_duration_threshold_ms=self._sig_duration_threshold.value(),
             )
+            assert isinstance(params, TrialStatsParams)
+            self._ttest_params = params
+            return params
         except (ValidationError, ValueError) as exc:
             QMessageBox.warning(self, "Invalid parameters", str(exc))
             raise ValueError(str(exc)) from exc
@@ -321,7 +334,8 @@ class ParamsPanel(QWidget):
             if r.strip()
         ]
         try:
-            return TrialSlopeStatsParams(
+            params = _merge_model_params(
+                self._slope_params,
                 anchor_event_codes=anchor_codes,
                 tmin_s=self._tmin.value(),
                 tmax_s=self._tmax.value(),
@@ -341,12 +355,16 @@ class ParamsPanel(QWidget):
                 activity_baseline_tmin_s=self._activity_baseline_tmin.value(),
                 activity_baseline_tmax_s=self._activity_baseline_tmax.value(),
             )
+            assert isinstance(params, TrialSlopeStatsParams)
+            self._slope_params = params
+            return params
         except (ValidationError, ValueError) as exc:
             QMessageBox.warning(self, "Invalid parameters", str(exc))
             raise ValueError(str(exc)) from exc
 
     def set_params(self, params: TrialStatsParams) -> None:
         """Populate all widgets from a ``TrialStatsParams`` instance."""
+        self._ttest_params = params
         self._anchor_codes.setText(", ".join(params.anchor_event_codes))
         self._tmin.setValue(params.tmin_s)
         self._tmax.setValue(params.tmax_s)
@@ -381,6 +399,7 @@ class ParamsPanel(QWidget):
 
     def set_slope_params(self, params: TrialSlopeStatsParams) -> None:
         """Populate shared + slope-specific widgets from slope params."""
+        self._slope_params = params
         self._anchor_codes.setText(", ".join(params.anchor_event_codes))
         self._tmin.setValue(params.tmin_s)
         self._tmax.setValue(params.tmax_s)

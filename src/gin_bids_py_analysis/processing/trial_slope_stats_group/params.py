@@ -11,6 +11,24 @@ from gin_bids_py_analysis.processing.base import BaseProcessingParams, BaseWrite
 class TrialSlopeStatsGroupParams(BaseProcessingParams):
     """Parameters for group-level ROI statistics on trial_slope_stats outputs."""
 
+    source_metric: Literal[
+        "raw_slope",
+        "r_value",
+        "standardized_slope_predictor",
+        "standardized_slope_full",
+    ] = Field(
+        default="standardized_slope_full",
+        description=(
+            "Channel-level metric read from each trial_slope_stats file and used in "
+            "the group contrast."
+        ),
+    )
+    contrast_mode: Literal["paired", "unpaired"] = Field(
+        default="paired",
+        description=(
+            "Contrast mode used to compare condition_a and condition_b at group level."
+        ),
+    )
     p_value_correction_method: Literal["none", "fdr_bh", "bonferroni"] = Field(
         default="none",
         description=(

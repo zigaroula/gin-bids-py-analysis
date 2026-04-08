@@ -159,4 +159,53 @@ class TestParamsPanelRoundTrip:
         assert params.activity_baseline_tmin_s == pytest.approx(-0.1)
         assert params.activity_baseline_tmax_s == pytest.approx(0.0)
 
+    def test_ttest_round_trip_preserves_script_only_fields(self, qtbot, default_params):
+        params = default_params.model_copy(
+            update={
+                "n_permutations": 250,
+                "permutation_seed": 123,
+                "experiment_start_event_code": "EXP_START",
+                "experiment_end_event_code": "EXP_END",
+            }
+        )
+        panel = ParamsPanel(params)
+        qtbot.addWidget(panel)
+
+        recovered = panel.get_params()
+
+        assert recovered.n_permutations == 250
+        assert recovered.permutation_seed == 123
+        assert recovered.experiment_start_event_code == "EXP_START"
+        assert recovered.experiment_end_event_code == "EXP_END"
+
+    def test_slope_round_trip_preserves_script_only_fields(self, qtbot, default_params, default_slope_params):
+        slope_params = TrialSlopeStatsParams(
+            **(
+                default_slope_params.model_dump()
+                | {
+                    "predictor_transform_by_condition": {
+                        "accepted": {"scale": 1.0, "offset": 0.0},
+                        "rejected": {"scale": -1.0, "offset": 0.5},
+                    },
+                    "experiment_start_event_code": "EXP_START",
+                    "experiment_end_event_code": "EXP_END",
+                }
+            )
+        )
+        panel = ParamsPanel(
+            default_params,
+            slope_params=slope_params,
+            default_mode="slope",
+        )
+        qtbot.addWidget(panel)
+
+        mode, params = panel.get_mode_and_params()
+
+        assert mode == "slope"
+        assert isinstance(params, TrialSlopeStatsParams)
+        assert params.predictor_transform_by_condition["rejected"].scale == pytest.approx(-1.0)
+        assert params.predictor_transform_by_condition["rejected"].offset == pytest.approx(0.5)
+        assert params.experiment_start_event_code == "EXP_START"
+        assert params.experiment_end_event_code == "EXP_END"
+
 

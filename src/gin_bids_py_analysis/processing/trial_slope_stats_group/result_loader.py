@@ -156,6 +156,14 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
             )
         else:
             condition_labels = ("condition_a", "condition_b")
+        source_metric = str_scalar(
+            dataset_or_none(fh, "meta/source_metric"),
+            default="raw_slope",
+        )
+        contrast_mode = str_scalar(
+            dataset_or_none(fh, "meta/contrast_mode"),
+            default="paired",
+        )
         p_value_correction_method = str_scalar(
             dataset_or_none(fh, "meta/p_value_correction_method"), default="none"
         )
@@ -166,6 +174,8 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         metadata: dict = {
             "p_value_correction_method": p_value_correction_method,
             "significance_alpha": significance_alpha,
+            "source_metric": source_metric,
+            "contrast_mode": contrast_mode,
             "roi_mode": roi_mode,
             "atlas_name": atlas_name,
             "activity_scaling": str_scalar(
@@ -339,6 +349,8 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         time_axis_s=time_axis_s,
         region_names=region_names,
         condition_labels=condition_labels,
+        source_metric=source_metric,
+        contrast_mode=contrast_mode,
         roi_channel_counts=roi_channel_counts,
         roi_subject_counts=roi_subject_counts,
         contributions=contributions,
@@ -475,6 +487,14 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         )
     else:
         condition_labels = ("condition_a", "condition_b")
+    source_metric = mat_str(
+        getattr(meta, "source_metric", None),
+        default="raw_slope",
+    )
+    contrast_mode = mat_str(
+        getattr(meta, "contrast_mode", None),
+        default="paired",
+    )
     p_value_correction_method = mat_str(
         getattr(meta, "p_value_correction_method", None), default="none"
     )
@@ -485,6 +505,8 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
     metadata: dict = {
         "p_value_correction_method": p_value_correction_method,
         "significance_alpha": significance_alpha,
+        "source_metric": source_metric,
+        "contrast_mode": contrast_mode,
         "roi_mode": roi_mode,
         "atlas_name": atlas_name,
         "activity_scaling": mat_str(getattr(meta, "activity_scaling", None), default="none"),
@@ -630,6 +652,8 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         time_axis_s=time_axis_s,
         region_names=region_names,
         condition_labels=condition_labels,
+        source_metric=source_metric,
+        contrast_mode=contrast_mode,
         roi_channel_counts=roi_channel_counts,
         roi_subject_counts=roi_subject_counts,
         contributions=contributions,

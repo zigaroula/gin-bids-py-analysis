@@ -44,6 +44,7 @@ PARAMS = TrialSlopeStatsParams(
     condition_a="pleasant",
     condition_b="unpleasant",
     predictor="rating",
+    predictor_transform_by_condition={"unpleasant": {"scale": -1, "offset": 0}, "pleasant": {"scale": 1, "offset": 0}},
     activity_scaling="zscore_by_baseline",
     activity_baseline_tmin_s=-0.2,
     activity_baseline_tmax_s=0.0,

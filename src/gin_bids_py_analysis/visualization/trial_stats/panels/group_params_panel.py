@@ -30,6 +30,16 @@ from gin_bids_py_analysis.processing.trial_stats_group.params import (
 from .manual_region_channels_dialog import ManualRegionChannelsDialog
 
 
+def _merge_model_params(
+    model: TrialStatsGroupParams | TrialSlopeStatsGroupParams,
+    **updates: object,
+) -> TrialStatsGroupParams | TrialSlopeStatsGroupParams:
+    """Return a validated copy of *model* with widget-driven updates applied."""
+    payload = model.model_dump()
+    payload.update(updates)
+    return model.__class__(**payload)
+
+
 class GroupParamsPanel(QWidget):
     """Right panel with ``TrialStatsGroupParams`` fields and a Compute button.
 
@@ -59,6 +69,12 @@ class GroupParamsPanel(QWidget):
             if analysis_mode is not None
             else ("slope" if isinstance(params, TrialSlopeStatsGroupParams) else "ttest")
         )
+        self._ttest_params: TrialStatsGroupParams | None = (
+            params if isinstance(params, TrialStatsGroupParams) else None
+        )
+        self._slope_params: TrialSlopeStatsGroupParams | None = (
+            params if isinstance(params, TrialSlopeStatsGroupParams) else None
+        )
         self.setMinimumWidth(280)
         self.setMaximumWidth(400)
 
@@ -76,10 +92,25 @@ class GroupParamsPanel(QWidget):
 
         # source_metric
         self._source_metric = QComboBox()
-        for m in ("mean_difference", "t_values", "condition_a_mean", "condition_b_mean"):
+        for m in (
+            "mean_difference",
+            "t_values",
+            "condition_a_mean",
+            "condition_b_mean",
+            "raw_slope",
+            "r_value",
+            "standardized_slope_predictor",
+            "standardized_slope_full",
+        ):
             self._source_metric.addItem(m)
         self._source_metric_label = QLabel("Source metric")
         form.addRow(self._source_metric_label, self._source_metric)
+
+        self._contrast_mode = QComboBox()
+        for m in ("paired", "unpaired"):
+            self._contrast_mode.addItem(m)
+        self._contrast_mode_label = QLabel("Contrast mode")
+        form.addRow(self._contrast_mode_label, self._contrast_mode)
 
         # p_value_correction_method
         self._correction = QComboBox()
@@ -185,7 +216,14 @@ class GroupParamsPanel(QWidget):
         atlas_name = self._atlas_name.text().strip() or None
         try:
             if self._analysis_mode == "slope":
-                return TrialSlopeStatsGroupParams(
+                base_params = self._slope_params or TrialSlopeStatsGroupParams(
+                    roi_mode="manual",
+                    manual_region_channels={"placeholder": {"01": ["CH1"]}},
+                )
+                params = _merge_model_params(
+                    base_params,
+                    source_metric=self._source_metric.currentText(),
+                    contrast_mode=self._contrast_mode.currentText(),
                     p_value_correction_method=self._correction.currentText(),
                     significance_alpha=self._alpha.value(),
                     roi_mode=self._roi_mode.currentText(),
@@ -194,7 +232,15 @@ class GroupParamsPanel(QWidget):
                     min_channels_per_roi=self._min_channels.value(),
                     min_subjects_per_roi=self._min_subjects.value(),
                 )
-            return TrialStatsGroupParams(
+                assert isinstance(params, TrialSlopeStatsGroupParams)
+                self._slope_params = params
+                return params
+            base_params = self._ttest_params or TrialStatsGroupParams(
+                roi_mode="manual",
+                manual_region_channels={"placeholder": {"01": ["CH1"]}},
+            )
+            params = _merge_model_params(
+                base_params,
                 source_metric=self._source_metric.currentText(),
                 p_value_correction_method=self._correction.currentText(),
                 cluster_permutation_method=self._cluster_method.currentText(),
@@ -205,14 +251,22 @@ class GroupParamsPanel(QWidget):
                 min_channels_per_roi=self._min_channels.value(),
                 min_subjects_per_roi=self._min_subjects.value(),
             )
+            assert isinstance(params, TrialStatsGroupParams)
+            self._ttest_params = params
+            return params
         except (ValidationError, ValueError) as exc:
             QMessageBox.warning(self, "Invalid parameters", str(exc))
             raise ValueError(str(exc)) from exc
 
     def set_params(self, params: TrialStatsGroupParams | TrialSlopeStatsGroupParams) -> None:
         """Populate all widgets from *params*."""
+        if isinstance(params, TrialSlopeStatsGroupParams):
+            self._slope_params = params
+        else:
+            self._ttest_params = params
         source_metric = getattr(params, "source_metric", "t_values")
         _set_combo(self._source_metric, source_metric)
+        _set_combo(self._contrast_mode, getattr(params, "contrast_mode", "paired"))
         _set_combo(self._correction, params.p_value_correction_method)
         _set_combo(self._cluster_method, getattr(params, "cluster_permutation_method", "custom"))
         self._alpha.setValue(params.significance_alpha)
@@ -291,10 +345,34 @@ class GroupParamsPanel(QWidget):
 
     def _apply_analysis_mode_visibility(self) -> None:
         is_ttest = self._analysis_mode == "ttest"
-        self._source_metric_label.setVisible(is_ttest)
-        self._source_metric.setVisible(is_ttest)
+        self._source_metric_label.setVisible(True)
+        self._source_metric.setVisible(True)
+        self._contrast_mode_label.setVisible(not is_ttest)
+        self._contrast_mode.setVisible(not is_ttest)
         self._cluster_method_label.setVisible(is_ttest)
         self._cluster_method.setVisible(is_ttest)
+        self._refresh_source_metric_options()
+
+    def _refresh_source_metric_options(self) -> None:
+        is_ttest = self._analysis_mode == "ttest"
+        current = self._source_metric.currentText().strip()
+        self._source_metric.blockSignals(True)
+        self._source_metric.clear()
+        options = (
+            ("mean_difference", "t_values", "condition_a_mean", "condition_b_mean")
+            if is_ttest
+            else (
+                "raw_slope",
+                "r_value",
+                "standardized_slope_predictor",
+                "standardized_slope_full",
+            )
+        )
+        for option in options:
+            self._source_metric.addItem(option)
+        default = "mean_difference" if is_ttest else "standardized_slope_full"
+        _set_combo(self._source_metric, current if current in options else default)
+        self._source_metric.blockSignals(False)
 
 
 # ---------------------------------------------------------------------------
