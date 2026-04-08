@@ -4,6 +4,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pytest
 import scipy.io
 
 from gin_bids_py_analysis.bids.file import BIDSFile
@@ -69,6 +70,14 @@ def _make_result(tmp_path: Path) -> TrialSlopeStatsProcessingResult:
         sfreq=10.0,
         condition_a_predictor_values=np.array([1.0, 2.0, 3.0], dtype=np.float64),
         condition_b_predictor_values=np.array([1.0, 2.0, 3.0], dtype=np.float64),
+        condition_a_epoch_means=np.array(
+            [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+            dtype=np.float64,
+        ),
+        condition_b_epoch_means=np.array(
+            [[-0.1, -0.2, -0.3], [-0.4, -0.5, -0.6]],
+            dtype=np.float64,
+        ),
         resolved_trials=[
             ResolvedTrial(
                 source_file=primary,
@@ -86,6 +95,9 @@ def _make_result(tmp_path: Path) -> TrialSlopeStatsProcessingResult:
         source_electrodes_files=[],
         analysis_level="channel",
         analysis_type="slope_regression",
+        activity_scaling="zscore_by_baseline",
+        activity_baseline_tmin_s=-0.2,
+        activity_baseline_tmax_s=0.0,
         predictor="predictor_value",
         predictor_scaling="none",
         p_value_correction_method="fdr_bh",
@@ -111,16 +123,32 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
 
     with h5py.File(output_path, "r") as fh:
         assert fh["meta"]["analysis_type"].asstr()[()] == "slope_regression"
+        assert fh["meta"]["activity_scaling"].asstr()[()] == "zscore_by_baseline"
+        assert float(fh["meta"]["activity_baseline_tmin_s"][()]) == pytest.approx(-0.2)
+        assert float(fh["meta"]["activity_baseline_tmax_s"][()]) == pytest.approx(0.0)
         assert fh["regression"]["condition_a"]["slope"].shape == (2, 3)
         assert fh["regression"]["condition_b"]["p_value_corrected"].shape == (2, 3)
         assert fh["predictor"]["condition_a_values"].shape == (3,)
         assert fh["predictor"]["condition_b_values"].shape == (3,)
+        np.testing.assert_allclose(
+            fh["scatter"]["condition_a_epoch_means"][:],
+            result.condition_a_epoch_means,
+        )
+        np.testing.assert_allclose(
+            fh["scatter"]["condition_b_epoch_means"][:],
+            result.condition_b_epoch_means,
+        )
         assert list(fh["trials"]["predictor_raw"].asstr()[:]) == ["1.0"]
 
     loaded = load_trial_slope_stats_result(output_path)
     np.testing.assert_allclose(loaded.condition_a_slope, result.condition_a_slope)
     np.testing.assert_allclose(loaded.condition_b_p_value_corrected, result.condition_b_p_value_corrected)
+    np.testing.assert_allclose(loaded.condition_a_epoch_means, result.condition_a_epoch_means)
+    np.testing.assert_allclose(loaded.condition_b_epoch_means, result.condition_b_epoch_means)
     assert loaded.predictor == "predictor_value"
+    assert loaded.activity_scaling == "zscore_by_baseline"
+    assert loaded.activity_baseline_tmin_s == pytest.approx(-0.2)
+    assert loaded.activity_baseline_tmax_s == pytest.approx(0.0)
 
 
 def test_writer_outputs_matlab(tmp_path: Path) -> None:
@@ -138,5 +166,8 @@ def test_writer_outputs_matlab(tmp_path: Path) -> None:
     data = mat["data"]
     assert str(data.meta.analysis_type) == "slope_regression"
     assert data.regression.condition_a.slope.shape == (2, 3)
+    loaded = load_trial_slope_stats_result(output_path)
+    np.testing.assert_allclose(loaded.condition_a_epoch_means, result.condition_a_epoch_means)
+    np.testing.assert_allclose(loaded.condition_b_epoch_means, result.condition_b_epoch_means)
 
 

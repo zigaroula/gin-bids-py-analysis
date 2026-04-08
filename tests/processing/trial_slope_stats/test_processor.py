@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 from mne import Annotations, create_info
 from mne.io import RawArray
 
@@ -233,3 +234,79 @@ def test_process_group_experiment_start_code_filters_early_anchors(tmp_path: Pat
     assert result.condition_a_stats_valid is True
     assert result.metadata["experiment_start_event_code"] == "1"
     assert result.metadata["experiment_end_event_code"] is None
+
+
+def test_process_group_activity_zscore_preserves_regression_significance(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 100), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
+    predictors = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
+
+    for onset, label, predictor in zip(onsets, labels, predictors):
+        start = int(onset * sfreq)
+        stop = start + 3
+        if label == "accepted":
+            value = (2.0 * predictor) + 1.0
+        else:
+            value = (-1.0 * predictor) + 5.0
+        data[0, start:stop] = value
+
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * len(onsets),
+        description=["Stimulus/S  10"] * len(onsets),
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+    group = BIDSFileGroup(primary=ieeg_file)
+
+    base_params = dict(
+        anchor_event_codes=["10"],
+        tmin_s=0.0,
+        tmax_s=0.2,
+        condition_a="accepted",
+        condition_b="rejected",
+        predictor="predictor_value",
+        min_trials_per_condition=3,
+        p_value_correction_method="none",
+    )
+
+    raw_result = TrialSlopeStatsProcessing(
+        TrialSlopeStatsParams(**base_params),
+        resolver=_SlopeResolver(labels, predictors),
+    ).process_group(group)
+    z_result = TrialSlopeStatsProcessing(
+        TrialSlopeStatsParams(
+            **base_params,
+            activity_scaling="zscore_by_baseline",
+            activity_baseline_tmin_s=0.0,
+            activity_baseline_tmax_s=0.1,
+        ),
+        resolver=_SlopeResolver(labels, predictors),
+    ).process_group(group)
+
+    np.testing.assert_allclose(z_result.condition_a_r_value, raw_result.condition_a_r_value)
+    np.testing.assert_allclose(z_result.condition_b_r_value, raw_result.condition_b_r_value)
+    np.testing.assert_allclose(z_result.condition_a_p_value_corrected, raw_result.condition_a_p_value_corrected)
+    np.testing.assert_allclose(z_result.condition_b_p_value_corrected, raw_result.condition_b_p_value_corrected)
+    assert z_result.activity_scaling == "zscore_by_baseline"
+    assert z_result.metadata["activity_scaling"] == "zscore_by_baseline"
+    assert z_result.activity_baseline_tmin_s == pytest.approx(0.0)
+    assert z_result.activity_baseline_tmax_s == pytest.approx(0.1)
+    assert not np.allclose(z_result.condition_a_slope, raw_result.condition_a_slope)
+    assert not np.allclose(z_result.condition_a_epoch_means, raw_result.condition_a_epoch_means)

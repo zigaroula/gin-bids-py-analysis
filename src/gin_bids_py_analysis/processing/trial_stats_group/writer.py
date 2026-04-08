@@ -100,6 +100,12 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
             meta_kwargs["n_bins"] = int(result.metadata["n_bins"])
         if "effective_n_bins" in result.metadata:
             meta_kwargs["effective_n_bins"] = int(result.metadata["effective_n_bins"])
+        if "activity_scaling" in result.metadata:
+            meta_kwargs["activity_scaling"] = np.str_(str(result.metadata["activity_scaling"]))
+        if "activity_baseline_tmin_s" in result.metadata:
+            meta_kwargs["activity_baseline_tmin_s"] = float(result.metadata["activity_baseline_tmin_s"])
+        if "activity_baseline_tmax_s" in result.metadata:
+            meta_kwargs["activity_baseline_tmax_s"] = float(result.metadata["activity_baseline_tmax_s"])
         meta_struct = make_struct(**meta_kwargs)
 
         contributions_struct = make_struct(
@@ -356,6 +362,22 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
                 meta_grp.create_dataset(
                     "effective_n_bins",
                     data=int(result.metadata["effective_n_bins"]),
+                )
+            if "activity_scaling" in result.metadata:
+                meta_grp.create_dataset(
+                    "activity_scaling",
+                    data=str(result.metadata["activity_scaling"]),
+                    dtype=str_dtype,
+                )
+            if "activity_baseline_tmin_s" in result.metadata:
+                meta_grp.create_dataset(
+                    "activity_baseline_tmin_s",
+                    data=float(result.metadata["activity_baseline_tmin_s"]),
+                )
+            if "activity_baseline_tmax_s" in result.metadata:
+                meta_grp.create_dataset(
+                    "activity_baseline_tmax_s",
+                    data=float(result.metadata["activity_baseline_tmax_s"]),
                 )
 
             contrib_grp = fh.create_group("contributions")

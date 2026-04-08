@@ -23,7 +23,7 @@ from gin_bids_py_analysis.visualization.trial_stats import launch_slope
 # ---------------------------------------------------------------------------
 
 # Kept aligned with scripts/run_trial_slope_stats.py inputs.
-BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
+BIDS_ROOT = Path(r"E:\data_clarissa\valuation\bids")
 
 IEEG_FILTERS = {
     "suffix": "ieeg",
@@ -44,6 +44,9 @@ PARAMS = TrialSlopeStatsParams(
     condition_a="pleasant",
     condition_b="unpleasant",
     predictor="rating",
+    activity_scaling="zscore_by_baseline",
+    activity_baseline_tmin_s=-0.2,
+    activity_baseline_tmax_s=0.0,
     p_value_correction_method="none",
     significance_alpha=0.05,
 )
@@ -58,9 +61,9 @@ RESOLVER = TableTrialResolver(
 )
 
 ROI_CSV_FILES = {
-    "vmPFC": Path(r"C:\Users\Benjamin BONTEMPS\Downloads\PFCvm_elecs_tbl.csv"),
-    "daINS": Path(r"C:\Users\Benjamin BONTEMPS\Downloads\aINS_dors_elecs_tbl.csv"),
-    "vaINS": Path(r"C:\Users\Benjamin BONTEMPS\Downloads\aINS_vent_elecs_tbl.csv"),
+    "vmPFC": Path(r"E:\data_clarissa\valuation\csv\PFCvm_elecs_tbl.csv"),
+    "daINS": Path(r"E:\data_clarissa\valuation\csv\aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"E:\data_clarissa\valuation\csv\aINS_vent_elecs_tbl.csv"),
 }
 
 GROUP_PARAM_KWARGS = {

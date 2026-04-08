@@ -168,6 +168,18 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
             "significance_alpha": significance_alpha,
             "roi_mode": roi_mode,
             "atlas_name": atlas_name,
+            "activity_scaling": str_scalar(
+                dataset_or_none(fh, "meta/activity_scaling"),
+                default="none",
+            ),
+            "activity_baseline_tmin_s": float_scalar(
+                dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
+                default=-0.2,
+            ),
+            "activity_baseline_tmax_s": float_scalar(
+                dataset_or_none(fh, "meta/activity_baseline_tmax_s"),
+                default=0.0,
+            ),
         }
         for key in ("binning_mode", "window_ms", "n_bins", "effective_n_bins"):
             ds = dataset_or_none(fh, f"meta/{key}")
@@ -475,6 +487,15 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         "significance_alpha": significance_alpha,
         "roi_mode": roi_mode,
         "atlas_name": atlas_name,
+        "activity_scaling": mat_str(getattr(meta, "activity_scaling", None), default="none"),
+        "activity_baseline_tmin_s": mat_float(
+            getattr(meta, "activity_baseline_tmin_s", None),
+            default=-0.2,
+        ),
+        "activity_baseline_tmax_s": mat_float(
+            getattr(meta, "activity_baseline_tmax_s", None),
+            default=0.0,
+        ),
     }
 
     # excluded ROIs

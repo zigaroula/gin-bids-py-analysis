@@ -1,4 +1,4 @@
-"""Middle panel: three tabbed matplotlib plots."""
+"""Middle panel: tabbed matplotlib plots for subject-level trial results."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from gin_bids_py_analysis.processing.trial_stats import TrialStatsProcessingResu
 
 
 class PlotPanel(QWidget):
-    """Middle panel showing three tabbed plots for trial stats results.
+    """Middle panel showing tabbed plots for trial stats results.
 
     Tabs
     ----
@@ -68,6 +68,16 @@ class PlotPanel(QWidget):
         ml.addWidget(self._canvas_matrix)
         self._tabs.addTab(matrix_w, "Trial Matrix")
 
+        scatter_w = QWidget()
+        sl = QVBoxLayout(scatter_w)
+        sl.setContentsMargins(0, 0, 0, 0)
+        self._fig_scatter = Figure(tight_layout=True)
+        self._ax_scatter = self._fig_scatter.add_subplot(111)
+        self._canvas_scatter = FigureCanvasQTAgg(self._fig_scatter)
+        sl.addWidget(self._canvas_scatter)
+        self._scatter_tab_index = self._tabs.addTab(scatter_w, "Scatter")
+        self._tabs.setTabEnabled(self._scatter_tab_index, False)
+
         layout.addWidget(self._tabs)
 
         self._draw_placeholder("Select a subject and click Compute")
@@ -85,6 +95,8 @@ class PlotPanel(QWidget):
 
         If ``result.stats_valid`` is False, a notice is shown instead.
         """
+        self._set_scatter_enabled(_is_slope_result(result))
+
         if not result.stats_valid:
             self._draw_placeholder(
                 "Not enough trials to compute statistics\n"
@@ -123,6 +135,7 @@ class PlotPanel(QWidget):
             sem_a=result.condition_a_sem[ch],
             sem_b=result.condition_b_sem[ch],
             sig_mask=sig,
+            activity_scaling=result.activity_scaling,
         )
 
         ax = self._ax_t
@@ -143,6 +156,17 @@ class PlotPanel(QWidget):
                 transform=ax.get_xaxis_transform(),
             )
         ax.set_ylabel("t-value")
+        ax.set_title(
+            self._format_channel_title(
+                ch_label=ch_label,
+                condition_a=result.condition_a,
+                condition_b=result.condition_b,
+                condition_a_count=result.condition_a_trial_count,
+                condition_b_count=result.condition_b_trial_count,
+                plot_label="t-values",
+            ),
+            fontsize=9,
+        )
         self._canvas_t.draw_idle()
 
         ax = self._ax_p
@@ -180,6 +204,17 @@ class PlotPanel(QWidget):
             )
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("p-value")
+        ax.set_title(
+            self._format_channel_title(
+                ch_label=ch_label,
+                condition_a=result.condition_a,
+                condition_b=result.condition_b,
+                condition_a_count=result.condition_a_trial_count,
+                condition_b_count=result.condition_b_trial_count,
+                plot_label="p-values",
+            ),
+            fontsize=9,
+        )
         all_p = [p] if len(p) > 0 else []
         if p_unc is not None:
             all_p.append(p_unc)
@@ -189,6 +224,7 @@ class PlotPanel(QWidget):
         self._canvas_p.draw_idle()
 
         self._draw_trial_matrix(result, ch, t, ch_label)
+        self._draw_scatter_placeholder("Scatter available only in slope mode")
 
     def _update_slope_plots(
         self,
@@ -215,6 +251,7 @@ class PlotPanel(QWidget):
             sem_a=result.condition_a_sem[ch],
             sem_b=result.condition_b_sem[ch],
             sig_mask=sig_any,
+            activity_scaling=result.activity_scaling,
         )
 
         ax = self._ax_t
@@ -247,6 +284,17 @@ class PlotPanel(QWidget):
                 transform=ax.get_xaxis_transform(),
             )
         ax.set_ylabel("slope")
+        ax.set_title(
+            self._format_channel_title(
+                ch_label=ch_label,
+                condition_a=result.condition_a,
+                condition_b=result.condition_b,
+                condition_a_count=result.condition_a_trial_count,
+                condition_b_count=result.condition_b_trial_count,
+                plot_label="slopes",
+            ),
+            fontsize=9,
+        )
         ax.legend(fontsize="small", loc="upper right")
         self._canvas_t.draw_idle()
 
@@ -286,6 +334,17 @@ class PlotPanel(QWidget):
             )
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("p-value")
+        ax.set_title(
+            self._format_channel_title(
+                ch_label=ch_label,
+                condition_a=result.condition_a,
+                condition_b=result.condition_b,
+                condition_a_count=result.condition_a_trial_count,
+                condition_b_count=result.condition_b_trial_count,
+                plot_label="slope p-values",
+            ),
+            fontsize=9,
+        )
         all_p = [p_a, p_b]
         if has_correction:
             all_p.extend([p_a_raw, p_b_raw])
@@ -295,6 +354,7 @@ class PlotPanel(QWidget):
         self._canvas_p.draw_idle()
 
         self._draw_trial_matrix(result, ch, t, ch_label)
+        self._draw_scatter_plot(result, ch, ch_label)
 
     def _draw_activity_plot(
         self,
@@ -310,6 +370,7 @@ class PlotPanel(QWidget):
         sem_a: np.ndarray,
         sem_b: np.ndarray,
         sig_mask: np.ndarray,
+        activity_scaling: str,
     ) -> None:
         ax = self._ax_means
         ax.clear()
@@ -318,7 +379,7 @@ class PlotPanel(QWidget):
         ax.plot(t, mean_b, color="tomato", label=condition_b)
         ax.fill_between(t, mean_b - sem_b, mean_b + sem_b, alpha=0.25, color="tomato")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
-        ax.set_ylabel("Amplitude")
+        ax.set_ylabel(_activity_axis_label(activity_scaling))
         ax.set_title(
             f"{ch_label}  —  {condition_a_count}× {condition_a} / {condition_b_count}× {condition_b}",
             fontsize=9,
@@ -387,6 +448,145 @@ class PlotPanel(QWidget):
         ax.set_title(f"{ch_label}  —  trials ({n_a} / {n_b})", fontsize=9)
         self._canvas_matrix.draw_idle()
 
+    def _draw_scatter_plot(
+        self,
+        result: TrialSlopeStatsProcessingResult,
+        channel_idx: int,
+        ch_label: str,
+    ) -> None:
+        self._fig_scatter.clear()
+        self._ax_scatter = self._fig_scatter.add_subplot(111)
+        ax = self._ax_scatter
+
+        pred_a, act_a, invalid_a = self._extract_scatter_series(
+            predictor_values=result.condition_a_predictor_values,
+            epoch_means=result.condition_a_epoch_means,
+            channel_idx=channel_idx,
+        )
+        pred_b, act_b, invalid_b = self._extract_scatter_series(
+            predictor_values=result.condition_b_predictor_values,
+            epoch_means=result.condition_b_epoch_means,
+            channel_idx=channel_idx,
+        )
+
+        if invalid_a or invalid_b:
+            self._draw_scatter_placeholder("No scatter data available")
+            return
+
+        plotted = False
+        plotted |= self._plot_scatter_condition(
+            ax=ax,
+            predictor_values=pred_a,
+            activity_values=act_a,
+            color="steelblue",
+            label=result.condition_a,
+        )
+        plotted |= self._plot_scatter_condition(
+            ax=ax,
+            predictor_values=pred_b,
+            activity_values=act_b,
+            color="tomato",
+            label=result.condition_b,
+        )
+        if not plotted:
+            self._draw_scatter_placeholder("No scatter data available")
+            return
+
+        predictor_label = result.predictor.strip() if result.predictor else ""
+        ax.set_xlabel(predictor_label or "Predictor value")
+        ax.set_ylabel(_scatter_activity_axis_label(result.activity_scaling))
+        ax.set_title(
+            self._format_channel_title(
+                ch_label=ch_label,
+                condition_a=result.condition_a,
+                condition_b=result.condition_b,
+                condition_a_count=result.condition_a_trial_count,
+                condition_b_count=result.condition_b_trial_count,
+                plot_label="predictor vs activity",
+            ),
+            fontsize=9,
+        )
+        _safe_legend(ax)
+        self._canvas_scatter.draw_idle()
+
+    def _draw_scatter_placeholder(self, message: str) -> None:
+        self._fig_scatter.clear()
+        self._ax_scatter = self._fig_scatter.add_subplot(111)
+        self._ax_scatter.set_facecolor("#f4f4f4")
+        self._ax_scatter.set_xticks([])
+        self._ax_scatter.set_yticks([])
+        self._ax_scatter.text(
+            0.5,
+            0.5,
+            message,
+            transform=self._ax_scatter.transAxes,
+            ha="center",
+            va="center",
+            color="gray",
+            fontsize=10,
+        )
+        self._canvas_scatter.draw_idle()
+
+    def _extract_scatter_series(
+        self,
+        *,
+        predictor_values: np.ndarray,
+        epoch_means: np.ndarray,
+        channel_idx: int,
+    ) -> tuple[np.ndarray, np.ndarray, bool]:
+        predictor = np.asarray(predictor_values, dtype=np.float64).ravel()
+        activity = np.asarray(epoch_means, dtype=np.float64)
+
+        if predictor.size == 0 and activity.size == 0:
+            return np.empty(0, dtype=np.float64), np.empty(0, dtype=np.float64), False
+        if predictor.size == 0 or activity.size == 0:
+            return np.empty(0, dtype=np.float64), np.empty(0, dtype=np.float64), True
+        if activity.ndim != 2 or channel_idx < 0 or channel_idx >= activity.shape[0]:
+            return np.empty(0, dtype=np.float64), np.empty(0, dtype=np.float64), True
+
+        activity_row = np.asarray(activity[channel_idx], dtype=np.float64).ravel()
+        if activity_row.size != predictor.size:
+            return np.empty(0, dtype=np.float64), np.empty(0, dtype=np.float64), True
+
+        return predictor, activity_row, False
+
+    def _plot_scatter_condition(
+        self,
+        *,
+        ax,
+        predictor_values: np.ndarray,
+        activity_values: np.ndarray,
+        color: str,
+        label: str,
+    ) -> bool:
+        predictor = np.asarray(predictor_values, dtype=np.float64).ravel()
+        activity = np.asarray(activity_values, dtype=np.float64).ravel()
+        valid = np.isfinite(predictor) & np.isfinite(activity)
+        if valid.sum() == 0:
+            return False
+
+        predictor = predictor[valid]
+        activity = activity[valid]
+        ax.scatter(
+            predictor,
+            activity,
+            color=color,
+            alpha=0.35,
+            s=18,
+            label=label,
+            linewidths=0,
+        )
+        if predictor.size >= 2:
+            coefs = np.polyfit(predictor, activity, 1)
+            x_range = np.array([predictor.min(), predictor.max()], dtype=np.float64)
+            ax.plot(
+                x_range,
+                np.polyval(coefs, x_range),
+                color=color,
+                linewidth=1.5,
+            )
+        return True
+
     def show_placeholder(self) -> None:
         """Clear all plots and display a waiting message."""
         self._draw_placeholder("Computing…")
@@ -410,6 +610,11 @@ class PlotPanel(QWidget):
         self._ax_matrix.set_facecolor("#f4f4f4")
         self._ax_matrix.set_xticks([])
         self._ax_matrix.set_yticks([])
+        self._fig_scatter.clear()
+        self._ax_scatter = self._fig_scatter.add_subplot(111)
+        self._ax_scatter.set_facecolor("#f4f4f4")
+        self._ax_scatter.set_xticks([])
+        self._ax_scatter.set_yticks([])
         if message:
             self._ax_means.text(
                 0.5,
@@ -425,7 +630,50 @@ class PlotPanel(QWidget):
         self._canvas_t.draw_idle()
         self._canvas_p.draw_idle()
         self._canvas_matrix.draw_idle()
+        self._canvas_scatter.draw_idle()
+
+    def _set_scatter_enabled(self, enabled: bool) -> None:
+        self._tabs.setTabEnabled(self._scatter_tab_index, enabled)
+        if not enabled and self._tabs.currentIndex() == self._scatter_tab_index:
+            self._tabs.setCurrentIndex(0)
+
+    def _format_channel_title(
+        self,
+        *,
+        ch_label: str,
+        condition_a: str,
+        condition_b: str,
+        condition_a_count: int,
+        condition_b_count: int,
+        plot_label: str,
+    ) -> str:
+        return (
+            f"{ch_label} - {plot_label} - "
+            f"{condition_a_count} x {condition_a} / {condition_b_count} x {condition_b}"
+        )
 
 
 def _is_slope_result(result: object) -> bool:
     return hasattr(result, "analysis_type") and getattr(result, "analysis_type", "") == "slope_regression"
+
+
+def _safe_legend(ax) -> None:
+    handles, labels = ax.get_legend_handles_labels()
+    if handles and labels:
+        ax.legend(fontsize="small", loc="upper right")
+
+
+def _activity_axis_label(activity_scaling: str) -> str:
+    if _is_zscore_activity_scaling(activity_scaling):
+        return "Activity (z)"
+    return "Amplitude"
+
+
+def _scatter_activity_axis_label(activity_scaling: str) -> str:
+    if _is_zscore_activity_scaling(activity_scaling):
+        return "Epoch mean activity (z)"
+    return "Epoch mean activity"
+
+
+def _is_zscore_activity_scaling(activity_scaling: str) -> bool:
+    return str(activity_scaling).strip().lower().startswith("zscore")

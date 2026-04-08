@@ -129,6 +129,15 @@ class TestGroupPlotPanelUpdatePlots:
         assert panel.current_roi_index == 1
         assert panel.current_roi_name == "regionB"
 
+    def test_ttest_group_stats_axes_have_titles(self, qtbot, synthetic_group_result):
+        panel = GroupPlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_group_result, 0)
+
+        assert "t-values" in panel._ax_t.get_title()
+        assert "p-values" in panel._ax_p.get_title()
+
 
 @pytest.fixture()
 def synthetic_slope_group_result(synthetic_result) -> TrialSlopeStatsGroupProcessingResult:
@@ -141,14 +150,14 @@ def synthetic_slope_group_result(synthetic_result) -> TrialSlopeStatsGroupProces
         source_group=BIDSFileGroup(primary=synthetic_result.source_group.primary),
         metadata={},
         output_entities=None,
-        condition_a_slope_t_values=np.full(shape, 2.0, dtype=np.float64),
-        condition_a_slope_p_values=np.full(shape, 0.02, dtype=np.float64),
-        condition_a_slope_p_values_uncorrected=np.full(shape, 0.03, dtype=np.float64),
-        condition_a_slope_significant_mask=np.ones(shape, dtype=bool),
-        condition_b_slope_t_values=np.full(shape, -1.5, dtype=np.float64),
-        condition_b_slope_p_values=np.full(shape, 0.04, dtype=np.float64),
-        condition_b_slope_p_values_uncorrected=np.full(shape, 0.05, dtype=np.float64),
-        condition_b_slope_significant_mask=np.zeros(shape, dtype=bool),
+        slope_t_values=np.full(shape, 2.0, dtype=np.float64),
+        slope_p_values=np.full(shape, 0.02, dtype=np.float64),
+        slope_p_values_uncorrected=np.full(shape, 0.03, dtype=np.float64),
+        slope_significant_mask=np.ones(shape, dtype=bool),
+        activity_t_values=np.full(shape, -1.5, dtype=np.float64),
+        activity_p_values=np.full(shape, 0.04, dtype=np.float64),
+        activity_p_values_uncorrected=np.full(shape, 0.05, dtype=np.float64),
+        activity_significant_mask=np.zeros(shape, dtype=bool),
         condition_a_slope_mean=np.full(shape, 0.8, dtype=np.float64),
         condition_a_slope_sem=np.full(shape, 0.1, dtype=np.float64),
         condition_b_slope_mean=np.full(shape, -0.6, dtype=np.float64),
@@ -161,16 +170,12 @@ def synthetic_slope_group_result(synthetic_result) -> TrialSlopeStatsGroupProces
         condition_a_r_value_sem=np.full(shape, 0.05, dtype=np.float64),
         condition_b_r_value_mean=np.full(shape, -0.1, dtype=np.float64),
         condition_b_r_value_sem=np.full(shape, 0.05, dtype=np.float64),
-        condition_a_epoch_slope_t=np.full(n_roi, 2.0, dtype=np.float64),
-        condition_a_epoch_slope_p=np.full(n_roi, 0.02, dtype=np.float64),
-        condition_a_epoch_slope_df=np.full(n_roi, 10.0, dtype=np.float64),
-        condition_a_epoch_slope_mean=np.full(n_roi, 0.8, dtype=np.float64),
-        condition_a_epoch_slope_sem=np.full(n_roi, 0.1, dtype=np.float64),
-        condition_b_epoch_slope_t=np.full(n_roi, -1.5, dtype=np.float64),
-        condition_b_epoch_slope_p=np.full(n_roi, 0.04, dtype=np.float64),
-        condition_b_epoch_slope_df=np.full(n_roi, 10.0, dtype=np.float64),
-        condition_b_epoch_slope_mean=np.full(n_roi, -0.6, dtype=np.float64),
-        condition_b_epoch_slope_sem=np.full(n_roi, 0.1, dtype=np.float64),
+        epoch_slope_t=np.full(n_roi, 2.0, dtype=np.float64),
+        epoch_slope_p=np.full(n_roi, 0.02, dtype=np.float64),
+        epoch_slope_df=np.full(n_roi, 10.0, dtype=np.float64),
+        epoch_activity_t=np.full(n_roi, -1.5, dtype=np.float64),
+        epoch_activity_p=np.full(n_roi, 0.04, dtype=np.float64),
+        epoch_activity_df=np.full(n_roi, 10.0, dtype=np.float64),
         time_axis_s=time_axis,
         region_names=["slope_roi_a", "slope_roi_b"],
         condition_labels=cond_labels,
@@ -216,8 +221,8 @@ class TestGroupPlotPanelSlopeUpdate:
 
         assert panel._roi_list.count() == 2
         assert panel.current_roi_name == "slope_roi_a"
-        assert panel._plot_tabs.tabText(0) == "Activity"
-        assert panel._plot_tabs.tabText(1) == "Slope mean"
+        assert panel._plot_tabs.tabText(0) == "Activity mean"
+        assert panel._plot_tabs.tabText(4) == "Slope mean"
 
     def test_activity_means_are_plotted_in_activity_axis(self, qtbot, synthetic_slope_group_result):
         panel = GroupPlotPanel()
@@ -248,3 +253,24 @@ class TestGroupPlotPanelSlopeUpdate:
         assert set(labeled_lines) == set(synthetic_slope_group_result.condition_labels)
         assert np.allclose(labeled_lines["pleasant"].get_ydata(), 0.8)
         assert np.allclose(labeled_lines["unpleasant"].get_ydata(), -0.6)
+
+    def test_slope_group_axes_have_titles_with_roi_context(self, qtbot, synthetic_slope_group_result):
+        panel = GroupPlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_group_result, 0)
+
+        assert "slope mean" in panel._ax_slope.get_title()
+        assert "channel(s)" in panel._ax_slope.get_title()
+        assert "activity p-values" in panel._ax_activity_p.get_title()
+        assert "slope p-values" in panel._ax_p.get_title()
+
+    def test_slope_group_uses_zscore_activity_labels_when_metadata_requests_it(self, qtbot, synthetic_slope_group_result):
+        synthetic_slope_group_result.metadata = {"activity_scaling": "zscore_by_baseline"}
+        panel = GroupPlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_group_result, 0)
+
+        assert panel._ax_means.get_ylabel() == "mean region activity (z)"
+        assert panel._ax_scatter.get_ylabel() == "Epoch mean activity (z)"

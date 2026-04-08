@@ -51,6 +51,9 @@ def _write_slope_stats_h5(
     condition_a_r_value: np.ndarray | None = None,
     condition_b_r_value: np.ndarray | None = None,
     condition_labels: tuple[str, str] = ("accepted", "rejected"),
+    activity_scaling: str = "none",
+    activity_baseline_tmin_s: float = -0.2,
+    activity_baseline_tmax_s: float = 0.0,
     source_ieeg_files: list[str] | None = None,
     source_electrodes_files: list[str] | None = None,
 ) -> None:
@@ -99,6 +102,9 @@ def _write_slope_stats_h5(
         meta.create_dataset("window_ms", data=0.0)
         meta.create_dataset("n_bins", data=0)
         meta.create_dataset("effective_n_bins", data=n_t)
+        meta.create_dataset("activity_scaling", data=activity_scaling, dtype=str_dtype)
+        meta.create_dataset("activity_baseline_tmin_s", data=activity_baseline_tmin_s)
+        meta.create_dataset("activity_baseline_tmax_s", data=activity_baseline_tmax_s)
 
         prov = fh.create_group("provenance")
         prov.create_dataset(
@@ -135,6 +141,36 @@ def test_build_compatible_groups_splits_heterogeneous_inputs() -> None:
         groups = build_trial_slope_stats_compatible_groups(files)
         assert len(groups) == 2
         assert sorted(len(g.all_files) for g in groups) == [1, 2]
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+
+
+def test_build_compatible_groups_splits_activity_scaling_inputs() -> None:
+    case_dir = _make_case_dir("groups_split_activity_scaling")
+    try:
+        time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
+        slope = np.ones((2, 3), dtype=np.float64)
+
+        path_a = case_dir / "sub-01_task-decid_desc-slopestat_stats.h5"
+        path_b = case_dir / "sub-02_task-decid_desc-slopestat_stats.h5"
+        _write_slope_stats_h5(path_a, channels=["A1", "A2"], time_s=time_s, condition_a_slope=slope, condition_b_slope=slope)
+        _write_slope_stats_h5(
+            path_b,
+            channels=["A1", "A2"],
+            time_s=time_s,
+            condition_a_slope=slope,
+            condition_b_slope=slope,
+            activity_scaling="zscore_by_baseline",
+        )
+
+        files = [
+            _make_bids_file(path_a, {"subject": "01", "task": "decid", "desc": "slopestat", "suffix": "stats", "extension": ".h5"}),
+            _make_bids_file(path_b, {"subject": "02", "task": "decid", "desc": "slopestat", "suffix": "stats", "extension": ".h5"}),
+        ]
+
+        groups = build_trial_slope_stats_compatible_groups(files)
+        assert len(groups) == 2
+        assert all(len(group.all_files) == 1 for group in groups)
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 

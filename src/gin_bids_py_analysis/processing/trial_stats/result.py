@@ -42,6 +42,9 @@ class TrialStatsProcessingResult(BaseProcessingResult):
     region_channels: dict[str, list[str]] = field(default_factory=dict)
     window_ms: float = 0.0
     n_bins: int = 0
+    activity_scaling: str = "none"
+    activity_baseline_tmin_s: float = -0.2
+    activity_baseline_tmax_s: float = 0.0
     p_value_correction_method: str = "fdr_bh"
     significance_alpha: float = 0.05
     stats_valid: bool = False

@@ -129,6 +129,22 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
                         meta.create_dataset(key, data=float(val))
                     else:
                         meta.create_dataset(key, data=int(val))
+            if "activity_scaling" in result.metadata:
+                meta.create_dataset(
+                    "activity_scaling",
+                    data=str(result.metadata["activity_scaling"]),
+                    dtype=str_dtype,
+                )
+            if "activity_baseline_tmin_s" in result.metadata:
+                meta.create_dataset(
+                    "activity_baseline_tmin_s",
+                    data=float(result.metadata["activity_baseline_tmin_s"]),
+                )
+            if "activity_baseline_tmax_s" in result.metadata:
+                meta.create_dataset(
+                    "activity_baseline_tmax_s",
+                    data=float(result.metadata["activity_baseline_tmax_s"]),
+                )
 
             # --- /excluded_rois ---
             excl = fh.create_group("excluded_rois")
@@ -289,6 +305,12 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
             val = result.metadata.get(key)
             if val is not None:
                 meta_kwargs[key] = val
+        if "activity_scaling" in result.metadata:
+            meta_kwargs["activity_scaling"] = np.str_(str(result.metadata["activity_scaling"]))
+        if "activity_baseline_tmin_s" in result.metadata:
+            meta_kwargs["activity_baseline_tmin_s"] = float(result.metadata["activity_baseline_tmin_s"])
+        if "activity_baseline_tmax_s" in result.metadata:
+            meta_kwargs["activity_baseline_tmax_s"] = float(result.metadata["activity_baseline_tmax_s"])
         meta_struct = make_struct(**meta_kwargs)
 
         contributions_struct = make_struct(

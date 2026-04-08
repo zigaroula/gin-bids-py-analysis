@@ -130,6 +130,18 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
         p_value_correction_method = str_scalar(dataset_or_none(fh, "meta/p_value_correction_method"), default="fdr_bh")
         significance_alpha = float_scalar(dataset_or_none(fh, "meta/significance_alpha"), default=0.05)
         stats_valid = bool(dataset_or_none(fh, "meta/stats_valid")[()]) if dataset_or_none(fh, "meta/stats_valid") is not None else bool(condition_a_stats_valid or condition_b_stats_valid)
+        activity_scaling = str_scalar(
+            dataset_or_none(fh, "meta/activity_scaling"),
+            default="none",
+        )
+        activity_baseline_tmin_s = float_scalar(
+            dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
+            default=-0.2,
+        )
+        activity_baseline_tmax_s = float_scalar(
+            dataset_or_none(fh, "meta/activity_baseline_tmax_s"),
+            default=0.0,
+        )
 
         atlas_name_raw = str_scalar(dataset_or_none(fh, "meta/atlas_name"), default="")
         atlas_name = atlas_name_raw.strip() or None
@@ -187,7 +199,11 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
     return TrialSlopeStatsProcessingResult(
         source_group=source_group,
-        metadata={},
+        metadata={
+            "activity_scaling": activity_scaling,
+            "activity_baseline_tmin_s": activity_baseline_tmin_s,
+            "activity_baseline_tmax_s": activity_baseline_tmax_s,
+        },
         condition_a_slope=condition_a_slope,
         condition_a_intercept=condition_a_intercept,
         condition_a_r_value=condition_a_r_value,
@@ -225,6 +241,9 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
         region_channels=region_channels,
         window_ms=window_ms,
         n_bins=n_bins,
+        activity_scaling=activity_scaling,
+        activity_baseline_tmin_s=activity_baseline_tmin_s,
+        activity_baseline_tmax_s=activity_baseline_tmax_s,
         predictor=predictor,
         predictor_scaling=predictor_scaling,
         p_value_correction_method=p_value_correction_method,
@@ -248,6 +267,7 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
     means = data.means
     uncertainty = getattr(data, "uncertainty", None)
     predictor = getattr(data, "predictor", None)
+    scatter = getattr(data, "scatter", None)
     axes = data.axes
     meta = data.meta
     prov = getattr(data, "provenance", None)
@@ -280,6 +300,22 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
             return empty.copy()
         arr = np.asarray(raw, dtype=np.float64)
         return arr.reshape(n_features, n_times)
+
+    def _mat_feature_trial_2d(obj: object, attr: str) -> np.ndarray:
+        raw = getattr(obj, attr, None) if obj is not None else None
+        if raw is None:
+            return np.empty((0, 0), dtype=np.float64)
+        arr = np.asarray(raw, dtype=np.float64)
+        if arr.size == 0:
+            return np.empty((n_features, 0), dtype=np.float64)
+        arr = np.atleast_2d(arr)
+        if arr.shape[0] == n_features:
+            return arr.reshape(n_features, -1)
+        if arr.shape[1] == n_features:
+            return arr.T.reshape(n_features, -1)
+        if n_features == 1:
+            return arr.reshape(1, -1)
+        return np.empty((0, 0), dtype=np.float64)
 
     reg_a = getattr(regression, "condition_a", None)
     reg_b = getattr(regression, "condition_b", None)
@@ -326,6 +362,8 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
         getattr(predictor, "condition_b_values", np.array([], dtype=np.float64)),
         dtype=np.float64,
     ).ravel()
+    condition_a_epoch_means = _mat_feature_trial_2d(scatter, "condition_a_epoch_means")
+    condition_b_epoch_means = _mat_feature_trial_2d(scatter, "condition_b_epoch_means")
 
     counts_raw = getattr(meta, "trial_counts", None)
     counts = np.asarray(counts_raw, dtype=np.int64).ravel() if counts_raw is not None else np.array([], dtype=np.int64)
@@ -338,6 +376,15 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
     p_value_correction_method = mat_str(getattr(meta, "p_value_correction_method", None), default="fdr_bh")
     significance_alpha = mat_float(getattr(meta, "significance_alpha", None), default=0.05)
     stats_valid = bool(mat_int(getattr(meta, "stats_valid", None), default=int(condition_a_stats_valid or condition_b_stats_valid)))
+    activity_scaling = mat_str(getattr(meta, "activity_scaling", None), default="none")
+    activity_baseline_tmin_s = mat_float(
+        getattr(meta, "activity_baseline_tmin_s", None),
+        default=-0.2,
+    )
+    activity_baseline_tmax_s = mat_float(
+        getattr(meta, "activity_baseline_tmax_s", None),
+        default=0.0,
+    )
 
     atlas_name_raw = mat_str(getattr(meta, "atlas_name", None), default="")
     atlas_name = atlas_name_raw.strip() or None
@@ -352,7 +399,11 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
     return TrialSlopeStatsProcessingResult(
         source_group=source_group,
-        metadata={},
+        metadata={
+            "activity_scaling": activity_scaling,
+            "activity_baseline_tmin_s": activity_baseline_tmin_s,
+            "activity_baseline_tmax_s": activity_baseline_tmax_s,
+        },
         condition_a_slope=condition_a_slope,
         condition_a_intercept=condition_a_intercept,
         condition_a_r_value=condition_a_r_value,
@@ -390,6 +441,9 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
         region_channels={},
         window_ms=window_ms,
         n_bins=n_bins,
+        activity_scaling=activity_scaling,
+        activity_baseline_tmin_s=activity_baseline_tmin_s,
+        activity_baseline_tmax_s=activity_baseline_tmax_s,
         predictor=predictor,
         predictor_scaling=predictor_scaling,
         p_value_correction_method=p_value_correction_method,
@@ -399,4 +453,6 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
         stats_valid=stats_valid,
         condition_a_epochs=np.array([]),
         condition_b_epochs=np.array([]),
+        condition_a_epoch_means=condition_a_epoch_means,
+        condition_b_epoch_means=condition_b_epoch_means,
     )

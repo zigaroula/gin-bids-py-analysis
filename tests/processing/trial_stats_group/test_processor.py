@@ -51,6 +51,9 @@ def _write_trial_stats_h5(
     t_values: np.ndarray | None = None,
     permuted_t_values: np.ndarray | None = None,
     condition_labels: tuple[str, str] = ("accepted", "rejected"),
+    activity_scaling: str = "none",
+    activity_baseline_tmin_s: float = -0.2,
+    activity_baseline_tmax_s: float = 0.0,
     source_ieeg_files: list[str] | None = None,
     source_electrodes_files: list[str] | None = None,
 ) -> None:
@@ -92,6 +95,9 @@ def _write_trial_stats_h5(
         meta_grp.create_dataset("window_ms", data=0.0)
         meta_grp.create_dataset("n_bins", data=0)
         meta_grp.create_dataset("effective_n_bins", data=int(len(time_s)))
+        meta_grp.create_dataset("activity_scaling", data=activity_scaling, dtype=str_dtype)
+        meta_grp.create_dataset("activity_baseline_tmin_s", data=activity_baseline_tmin_s)
+        meta_grp.create_dataset("activity_baseline_tmax_s", data=activity_baseline_tmax_s)
 
         prov_grp = fh.create_group("provenance")
         prov_grp.create_dataset(
@@ -129,6 +135,35 @@ def test_build_trial_stats_compatible_groups_splits_heterogeneous_inputs() -> No
         groups = build_trial_stats_compatible_groups(files, source_metric="mean_difference")
         assert len(groups) == 2
         assert sorted(len(group.all_files) for group in groups) == [1, 2]
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+
+
+def test_build_trial_stats_compatible_groups_splits_activity_scaling_inputs() -> None:
+    case_dir = _make_case_dir("group_split_activity_scaling")
+    try:
+        time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
+        data = np.ones((2, 3), dtype=np.float64)
+
+        path_a = case_dir / "sub-01_task-decid_desc-trialstats_stats.h5"
+        path_b = case_dir / "sub-02_task-decid_desc-trialstats_stats.h5"
+        _write_trial_stats_h5(path_a, channels=["A1", "A2"], time_s=time_s, mean_difference=data)
+        _write_trial_stats_h5(
+            path_b,
+            channels=["A1", "A2"],
+            time_s=time_s,
+            mean_difference=data,
+            activity_scaling="zscore_by_baseline",
+        )
+
+        files = [
+            _make_bids_file(path_a, {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
+            _make_bids_file(path_b, {"subject": "02", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
+        ]
+
+        groups = build_trial_stats_compatible_groups(files, source_metric="mean_difference")
+        assert len(groups) == 2
+        assert all(len(group.all_files) == 1 for group in groups)
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 

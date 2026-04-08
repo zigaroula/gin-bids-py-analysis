@@ -177,6 +177,18 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
         atlas_name: str | None = atlas_name_raw.strip() or None
         window_ms = float_scalar(dataset_or_none(fh, "meta/window_ms"), default=0.0)
         n_bins = int_scalar(dataset_or_none(fh, "meta/n_bins"), default=0)
+        activity_scaling = str_scalar(
+            dataset_or_none(fh, "meta/activity_scaling"),
+            default="none",
+        )
+        activity_baseline_tmin_s = float_scalar(
+            dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
+            default=-0.2,
+        )
+        activity_baseline_tmax_s = float_scalar(
+            dataset_or_none(fh, "meta/activity_baseline_tmax_s"),
+            default=0.0,
+        )
         n_perms = int_scalar(dataset_or_none(fh, "meta/n_permutations"), default=0)
 
         # --- epochs (optional, present only when include_epochs=True) ---
@@ -221,6 +233,9 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
     return TrialStatsProcessingResult(
         source_group=source_group,
         metadata={
+            "activity_scaling": activity_scaling,
+            "activity_baseline_tmin_s": activity_baseline_tmin_s,
+            "activity_baseline_tmax_s": activity_baseline_tmax_s,
             "n_permutations": (
                 permuted_t_values.shape[0]
                 if permuted_t_values is not None
@@ -250,6 +265,9 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
         atlas_name=atlas_name,
         window_ms=window_ms,
         n_bins=n_bins,
+        activity_scaling=activity_scaling,
+        activity_baseline_tmin_s=activity_baseline_tmin_s,
+        activity_baseline_tmax_s=activity_baseline_tmax_s,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,
         stats_valid=stats_valid,
@@ -369,6 +387,15 @@ def _load_from_matlab(path: Path) -> TrialStatsProcessingResult:
     atlas_name: str | None = atlas_name_raw.strip() or None
     window_ms = mat_float(getattr(meta, "window_ms", None), default=0.0)
     n_bins = mat_int(getattr(meta, "n_bins", None), default=0)
+    activity_scaling = mat_str(getattr(meta, "activity_scaling", None), default="none")
+    activity_baseline_tmin_s = mat_float(
+        getattr(meta, "activity_baseline_tmin_s", None),
+        default=-0.2,
+    )
+    activity_baseline_tmax_s = mat_float(
+        getattr(meta, "activity_baseline_tmax_s", None),
+        default=0.0,
+    )
 
     # --- provenance ---
     source_ieeg_files = (
@@ -383,7 +410,11 @@ def _load_from_matlab(path: Path) -> TrialStatsProcessingResult:
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
     return TrialStatsProcessingResult(
         source_group=source_group,
-        metadata={},
+        metadata={
+            "activity_scaling": activity_scaling,
+            "activity_baseline_tmin_s": activity_baseline_tmin_s,
+            "activity_baseline_tmax_s": activity_baseline_tmax_s,
+        },
         t_values=t_values,
         p_values=p_values,
         p_values_uncorrected=p_values_uncorrected,
@@ -407,6 +438,9 @@ def _load_from_matlab(path: Path) -> TrialStatsProcessingResult:
         atlas_name=atlas_name,
         window_ms=window_ms,
         n_bins=n_bins,
+        activity_scaling=activity_scaling,
+        activity_baseline_tmin_s=activity_baseline_tmin_s,
+        activity_baseline_tmax_s=activity_baseline_tmax_s,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,
         stats_valid=stats_valid,

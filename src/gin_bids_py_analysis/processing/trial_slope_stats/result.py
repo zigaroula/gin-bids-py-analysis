@@ -55,6 +55,9 @@ class TrialSlopeStatsProcessingResult(BaseProcessingResult):
     region_channels: dict[str, list[str]] = field(default_factory=dict)
     window_ms: float = 0.0
     n_bins: int = 0
+    activity_scaling: str = "none"
+    activity_baseline_tmin_s: float = -0.2
+    activity_baseline_tmax_s: float = 0.0
 
     predictor: str = "predictor_value"
     predictor_scaling: str = "none"

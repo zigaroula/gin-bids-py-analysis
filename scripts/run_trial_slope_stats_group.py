@@ -23,7 +23,7 @@ from gin_bids_py_analysis.processing.trial_slope_stats_group import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
+BIDS_ROOT = Path(r"E:\data_clarissa\valuation\bids")
 
 # Kept aligned with scripts/run_trial_slope_stats.py inputs.
 IEEG_FILTERS = {

@@ -46,6 +46,9 @@ PARAMS = TrialStatsParams(
     condition_b="rejected",
     # atlas_name="MarsAtlas",
     # n_bins=24,
+    activity_scaling="none",
+    activity_baseline_tmin_s=-0.2,
+    activity_baseline_tmax_s=0.0,
     p_value_correction_method="fdr_bh",
     significance_alpha=0.05,
 )

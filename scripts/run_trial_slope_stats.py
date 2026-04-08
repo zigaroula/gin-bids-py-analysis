@@ -20,7 +20,7 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResol
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
+BIDS_ROOT = Path(r"E:\data_clarissa\valuation\bids")
 
 IEEG_FILTERS = {
     "suffix": "ieeg",
@@ -41,6 +41,9 @@ PARAMS = TrialSlopeStatsParams(
     condition_a="pleasant",
     condition_b="unpleasant",
     predictor="rating",
+    activity_scaling="none",
+    activity_baseline_tmin_s=-0.2,
+    activity_baseline_tmax_s=0.0,
     p_value_correction_method="none",
     significance_alpha=0.05,
 )

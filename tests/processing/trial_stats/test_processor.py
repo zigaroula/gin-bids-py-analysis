@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 from mne import Annotations, create_info
 from mne.io import RawArray
 
@@ -901,3 +902,75 @@ def test_process_group_experiment_end_code_filters_late_anchors(
     assert result.condition_b_trial_count == 2
     assert result.metadata["experiment_start_event_code"] is None
     assert result.metadata["experiment_end_event_code"] == "2"
+
+
+def test_process_group_activity_zscore_preserves_ttest_statistics(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 80), dtype=np.float32)
+    data[0, 10:13] = 6.0
+    data[0, 20:23] = 1.0
+    data[0, 30:33] = 8.0
+    data[0, 40:43] = 2.0
+    annotations = Annotations(
+        onset=[1.0, 2.0, 3.0, 4.0],
+        duration=[0.0] * 4,
+        description=["Stimulus/S  10"] * 4,
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+    group = BIDSFileGroup(primary=ieeg_file)
+
+    base_params = dict(
+        anchor_event_codes=["10"],
+        tmin_s=0.0,
+        tmax_s=0.2,
+        condition_a="accepted",
+        condition_b="rejected",
+        min_trials_per_condition=2,
+        p_value_correction_method="none",
+    )
+
+    raw_result = TrialStatsProcessing(
+        TrialStatsParams(**base_params),
+        resolver=_AlternatingResolver(),
+    ).process_group(group)
+    z_result = TrialStatsProcessing(
+        TrialStatsParams(
+            **base_params,
+            activity_scaling="zscore_by_baseline",
+            activity_baseline_tmin_s=0.0,
+            activity_baseline_tmax_s=0.1,
+        ),
+        resolver=_AlternatingResolver(),
+    ).process_group(group)
+
+    np.testing.assert_allclose(z_result.t_values, raw_result.t_values)
+    np.testing.assert_allclose(z_result.p_values, raw_result.p_values)
+    np.testing.assert_array_equal(z_result.significant_mask, raw_result.significant_mask)
+    assert z_result.activity_scaling == "zscore_by_baseline"
+    assert z_result.metadata["activity_scaling"] == "zscore_by_baseline"
+    assert z_result.activity_baseline_tmin_s == pytest.approx(0.0)
+    assert z_result.activity_baseline_tmax_s == pytest.approx(0.1)
+    assert not np.allclose(z_result.mean_difference, raw_result.mean_difference)
+    baseline_mask = (z_result.time_axis_s >= 0.0) & (z_result.time_axis_s <= 0.1)
+    pooled_baseline = np.concatenate(
+        [
+            z_result.condition_a_epochs[:, :, baseline_mask],
+            z_result.condition_b_epochs[:, :, baseline_mask],
+        ],
+        axis=0,
+    )
+    assert abs(float(np.nanmean(pooled_baseline))) < 1e-12

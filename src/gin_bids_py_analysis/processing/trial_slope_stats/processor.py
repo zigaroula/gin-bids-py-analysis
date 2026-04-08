@@ -25,6 +25,7 @@ from gin_bids_py_analysis.processing.utils.statistics import (
     compute_condition_mean,
     compute_condition_sem,
     correct_p_values,
+    zscore_activity_by_baseline,
 )
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
@@ -205,6 +206,15 @@ class TrialSlopeStatsProcessing(BaseProcessing):
         predictor_a_array = np.asarray(predictor_a, dtype=np.float64)
         predictor_b_array = np.asarray(predictor_b, dtype=np.float64)
 
+        if self.params.activity_scaling == "zscore_by_baseline":
+            epochs_a_array, epochs_b_array = zscore_activity_by_baseline(
+                epochs_a_array,
+                epochs_b_array,
+                time_axis_ref,
+                baseline_tmin_s=self.params.activity_baseline_tmin_s,
+                baseline_tmax_s=self.params.activity_baseline_tmax_s,
+            )
+
         time_axis_eval = time_axis_ref
         binning_mode = "none"
         window_sample_count = 0
@@ -341,6 +351,9 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 "window_samples": window_sample_count,
                 "effective_n_bins": effective_n_bins,
                 "binning_mode": binning_mode,
+                "activity_scaling": self.params.activity_scaling,
+                "activity_baseline_tmin_s": self.params.activity_baseline_tmin_s,
+                "activity_baseline_tmax_s": self.params.activity_baseline_tmax_s,
             },
             condition_a_slope=condition_a_slope,
             condition_a_intercept=condition_a_intercept,
@@ -380,6 +393,9 @@ class TrialSlopeStatsProcessing(BaseProcessing):
             region_channels=region_channels,
             window_ms=self.params.window_ms,
             n_bins=self.params.n_bins,
+            activity_scaling=self.params.activity_scaling,
+            activity_baseline_tmin_s=self.params.activity_baseline_tmin_s,
+            activity_baseline_tmax_s=self.params.activity_baseline_tmax_s,
             predictor=self.params.predictor,
             predictor_scaling=self.params.predictor_scaling,
             p_value_correction_method=self.params.p_value_correction_method,

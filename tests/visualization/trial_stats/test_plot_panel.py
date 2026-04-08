@@ -67,3 +67,77 @@ class TestPlotPanel:
         qtbot.addWidget(panel)
         panel.update_plots(synthetic_slope_result, channel_idx=0)
         assert panel._tabs.tabText(1) == "Slopes"
+        assert panel._tabs.isTabEnabled(panel._scatter_tab_index)
+
+    def test_ttest_axes_have_titles(self, qtbot, synthetic_result):
+        panel = PlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_result, channel_idx=0)
+
+        assert "t-values" in panel._ax_t.get_title()
+        assert "p-values" in panel._ax_p.get_title()
+        assert not panel._tabs.isTabEnabled(panel._scatter_tab_index)
+
+    def test_slope_axes_have_titles(self, qtbot, synthetic_slope_result):
+        panel = PlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_result, channel_idx=0)
+
+        assert "slopes" in panel._ax_t.get_title()
+        assert "slope p-values" in panel._ax_p.get_title()
+
+    def test_scatter_tab_is_present(self, qtbot):
+        panel = PlotPanel()
+        qtbot.addWidget(panel)
+
+        assert panel._tabs.tabText(panel._scatter_tab_index) == "Scatter"
+
+    def test_slope_scatter_draws_points_and_regressions(self, qtbot, synthetic_slope_result):
+        panel = PlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_result, channel_idx=0)
+
+        assert len(panel._ax_scatter.collections) == 2
+        assert len(panel._ax_scatter.lines) == 2
+        assert "predictor vs activity" in panel._ax_scatter.get_title()
+        assert panel._ax_scatter.get_xlabel() == "predictor_value"
+        assert panel._ax_scatter.get_ylabel() == "Epoch mean activity"
+
+    def test_slope_scatter_uses_zscore_ylabel_when_activity_is_scaled(self, qtbot, synthetic_slope_result):
+        synthetic_slope_result.activity_scaling = "zscore_by_baseline"
+        panel = PlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_result, channel_idx=0)
+
+        assert panel._ax_scatter.get_ylabel() == "Epoch mean activity (z)"
+
+    def test_slope_scatter_shows_placeholder_when_epoch_means_missing(
+        self,
+        qtbot,
+        synthetic_slope_result,
+    ):
+        synthetic_slope_result.condition_a_epoch_means = np.array([])
+        synthetic_slope_result.condition_b_epoch_means = np.array([])
+        panel = PlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_result, channel_idx=0)
+
+        assert panel._ax_scatter.texts[0].get_text() == "No scatter data available"
+
+    def test_slope_scatter_shows_placeholder_when_epoch_means_are_incoherent(
+        self,
+        qtbot,
+        synthetic_slope_result,
+    ):
+        synthetic_slope_result.condition_b_epoch_means = np.ones((4, 10), dtype=np.float64)
+        panel = PlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_result, channel_idx=0)
+
+        assert panel._ax_scatter.texts[0].get_text() == "No scatter data available"

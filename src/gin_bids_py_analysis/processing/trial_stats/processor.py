@@ -32,6 +32,7 @@ from gin_bids_py_analysis.processing.utils.epoching import (
 from gin_bids_py_analysis.processing.utils.statistics import (
     compute_condition_sem,
     correct_p_values,
+    zscore_activity_by_baseline,
 )
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
@@ -247,6 +248,15 @@ class TrialStatsProcessing(BaseProcessing):
             len(time_axis_ref),
         )
 
+        if self.params.activity_scaling == "zscore_by_baseline":
+            epochs_a_array, epochs_b_array = zscore_activity_by_baseline(
+                epochs_a_array,
+                epochs_b_array,
+                time_axis_ref,
+                baseline_tmin_s=self.params.activity_baseline_tmin_s,
+                baseline_tmax_s=self.params.activity_baseline_tmax_s,
+            )
+
         time_axis_eval = time_axis_ref
         binning_mode = "none"
         window_sample_count = 0
@@ -424,6 +434,9 @@ class TrialStatsProcessing(BaseProcessing):
                 "window_samples": window_sample_count,
                 "effective_n_bins": effective_n_bins,
                 "binning_mode": binning_mode,
+                "activity_scaling": self.params.activity_scaling,
+                "activity_baseline_tmin_s": self.params.activity_baseline_tmin_s,
+                "activity_baseline_tmax_s": self.params.activity_baseline_tmax_s,
                 "channel_significance_mode": self.params.channel_significance_mode,
                 "channel_significance_duration_threshold_ms": self.params.channel_significance_duration_threshold_ms,
             },
@@ -456,6 +469,9 @@ class TrialStatsProcessing(BaseProcessing):
             region_channels=region_channels,
             window_ms=self.params.window_ms,
             n_bins=self.params.n_bins,
+            activity_scaling=self.params.activity_scaling,
+            activity_baseline_tmin_s=self.params.activity_baseline_tmin_s,
+            activity_baseline_tmax_s=self.params.activity_baseline_tmax_s,
             p_value_correction_method=self.params.p_value_correction_method,
             significance_alpha=self.params.significance_alpha,
             stats_valid=stats_valid,

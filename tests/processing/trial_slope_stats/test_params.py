@@ -15,6 +15,9 @@ def test_params_validate_core_constraints() -> None:
     )
     assert params.min_trials_per_condition == 3
     assert params.predictor_scaling == "none"
+    assert params.activity_scaling == "none"
+    assert params.activity_baseline_tmin_s == pytest.approx(-0.2)
+    assert params.activity_baseline_tmax_s == pytest.approx(0.0)
 
 
 def test_params_reject_equal_conditions() -> None:
@@ -46,6 +49,16 @@ def test_params_rejects_empty_predictor_key() -> None:
             tmin_s=0.0,
             tmax_s=1.0,
             predictor="   ",
+        )
+
+
+def test_params_rejects_baseline_outside_epoch_when_baseline_scaling_enabled() -> None:
+    with pytest.raises(ValueError, match="activity_baseline_tmin_s"):
+        TrialSlopeStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=1.0,
+            activity_scaling="zscore_by_baseline",
         )
 
 

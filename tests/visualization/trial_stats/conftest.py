@@ -142,6 +142,8 @@ def synthetic_slope_result(default_slope_params: TrialSlopeStatsParams) -> Trial
     sig_b = p_b < 0.05
     mean_a = rng.standard_normal((n_ch, n_t))
     mean_b = rng.standard_normal((n_ch, n_t))
+    epoch_means_a = rng.standard_normal((n_ch, 12))
+    epoch_means_b = rng.standard_normal((n_ch, 11))
 
     return TrialSlopeStatsProcessingResult(
         source_group=group,
@@ -174,6 +176,8 @@ def synthetic_slope_result(default_slope_params: TrialSlopeStatsParams) -> Trial
         sfreq=20.0,
         condition_a_predictor_values=np.linspace(0.0, 1.0, 12),
         condition_b_predictor_values=np.linspace(0.0, 1.0, 11),
+        condition_a_epoch_means=epoch_means_a,
+        condition_b_epoch_means=epoch_means_b,
         resolved_trials=[],
         source_ieeg_files=[str(mock_file.path)],
         source_table_files=[],

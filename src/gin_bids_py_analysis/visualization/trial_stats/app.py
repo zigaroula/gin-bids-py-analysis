@@ -107,6 +107,9 @@ def launch_slope(
         atlas_regions=list(params.atlas_regions),
         window_ms=params.window_ms,
         n_bins=params.n_bins,
+        activity_scaling=params.activity_scaling,
+        activity_baseline_tmin_s=params.activity_baseline_tmin_s,
+        activity_baseline_tmax_s=params.activity_baseline_tmax_s,
     )
     window = TrialStatsWindow(
         subject_groups,

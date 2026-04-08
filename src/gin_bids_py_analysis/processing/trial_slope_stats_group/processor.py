@@ -68,6 +68,9 @@ class _RawSlopeStatsData:
     window_ms: float
     n_bins: int
     effective_n_bins: int
+    activity_scaling: str
+    activity_baseline_tmin_s: float
+    activity_baseline_tmax_s: float
     source_ieeg_files: list[str]
     source_electrodes_files: list[str]
 
@@ -83,6 +86,9 @@ class _SnapshotSignature:
     window_ms: float
     n_bins: int
     effective_n_bins: int
+    activity_scaling: str
+    activity_baseline_tmin_s: float
+    activity_baseline_tmax_s: float
     analysis_level: str
 
     @property
@@ -97,6 +103,9 @@ class _SnapshotSignature:
             self.window_ms,
             self.n_bins,
             self.effective_n_bins,
+            self.activity_scaling,
+            self.activity_baseline_tmin_s,
+            self.activity_baseline_tmax_s,
             self.analysis_level,
         )
 
@@ -126,6 +135,9 @@ class _SlopeStatsSnapshot:
     window_ms: float
     n_bins: int
     effective_n_bins: int
+    activity_scaling: str
+    activity_baseline_tmin_s: float
+    activity_baseline_tmax_s: float
     source_ieeg_files: list[str]
     source_electrodes_files: list[str]
     signature: _SnapshotSignature
@@ -397,6 +409,9 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
                 "window_ms": first.window_ms,
                 "n_bins": first.n_bins,
                 "effective_n_bins": first.effective_n_bins,
+                "activity_scaling": first.activity_scaling,
+                "activity_baseline_tmin_s": first.activity_baseline_tmin_s,
+                "activity_baseline_tmax_s": first.activity_baseline_tmax_s,
             },
             output_entities={"subject": "group"},
             slope_t_values=t_values_slope,
@@ -744,6 +759,9 @@ def _load_slope_stats_snapshot(stats_file: BIDSFile) -> _SlopeStatsSnapshot:
         window_ms=raw.window_ms,
         n_bins=raw.n_bins,
         effective_n_bins=raw.effective_n_bins,
+        activity_scaling=raw.activity_scaling,
+        activity_baseline_tmin_s=raw.activity_baseline_tmin_s,
+        activity_baseline_tmax_s=raw.activity_baseline_tmax_s,
         source_ieeg_files=raw.source_ieeg_files,
         source_electrodes_files=raw.source_electrodes_files,
         signature=signature,
@@ -768,6 +786,9 @@ def _build_signature(
         window_ms=float(raw.window_ms),
         n_bins=int(raw.n_bins),
         effective_n_bins=int(raw.effective_n_bins),
+        activity_scaling=str(raw.activity_scaling or "none"),
+        activity_baseline_tmin_s=float(raw.activity_baseline_tmin_s),
+        activity_baseline_tmax_s=float(raw.activity_baseline_tmax_s),
         analysis_level=str(raw.analysis_level or "channel"),
     )
 
@@ -827,6 +848,18 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
         effective_n_bins = int_scalar(
             dataset_or_none(fh, "meta/effective_n_bins"), default=n_t
         )
+        activity_scaling = str_scalar(
+            dataset_or_none(fh, "meta/activity_scaling"),
+            default="none",
+        )
+        activity_baseline_tmin_s = float_scalar(
+            dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
+            default=-0.2,
+        )
+        activity_baseline_tmax_s = float_scalar(
+            dataset_or_none(fh, "meta/activity_baseline_tmax_s"),
+            default=0.0,
+        )
 
         source_ieeg_files: list[str] = []
         source_electrodes_files: list[str] = []
@@ -860,6 +893,9 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
         window_ms=window_ms,
         n_bins=n_bins,
         effective_n_bins=effective_n_bins,
+        activity_scaling=activity_scaling,
+        activity_baseline_tmin_s=activity_baseline_tmin_s,
+        activity_baseline_tmax_s=activity_baseline_tmax_s,
         source_ieeg_files=source_ieeg_files,
         source_electrodes_files=source_electrodes_files,
     )
@@ -913,6 +949,15 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
         window_ms = mat_float(getattr(meta, "window_ms", None), default=0.0)
         n_bins = mat_int(getattr(meta, "n_bins", None), default=0)
         effective_n_bins = mat_int(getattr(meta, "effective_n_bins", None), default=n_t)
+        activity_scaling = mat_str(getattr(meta, "activity_scaling", None), default="none")
+        activity_baseline_tmin_s = mat_float(
+            getattr(meta, "activity_baseline_tmin_s", None),
+            default=-0.2,
+        )
+        activity_baseline_tmax_s = mat_float(
+            getattr(meta, "activity_baseline_tmax_s", None),
+            default=0.0,
+        )
 
         source_ieeg_files: list[str] = []
         source_electrodes_files: list[str] = []
@@ -963,6 +1008,9 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
         window_ms=window_ms,
         n_bins=n_bins,
         effective_n_bins=effective_n_bins,
+        activity_scaling=activity_scaling,
+        activity_baseline_tmin_s=activity_baseline_tmin_s,
+        activity_baseline_tmax_s=activity_baseline_tmax_s,
         source_ieeg_files=source_ieeg_files,
         source_electrodes_files=source_electrodes_files,
     )

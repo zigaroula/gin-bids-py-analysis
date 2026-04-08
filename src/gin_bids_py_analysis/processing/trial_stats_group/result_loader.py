@@ -151,6 +151,18 @@ def _load_from_hdf5(path: Path) -> TrialStatsGroupProcessingResult:
         roi_mode = str_scalar(dataset_or_none(fh, "meta/roi_mode"), default="manual")
         atlas_name_raw = str_scalar(dataset_or_none(fh, "meta/atlas_name"), default="")
         atlas_name: str | None = atlas_name_raw.strip() or None
+        activity_scaling = str_scalar(
+            dataset_or_none(fh, "meta/activity_scaling"),
+            default="none",
+        )
+        activity_baseline_tmin_s = float_scalar(
+            dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
+            default=-0.2,
+        )
+        activity_baseline_tmax_s = float_scalar(
+            dataset_or_none(fh, "meta/activity_baseline_tmax_s"),
+            default=0.0,
+        )
 
         # excluded ROIs
         ex_region_ds = dataset_or_none(fh, "meta/excluded_rois/region")
@@ -252,6 +264,9 @@ def _load_from_hdf5(path: Path) -> TrialStatsGroupProcessingResult:
             "p_value_correction_method": p_value_correction_method,
             "significance_alpha": significance_alpha,
             "roi_mode": roi_mode,
+            "activity_scaling": activity_scaling,
+            "activity_baseline_tmin_s": activity_baseline_tmin_s,
+            "activity_baseline_tmax_s": activity_baseline_tmax_s,
         },
         t_values=t_values,
         p_values=p_values,
@@ -376,6 +391,15 @@ def _load_from_matlab(path: Path) -> TrialStatsGroupProcessingResult:
     roi_mode = mat_str(getattr(meta, "roi_mode", None), default="manual")
     atlas_name_raw = mat_str(getattr(meta, "atlas_name", None), default="")
     atlas_name: str | None = atlas_name_raw.strip() or None
+    activity_scaling = mat_str(getattr(meta, "activity_scaling", None), default="none")
+    activity_baseline_tmin_s = mat_float(
+        getattr(meta, "activity_baseline_tmin_s", None),
+        default=-0.2,
+    )
+    activity_baseline_tmax_s = mat_float(
+        getattr(meta, "activity_baseline_tmax_s", None),
+        default=0.0,
+    )
 
     excluded_rois: dict[str, str] = {}
     ex_raw = getattr(meta, "excluded_rois", None)
@@ -410,6 +434,9 @@ def _load_from_matlab(path: Path) -> TrialStatsGroupProcessingResult:
             "p_value_correction_method": p_value_correction_method,
             "significance_alpha": significance_alpha,
             "roi_mode": roi_mode,
+            "activity_scaling": activity_scaling,
+            "activity_baseline_tmin_s": activity_baseline_tmin_s,
+            "activity_baseline_tmax_s": activity_baseline_tmax_s,
         },
         t_values=t_values,
         p_values=p_values,

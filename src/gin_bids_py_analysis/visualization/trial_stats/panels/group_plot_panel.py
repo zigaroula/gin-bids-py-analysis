@@ -285,7 +285,7 @@ class GroupPlotPanel(QWidget):
             if np.nanmin(all_means) < 0 < np.nanmax(all_means):
                 ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
-        ax.set_ylabel("mean region activity")
+        ax.set_ylabel(_group_activity_axis_label(result))
         n_ch = (
             int(result.roi_channel_counts[roi_idx])
             if result.roi_channel_counts.size > roi_idx
@@ -333,6 +333,10 @@ class GroupPlotPanel(QWidget):
                 transform=ax.get_xaxis_transform(),
             )
         ax.set_ylabel("t-value")
+        ax.set_title(
+            f"{roi_label} - t-values - {n_ch} channel(s) / {n_subj} subject(s)",
+            fontsize=9,
+        )
         self._canvas_t.draw_idle()
 
         ax = self._ax_p
@@ -376,6 +380,10 @@ class GroupPlotPanel(QWidget):
             ax.set_ylim(bottom=0.0, top=max(1.05, p_max * 1.05))
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("p-value")
+        ax.set_title(
+            f"{roi_label} - p-values - {n_ch} channel(s) / {n_subj} subject(s)",
+            fontsize=9,
+        )
         _safe_legend(ax)
         self._canvas_p.draw_idle()
 
@@ -467,7 +475,7 @@ class GroupPlotPanel(QWidget):
             ax.text(0.5, 0.5, "No activity means available", transform=ax.transAxes,
                     ha="center", va="center", fontsize=9, color="gray")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
-        ax.set_ylabel("mean region activity")
+        ax.set_ylabel(_group_activity_axis_label(result))
         ax.set_title(title_base, fontsize=9)
         if sig_activity.any():
             ax.fill_between(t, 0.005, 0.025, where=sig_activity, alpha=0.75, color="red",
@@ -516,6 +524,7 @@ class GroupPlotPanel(QWidget):
             ax.set_ylim(bottom=0.0, top=max(1.05, p_max * 1.05))
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("activity p-value")
+        ax.set_title(f"{title_base} - activity p-values", fontsize=9)
         _safe_legend(ax)
         self._canvas_activity_p.draw_idle()
 
@@ -573,6 +582,7 @@ class GroupPlotPanel(QWidget):
                     ha="center", va="center", fontsize=9, color="gray")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
         ax.set_ylabel("mean slope")
+        ax.set_title(f"{title_base} - slope mean", fontsize=9)
         if sig_slope.any():
             ax.fill_between(t, 0.005, 0.025, where=sig_slope, alpha=0.75, color="red",
                             transform=ax.get_xaxis_transform(), zorder=5)
@@ -620,6 +630,7 @@ class GroupPlotPanel(QWidget):
             ax.set_ylim(bottom=0.0, top=max(1.05, p_max * 1.05))
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("slope p-value")
+        ax.set_title(f"{title_base} - slope p-values", fontsize=9)
         _safe_legend(ax)
         self._canvas_p.draw_idle()
 
@@ -675,6 +686,7 @@ class GroupPlotPanel(QWidget):
             cond_a_label=cond_a_label,
             cond_b_label=cond_b_label,
             sig_slope=sig_slope,
+            activity_scaling=_group_activity_scaling(result),
         )
 
     # ------------------------------------------------------------------
@@ -709,6 +721,7 @@ class GroupPlotPanel(QWidget):
                 color="gray",
                 fontsize=10,
             )
+            ax.set_title(f"{roi_label}{title_suffix}", fontsize=9)
             ax.set_xlabel("Time (s)")
             canvas.draw_idle()
             return
@@ -774,10 +787,12 @@ class GroupPlotPanel(QWidget):
         cond_a_label: str,
         cond_b_label: str,
         sig_slope: np.ndarray,
+        activity_scaling: str,
     ) -> None:
         """Draw a predictor-vs-activity scatter plot with per-condition regression lines."""
         fig.clear()
-        ax = fig.add_subplot(111)
+        self._ax_scatter = fig.add_subplot(111)
+        ax = self._ax_scatter
 
         pred_a = np.asarray(pred_a, dtype=np.float64).ravel()
         act_a = np.asarray(act_a, dtype=np.float64).ravel()
@@ -789,6 +804,8 @@ class GroupPlotPanel(QWidget):
             ax.text(0.5, 0.5, "No scatter data available", transform=ax.transAxes,
                     ha="center", va="center", fontsize=9, color="gray")
             ax.set_title(f"{roi_label} — scatter", fontsize=9)
+            ax.set_xlabel("Predictor value")
+            ax.set_ylabel(_group_scatter_activity_axis_label(activity_scaling))
             canvas.draw_idle()
             return
 
@@ -818,7 +835,7 @@ class GroupPlotPanel(QWidget):
                             color="tomato", linewidth=1.5, linestyle=reg_ls)
 
         ax.set_xlabel("Predictor value")
-        ax.set_ylabel("Epoch mean activity")
+        ax.set_ylabel(_group_scatter_activity_axis_label(activity_scaling))
         ax.set_title(f"{roi_label} — predictor vs activity", fontsize=9)
         _safe_legend(ax)
         canvas.draw_idle()
@@ -873,3 +890,26 @@ def _safe_legend(ax) -> None:
 
 def _is_slope_group_result(result: object) -> bool:
     return hasattr(result, "slope_t_values")
+
+
+def _group_activity_axis_label(result: object) -> str:
+    if _is_group_zscore_activity_scaling(_group_activity_scaling(result)):
+        return "mean region activity (z)"
+    return "mean region activity"
+
+
+def _group_scatter_activity_axis_label(activity_scaling: str) -> str:
+    if _is_group_zscore_activity_scaling(activity_scaling):
+        return "Epoch mean activity (z)"
+    return "Epoch mean activity"
+
+
+def _group_activity_scaling(result: object) -> str:
+    metadata = getattr(result, "metadata", {})
+    if isinstance(metadata, dict):
+        return str(metadata.get("activity_scaling", "none"))
+    return "none"
+
+
+def _is_group_zscore_activity_scaling(activity_scaling: str) -> bool:
+    return str(activity_scaling).strip().lower().startswith("zscore")

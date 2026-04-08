@@ -131,6 +131,29 @@ class TrialStatsParams(BaseProcessingParams):
             "Only used when channel_significance_mode='duration'."
         ),
     )
+    activity_scaling: Literal["none", "zscore_by_baseline"] = Field(
+        default="none",
+        description=(
+            "Optional scaling applied to the input activity before subject-level statistics. "
+            "'none' keeps the original units. "
+            "'zscore_by_baseline' z-scores activity relative to a pooled baseline window, "
+            "independently for each channel/ROI."
+        ),
+    )
+    activity_baseline_tmin_s: float = Field(
+        default=-0.2,
+        description=(
+            "Baseline window start in seconds, relative to the anchor event. "
+            "Used only when activity_scaling='zscore_by_baseline'."
+        ),
+    )
+    activity_baseline_tmax_s: float = Field(
+        default=0.0,
+        description=(
+            "Baseline window end in seconds, relative to the anchor event. "
+            "Used only when activity_scaling='zscore_by_baseline'."
+        ),
+    )
     experiment_start_event_code: str | None = Field(
         default=None,
         description=(
@@ -197,6 +220,21 @@ class TrialStatsParams(BaseProcessingParams):
             raise ValueError(
                 "window_ms and n_bins are mutually exclusive; define only one."
             )
+        if self.activity_baseline_tmax_s <= self.activity_baseline_tmin_s:
+            raise ValueError(
+                "activity_baseline_tmax_s must be greater than activity_baseline_tmin_s."
+            )
+        if self.activity_scaling == "zscore_by_baseline":
+            if self.activity_baseline_tmin_s < self.tmin_s:
+                raise ValueError(
+                    "activity_baseline_tmin_s must be within the epoch window when "
+                    "activity_scaling='zscore_by_baseline'."
+                )
+            if self.activity_baseline_tmax_s > self.tmax_s:
+                raise ValueError(
+                    "activity_baseline_tmax_s must be within the epoch window when "
+                    "activity_scaling='zscore_by_baseline'."
+                )
         if self.p_value_correction_method == "permutation" and self.n_permutations == 0:
             raise ValueError(
                 "p_value_correction_method='permutation' requires n_permutations > 0."

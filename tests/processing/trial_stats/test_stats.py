@@ -14,7 +14,10 @@ from gin_bids_py_analysis.processing.trial_stats.stats import (
     compute_single_bin_channel_significance,
     extract_epochs,
 )
-from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
+from gin_bids_py_analysis.processing.utils.statistics import (
+    correct_p_values,
+    zscore_activity_by_baseline,
+)
 
 
 def _trial(onset_s: float, *, keep: bool = True) -> ResolvedTrial:
@@ -227,6 +230,73 @@ def test_trial_stats_params_rejects_permutation_with_zero_n_permutations() -> No
             p_value_correction_method="permutation",
             n_permutations=0,
         )
+
+
+def test_trial_stats_params_rejects_baseline_outside_epoch_when_baseline_scaling_enabled() -> None:
+    with pytest.raises(ValueError, match="activity_baseline_tmin_s"):
+        TrialStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.1,
+            activity_scaling="zscore_by_baseline",
+        )
+
+
+def test_zscore_activity_by_baseline_uses_pooled_baseline_window() -> None:
+    epochs_a = np.array(
+        [
+            [[1.0, 2.0, 11.0]],
+            [[2.0, 3.0, 12.0]],
+        ],
+        dtype=np.float64,
+    )
+    epochs_b = np.array(
+        [
+            [[3.0, 4.0, 13.0]],
+            [[4.0, 5.0, 14.0]],
+        ],
+        dtype=np.float64,
+    )
+    time_axis_s = np.array([-0.2, 0.0, 0.2], dtype=np.float64)
+
+    z_a, z_b = zscore_activity_by_baseline(
+        epochs_a,
+        epochs_b,
+        time_axis_s,
+        baseline_tmin_s=-0.2,
+        baseline_tmax_s=0.0,
+    )
+    pooled_baseline = np.concatenate([z_a[:, :, :2], z_b[:, :, :2]], axis=0)
+
+    assert z_a.shape == epochs_a.shape
+    assert z_b.shape == epochs_b.shape
+    np.testing.assert_allclose(
+        np.nanmean(pooled_baseline, axis=(0, 2)),
+        np.zeros((1,)),
+        atol=1e-12,
+    )
+    np.testing.assert_allclose(
+        np.nanstd(pooled_baseline, axis=(0, 2), ddof=1),
+        np.ones((1,)),
+        atol=1e-12,
+    )
+
+
+def test_zscore_activity_by_baseline_falls_back_to_centering_when_variance_is_zero() -> None:
+    epochs_a = np.array([[[5.0, 5.0, 7.0]]], dtype=np.float64)
+    epochs_b = np.array([[[5.0, 5.0, 3.0]]], dtype=np.float64)
+    time_axis_s = np.array([-0.2, 0.0, 0.2], dtype=np.float64)
+
+    z_a, z_b = zscore_activity_by_baseline(
+        epochs_a,
+        epochs_b,
+        time_axis_s,
+        baseline_tmin_s=-0.2,
+        baseline_tmax_s=0.0,
+    )
+
+    np.testing.assert_allclose(z_a, [[[0.0, 0.0, 2.0]]])
+    np.testing.assert_allclose(z_b, [[[0.0, 0.0, -2.0]]])
 
 
 # ---------------------------------------------------------------------------
