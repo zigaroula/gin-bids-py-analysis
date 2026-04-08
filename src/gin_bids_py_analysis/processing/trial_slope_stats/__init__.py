@@ -7,8 +7,14 @@ from .processor import TrialSlopeStatsProcessing
 from .result import TrialSlopeStatsProcessingResult
 from .result_loader import load_trial_slope_stats_result
 from .writer import TrialSlopeStatsProcessingWriter
+from ..utils.condition_rules import ConditionDefinition, ConditionExpr
+from ..utils.trial_resolver import TableTrialResolver, TrialResolver
 
 __all__ = [
+    "TrialResolver",
+    "TableTrialResolver",
+    "ConditionExpr",
+    "ConditionDefinition",
     "TrialSlopeStatsParams",
     "TrialSlopeStatsProcessing",
     "TrialSlopeStatsProcessingResult",

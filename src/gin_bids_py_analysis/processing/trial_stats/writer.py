@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -177,6 +178,17 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             ),
             trial_id=np.array(
                 [trial.trial_id or "" for trial in result.resolved_trials],
+                dtype=object,
+            ),
+            condition_inputs=np.array(
+                [_condition_inputs_json(trial) for trial in result.resolved_trials],
+                dtype=object,
+            ),
+            condition_resolution_reason=np.array(
+                [
+                    str(trial.metadata.get("condition_resolution_reason", ""))
+                    for trial in result.resolved_trials
+                ],
                 dtype=object,
             ),
         )
@@ -506,6 +518,25 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
                 ),
                 dtype=str_dtype,
             )
+            trial_grp.create_dataset(
+                "condition_inputs",
+                data=np.array(
+                    [_condition_inputs_json(trial) for trial in result.resolved_trials],
+                    dtype=object,
+                ),
+                dtype=str_dtype,
+            )
+            trial_grp.create_dataset(
+                "condition_resolution_reason",
+                data=np.array(
+                    [
+                        str(trial.metadata.get("condition_resolution_reason", ""))
+                        for trial in result.resolved_trials
+                    ],
+                    dtype=object,
+                ),
+                dtype=str_dtype,
+            )
 
             if result.condition_a_epochs.ndim == 3 and self.params.include_epochs:
                 epochs_grp = fh.create_group("epochs")
@@ -569,6 +600,8 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
                     "anchor_onset_s",
                     "trial_id",
                     "resolved_label",
+                    "condition_inputs",
+                    "condition_resolution_reason",
                     "keep",
                     "exclusion_reason",
                 ]
@@ -582,6 +615,8 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
                         trial.anchor_onset_s,
                         trial.trial_id or "",
                         trial.label or "",
+                        _condition_inputs_json(trial),
+                        str(trial.metadata.get("condition_resolution_reason", "")),
                         str(trial.keep).lower(),
                         trial.exclusion_reason or "",
                     ]
@@ -591,6 +626,12 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
 def _trial_table_path(output_path: Path) -> Path:
     tsv_path = output_path.with_suffix(".tsv")
     return tsv_path.with_name(tsv_path.name.replace("_stats.tsv", "_trials.tsv"))
+
+
+def _condition_inputs_json(trial: object) -> str:
+    metadata = getattr(trial, "metadata", {})
+    value = metadata.get("condition_inputs", {}) if isinstance(metadata, dict) else {}
+    return json.dumps(value, sort_keys=True, ensure_ascii=True, default=str)
 
 
 def _validate_uncertainty_shapes(result: TrialStatsProcessingResult) -> None:

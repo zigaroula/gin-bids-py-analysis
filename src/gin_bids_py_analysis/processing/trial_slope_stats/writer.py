@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -257,6 +258,25 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
                     dtype=np.float64,
                 ),
             )
+            trial_grp.create_dataset(
+                "condition_inputs",
+                data=np.array(
+                    [_condition_inputs_json(trial) for trial in result.resolved_trials],
+                    dtype=object,
+                ),
+                dtype=str_dtype,
+            )
+            trial_grp.create_dataset(
+                "condition_resolution_reason",
+                data=np.array(
+                    [
+                        str(trial.metadata.get("condition_resolution_reason", ""))
+                        for trial in result.resolved_trials
+                    ],
+                    dtype=object,
+                ),
+                dtype=str_dtype,
+            )
 
             if result.condition_a_epochs.ndim == 3 and self.params.include_epochs:
                 epochs_grp = fh.create_group("epochs")
@@ -423,6 +443,17 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
                 [_to_float_or_nan(trial.metadata.get("predictor_value")) for trial in result.resolved_trials],
                 dtype=np.float64,
             ),
+            condition_inputs=np.array(
+                [_condition_inputs_json(trial) for trial in result.resolved_trials],
+                dtype=object,
+            ),
+            condition_resolution_reason=np.array(
+                [
+                    str(trial.metadata.get("condition_resolution_reason", ""))
+                    for trial in result.resolved_trials
+                ],
+                dtype=object,
+            ),
         )
 
         prov_struct = make_struct(
@@ -491,6 +522,8 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
                     "resolved_label",
                     "predictor_raw",
                     "predictor_value",
+                    "condition_inputs",
+                    "condition_resolution_reason",
                     "keep",
                     "exclusion_reason",
                 ]
@@ -506,6 +539,8 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
                         trial.label or "",
                         str(trial.metadata.get("predictor_raw", "")),
                         _to_float_or_nan(trial.metadata.get("predictor_value")),
+                        _condition_inputs_json(trial),
+                        str(trial.metadata.get("condition_resolution_reason", "")),
                         str(trial.keep).lower(),
                         trial.exclusion_reason or "",
                     ]
@@ -532,6 +567,12 @@ def _write_condition_regression_hdf5(
     group.create_dataset("significant_mask", data=np.asarray(significant_mask, dtype=bool))
     group.create_dataset("n_trials_used", data=int(n_trials_used))
     group.create_dataset("stats_valid", data=bool(stats_valid))
+
+
+def _condition_inputs_json(trial: object) -> str:
+    metadata = getattr(trial, "metadata", {})
+    value = metadata.get("condition_inputs", {}) if isinstance(metadata, dict) else {}
+    return json.dumps(value, sort_keys=True, ensure_ascii=True, default=str)
 
 
 def _trial_table_path(output_path: Path) -> Path:

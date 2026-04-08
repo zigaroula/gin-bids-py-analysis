@@ -205,11 +205,50 @@ Core configuration in `TrialStatsParams` (`src/gin_bids_py_analysis/processing/t
   - These are mutually exclusive (cannot both be active)
 
 Resolver configuration (also critical):
-- `TableTrialLabelResolver` maps each anchor event to trial labels from tables.
+- `TableTrialResolver` maps each anchor event to trial labels from tables.
 - Most important settings:
-  - `label_column`
-  - `label_map`
+  - `conditions`
+  - `extract_columns`
   - optional onset/order/code/keep columns
+
+Minimal examples:
+
+```python
+TableTrialResolver(
+    conditions=[
+        {"label": "accepted", "when": {"column": "choice", "op": "==", "value": "1"}},
+        {"label": "rejected", "when": {"column": "choice", "op": "==", "value": "0"}},
+    ]
+)
+
+TableTrialResolver(
+    conditions=[
+        {"label": "positive", "when": {"column": "rating", "op": ">", "value": 0}},
+        {"label": "negative", "when": {"column": "rating", "op": "<", "value": 0}},
+    ]
+)
+
+TableTrialResolver(
+    conditions=[
+        {
+            "label": "accepted_high_conf",
+            "when": {
+                "all": [
+                    {"column": "choice", "op": "==", "value": "1"},
+                    {"column": "confidence", "op": ">=", "value": 4},
+                ]
+            },
+        },
+        {
+            "label": "other",
+            "when": {"any": [
+                {"column": "choice", "op": "==", "value": "0"},
+                {"column": "confidence", "op": "<", "value": 4},
+            ]},
+        },
+    ]
+)
+```
 
 Writer configuration (`TrialStatsWriterParams`):
 - `output_format`: `"hdf5"` or `"matlab"`
@@ -239,7 +278,7 @@ Core configuration in `TrialSlopeStatsParams`
 - Required:
   - `anchor_event_codes`
   - `tmin_s`, `tmax_s`
-  - `predictor_metadata_key` (metadata key carrying the numeric value)
+  - `predictor` (metadata key carrying the numeric value)
 - Labels and minimum data:
   - `condition_a`, `condition_b`
   - `min_trials_per_condition` (default `3`)
@@ -253,9 +292,9 @@ Core configuration in `TrialSlopeStatsParams`
   - same `window_ms` / `n_bins` mutual exclusivity
 
 Resolver configuration:
-- Use `TableTrialLabelResolver` as in `trial_stats`.
+- Use `TableTrialResolver` as in `trial_stats`.
 - To inject the predictor from table columns into trial metadata, use:
-  - `extra_metadata_columns={"predictor_value": "<column_name>"}`.
+  - `extract_columns=["<column_name>"]`.
 - Trials with missing/non-numeric predictor values are excluded and tagged
   with `invalid_predictor_value`.
 

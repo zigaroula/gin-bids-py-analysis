@@ -5,7 +5,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-import bids.layout as _layout
+try:
+    import bids.layout as _layout
+except ImportError:  # pragma: no cover - exercised only without pybids installed
+    class _LayoutModule:
+        class BIDSFile:  # type: ignore[empty-body]
+            pass
+
+    _layout = _LayoutModule()
 
 # Maps file extensions to the name of the loader function in data.loader that
 # handles them.  Used by ensure_loaded() when no explicit loader is set.

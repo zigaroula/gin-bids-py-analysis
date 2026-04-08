@@ -10,6 +10,7 @@ from mne.io import RawArray
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.trial_stats import (
+    TableTrialResolver,
     TrialStatsParams,
     TrialStatsProcessing,
 )
@@ -974,3 +975,82 @@ def test_process_group_activity_zscore_preserves_ttest_statistics(
         axis=0,
     )
     assert abs(float(np.nanmean(pooled_baseline))) < 1e-12
+
+
+def test_process_group_supports_numeric_condition_rules_and_audits_exclusions(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-rate_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "rate",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    beh_path = tmp_path / "sub-01_task-rate_run-1_beh.tsv"
+    _write_text(
+        beh_path,
+        "rating\n-2\n2\n-1\n3\n0\n",
+    )
+    beh_file = _make_bids_file(
+        beh_path,
+        {
+            "subject": "01",
+            "task": "rate",
+            "run": "1",
+            "suffix": "beh",
+            "extension": ".tsv",
+            "datatype": "beh",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 80), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0, 5.0]
+    amplitudes = [6.0, 1.0, 5.0, 2.0, 9.0]
+    for onset, amplitude in zip(onsets, amplitudes):
+        start = int(onset * sfreq)
+        data[0, start : start + 3] = amplitude
+
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * len(onsets),
+        description=["Stimulus/S  10"] * len(onsets),
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    resolver = TableTrialResolver(
+        conditions=[
+            {"label": "negative", "when": {"column": "rating", "op": "<", "value": 0}},
+            {"label": "positive", "when": {"column": "rating", "op": ">", "value": 0}},
+        ],
+        extract_columns=["rating"],
+    )
+
+    result = TrialStatsProcessing(
+        TrialStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="negative",
+            condition_b="positive",
+            min_trials_per_condition=2,
+            p_value_correction_method="none",
+        ),
+        resolver=resolver,
+    ).process_group(BIDSFileGroup(primary=ieeg_file, secondaries=[beh_file]))
+
+    assert result.condition_a_trial_count == 2
+    assert result.condition_b_trial_count == 2
+    assert result.stats_valid is True
+    assert np.all(result.mean_difference > 0.0)
+    assert any(trial.exclusion_reason == "no_matching_condition" for trial in result.resolved_trials)
+    assert any(
+        trial.metadata.get("condition_resolution_reason") == "no_matching_condition"
+        for trial in result.resolved_trials
+    )

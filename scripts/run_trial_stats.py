@@ -53,13 +53,18 @@ PARAMS = TrialStatsParams(
 )
 
 # This resolver is the task-specific layer for accepted vs rejected.
-# Update the column names and label map to match your dataset.
+# Update the column names and conditions to match your dataset.
 RESOLVER = TableTrialResolver(
-    label_column="choice",
-    label_map={
-        "0": "rejected",
-        "1": "accepted",
-    },
+    conditions=[
+        {
+            "label": "accepted",
+            "when": {"column": "choice", "op": "==", "value": "1"},
+        },
+        {
+            "label": "rejected",
+            "when": {"column": "choice", "op": "==", "value": "0"},
+        },
+    ],
 )
 
 WRITER_PARAMS = TrialStatsWriterParams(

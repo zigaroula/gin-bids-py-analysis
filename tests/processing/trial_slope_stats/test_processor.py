@@ -13,6 +13,7 @@ from gin_bids_py_analysis.processing.trial_slope_stats import (
     TrialSlopeStatsParams,
     TrialSlopeStatsProcessing,
 )
+from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 
 
@@ -310,3 +311,95 @@ def test_process_group_activity_zscore_preserves_regression_significance(
     assert z_result.activity_baseline_tmax_s == pytest.approx(0.1)
     assert not np.allclose(z_result.condition_a_slope, raw_result.condition_a_slope)
     assert not np.allclose(z_result.condition_a_epoch_means, raw_result.condition_a_epoch_means)
+
+
+def test_process_group_supports_numeric_condition_rules_with_predictor_extraction(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-rate_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "rate",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    beh_path = tmp_path / "sub-01_task-rate_run-1_beh.tsv"
+    beh_path.write_text(
+        "valence\tscore\n"
+        "-1\t1\n"
+        "1\t1\n"
+        "-2\t2\n"
+        "2\t2\n"
+        "-3\t3\n"
+        "3\t3\n"
+        "0\t4\n",
+        encoding="utf-8",
+    )
+    beh_file = _make_bids_file(
+        beh_path,
+        {
+            "subject": "01",
+            "task": "rate",
+            "run": "1",
+            "suffix": "beh",
+            "extension": ".tsv",
+            "datatype": "beh",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 120), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+    valence = [-1, 1, -2, 2, -3, 3, 0]
+    scores = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0]
+    for onset, label_value, score in zip(onsets, valence, scores):
+        start = int(onset * sfreq)
+        stop = start + 3
+        if label_value < 0:
+            data[0, start:stop] = (2.0 * score) + 1.0
+        elif label_value > 0:
+            data[0, start:stop] = (-1.0 * score) + 5.0
+        else:
+            data[0, start:stop] = 9.0
+
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * len(onsets),
+        description=["Stimulus/S  10"] * len(onsets),
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    resolver = TableTrialResolver(
+        conditions=[
+            {"label": "negative", "when": {"column": "valence", "op": "<", "value": 0}},
+            {"label": "positive", "when": {"column": "valence", "op": ">", "value": 0}},
+        ],
+        extract_columns=["score"],
+    )
+
+    result = TrialSlopeStatsProcessing(
+        TrialSlopeStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="negative",
+            condition_b="positive",
+            predictor="score",
+            min_trials_per_condition=3,
+            p_value_correction_method="none",
+        ),
+        resolver=resolver,
+    ).process_group(BIDSFileGroup(primary=ieeg_file, secondaries=[beh_file]))
+
+    assert result.condition_a_trial_count == 3
+    assert result.condition_b_trial_count == 3
+    assert result.condition_a_stats_valid is True
+    assert result.condition_b_stats_valid is True
+    assert any(trial.exclusion_reason == "no_matching_condition" for trial in result.resolved_trials)
+    np.testing.assert_allclose(result.condition_a_slope, np.full((1, 3), 2.0), atol=1e-8)
+    np.testing.assert_allclose(result.condition_b_slope, np.full((1, 3), -1.0), atol=1e-8)

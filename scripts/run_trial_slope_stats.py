@@ -49,11 +49,16 @@ PARAMS = TrialSlopeStatsParams(
 )
 
 RESOLVER = TableTrialResolver(
-    label_column="pleasant",
-    label_map={
-        "1.0": "unpleasant",
-        "2.0": "pleasant",
-    },
+    conditions=[
+        {
+            "label": "pleasant",
+            "when": {"column": "pleasant", "op": "==", "value": "2.0"},
+        },
+        {
+            "label": "unpleasant",
+            "when": {"column": "pleasant", "op": "==", "value": "1.0"},
+        },
+    ],
     extract_columns=["rating"],
 )
 

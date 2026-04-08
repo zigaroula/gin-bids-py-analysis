@@ -44,6 +44,7 @@ class TrialSlopeStatsProcessing(BaseProcessing):
     ) -> None:
         self.params = params
         self.resolver = resolver
+        self._validate_resolver_labels()
 
     def process_group(
         self,
@@ -471,6 +472,19 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 continue
             normalized.append(replace(trial, metadata=metadata))
         return normalized
+
+    def _validate_resolver_labels(self) -> None:
+        resolver_labels = getattr(self.resolver, "condition_labels", None)
+        if resolver_labels is None:
+            return
+
+        labels = tuple(str(label) for label in resolver_labels)
+        expected = (self.params.condition_a, self.params.condition_b)
+        if len(labels) != 2 or set(labels) != set(expected):
+            raise ValueError(
+                "Resolver condition labels must match TrialSlopeStatsParams.condition_a/"
+                f"condition_b exactly. Expected {expected!r}, got {labels!r}."
+            )
 
 
 def _to_float_or_nan(value: object) -> float:
