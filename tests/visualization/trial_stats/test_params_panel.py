@@ -30,7 +30,7 @@ class TestParamsPanelRoundTrip:
         assert recovered.atlas_regions == []
         assert recovered.window_ms == pytest.approx(0.0)
         assert recovered.n_bins == 0
-        assert recovered.activity_scaling == "none"
+        assert recovered.activity_zscore == "none"
         assert recovered.activity_baseline_tmin_s == pytest.approx(-0.2)
         assert recovered.activity_baseline_tmax_s == pytest.approx(0.0)
 
@@ -53,7 +53,7 @@ class TestParamsPanelRoundTrip:
             atlas_regions=[],
             window_ms=0.0,
             n_bins=0,
-            activity_scaling="zscore_by_baseline",
+            activity_zscore="baseline",
             activity_baseline_tmin_s=-0.1,
             activity_baseline_tmax_s=0.0,
         )
@@ -70,7 +70,7 @@ class TestParamsPanelRoundTrip:
         assert recovered.equal_var
         assert recovered.p_value_correction_method == "bonferroni"
         assert recovered.significance_alpha == pytest.approx(0.01)
-        assert recovered.activity_scaling == "zscore_by_baseline"
+        assert recovered.activity_zscore == "baseline"
         assert recovered.activity_baseline_tmin_s == pytest.approx(-0.1)
         assert recovered.activity_baseline_tmax_s == pytest.approx(0.0)
 
@@ -137,10 +137,10 @@ class TestParamsPanelRoundTrip:
         assert isinstance(params, TrialSlopeStatsParams)
         assert params.predictor == default_slope_params.predictor
 
-    def test_slope_mode_round_trip_preserves_activity_scaling(self, qtbot, default_params, default_slope_params):
+    def test_slope_mode_round_trip_preserves_activity_zscore(self, qtbot, default_params, default_slope_params):
         slope_params = default_slope_params.model_copy(
             update={
-                "activity_scaling": "zscore_by_baseline",
+                "activity_zscore": "baseline",
                 "activity_baseline_tmin_s": -0.1,
                 "activity_baseline_tmax_s": 0.0,
             }
@@ -155,7 +155,7 @@ class TestParamsPanelRoundTrip:
         mode, params = panel.get_mode_and_params()
         assert mode == "slope"
         assert isinstance(params, TrialSlopeStatsParams)
-        assert params.activity_scaling == "zscore_by_baseline"
+        assert params.activity_zscore == "baseline"
         assert params.activity_baseline_tmin_s == pytest.approx(-0.1)
         assert params.activity_baseline_tmax_s == pytest.approx(0.0)
 

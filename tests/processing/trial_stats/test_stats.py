@@ -238,7 +238,7 @@ def test_trial_stats_params_rejects_baseline_outside_epoch_when_baseline_scaling
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.1,
-            activity_scaling="zscore_by_baseline",
+            activity_zscore="baseline",
         )
 
 

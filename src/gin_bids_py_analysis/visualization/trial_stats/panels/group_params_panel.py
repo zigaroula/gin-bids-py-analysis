@@ -97,10 +97,8 @@ class GroupParamsPanel(QWidget):
             "t_values",
             "condition_a_mean",
             "condition_b_mean",
-            "raw_slope",
+            "slope",
             "r_value",
-            "standardized_slope_predictor",
-            "standardized_slope_full",
         ):
             self._source_metric.addItem(m)
         self._source_metric_label = QLabel("Source metric")
@@ -362,15 +360,13 @@ class GroupParamsPanel(QWidget):
             ("mean_difference", "t_values", "condition_a_mean", "condition_b_mean")
             if is_ttest
             else (
-                "raw_slope",
+                "slope",
                 "r_value",
-                "standardized_slope_predictor",
-                "standardized_slope_full",
             )
         )
         for option in options:
             self._source_metric.addItem(option)
-        default = "mean_difference" if is_ttest else "standardized_slope_full"
+        default = "mean_difference" if is_ttest else "slope"
         _set_combo(self._source_metric, current if current in options else default)
         self._source_metric.blockSignals(False)
 

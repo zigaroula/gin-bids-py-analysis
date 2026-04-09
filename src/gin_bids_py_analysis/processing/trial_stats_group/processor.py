@@ -64,7 +64,7 @@ class _RawTrialStatsData:
     window_ms: float
     n_bins: int
     effective_n_bins: int
-    activity_scaling: str
+    activity_zscore: str
     activity_baseline_tmin_s: float
     activity_baseline_tmax_s: float
     source_ieeg_files: list[str]
@@ -83,7 +83,7 @@ class _SnapshotSignature:
     window_ms: float
     n_bins: int
     effective_n_bins: int
-    activity_scaling: str
+    activity_zscore: str
     activity_baseline_tmin_s: float
     activity_baseline_tmax_s: float
     analysis_level: str
@@ -100,7 +100,7 @@ class _SnapshotSignature:
             self.window_ms,
             self.n_bins,
             self.effective_n_bins,
-            self.activity_scaling,
+            self.activity_zscore,
             self.activity_baseline_tmin_s,
             self.activity_baseline_tmax_s,
             self.analysis_level,
@@ -125,7 +125,7 @@ class _TrialStatsSnapshot:
     window_ms: float
     n_bins: int
     effective_n_bins: int
-    activity_scaling: str
+    activity_zscore: str
     activity_baseline_tmin_s: float
     activity_baseline_tmax_s: float
     source_ieeg_files: list[str]
@@ -449,7 +449,7 @@ class TrialStatsGroupProcessing(BaseProcessing):
                 "window_ms": first.window_ms,
                 "n_bins": first.n_bins,
                 "effective_n_bins": first.effective_n_bins,
-                "activity_scaling": first.activity_scaling,
+                "activity_zscore": first.activity_zscore,
                 "activity_baseline_tmin_s": first.activity_baseline_tmin_s,
                 "activity_baseline_tmax_s": first.activity_baseline_tmax_s,
                 "excluded_rois": dict(excluded_rois),
@@ -698,7 +698,7 @@ def _build_signature(
     window_ms: float,
     n_bins: int,
     effective_n_bins: int,
-    activity_scaling: str,
+    activity_zscore: str,
     activity_baseline_tmin_s: float,
     activity_baseline_tmax_s: float,
 ) -> _SnapshotSignature:
@@ -713,7 +713,7 @@ def _build_signature(
         window_ms=float(window_ms),
         n_bins=int(n_bins),
         effective_n_bins=int(effective_n_bins),
-        activity_scaling=str(activity_scaling or "none"),
+        activity_zscore=str(activity_zscore or "none"),
         activity_baseline_tmin_s=float(activity_baseline_tmin_s),
         activity_baseline_tmax_s=float(activity_baseline_tmax_s),
         analysis_level=str(analysis_level or "channel"),
@@ -735,7 +735,7 @@ def _read_snapshot_signature(
         window_ms=raw.window_ms,
         n_bins=raw.n_bins,
         effective_n_bins=raw.effective_n_bins,
-        activity_scaling=raw.activity_scaling,
+        activity_zscore=raw.activity_zscore,
         activity_baseline_tmin_s=raw.activity_baseline_tmin_s,
         activity_baseline_tmax_s=raw.activity_baseline_tmax_s,
     )
@@ -764,7 +764,7 @@ def _load_trial_stats_snapshot(
         window_ms=raw.window_ms,
         n_bins=raw.n_bins,
         effective_n_bins=raw.effective_n_bins,
-        activity_scaling=raw.activity_scaling,
+        activity_zscore=raw.activity_zscore,
         activity_baseline_tmin_s=raw.activity_baseline_tmin_s,
         activity_baseline_tmax_s=raw.activity_baseline_tmax_s,
     )
@@ -785,7 +785,7 @@ def _load_trial_stats_snapshot(
         window_ms=raw.window_ms,
         n_bins=raw.n_bins,
         effective_n_bins=raw.effective_n_bins,
-        activity_scaling=raw.activity_scaling,
+        activity_zscore=raw.activity_zscore,
         activity_baseline_tmin_s=raw.activity_baseline_tmin_s,
         activity_baseline_tmax_s=raw.activity_baseline_tmax_s,
         source_ieeg_files=raw.source_ieeg_files,
@@ -849,10 +849,13 @@ def _load_raw_from_hdf5(
             dataset_or_none(fh, "meta/effective_n_bins"),
             default=len(time_axis_s),
         )
-        activity_scaling = str_scalar(
-            dataset_or_none(fh, "meta/activity_scaling"),
-            default="none",
-        )
+        activity_zscore_ds = dataset_or_none(fh, "meta/activity_zscore")
+        if activity_zscore_ds is None:
+            raise ValueError(
+                f"{stats_file.path.name}: unsupported legacy trial_stats_group input; "
+                "meta/activity_zscore is required."
+            )
+        activity_zscore = str_scalar(activity_zscore_ds, default="none")
         activity_baseline_tmin_s = float_scalar(
             dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
             default=-0.2,
@@ -884,7 +887,7 @@ def _load_raw_from_hdf5(
         window_ms=window_ms,
         n_bins=n_bins,
         effective_n_bins=effective_n_bins,
-        activity_scaling=activity_scaling,
+        activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
         source_ieeg_files=source_ieeg_files,
@@ -995,7 +998,13 @@ def _load_raw_from_matlab(
         effective_n_bins = mat_int(
             getattr(meta, "effective_n_bins", None), default=len(time_axis_s)
         )
-        activity_scaling = mat_str(getattr(meta, "activity_scaling", None), default="none")
+        activity_zscore_raw = getattr(meta, "activity_zscore", None)
+        if activity_zscore_raw is None:
+            raise ValueError(
+                f"{stats_file.path.name}: unsupported legacy trial_stats_group input; "
+                "meta.activity_zscore is required."
+            )
+        activity_zscore = mat_str(activity_zscore_raw, default="none")
         activity_baseline_tmin_s = mat_float(
             getattr(meta, "activity_baseline_tmin_s", None),
             default=-0.2,
@@ -1022,7 +1031,7 @@ def _load_raw_from_matlab(
         window_ms=window_ms,
         n_bins=n_bins,
         effective_n_bins=effective_n_bins,
-        activity_scaling=activity_scaling,
+        activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
         source_ieeg_files=source_ieeg_files,

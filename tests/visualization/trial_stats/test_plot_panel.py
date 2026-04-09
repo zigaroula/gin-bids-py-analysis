@@ -5,7 +5,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.visualization.trial_stats.panels.plot_panel import PlotPanel
+from gin_bids_py_analysis.visualization.trial_stats.panels.plot_panel import (
+    PlotPanel,
+    _compute_scatter_summary_points,
+)
 
 
 class TestPlotPanel:
@@ -100,14 +103,34 @@ class TestPlotPanel:
 
         panel.update_plots(synthetic_slope_result, channel_idx=0)
 
-        assert len(panel._ax_scatter.collections) == 2
-        assert len(panel._ax_scatter.lines) == 2
+        assert len(panel._ax_scatter.collections) >= 2
+        assert len(panel._ax_scatter.lines) >= 2
+        assert len(panel._ax_scatter.containers) == 2
         assert "predictor vs activity" in panel._ax_scatter.get_title()
         assert panel._ax_scatter.get_xlabel() == "predictor_value"
         assert panel._ax_scatter.get_ylabel() == "Epoch mean activity"
 
+    def test_compute_scatter_summary_points_builds_binned_means_and_sem(self):
+        predictor = np.linspace(-50.0, 50.0, 10)
+        activity = np.linspace(0.0, 1.0, 10)
+
+        mean_x, mean_y, sem_x, sem_y = _compute_scatter_summary_points(
+            predictor,
+            activity,
+            target_bins=5,
+        )
+
+        assert mean_x.shape == (5,)
+        assert mean_y.shape == (5,)
+        assert sem_x.shape == (5,)
+        assert sem_y.shape == (5,)
+        assert np.all(np.diff(mean_x) > 0.0)
+        assert np.all(np.diff(mean_y) > 0.0)
+        assert np.all(sem_x >= 0.0)
+        assert np.all(sem_y >= 0.0)
+
     def test_slope_scatter_uses_zscore_ylabel_when_activity_is_scaled(self, qtbot, synthetic_slope_result):
-        synthetic_slope_result.activity_scaling = "zscore_by_baseline"
+        synthetic_slope_result.activity_zscore = "baseline"
         panel = PlotPanel()
         qtbot.addWidget(panel)
 

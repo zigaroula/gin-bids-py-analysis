@@ -53,6 +53,7 @@ def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> TrialSlope
             "window_ms": 0.0,
             "n_bins": 0,
             "effective_n_bins": n_t,
+            "activity_zscore": "none",
         },
         slope_t_values=np.full(shape, 2.0, dtype=np.float64),
         slope_p_values=np.full(shape, 0.02, dtype=np.float64),

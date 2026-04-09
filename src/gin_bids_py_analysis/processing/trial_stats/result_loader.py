@@ -177,10 +177,13 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
         atlas_name: str | None = atlas_name_raw.strip() or None
         window_ms = float_scalar(dataset_or_none(fh, "meta/window_ms"), default=0.0)
         n_bins = int_scalar(dataset_or_none(fh, "meta/n_bins"), default=0)
-        activity_scaling = str_scalar(
-            dataset_or_none(fh, "meta/activity_scaling"),
-            default="none",
-        )
+        activity_zscore_ds = dataset_or_none(fh, "meta/activity_zscore")
+        if activity_zscore_ds is None:
+            raise ValueError(
+                f"{path.name}: unsupported legacy trial_stats schema; "
+                "meta/activity_zscore is required."
+            )
+        activity_zscore = str_scalar(activity_zscore_ds, default="none")
         activity_baseline_tmin_s = float_scalar(
             dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
             default=-0.2,
@@ -233,7 +236,7 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
     return TrialStatsProcessingResult(
         source_group=source_group,
         metadata={
-            "activity_scaling": activity_scaling,
+            "activity_zscore": activity_zscore,
             "activity_baseline_tmin_s": activity_baseline_tmin_s,
             "activity_baseline_tmax_s": activity_baseline_tmax_s,
             "n_permutations": (
@@ -265,7 +268,7 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
         atlas_name=atlas_name,
         window_ms=window_ms,
         n_bins=n_bins,
-        activity_scaling=activity_scaling,
+        activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
         p_value_correction_method=p_value_correction_method,
@@ -387,7 +390,13 @@ def _load_from_matlab(path: Path) -> TrialStatsProcessingResult:
     atlas_name: str | None = atlas_name_raw.strip() or None
     window_ms = mat_float(getattr(meta, "window_ms", None), default=0.0)
     n_bins = mat_int(getattr(meta, "n_bins", None), default=0)
-    activity_scaling = mat_str(getattr(meta, "activity_scaling", None), default="none")
+    activity_zscore_raw = getattr(meta, "activity_zscore", None)
+    if activity_zscore_raw is None:
+        raise ValueError(
+            f"{path.name}: unsupported legacy trial_stats schema; "
+            "meta.activity_zscore is required."
+        )
+    activity_zscore = mat_str(activity_zscore_raw, default="none")
     activity_baseline_tmin_s = mat_float(
         getattr(meta, "activity_baseline_tmin_s", None),
         default=-0.2,
@@ -411,7 +420,7 @@ def _load_from_matlab(path: Path) -> TrialStatsProcessingResult:
     return TrialStatsProcessingResult(
         source_group=source_group,
         metadata={
-            "activity_scaling": activity_scaling,
+            "activity_zscore": activity_zscore,
             "activity_baseline_tmin_s": activity_baseline_tmin_s,
             "activity_baseline_tmax_s": activity_baseline_tmax_s,
         },
@@ -438,7 +447,7 @@ def _load_from_matlab(path: Path) -> TrialStatsProcessingResult:
         atlas_name=atlas_name,
         window_ms=window_ms,
         n_bins=n_bins,
-        activity_scaling=activity_scaling,
+        activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
         p_value_correction_method=p_value_correction_method,

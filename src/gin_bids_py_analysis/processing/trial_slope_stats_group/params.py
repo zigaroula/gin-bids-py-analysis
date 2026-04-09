@@ -12,12 +12,10 @@ class TrialSlopeStatsGroupParams(BaseProcessingParams):
     """Parameters for group-level ROI statistics on trial_slope_stats outputs."""
 
     source_metric: Literal[
-        "raw_slope",
+        "slope",
         "r_value",
-        "standardized_slope_predictor",
-        "standardized_slope_full",
     ] = Field(
-        default="standardized_slope_full",
+        default="slope",
         description=(
             "Channel-level metric read from each trial_slope_stats file and used in "
             "the group contrast."

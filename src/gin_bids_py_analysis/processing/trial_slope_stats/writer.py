@@ -44,30 +44,12 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
     ) -> None:
         str_dtype = h5py.string_dtype(encoding="utf-8")
         _validate_shape_consistency(result)
-        cond_a_std_pred = _coerce_optional_map(
-            result.condition_a_slope_standardized_predictor,
-            result.condition_a_slope.shape,
-        )
-        cond_a_std_full = _coerce_optional_map(
-            result.condition_a_slope_standardized_full,
-            result.condition_a_slope.shape,
-        )
-        cond_b_std_pred = _coerce_optional_map(
-            result.condition_b_slope_standardized_predictor,
-            result.condition_b_slope.shape,
-        )
-        cond_b_std_full = _coerce_optional_map(
-            result.condition_b_slope_standardized_full,
-            result.condition_b_slope.shape,
-        )
 
         with h5py.File(output_path, "w") as fh:
             regression_grp = fh.create_group("regression")
             _write_condition_regression_hdf5(
                 regression_grp.create_group("condition_a"),
                 slope=result.condition_a_slope,
-                slope_standardized_predictor=cond_a_std_pred,
-                slope_standardized_full=cond_a_std_full,
                 intercept=result.condition_a_intercept,
                 r_value=result.condition_a_r_value,
                 p_value=result.condition_a_p_value,
@@ -79,8 +61,6 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
             _write_condition_regression_hdf5(
                 regression_grp.create_group("condition_b"),
                 slope=result.condition_b_slope,
-                slope_standardized_predictor=cond_b_std_pred,
-                slope_standardized_full=cond_b_std_full,
                 intercept=result.condition_b_intercept,
                 r_value=result.condition_b_r_value,
                 p_value=result.condition_b_p_value,
@@ -156,8 +136,8 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
                 dtype=str_dtype,
             )
             meta_grp.create_dataset(
-                "predictor_scaling",
-                data=str(result.predictor_scaling),
+                "predictor_zscore",
+                data=str(result.predictor_zscore),
                 dtype=str_dtype,
             )
             meta_grp.create_dataset(
@@ -218,8 +198,8 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
             meta_grp.create_dataset("window_ms", data=float(result.window_ms))
             meta_grp.create_dataset("n_bins", data=int(result.n_bins))
             meta_grp.create_dataset(
-                "activity_scaling",
-                data=str(result.activity_scaling),
+                "activity_zscore",
+                data=str(result.activity_zscore),
                 dtype=str_dtype,
             )
             meta_grp.create_dataset(
@@ -410,22 +390,6 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
         output_path: Path,
     ) -> None:
         _validate_shape_consistency(result)
-        cond_a_std_pred = _coerce_optional_map(
-            result.condition_a_slope_standardized_predictor,
-            result.condition_a_slope.shape,
-        )
-        cond_a_std_full = _coerce_optional_map(
-            result.condition_a_slope_standardized_full,
-            result.condition_a_slope.shape,
-        )
-        cond_b_std_pred = _coerce_optional_map(
-            result.condition_b_slope_standardized_predictor,
-            result.condition_b_slope.shape,
-        )
-        cond_b_std_full = _coerce_optional_map(
-            result.condition_b_slope_standardized_full,
-            result.condition_b_slope.shape,
-        )
 
         cond_a = matlab_safe_name(result.condition_a)
         cond_b = matlab_safe_name(result.condition_b)
@@ -433,8 +397,6 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
         regression_struct = make_struct(
             condition_a=make_struct(
                 slope=result.condition_a_slope.astype(np.float64),
-                slope_standardized_predictor=cond_a_std_pred.astype(np.float64),
-                slope_standardized_full=cond_a_std_full.astype(np.float64),
                 intercept=result.condition_a_intercept.astype(np.float64),
                 r_value=result.condition_a_r_value.astype(np.float64),
                 p_value=result.condition_a_p_value.astype(np.float64),
@@ -445,8 +407,6 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
             ),
             condition_b=make_struct(
                 slope=result.condition_b_slope.astype(np.float64),
-                slope_standardized_predictor=cond_b_std_pred.astype(np.float64),
-                slope_standardized_full=cond_b_std_full.astype(np.float64),
                 intercept=result.condition_b_intercept.astype(np.float64),
                 r_value=result.condition_b_r_value.astype(np.float64),
                 p_value=result.condition_b_p_value.astype(np.float64),
@@ -508,7 +468,7 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
         meta_struct = make_struct(
             analysis_type=np.str_("slope_regression"),
             predictor=np.str_(result.predictor),
-            predictor_scaling=np.str_(result.predictor_scaling),
+            predictor_zscore=np.str_(result.predictor_zscore),
             predictor_transform_by_condition_json=np.str_(
                 json.dumps(
                     result.predictor_transform_by_condition,
@@ -530,7 +490,7 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
             atlas_region_channel_map=atlas_map_struct,
             window_ms=float(result.window_ms),
             n_bins=int(result.n_bins),
-            activity_scaling=np.str_(result.activity_scaling),
+            activity_zscore=np.str_(result.activity_zscore),
             activity_baseline_tmin_s=float(result.activity_baseline_tmin_s),
             activity_baseline_tmax_s=float(result.activity_baseline_tmax_s),
             window_samples=int(result.metadata.get("window_samples", 0)),
@@ -635,7 +595,7 @@ class TrialSlopeStatsProcessingWriter(BaseProcessingWriter):
             scatter=scatter_struct,
             provenance=prov_struct,
         )
-        savemat(str(output_path), {"data": data}, do_compression=True)
+        savemat(str(output_path), {"data": data}, do_compression=True, long_field_names=True)
 
     def _write_trial_table_tsv(
         self,
@@ -691,8 +651,6 @@ def _write_condition_regression_hdf5(
     group: h5py.Group,
     *,
     slope: np.ndarray,
-    slope_standardized_predictor: np.ndarray,
-    slope_standardized_full: np.ndarray,
     intercept: np.ndarray,
     r_value: np.ndarray,
     p_value: np.ndarray,
@@ -702,14 +660,6 @@ def _write_condition_regression_hdf5(
     stats_valid: bool,
 ) -> None:
     group.create_dataset("slope", data=np.asarray(slope, dtype=np.float64))
-    group.create_dataset(
-        "slope_standardized_predictor",
-        data=np.asarray(slope_standardized_predictor, dtype=np.float64),
-    )
-    group.create_dataset(
-        "slope_standardized_full",
-        data=np.asarray(slope_standardized_full, dtype=np.float64),
-    )
     group.create_dataset("intercept", data=np.asarray(intercept, dtype=np.float64))
     group.create_dataset("r_value", data=np.asarray(r_value, dtype=np.float64))
     group.create_dataset("p_value", data=np.asarray(p_value, dtype=np.float64))
@@ -734,15 +684,11 @@ def _validate_shape_consistency(result: TrialSlopeStatsProcessingResult) -> None
     expected = result.condition_a_slope.shape
     shapes = {
         "condition_a_intercept": result.condition_a_intercept.shape,
-        "condition_a_slope_standardized_predictor": result.condition_a_slope_standardized_predictor.shape,
-        "condition_a_slope_standardized_full": result.condition_a_slope_standardized_full.shape,
         "condition_a_r_value": result.condition_a_r_value.shape,
         "condition_a_p_value": result.condition_a_p_value.shape,
         "condition_a_p_value_corrected": result.condition_a_p_value_corrected.shape,
         "condition_a_significant_mask": result.condition_a_significant_mask.shape,
         "condition_b_slope": result.condition_b_slope.shape,
-        "condition_b_slope_standardized_predictor": result.condition_b_slope_standardized_predictor.shape,
-        "condition_b_slope_standardized_full": result.condition_b_slope_standardized_full.shape,
         "condition_b_intercept": result.condition_b_intercept.shape,
         "condition_b_r_value": result.condition_b_r_value.shape,
         "condition_b_p_value": result.condition_b_p_value.shape,
@@ -753,16 +699,10 @@ def _validate_shape_consistency(result: TrialSlopeStatsProcessingResult) -> None
         "condition_a_sem": result.condition_a_sem.shape,
         "condition_b_sem": result.condition_b_sem.shape,
     }
-    optional_empty = {
-        "condition_a_slope_standardized_predictor",
-        "condition_a_slope_standardized_full",
-        "condition_b_slope_standardized_predictor",
-        "condition_b_slope_standardized_full",
-    }
     mismatched = [
         name
         for name, shape in shapes.items()
-        if shape != expected and not (name in optional_empty and np.prod(shape, dtype=np.int64) == 0)
+        if shape != expected
     ]
     if mismatched:
         details = ", ".join(f"{name}={shapes[name]!r}" for name in mismatched)
@@ -770,19 +710,6 @@ def _validate_shape_consistency(result: TrialSlopeStatsProcessingResult) -> None
             "All regression and summary arrays must share shape "
             f"{expected!r}; got {details}."
         )
-
-
-def _coerce_optional_map(values: np.ndarray, expected_shape: tuple[int, ...]) -> np.ndarray:
-    arr = np.asarray(values, dtype=np.float64)
-    if arr.shape == expected_shape:
-        return arr
-    if arr.size == 0:
-        return np.full(expected_shape, np.nan, dtype=np.float64)
-    raise ValueError(
-        f"Expected array shape {expected_shape!r} or empty array, got {arr.shape!r}."
-    )
-
-
 def _to_float_or_nan(value: object) -> float:
     if value is None:
         return float("nan")

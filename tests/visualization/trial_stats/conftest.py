@@ -185,7 +185,7 @@ def synthetic_slope_result(default_slope_params: TrialSlopeStatsParams) -> Trial
         analysis_level="channel",
         analysis_type="slope_regression",
         predictor="predictor_value",
-        predictor_scaling="none",
+        predictor_zscore="none",
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
         condition_a_stats_valid=True,

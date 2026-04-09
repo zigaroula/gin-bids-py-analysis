@@ -313,7 +313,7 @@ def _make_minimal_result(
         region_channels={},
         window_ms=0.0,
         n_bins=0,
-        activity_scaling="zscore_by_baseline",
+        activity_zscore="baseline",
         activity_baseline_tmin_s=-0.2,
         activity_baseline_tmax_s=0.0,
         p_value_correction_method="fdr_bh",
@@ -347,7 +347,7 @@ def test_writer_hdf5_channel_significant_mask_written_and_loaded(
         np.testing.assert_array_equal(stored, mask)
         assert fh["meta"]["channel_significance_mode"].asstr()[()] == "single_bin"
         assert float(fh["meta"]["channel_significance_duration_threshold_ms"][()]) == 100.0
-        assert fh["meta"]["activity_scaling"].asstr()[()] == "zscore_by_baseline"
+        assert fh["meta"]["activity_zscore"].asstr()[()] == "baseline"
         assert float(fh["meta"]["activity_baseline_tmin_s"][()]) == pytest.approx(-0.2)
         assert float(fh["meta"]["activity_baseline_tmax_s"][()]) == pytest.approx(0.0)
 
@@ -355,7 +355,7 @@ def test_writer_hdf5_channel_significant_mask_written_and_loaded(
     loaded = load_trial_stats_result(output_path)
     assert loaded.channel_significant_mask is not None
     np.testing.assert_array_equal(loaded.channel_significant_mask, mask)
-    assert loaded.activity_scaling == "zscore_by_baseline"
+    assert loaded.activity_zscore == "baseline"
     assert loaded.activity_baseline_tmin_s == pytest.approx(-0.2)
     assert loaded.activity_baseline_tmax_s == pytest.approx(0.0)
 

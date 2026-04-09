@@ -294,7 +294,7 @@ def test_process_group_activity_zscore_preserves_regression_significance(
     z_result = TrialSlopeStatsProcessing(
         TrialSlopeStatsParams(
             **base_params,
-            activity_scaling="zscore_by_baseline",
+            activity_zscore="baseline",
             activity_baseline_tmin_s=0.0,
             activity_baseline_tmax_s=0.1,
         ),
@@ -305,8 +305,8 @@ def test_process_group_activity_zscore_preserves_regression_significance(
     np.testing.assert_allclose(z_result.condition_b_r_value, raw_result.condition_b_r_value)
     np.testing.assert_allclose(z_result.condition_a_p_value_corrected, raw_result.condition_a_p_value_corrected)
     np.testing.assert_allclose(z_result.condition_b_p_value_corrected, raw_result.condition_b_p_value_corrected)
-    assert z_result.activity_scaling == "zscore_by_baseline"
-    assert z_result.metadata["activity_scaling"] == "zscore_by_baseline"
+    assert z_result.activity_zscore == "baseline"
+    assert z_result.metadata["activity_zscore"] == "baseline"
     assert z_result.activity_baseline_tmin_s == pytest.approx(0.0)
     assert z_result.activity_baseline_tmax_s == pytest.approx(0.1)
     assert not np.allclose(z_result.condition_a_slope, raw_result.condition_a_slope)

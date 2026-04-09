@@ -51,7 +51,7 @@ def _write_trial_stats_h5(
     t_values: np.ndarray | None = None,
     permuted_t_values: np.ndarray | None = None,
     condition_labels: tuple[str, str] = ("accepted", "rejected"),
-    activity_scaling: str = "none",
+    activity_zscore: str = "none",
     activity_baseline_tmin_s: float = -0.2,
     activity_baseline_tmax_s: float = 0.0,
     source_ieeg_files: list[str] | None = None,
@@ -95,7 +95,7 @@ def _write_trial_stats_h5(
         meta_grp.create_dataset("window_ms", data=0.0)
         meta_grp.create_dataset("n_bins", data=0)
         meta_grp.create_dataset("effective_n_bins", data=int(len(time_s)))
-        meta_grp.create_dataset("activity_scaling", data=activity_scaling, dtype=str_dtype)
+        meta_grp.create_dataset("activity_zscore", data=activity_zscore, dtype=str_dtype)
         meta_grp.create_dataset("activity_baseline_tmin_s", data=activity_baseline_tmin_s)
         meta_grp.create_dataset("activity_baseline_tmax_s", data=activity_baseline_tmax_s)
 
@@ -139,8 +139,8 @@ def test_build_trial_stats_compatible_groups_splits_heterogeneous_inputs() -> No
         shutil.rmtree(case_dir, ignore_errors=True)
 
 
-def test_build_trial_stats_compatible_groups_splits_activity_scaling_inputs() -> None:
-    case_dir = _make_case_dir("group_split_activity_scaling")
+def test_build_trial_stats_compatible_groups_splits_activity_zscore_inputs() -> None:
+    case_dir = _make_case_dir("group_split_activity_zscore")
     try:
         time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
         data = np.ones((2, 3), dtype=np.float64)
@@ -153,7 +153,7 @@ def test_build_trial_stats_compatible_groups_splits_activity_scaling_inputs() ->
             channels=["A1", "A2"],
             time_s=time_s,
             mean_difference=data,
-            activity_scaling="zscore_by_baseline",
+            activity_zscore="baseline",
         )
 
         files = [
@@ -528,6 +528,9 @@ def _write_trial_stats_mat(
         n_bins=0,
         effective_n_bins=int(len(time_s)),
         binning_mode=np.str_("none"),
+        activity_zscore=np.str_("none"),
+        activity_baseline_tmin_s=-0.2,
+        activity_baseline_tmax_s=0.0,
         stats_valid=np.uint8(1),
     )
     prov_struct = make_struct(

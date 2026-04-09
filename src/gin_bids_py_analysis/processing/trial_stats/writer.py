@@ -137,7 +137,7 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             atlas_region_channel_map=atlas_map_struct,
             window_ms=float(result.window_ms),
             n_bins=int(result.n_bins),
-            activity_scaling=str(result.activity_scaling),
+            activity_zscore=str(result.activity_zscore),
             activity_baseline_tmin_s=float(result.activity_baseline_tmin_s),
             activity_baseline_tmax_s=float(result.activity_baseline_tmax_s),
             window_samples=int(result.metadata.get("window_samples", 0)),
@@ -227,7 +227,7 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             epochs=epochs_struct,
             provenance=prov_struct,
         )
-        savemat(str(output_path), {"data": data}, do_compression=True)
+        savemat(str(output_path), {"data": data}, do_compression=True, long_field_names=True)
 
     def _write_hdf5(
         self,
@@ -423,8 +423,8 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
                 data=int(result.n_bins),
             )
             meta_grp.create_dataset(
-                "activity_scaling",
-                data=str(result.activity_scaling),
+                "activity_zscore",
+                data=str(result.activity_zscore),
                 dtype=str_dtype,
             )
             meta_grp.create_dataset(

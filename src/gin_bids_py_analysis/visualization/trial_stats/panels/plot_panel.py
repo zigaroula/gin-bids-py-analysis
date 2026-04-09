@@ -10,6 +10,8 @@ from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
 from gin_bids_py_analysis.processing.trial_slope_stats import TrialSlopeStatsProcessingResult
 from gin_bids_py_analysis.processing.trial_stats import TrialStatsProcessingResult
 
+_SCATTER_SUMMARY_TARGET_BINS = 5
+
 
 class PlotPanel(QWidget):
     """Middle panel showing tabbed plots for trial stats results.
@@ -135,7 +137,7 @@ class PlotPanel(QWidget):
             sem_a=result.condition_a_sem[ch],
             sem_b=result.condition_b_sem[ch],
             sig_mask=sig,
-            activity_scaling=result.activity_scaling,
+            activity_zscore=result.activity_zscore,
         )
 
         ax = self._ax_t
@@ -251,7 +253,7 @@ class PlotPanel(QWidget):
             sem_a=result.condition_a_sem[ch],
             sem_b=result.condition_b_sem[ch],
             sig_mask=sig_any,
-            activity_scaling=result.activity_scaling,
+            activity_zscore=result.activity_zscore,
         )
 
         ax = self._ax_t
@@ -370,7 +372,7 @@ class PlotPanel(QWidget):
         sem_a: np.ndarray,
         sem_b: np.ndarray,
         sig_mask: np.ndarray,
-        activity_scaling: str,
+        activity_zscore: str,
     ) -> None:
         ax = self._ax_means
         ax.clear()
@@ -379,7 +381,7 @@ class PlotPanel(QWidget):
         ax.plot(t, mean_b, color="tomato", label=condition_b)
         ax.fill_between(t, mean_b - sem_b, mean_b + sem_b, alpha=0.25, color="tomato")
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
-        ax.set_ylabel(_activity_axis_label(activity_scaling))
+        ax.set_ylabel(_activity_axis_label(activity_zscore))
         ax.set_title(
             f"{ch_label}  —  {condition_a_count}× {condition_a} / {condition_b_count}× {condition_b}",
             fontsize=9,
@@ -492,9 +494,8 @@ class PlotPanel(QWidget):
             self._draw_scatter_placeholder("No scatter data available")
             return
 
-        predictor_label = result.predictor.strip() if result.predictor else ""
-        ax.set_xlabel(predictor_label or "Predictor value")
-        ax.set_ylabel(_scatter_activity_axis_label(result.activity_scaling))
+        ax.set_xlabel(_predictor_axis_label(result.predictor, result.predictor_zscore))
+        ax.set_ylabel(_scatter_activity_axis_label(result.activity_zscore))
         ax.set_title(
             self._format_channel_title(
                 ch_label=ch_label,
@@ -575,6 +576,7 @@ class PlotPanel(QWidget):
             s=18,
             label=label,
             linewidths=0,
+            zorder=1,
         )
         if predictor.size >= 2:
             coefs = np.polyfit(predictor, activity, 1)
@@ -584,6 +586,32 @@ class PlotPanel(QWidget):
                 np.polyval(coefs, x_range),
                 color=color,
                 linewidth=1.5,
+                zorder=2,
+            )
+        summary_x, summary_y, summary_x_sem, summary_y_sem = _compute_scatter_summary_points(
+            predictor,
+            activity,
+            target_bins=_SCATTER_SUMMARY_TARGET_BINS,
+        )
+        if summary_x.size > 0:
+            ax.errorbar(
+                summary_x,
+                summary_y,
+                xerr=summary_x_sem,
+                yerr=summary_y_sem,
+                fmt="o",
+                linestyle="none",
+                color=color,
+                ecolor=color,
+                elinewidth=1.6,
+                capsize=0,
+                markersize=8,
+                markerfacecolor=color,
+                markeredgecolor="black",
+                markeredgewidth=1.0,
+                alpha=1.0,
+                zorder=3,
+                label="_nolegend_",
             )
         return True
 
@@ -663,17 +691,80 @@ def _safe_legend(ax) -> None:
         ax.legend(fontsize="small", loc="upper right")
 
 
-def _activity_axis_label(activity_scaling: str) -> str:
-    if _is_zscore_activity_scaling(activity_scaling):
+def _compute_scatter_summary_points(
+    predictor_values: np.ndarray,
+    activity_values: np.ndarray,
+    *,
+    target_bins: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    predictor = np.asarray(predictor_values, dtype=np.float64).ravel()
+    activity = np.asarray(activity_values, dtype=np.float64).ravel()
+    valid = np.isfinite(predictor) & np.isfinite(activity)
+    if valid.sum() < 4:
+        empty = np.empty(0, dtype=np.float64)
+        return empty, empty, empty, empty
+
+    predictor = predictor[valid]
+    activity = activity[valid]
+    order = np.argsort(predictor, kind="mergesort")
+    predictor = predictor[order]
+    activity = activity[order]
+
+    n_bins = min(int(target_bins), int(predictor.size))
+    if n_bins < 2:
+        empty = np.empty(0, dtype=np.float64)
+        return empty, empty, empty, empty
+
+    predictor_bins = np.array_split(predictor, n_bins)
+    activity_bins = np.array_split(activity, n_bins)
+
+    mean_x: list[float] = []
+    mean_y: list[float] = []
+    sem_x: list[float] = []
+    sem_y: list[float] = []
+    for predictor_bin, activity_bin in zip(predictor_bins, activity_bins):
+        if predictor_bin.size == 0:
+            continue
+        mean_x.append(float(np.nanmean(predictor_bin)))
+        mean_y.append(float(np.nanmean(activity_bin)))
+        sem_x.append(_sem_or_zero(predictor_bin))
+        sem_y.append(_sem_or_zero(activity_bin))
+
+    return (
+        np.asarray(mean_x, dtype=np.float64),
+        np.asarray(mean_y, dtype=np.float64),
+        np.asarray(sem_x, dtype=np.float64),
+        np.asarray(sem_y, dtype=np.float64),
+    )
+
+
+def _sem_or_zero(values: np.ndarray) -> float:
+    arr = np.asarray(values, dtype=np.float64).ravel()
+    finite = arr[np.isfinite(arr)]
+    if finite.size < 2:
+        return 0.0
+    sem = float(np.nanstd(finite, ddof=1) / np.sqrt(finite.size))
+    return sem if np.isfinite(sem) else 0.0
+
+
+def _activity_axis_label(activity_zscore: str) -> str:
+    if _is_activity_zscore_enabled(activity_zscore):
         return "Activity (z)"
     return "Amplitude"
 
 
-def _scatter_activity_axis_label(activity_scaling: str) -> str:
-    if _is_zscore_activity_scaling(activity_scaling):
+def _scatter_activity_axis_label(activity_zscore: str) -> str:
+    if _is_activity_zscore_enabled(activity_zscore):
         return "Epoch mean activity (z)"
     return "Epoch mean activity"
 
 
-def _is_zscore_activity_scaling(activity_scaling: str) -> bool:
-    return str(activity_scaling).strip().lower().startswith("zscore")
+def _predictor_axis_label(predictor: str, predictor_zscore: str) -> str:
+    base = predictor.strip() if predictor else "Predictor value"
+    if str(predictor_zscore).strip().lower() == "within_condition":
+        return f"{base} (z)"
+    return base
+
+
+def _is_activity_zscore_enabled(activity_zscore: str) -> bool:
+    return str(activity_zscore).strip().lower() in {"baseline", "across_trials"}

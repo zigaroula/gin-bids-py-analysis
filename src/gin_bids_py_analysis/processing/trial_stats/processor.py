@@ -249,7 +249,7 @@ class TrialStatsProcessing(BaseProcessing):
             len(time_axis_ref),
         )
 
-        if self.params.activity_scaling == "zscore_by_baseline":
+        if self.params.activity_zscore == "baseline":
             epochs_a_array, epochs_b_array = zscore_activity_by_baseline(
                 epochs_a_array,
                 epochs_b_array,
@@ -435,7 +435,7 @@ class TrialStatsProcessing(BaseProcessing):
                 "window_samples": window_sample_count,
                 "effective_n_bins": effective_n_bins,
                 "binning_mode": binning_mode,
-                "activity_scaling": self.params.activity_scaling,
+                "activity_zscore": self.params.activity_zscore,
                 "activity_baseline_tmin_s": self.params.activity_baseline_tmin_s,
                 "activity_baseline_tmax_s": self.params.activity_baseline_tmax_s,
                 "channel_significance_mode": self.params.channel_significance_mode,
@@ -470,7 +470,7 @@ class TrialStatsProcessing(BaseProcessing):
             region_channels=region_channels,
             window_ms=self.params.window_ms,
             n_bins=self.params.n_bins,
-            activity_scaling=self.params.activity_scaling,
+            activity_zscore=self.params.activity_zscore,
             activity_baseline_tmin_s=self.params.activity_baseline_tmin_s,
             activity_baseline_tmax_s=self.params.activity_baseline_tmax_s,
             p_value_correction_method=self.params.p_value_correction_method,

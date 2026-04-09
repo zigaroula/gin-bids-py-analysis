@@ -81,6 +81,13 @@ class TestGroupPlotPanelPlaceholder:
         # ROI list widget should exist and be empty initially
         assert panel._roi_list.count() == 0
 
+    def test_matrix_row_label_toggles_are_off_by_default(self, qtbot):
+        panel = GroupPlotPanel()
+        qtbot.addWidget(panel)
+
+        assert panel._activity_matrix_row_labels_checkbox.isChecked() is False
+        assert panel._matrix_row_labels_checkbox.isChecked() is False
+
 
 class TestGroupPlotPanelUpdatePlots:
     def test_update_plots_populates_roi_list(self, qtbot, synthetic_group_result):
@@ -266,7 +273,7 @@ class TestGroupPlotPanelSlopeUpdate:
         assert "slope p-values" in panel._ax_p.get_title()
 
     def test_slope_group_uses_zscore_activity_labels_when_metadata_requests_it(self, qtbot, synthetic_slope_group_result):
-        synthetic_slope_group_result.metadata = {"activity_scaling": "zscore_by_baseline"}
+        synthetic_slope_group_result.metadata = {"activity_zscore": "baseline"}
         panel = GroupPlotPanel()
         qtbot.addWidget(panel)
 
@@ -274,3 +281,67 @@ class TestGroupPlotPanelSlopeUpdate:
 
         assert panel._ax_means.get_ylabel() == "mean region activity (z)"
         assert panel._ax_scatter.get_ylabel() == "Epoch mean activity (z)"
+
+    def test_slope_matrix_row_labels_can_be_toggled_on_for_subject_channel_mapping(
+        self,
+        qtbot,
+        synthetic_slope_group_result,
+    ):
+        panel = GroupPlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_group_result, 0)
+
+        assert [tick.get_text() for tick in panel._ax_matrix.get_yticklabels()] == [
+            "pleasant",
+            "unpleasant",
+        ]
+
+        panel._plot_tabs.setCurrentIndex(7)
+
+        panel._matrix_row_labels_checkbox.setChecked(True)
+
+        assert [tick.get_text() for tick in panel._ax_matrix.get_yticklabels()] == [
+            "pleasant: sub-01 / A1",
+            "pleasant: sub-01 / A2",
+            "pleasant: sub-02 / A1",
+            "unpleasant: sub-01 / A1",
+            "unpleasant: sub-01 / A2",
+            "unpleasant: sub-02 / A1",
+        ]
+
+    def test_activity_and_slope_matrix_toggles_have_independent_state(
+        self,
+        qtbot,
+        synthetic_slope_group_result,
+    ):
+        panel = GroupPlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_group_result, 0)
+
+        panel._activity_matrix_row_labels_checkbox.setChecked(True)
+
+        assert [tick.get_text() for tick in panel._ax_activity_matrix.get_yticklabels()] == [
+            "pleasant: sub-01 / A1",
+            "pleasant: sub-01 / A2",
+            "pleasant: sub-02 / A1",
+            "unpleasant: sub-01 / A1",
+            "unpleasant: sub-01 / A2",
+            "unpleasant: sub-02 / A1",
+        ]
+        assert [tick.get_text() for tick in panel._ax_matrix.get_yticklabels()] == [
+            "pleasant",
+            "unpleasant",
+        ]
+
+        panel._matrix_row_labels_checkbox.setChecked(True)
+
+        assert [tick.get_text() for tick in panel._ax_matrix.get_yticklabels()] == [
+            "pleasant: sub-01 / A1",
+            "pleasant: sub-01 / A2",
+            "pleasant: sub-02 / A1",
+            "unpleasant: sub-01 / A1",
+            "unpleasant: sub-01 / A2",
+            "unpleasant: sub-02 / A1",
+        ]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
@@ -57,12 +58,8 @@ class _RawSlopeStatsData:
     channels: list[str]
     time_axis_s: np.ndarray
     condition_labels: tuple[str, str]
-    condition_a_raw_slope: np.ndarray       # (n_channels, n_times)
-    condition_b_raw_slope: np.ndarray       # (n_channels, n_times)
-    condition_a_standardized_slope_predictor: np.ndarray
-    condition_b_standardized_slope_predictor: np.ndarray
-    condition_a_standardized_slope_full: np.ndarray
-    condition_b_standardized_slope_full: np.ndarray
+    condition_a_slope: np.ndarray       # (n_channels, n_times)
+    condition_b_slope: np.ndarray       # (n_channels, n_times)
     condition_a_mean: np.ndarray        # (n_channels, n_times)
     condition_b_mean: np.ndarray        # (n_channels, n_times)
     condition_a_r_value: np.ndarray     # (n_channels, n_times)
@@ -79,7 +76,10 @@ class _RawSlopeStatsData:
     window_ms: float
     n_bins: int
     effective_n_bins: int
-    activity_scaling: str
+    predictor: str
+    predictor_zscore: str
+    predictor_transform_by_condition: dict[str, dict[str, float]]
+    activity_zscore: str
     activity_baseline_tmin_s: float
     activity_baseline_tmax_s: float
     source_ieeg_files: list[str]
@@ -97,7 +97,10 @@ class _SnapshotSignature:
     window_ms: float
     n_bins: int
     effective_n_bins: int
-    activity_scaling: str
+    predictor: str
+    predictor_zscore: str
+    predictor_transform_by_condition_json: str
+    activity_zscore: str
     activity_baseline_tmin_s: float
     activity_baseline_tmax_s: float
     analysis_level: str
@@ -114,7 +117,10 @@ class _SnapshotSignature:
             self.window_ms,
             self.n_bins,
             self.effective_n_bins,
-            self.activity_scaling,
+            self.predictor,
+            self.predictor_zscore,
+            self.predictor_transform_by_condition_json,
+            self.activity_zscore,
             self.activity_baseline_tmin_s,
             self.activity_baseline_tmax_s,
             self.analysis_level,
@@ -132,12 +138,8 @@ class _SlopeStatsSnapshot:
     channel_names: list[str]
     channel_index_by_norm: dict[str, int]
     time_axis_s: np.ndarray
-    condition_a_raw_slope: np.ndarray
-    condition_b_raw_slope: np.ndarray
-    condition_a_standardized_slope_predictor: np.ndarray
-    condition_b_standardized_slope_predictor: np.ndarray
-    condition_a_standardized_slope_full: np.ndarray
-    condition_b_standardized_slope_full: np.ndarray
+    condition_a_slope: np.ndarray
+    condition_b_slope: np.ndarray
     condition_a_mean: np.ndarray
     condition_b_mean: np.ndarray
     condition_a_r_value: np.ndarray
@@ -155,7 +157,10 @@ class _SlopeStatsSnapshot:
     window_ms: float
     n_bins: int
     effective_n_bins: int
-    activity_scaling: str
+    predictor: str
+    predictor_zscore: str
+    predictor_transform_by_condition: dict[str, dict[str, float]]
+    activity_zscore: str
     activity_baseline_tmin_s: float
     activity_baseline_tmax_s: float
     source_ieeg_files: list[str]
@@ -169,12 +174,8 @@ class _ContributionRecord:
     subject: str
     channel: str
     source_stats_file: str
-    raw_slope_a_values: np.ndarray      # (n_times,)
-    raw_slope_b_values: np.ndarray      # (n_times,)
-    standardized_slope_predictor_a_values: np.ndarray
-    standardized_slope_predictor_b_values: np.ndarray
-    standardized_slope_full_a_values: np.ndarray
-    standardized_slope_full_b_values: np.ndarray
+    slope_a_values: np.ndarray      # (n_times,)
+    slope_b_values: np.ndarray      # (n_times,)
     mean_a_values: np.ndarray       # (n_times,)
     mean_b_values: np.ndarray       # (n_times,)
     r_value_a_values: np.ndarray    # (n_times,)
@@ -477,7 +478,14 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
                 "window_ms": first.window_ms,
                 "n_bins": first.n_bins,
                 "effective_n_bins": first.effective_n_bins,
-                "activity_scaling": first.activity_scaling,
+                "predictor": first.predictor,
+                "predictor_zscore": first.predictor_zscore,
+                "predictor_transform_by_condition_json": json.dumps(
+                    first.predictor_transform_by_condition,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                "activity_zscore": first.activity_zscore,
                 "activity_baseline_tmin_s": first.activity_baseline_tmin_s,
                 "activity_baseline_tmax_s": first.activity_baseline_tmax_s,
             },
@@ -563,20 +571,10 @@ def _metric_values_for_record(
         raise ValueError(f"Unsupported condition key {condition!r}.")
 
     suffix = "a" if condition == "a" else "b"
-    if source_metric == "raw_slope":
-        return np.asarray(getattr(record, f"raw_slope_{suffix}_values"), dtype=np.float64)
+    if source_metric == "slope":
+        return np.asarray(getattr(record, f"slope_{suffix}_values"), dtype=np.float64)
     if source_metric == "r_value":
         return np.asarray(getattr(record, f"r_value_{suffix}_values"), dtype=np.float64)
-    if source_metric == "standardized_slope_predictor":
-        return np.asarray(
-            getattr(record, f"standardized_slope_predictor_{suffix}_values"),
-            dtype=np.float64,
-        )
-    if source_metric == "standardized_slope_full":
-        return np.asarray(
-            getattr(record, f"standardized_slope_full_{suffix}_values"),
-            dtype=np.float64,
-        )
     raise ValueError(f"Unsupported source_metric={source_metric!r}.")
 
 
@@ -606,12 +604,8 @@ def _collect_manual_roi_records(
                         subject=subject_key,
                         channel=snapshot.channel_names[idx],
                         source_stats_file=str(snapshot.stats_file.path),
-                        raw_slope_a_values=np.asarray(snapshot.condition_a_raw_slope[idx, :], dtype=np.float64),
-                        raw_slope_b_values=np.asarray(snapshot.condition_b_raw_slope[idx, :], dtype=np.float64),
-                        standardized_slope_predictor_a_values=np.asarray(snapshot.condition_a_standardized_slope_predictor[idx, :], dtype=np.float64),
-                        standardized_slope_predictor_b_values=np.asarray(snapshot.condition_b_standardized_slope_predictor[idx, :], dtype=np.float64),
-                        standardized_slope_full_a_values=np.asarray(snapshot.condition_a_standardized_slope_full[idx, :], dtype=np.float64),
-                        standardized_slope_full_b_values=np.asarray(snapshot.condition_b_standardized_slope_full[idx, :], dtype=np.float64),
+                        slope_a_values=np.asarray(snapshot.condition_a_slope[idx, :], dtype=np.float64),
+                        slope_b_values=np.asarray(snapshot.condition_b_slope[idx, :], dtype=np.float64),
                         mean_a_values=np.asarray(snapshot.condition_a_mean[idx, :], dtype=np.float64),
                         mean_b_values=np.asarray(snapshot.condition_b_mean[idx, :], dtype=np.float64),
                         r_value_a_values=np.asarray(snapshot.condition_a_r_value[idx, :], dtype=np.float64),
@@ -665,12 +659,8 @@ def _collect_atlas_roi_records(
                         subject=snapshot.subject,
                         channel=snapshot.channel_names[idx],
                         source_stats_file=str(snapshot.stats_file.path),
-                        raw_slope_a_values=np.asarray(snapshot.condition_a_raw_slope[idx, :], dtype=np.float64),
-                        raw_slope_b_values=np.asarray(snapshot.condition_b_raw_slope[idx, :], dtype=np.float64),
-                        standardized_slope_predictor_a_values=np.asarray(snapshot.condition_a_standardized_slope_predictor[idx, :], dtype=np.float64),
-                        standardized_slope_predictor_b_values=np.asarray(snapshot.condition_b_standardized_slope_predictor[idx, :], dtype=np.float64),
-                        standardized_slope_full_a_values=np.asarray(snapshot.condition_a_standardized_slope_full[idx, :], dtype=np.float64),
-                        standardized_slope_full_b_values=np.asarray(snapshot.condition_b_standardized_slope_full[idx, :], dtype=np.float64),
+                        slope_a_values=np.asarray(snapshot.condition_a_slope[idx, :], dtype=np.float64),
+                        slope_b_values=np.asarray(snapshot.condition_b_slope[idx, :], dtype=np.float64),
                         mean_a_values=np.asarray(snapshot.condition_a_mean[idx, :], dtype=np.float64),
                         mean_b_values=np.asarray(snapshot.condition_b_mean[idx, :], dtype=np.float64),
                         r_value_a_values=np.asarray(snapshot.condition_a_r_value[idx, :], dtype=np.float64),
@@ -876,12 +866,8 @@ def _load_slope_stats_snapshot(stats_file: BIDSFile) -> _SlopeStatsSnapshot:
         channel_names=raw.channels,
         channel_index_by_norm=channel_index_by_norm,
         time_axis_s=raw.time_axis_s,
-        condition_a_raw_slope=raw.condition_a_raw_slope,
-        condition_b_raw_slope=raw.condition_b_raw_slope,
-        condition_a_standardized_slope_predictor=raw.condition_a_standardized_slope_predictor,
-        condition_b_standardized_slope_predictor=raw.condition_b_standardized_slope_predictor,
-        condition_a_standardized_slope_full=raw.condition_a_standardized_slope_full,
-        condition_b_standardized_slope_full=raw.condition_b_standardized_slope_full,
+        condition_a_slope=raw.condition_a_slope,
+        condition_b_slope=raw.condition_b_slope,
         condition_a_mean=raw.condition_a_mean,
         condition_b_mean=raw.condition_b_mean,
         condition_a_r_value=raw.condition_a_r_value,
@@ -899,7 +885,10 @@ def _load_slope_stats_snapshot(stats_file: BIDSFile) -> _SlopeStatsSnapshot:
         window_ms=raw.window_ms,
         n_bins=raw.n_bins,
         effective_n_bins=raw.effective_n_bins,
-        activity_scaling=raw.activity_scaling,
+        predictor=raw.predictor,
+        predictor_zscore=raw.predictor_zscore,
+        predictor_transform_by_condition=raw.predictor_transform_by_condition,
+        activity_zscore=raw.activity_zscore,
         activity_baseline_tmin_s=raw.activity_baseline_tmin_s,
         activity_baseline_tmax_s=raw.activity_baseline_tmax_s,
         source_ieeg_files=raw.source_ieeg_files,
@@ -926,7 +915,14 @@ def _build_signature(
         window_ms=float(raw.window_ms),
         n_bins=int(raw.n_bins),
         effective_n_bins=int(raw.effective_n_bins),
-        activity_scaling=str(raw.activity_scaling or "none"),
+        predictor=str(raw.predictor or ""),
+        predictor_zscore=str(raw.predictor_zscore or "none"),
+        predictor_transform_by_condition_json=json.dumps(
+            raw.predictor_transform_by_condition,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        activity_zscore=str(raw.activity_zscore or "none"),
         activity_baseline_tmin_s=float(raw.activity_baseline_tmin_s),
         activity_baseline_tmax_s=float(raw.activity_baseline_tmax_s),
         analysis_level=str(raw.analysis_level or "channel"),
@@ -971,29 +967,13 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
                 np.asarray(ds[:], dtype=np.float64), n_features=n_ch, n_times=n_t
             )
 
-        ds_cond_a_raw_slope = dataset_or_none(fh, "regression/condition_a/slope")
-        ds_cond_b_raw_slope = dataset_or_none(fh, "regression/condition_b/slope")
-        ds_cond_a_std_pred = dataset_or_none(fh, "regression/condition_a/slope_standardized_predictor")
-        ds_cond_b_std_pred = dataset_or_none(fh, "regression/condition_b/slope_standardized_predictor")
-        ds_cond_a_std_full = dataset_or_none(fh, "regression/condition_a/slope_standardized_full")
-        ds_cond_b_std_full = dataset_or_none(fh, "regression/condition_b/slope_standardized_full")
+        ds_cond_a_slope = dataset_or_none(fh, "regression/condition_a/slope")
+        ds_cond_b_slope = dataset_or_none(fh, "regression/condition_b/slope")
         ds_cond_a_r = dataset_or_none(fh, "regression/condition_a/r_value")
         ds_cond_b_r = dataset_or_none(fh, "regression/condition_b/r_value")
 
-        condition_a_raw_slope = _read_2d("regression/condition_a/slope")
-        condition_b_raw_slope = _read_2d("regression/condition_b/slope")
-        condition_a_standardized_slope_predictor = _read_2d(
-            "regression/condition_a/slope_standardized_predictor"
-        )
-        condition_b_standardized_slope_predictor = _read_2d(
-            "regression/condition_b/slope_standardized_predictor"
-        )
-        condition_a_standardized_slope_full = _read_2d(
-            "regression/condition_a/slope_standardized_full"
-        )
-        condition_b_standardized_slope_full = _read_2d(
-            "regression/condition_b/slope_standardized_full"
-        )
+        condition_a_slope = _read_2d("regression/condition_a/slope")
+        condition_b_slope = _read_2d("regression/condition_b/slope")
         condition_a_r_value = _read_2d("regression/condition_a/r_value")
         condition_b_r_value = _read_2d("regression/condition_b/r_value")
 
@@ -1009,10 +989,43 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
         effective_n_bins = int_scalar(
             dataset_or_none(fh, "meta/effective_n_bins"), default=n_t
         )
-        activity_scaling = str_scalar(
-            dataset_or_none(fh, "meta/activity_scaling"),
-            default="none",
+        predictor_ds = dataset_or_none(fh, "meta/predictor")
+        if predictor_ds is None:
+            raise ValueError(
+                f"{stats_file.path.name}: unsupported legacy trial_slope_stats input; "
+                "meta/predictor is required."
+            )
+        predictor = str_scalar(predictor_ds, default="")
+        predictor_zscore_ds = dataset_or_none(fh, "meta/predictor_zscore")
+        if predictor_zscore_ds is None:
+            raise ValueError(
+                f"{stats_file.path.name}: unsupported legacy trial_slope_stats input; "
+                "meta/predictor_zscore is required."
+            )
+        predictor_zscore = str_scalar(predictor_zscore_ds, default="none")
+        predictor_transform_ds = dataset_or_none(
+            fh,
+            "meta/predictor_transform_by_condition_json",
         )
+        if predictor_transform_ds is None:
+            raise ValueError(
+                f"{stats_file.path.name}: unsupported legacy trial_slope_stats input; "
+                "meta/predictor_transform_by_condition_json is required."
+            )
+        predictor_transform_raw = str_scalar(predictor_transform_ds, default="{}")
+        try:
+            predictor_transform_by_condition = (
+                json.loads(predictor_transform_raw) if predictor_transform_raw else {}
+            )
+        except json.JSONDecodeError:
+            predictor_transform_by_condition = {}
+        activity_zscore_ds = dataset_or_none(fh, "meta/activity_zscore")
+        if activity_zscore_ds is None:
+            raise ValueError(
+                f"{stats_file.path.name}: unsupported legacy trial_slope_stats input; "
+                "meta/activity_zscore is required."
+            )
+        activity_zscore = str_scalar(activity_zscore_ds, default="none")
         activity_baseline_tmin_s = float_scalar(
             dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
             default=-0.2,
@@ -1040,22 +1053,16 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
         available_metrics=frozenset(
             metric
             for metric, present in {
-                "raw_slope": ds_cond_a_raw_slope is not None and ds_cond_b_raw_slope is not None,
+                "slope": ds_cond_a_slope is not None and ds_cond_b_slope is not None,
                 "r_value": ds_cond_a_r is not None and ds_cond_b_r is not None,
-                "standardized_slope_predictor": ds_cond_a_std_pred is not None and ds_cond_b_std_pred is not None,
-                "standardized_slope_full": ds_cond_a_std_full is not None and ds_cond_b_std_full is not None,
             }.items()
             if present
         ),
         channels=channels,
         time_axis_s=time_axis_s,
         condition_labels=condition_labels,
-        condition_a_raw_slope=condition_a_raw_slope,
-        condition_b_raw_slope=condition_b_raw_slope,
-        condition_a_standardized_slope_predictor=condition_a_standardized_slope_predictor,
-        condition_b_standardized_slope_predictor=condition_b_standardized_slope_predictor,
-        condition_a_standardized_slope_full=condition_a_standardized_slope_full,
-        condition_b_standardized_slope_full=condition_b_standardized_slope_full,
+        condition_a_slope=condition_a_slope,
+        condition_b_slope=condition_b_slope,
         condition_a_mean=condition_a_mean,
         condition_b_mean=condition_b_mean,
         condition_a_r_value=condition_a_r_value,
@@ -1084,7 +1091,10 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
         window_ms=window_ms,
         n_bins=n_bins,
         effective_n_bins=effective_n_bins,
-        activity_scaling=activity_scaling,
+        predictor=predictor,
+        predictor_zscore=predictor_zscore,
+        predictor_transform_by_condition=predictor_transform_by_condition,
+        activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
         source_ieeg_files=source_ieeg_files,
@@ -1125,12 +1135,8 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
         cond_a_reg = getattr(regression, "condition_a", None) if regression is not None else None
         cond_b_reg = getattr(regression, "condition_b", None) if regression is not None else None
 
-        condition_a_raw_slope = _read_mat_2d(cond_a_reg, "slope") if cond_a_reg is not None else _empty.copy()
-        condition_b_raw_slope = _read_mat_2d(cond_b_reg, "slope") if cond_b_reg is not None else _empty.copy()
-        condition_a_standardized_slope_predictor = _read_mat_2d(cond_a_reg, "slope_standardized_predictor") if cond_a_reg is not None else _empty.copy()
-        condition_b_standardized_slope_predictor = _read_mat_2d(cond_b_reg, "slope_standardized_predictor") if cond_b_reg is not None else _empty.copy()
-        condition_a_standardized_slope_full = _read_mat_2d(cond_a_reg, "slope_standardized_full") if cond_a_reg is not None else _empty.copy()
-        condition_b_standardized_slope_full = _read_mat_2d(cond_b_reg, "slope_standardized_full") if cond_b_reg is not None else _empty.copy()
+        condition_a_slope = _read_mat_2d(cond_a_reg, "slope") if cond_a_reg is not None else _empty.copy()
+        condition_b_slope = _read_mat_2d(cond_b_reg, "slope") if cond_b_reg is not None else _empty.copy()
         condition_a_r_value = _read_mat_2d(cond_a_reg, "r_value") if cond_a_reg is not None else _empty.copy()
         condition_b_r_value = _read_mat_2d(cond_b_reg, "r_value") if cond_b_reg is not None else _empty.copy()
 
@@ -1144,7 +1150,40 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
         window_ms = mat_float(getattr(meta, "window_ms", None), default=0.0)
         n_bins = mat_int(getattr(meta, "n_bins", None), default=0)
         effective_n_bins = mat_int(getattr(meta, "effective_n_bins", None), default=n_t)
-        activity_scaling = mat_str(getattr(meta, "activity_scaling", None), default="none")
+        predictor_raw_meta = getattr(meta, "predictor", None)
+        if predictor_raw_meta is None:
+            raise ValueError(
+                f"{stats_file.path.name}: unsupported legacy trial_slope_stats input; "
+                "meta.predictor is required."
+            )
+        predictor = mat_str(predictor_raw_meta, default="")
+        predictor_zscore_raw = getattr(meta, "predictor_zscore", None)
+        if predictor_zscore_raw is None:
+            raise ValueError(
+                f"{stats_file.path.name}: unsupported legacy trial_slope_stats input; "
+                "meta.predictor_zscore is required."
+            )
+        predictor_zscore = mat_str(predictor_zscore_raw, default="none")
+        predictor_transform_raw = getattr(meta, "predictor_transform_by_condition_json", None)
+        if predictor_transform_raw is None:
+            raise ValueError(
+                f"{stats_file.path.name}: unsupported legacy trial_slope_stats input; "
+                "meta.predictor_transform_by_condition_json is required."
+            )
+        predictor_transform_json = mat_str(predictor_transform_raw, default="{}")
+        try:
+            predictor_transform_by_condition = (
+                json.loads(predictor_transform_json) if predictor_transform_json else {}
+            )
+        except json.JSONDecodeError:
+            predictor_transform_by_condition = {}
+        activity_zscore_raw = getattr(meta, "activity_zscore", None)
+        if activity_zscore_raw is None:
+            raise ValueError(
+                f"{stats_file.path.name}: unsupported legacy trial_slope_stats input; "
+                "meta.activity_zscore is required."
+            )
+        activity_zscore = mat_str(activity_zscore_raw, default="none")
         activity_baseline_tmin_s = mat_float(
             getattr(meta, "activity_baseline_tmin_s", None),
             default=-0.2,
@@ -1205,22 +1244,16 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
         available_metrics=frozenset(
             metric
             for metric, present in {
-                "raw_slope": cond_a_reg is not None and cond_b_reg is not None and getattr(cond_a_reg, "slope", None) is not None and getattr(cond_b_reg, "slope", None) is not None,
+                "slope": cond_a_reg is not None and cond_b_reg is not None and getattr(cond_a_reg, "slope", None) is not None and getattr(cond_b_reg, "slope", None) is not None,
                 "r_value": cond_a_reg is not None and cond_b_reg is not None and getattr(cond_a_reg, "r_value", None) is not None and getattr(cond_b_reg, "r_value", None) is not None,
-                "standardized_slope_predictor": cond_a_reg is not None and cond_b_reg is not None and getattr(cond_a_reg, "slope_standardized_predictor", None) is not None and getattr(cond_b_reg, "slope_standardized_predictor", None) is not None,
-                "standardized_slope_full": cond_a_reg is not None and cond_b_reg is not None and getattr(cond_a_reg, "slope_standardized_full", None) is not None and getattr(cond_b_reg, "slope_standardized_full", None) is not None,
             }.items()
             if present
         ),
         channels=channels,
         time_axis_s=time_axis_s,
         condition_labels=condition_labels,
-        condition_a_raw_slope=condition_a_raw_slope,
-        condition_b_raw_slope=condition_b_raw_slope,
-        condition_a_standardized_slope_predictor=condition_a_standardized_slope_predictor,
-        condition_b_standardized_slope_predictor=condition_b_standardized_slope_predictor,
-        condition_a_standardized_slope_full=condition_a_standardized_slope_full,
-        condition_b_standardized_slope_full=condition_b_standardized_slope_full,
+        condition_a_slope=condition_a_slope,
+        condition_b_slope=condition_b_slope,
         condition_a_mean=condition_a_mean,
         condition_b_mean=condition_b_mean,
         condition_a_r_value=condition_a_r_value,
@@ -1237,7 +1270,10 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
         window_ms=window_ms,
         n_bins=n_bins,
         effective_n_bins=effective_n_bins,
-        activity_scaling=activity_scaling,
+        predictor=predictor,
+        predictor_zscore=predictor_zscore,
+        predictor_transform_by_condition=predictor_transform_by_condition,
+        activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
         source_ieeg_files=source_ieeg_files,

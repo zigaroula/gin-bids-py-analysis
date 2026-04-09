@@ -9,6 +9,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -95,6 +96,16 @@ class GroupPlotPanel(QWidget):
         self._ax_activity_matrix = self._fig_activity_matrix.add_subplot(111)
         self._canvas_activity_matrix = FigureCanvasQTAgg(self._fig_activity_matrix)
         activity_matrix_layout.addWidget(self._canvas_activity_matrix)
+        activity_matrix_controls_layout = QHBoxLayout()
+        activity_matrix_controls_layout.setContentsMargins(0, 6, 0, 0)
+        activity_matrix_controls_layout.addStretch(1)
+        self._activity_matrix_row_labels_checkbox = QCheckBox("Show subject/channel row labels")
+        self._activity_matrix_row_labels_checkbox.setToolTip(
+            "Display one label per matrix row to identify the contributing subject and channel."
+        )
+        activity_matrix_controls_layout.addWidget(self._activity_matrix_row_labels_checkbox)
+        activity_matrix_controls_layout.addStretch(1)
+        activity_matrix_layout.addLayout(activity_matrix_controls_layout)
         self._plot_tabs.addTab(activity_matrix_w, "Activity matrix")
 
         slope_w = QWidget()
@@ -131,6 +142,16 @@ class GroupPlotPanel(QWidget):
         self._ax_matrix = self._fig_matrix.add_subplot(111)
         self._canvas_matrix = FigureCanvasQTAgg(self._fig_matrix)
         matrix_layout.addWidget(self._canvas_matrix)
+        matrix_controls_layout = QHBoxLayout()
+        matrix_controls_layout.setContentsMargins(0, 6, 0, 0)
+        matrix_controls_layout.addStretch(1)
+        self._matrix_row_labels_checkbox = QCheckBox("Show subject/channel row labels")
+        self._matrix_row_labels_checkbox.setToolTip(
+            "Display one label per matrix row to identify the contributing subject and channel."
+        )
+        matrix_controls_layout.addWidget(self._matrix_row_labels_checkbox)
+        matrix_controls_layout.addStretch(1)
+        matrix_layout.addLayout(matrix_controls_layout)
         self._plot_tabs.addTab(matrix_w, "Slope matrix")
 
         scatter_w = QWidget()
@@ -151,6 +172,10 @@ class GroupPlotPanel(QWidget):
         self._current_result: object | None = None
 
         self._roi_list.currentRowChanged.connect(self._on_roi_changed)
+        self._activity_matrix_row_labels_checkbox.toggled.connect(
+            self._on_activity_matrix_row_labels_toggled
+        )
+        self._matrix_row_labels_checkbox.toggled.connect(self._on_matrix_row_labels_toggled)
 
         self._draw_placeholder("Run group compute to see results")
 
@@ -226,6 +251,16 @@ class GroupPlotPanel(QWidget):
         if row >= 0 and self._current_result is not None:
             self._draw_roi(self._current_result, row)
         self.roi_changed.emit(row)
+
+    def _on_activity_matrix_row_labels_toggled(self, checked: bool) -> None:
+        del checked
+        if self._current_result is not None:
+            self._draw_roi(self._current_result, self.current_roi_index)
+
+    def _on_matrix_row_labels_toggled(self, checked: bool) -> None:
+        del checked
+        if self._current_result is not None:
+            self._draw_roi(self._current_result, self.current_roi_index)
 
     # ------------------------------------------------------------------
     # Dispatch
@@ -405,12 +440,13 @@ class GroupPlotPanel(QWidget):
             else np.empty((0, len(t)), dtype=np.float64)
         )
         labels = result.contribution_labels[roi_idx] if has_contrib else []
-        self._draw_matrix_on(
+        self._ax_matrix = self._draw_matrix_on(
             fig=self._fig_matrix,
             canvas=self._canvas_matrix,
             rows_a=rows_a,
             rows_b=rows_b,
             labels=labels,
+            show_row_labels=self._matrix_row_labels_checkbox.isChecked(),
             time_axis=t,
             roi_label=roi_label,
             cond_a_label=result.condition_labels[0],
@@ -551,16 +587,17 @@ class GroupPlotPanel(QWidget):
             else np.empty((0, len(t)), dtype=np.float64)
         )
         contrib_labels = result.contribution_labels[roi_idx] if has_act_contrib else []
-        self._draw_matrix_on(
+        self._ax_activity_matrix = self._draw_matrix_on(
             fig=self._fig_activity_matrix,
             canvas=self._canvas_activity_matrix,
             rows_a=rows_act_a,
             rows_b=rows_act_b,
             labels=contrib_labels,
+            show_row_labels=self._activity_matrix_row_labels_checkbox.isChecked(),
             time_axis=t,
             roi_label=roi_label,
-            cond_a_label=f"activity {cond_a_label}",
-            cond_b_label=f"activity {cond_b_label}",
+            cond_a_label=cond_a_label,
+            cond_b_label=cond_b_label,
             title_suffix=" (activity contributions)",
         )
 
@@ -656,16 +693,17 @@ class GroupPlotPanel(QWidget):
             else np.empty((0, len(t)), dtype=np.float64)
         )
         slope_labels = result.contribution_labels[roi_idx] if has_slope_contrib else []
-        self._draw_matrix_on(
+        self._ax_matrix = self._draw_matrix_on(
             fig=self._fig_matrix,
             canvas=self._canvas_matrix,
             rows_a=rows_slope_a,
             rows_b=rows_slope_b,
             labels=slope_labels,
+            show_row_labels=self._matrix_row_labels_checkbox.isChecked(),
             time_axis=t,
             roi_label=roi_label,
-            cond_a_label=f"{metric_label} {cond_a_label}",
-            cond_b_label=f"{metric_label} {cond_b_label}",
+            cond_a_label=cond_a_label,
+            cond_b_label=cond_b_label,
             title_suffix=f" ({metric_label} contributions)",
         )
 
@@ -693,7 +731,8 @@ class GroupPlotPanel(QWidget):
             cond_a_label=cond_a_label,
             cond_b_label=cond_b_label,
             sig_slope=sig_slope,
-            activity_scaling=_group_activity_scaling(result),
+            predictor_label=_group_predictor_axis_label(result),
+            activity_zscore=_group_activity_zscore(result),
         )
 
     # ------------------------------------------------------------------
@@ -708,12 +747,16 @@ class GroupPlotPanel(QWidget):
         rows_a: np.ndarray,
         rows_b: np.ndarray,
         labels: list[str],
+        show_row_labels: bool,
         time_axis: np.ndarray,
         roi_label: str,
         cond_a_label: str,
         cond_b_label: str,
         title_suffix: str,
-    ) -> None:
+    ):
+        set_layout_engine = getattr(fig, "set_layout_engine", None)
+        if callable(set_layout_engine):
+            set_layout_engine(None)
         fig.clear()
         ax = fig.add_subplot(111)
 
@@ -731,7 +774,7 @@ class GroupPlotPanel(QWidget):
             ax.set_title(f"{roi_label}{title_suffix}", fontsize=9)
             ax.set_xlabel("Time (s)")
             canvas.draw_idle()
-            return
+            return ax
 
         n_t = len(time_axis)
         rows_a = np.asarray(rows_a, dtype=np.float64).reshape(-1, n_t)
@@ -758,28 +801,43 @@ class GroupPlotPanel(QWidget):
             ax.axhline(n_a - 0.5, color="white", linewidth=1.5)
         ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
 
-        y_ticks: list[float] = []
-        y_tick_labels: list[str] = []
-        if n_a > 0:
-            y_ticks.append(n_a / 2 - 0.5)
-            y_tick_labels.append(cond_a_label)
-        if n_b > 0:
-            y_ticks.append(n_a + n_b / 2 - 0.5)
-            y_tick_labels.append(cond_b_label)
-        ax.set_yticks(y_ticks)
-        ax.set_yticklabels(y_tick_labels, fontsize=8)
+        if show_row_labels:
+            row_labels = _build_matrix_row_labels(
+                labels,
+                n_a=n_a,
+                n_b=n_b,
+                cond_a_label=cond_a_label,
+                cond_b_label=cond_b_label,
+            )
+            ax.set_yticks(np.arange(matrix.shape[0], dtype=np.float64))
+            ax.set_yticklabels(
+                row_labels,
+                fontsize=_matrix_row_label_fontsize(matrix.shape[0]),
+            )
+            ax.tick_params(axis="y", length=0)
+        else:
+            y_ticks: list[float] = []
+            y_tick_labels: list[str] = []
+            if n_a > 0:
+                y_ticks.append(n_a / 2 - 0.5)
+                y_tick_labels.append(cond_a_label)
+            if n_b > 0:
+                y_ticks.append(n_a + n_b / 2 - 0.5)
+                y_tick_labels.append(cond_b_label)
+            ax.set_yticks(y_ticks)
+            ax.set_yticklabels(y_tick_labels, fontsize=8)
 
-        n_labels = len(labels)
-        if n_labels == matrix.shape[0]:
-            step = max(1, int(np.ceil(matrix.shape[0] / 24)))
-            y_tick_positions = list(range(0, matrix.shape[0], step))
-            y_tick_names = [labels[i] for i in y_tick_positions]
-            ax.set_yticks(y_tick_positions)
-            ax.set_yticklabels(y_tick_names, fontsize=7)
+        fig.subplots_adjust(
+            left=_matrix_left_margin(show_row_labels, ax.get_yticklabels()),
+            right=0.92,
+            bottom=0.12,
+            top=0.92,
+        )
 
         ax.set_title(f"{roi_label}{title_suffix}", fontsize=9)
         ax.set_xlabel("Time (s)")
         canvas.draw_idle()
+        return ax
 
     def _draw_scatter_on(
         self,
@@ -794,7 +852,8 @@ class GroupPlotPanel(QWidget):
         cond_a_label: str,
         cond_b_label: str,
         sig_slope: np.ndarray,
-        activity_scaling: str,
+        predictor_label: str,
+        activity_zscore: str,
     ) -> None:
         """Draw a predictor-vs-activity scatter plot with per-condition regression lines."""
         fig.clear()
@@ -811,8 +870,8 @@ class GroupPlotPanel(QWidget):
             ax.text(0.5, 0.5, "No scatter data available", transform=ax.transAxes,
                     ha="center", va="center", fontsize=9, color="gray")
             ax.set_title(f"{roi_label} — scatter", fontsize=9)
-            ax.set_xlabel("Predictor value")
-            ax.set_ylabel(_group_scatter_activity_axis_label(activity_scaling))
+            ax.set_xlabel(predictor_label)
+            ax.set_ylabel(_group_scatter_activity_axis_label(activity_zscore))
             canvas.draw_idle()
             return
 
@@ -841,8 +900,8 @@ class GroupPlotPanel(QWidget):
                     ax.plot(x_range_b, np.polyval(coefs_b, x_range_b),
                             color="tomato", linewidth=1.5, linestyle=reg_ls)
 
-        ax.set_xlabel("Predictor value")
-        ax.set_ylabel(_group_scatter_activity_axis_label(activity_scaling))
+        ax.set_xlabel(predictor_label)
+        ax.set_ylabel(_group_scatter_activity_axis_label(activity_zscore))
         ax.set_title(f"{roi_label} — predictor vs activity", fontsize=9)
         _safe_legend(ax)
         canvas.draw_idle()
@@ -895,41 +954,120 @@ def _safe_legend(ax) -> None:
         ax.legend(fontsize="small", loc="upper right")
 
 
+def _build_matrix_row_labels(
+    labels: list[str],
+    *,
+    n_a: int,
+    n_b: int,
+    cond_a_label: str,
+    cond_b_label: str,
+) -> list[str]:
+    raw_labels = list(labels)
+    if len(raw_labels) == n_a + n_b:
+        labels_a = raw_labels[:n_a]
+        labels_b = raw_labels[n_a:]
+    else:
+        labels_a = raw_labels[:n_a]
+        labels_b = raw_labels[:n_b]
+
+    return _build_matrix_block_row_labels(labels_a, n_a, cond_a_label) + _build_matrix_block_row_labels(
+        labels_b,
+        n_b,
+        cond_b_label,
+    )
+
+
+def _build_matrix_block_row_labels(
+    labels: list[str],
+    n_rows: int,
+    block_label: str,
+) -> list[str]:
+    out: list[str] = []
+    for idx in range(n_rows):
+        base_label = _format_contribution_label(labels[idx]) if idx < len(labels) else f"row {idx + 1}"
+        out.append(f"{block_label}: {base_label}")
+    return out
+
+
+def _format_contribution_label(label: str) -> str:
+    raw_label = str(label).strip()
+    if not raw_label:
+        return "unknown"
+    if "/" not in raw_label:
+        return raw_label
+    subject, channel = raw_label.split("/", 1)
+    subject = subject.strip()
+    channel = channel.strip()
+    if subject and not subject.startswith("sub-"):
+        subject = f"sub-{subject}"
+    if channel:
+        return f"{subject} / {channel}"
+    return subject or raw_label
+
+
+def _matrix_row_label_fontsize(n_rows: int) -> int:
+    if n_rows <= 12:
+        return 8
+    if n_rows <= 24:
+        return 7
+    if n_rows <= 40:
+        return 6
+    return 5
+
+
+def _matrix_left_margin(show_row_labels: bool, tick_labels: list) -> float:
+    if not show_row_labels:
+        return 0.12
+    label_lengths = [len(label.get_text()) for label in tick_labels if label.get_text()]
+    if not label_lengths:
+        return 0.18
+    return min(0.48, max(0.18, 0.011 * max(label_lengths)))
+
+
 def _is_slope_group_result(result: object) -> bool:
     return hasattr(result, "slope_t_values")
 
 
 def _group_activity_axis_label(result: object) -> str:
-    if _is_group_zscore_activity_scaling(_group_activity_scaling(result)):
+    if _is_group_activity_zscore_enabled(_group_activity_zscore(result)):
         return "mean region activity (z)"
     return "mean region activity"
 
 
-def _group_scatter_activity_axis_label(activity_scaling: str) -> str:
-    if _is_group_zscore_activity_scaling(activity_scaling):
+def _group_scatter_activity_axis_label(activity_zscore: str) -> str:
+    if _is_group_activity_zscore_enabled(activity_zscore):
         return "Epoch mean activity (z)"
     return "Epoch mean activity"
 
 
-def _group_activity_scaling(result: object) -> str:
+def _group_activity_zscore(result: object) -> str:
     metadata = getattr(result, "metadata", {})
     if isinstance(metadata, dict):
-        return str(metadata.get("activity_scaling", "none"))
+        return str(metadata.get("activity_zscore", "none"))
     return "none"
 
 
-def _is_group_zscore_activity_scaling(activity_scaling: str) -> bool:
-    return str(activity_scaling).strip().lower().startswith("zscore")
+def _is_group_activity_zscore_enabled(activity_zscore: str) -> bool:
+    return str(activity_zscore).strip().lower() in {"baseline", "across_trials"}
+
+
+def _group_predictor_axis_label(result: object) -> str:
+    metadata = getattr(result, "metadata", {})
+    predictor = ""
+    predictor_zscore = "none"
+    if isinstance(metadata, dict):
+        predictor = str(metadata.get("predictor", ""))
+        predictor_zscore = str(metadata.get("predictor_zscore", "none"))
+    base = predictor.strip() or "Predictor value"
+    if predictor_zscore.strip().lower() == "within_condition":
+        return f"{base} (z)"
+    return base
 
 
 def _slope_source_metric_label(result: object) -> str:
-    metric = str(getattr(result, "source_metric", "raw_slope")).strip().lower()
+    metric = str(getattr(result, "source_metric", "slope")).strip().lower()
     if metric == "r_value":
         return "r"
-    if metric == "standardized_slope_predictor":
-        return "std slope (x)"
-    if metric == "standardized_slope_full":
-        return "std slope (x+y)"
     return "slope"
 
 

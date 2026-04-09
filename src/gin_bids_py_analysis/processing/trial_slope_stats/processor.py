@@ -96,6 +96,8 @@ class TrialSlopeStatsProcessing(BaseProcessing):
         predictor_b_raw: list[float] = []
         predictor_a_transformed: list[float] = []
         predictor_b_transformed: list[float] = []
+        kept_trials_a: list[ResolvedTrial] = []
+        kept_trials_b: list[ResolvedTrial] = []
 
         sfreq_ref: float | None = None
         channel_names_ref: list[str] | None = None
@@ -202,10 +204,12 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                         epochs_a.append(epoch_for_stats)
                         predictor_a_raw.append(raw_predictor_value)
                         predictor_a_transformed.append(transformed_predictor_value)
+                        kept_trials_a.append(trial)
                     elif trial.label == self.params.condition_b:
                         epochs_b.append(epoch_for_stats)
                         predictor_b_raw.append(raw_predictor_value)
                         predictor_b_transformed.append(transformed_predictor_value)
+                        kept_trials_b.append(trial)
 
         assert sfreq_ref is not None
         assert channel_names_ref is not None
@@ -222,7 +226,7 @@ class TrialSlopeStatsProcessing(BaseProcessing):
         predictor_a_transformed_array = np.asarray(predictor_a_transformed, dtype=np.float64)
         predictor_b_transformed_array = np.asarray(predictor_b_transformed, dtype=np.float64)
 
-        if self.params.activity_scaling == "zscore_by_baseline":
+        if self.params.activity_zscore == "baseline":
             epochs_a_array, epochs_b_array = zscore_activity_by_baseline(
                 epochs_a_array,
                 epochs_b_array,
@@ -230,6 +234,18 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 baseline_tmin_s=self.params.activity_baseline_tmin_s,
                 baseline_tmax_s=self.params.activity_baseline_tmax_s,
             )
+            activity_a_zscore_valid = True
+            activity_b_zscore_valid = True
+        elif self.params.activity_zscore == "across_trials":
+            epochs_a_array, activity_a_zscore_valid = zscore_epochs_across_trials(
+                epochs_a_array
+            )
+            epochs_b_array, activity_b_zscore_valid = zscore_epochs_across_trials(
+                epochs_b_array
+            )
+        else:
+            activity_a_zscore_valid = True
+            activity_b_zscore_valid = True
 
         time_axis_eval = time_axis_ref
         binning_mode = "none"
@@ -289,19 +305,35 @@ class TrialSlopeStatsProcessing(BaseProcessing):
             n_times=len(time_axis_eval),
         )
 
-        cond_a_ready = epochs_a_array.shape[0] >= self.params.min_trials_per_condition
-        cond_b_ready = epochs_b_array.shape[0] >= self.params.min_trials_per_condition
+        cond_a_ready = (
+            epochs_a_array.shape[0] >= self.params.min_trials_per_condition
+            and activity_a_zscore_valid
+        )
+        cond_b_ready = (
+            epochs_b_array.shape[0] >= self.params.min_trials_per_condition
+            and activity_b_zscore_valid
+        )
 
-        predictor_a_effective_array = self._scale_predictor_values(
+        predictor_a_effective_array, predictor_a_zscore_valid = self._scale_predictor_values(
             predictor_a_transformed_array,
         )
-        predictor_b_effective_array = self._scale_predictor_values(
+        predictor_b_effective_array, predictor_b_zscore_valid = self._scale_predictor_values(
             predictor_b_transformed_array,
+        )
+        self._store_effective_predictor_values(
+            kept_trials_a,
+            predictor_a_effective_array,
+        )
+        self._store_effective_predictor_values(
+            kept_trials_b,
+            predictor_b_effective_array,
         )
 
         condition_a_slope, condition_a_intercept, condition_a_r_value, condition_a_p_value, condition_a_stats_valid = (
             compute_linear_regression_maps(
-                predictor_a_transformed_array if cond_a_ready else np.array([], dtype=np.float64),
+                predictor_a_effective_array
+                if cond_a_ready and predictor_a_zscore_valid
+                else np.array([], dtype=np.float64),
                 epochs_a_array if cond_a_ready else np.empty_like(epochs_a_array[:0]),
                 n_features=len(feature_names),
                 n_times=len(time_axis_eval),
@@ -309,59 +341,14 @@ class TrialSlopeStatsProcessing(BaseProcessing):
         )
         condition_b_slope, condition_b_intercept, condition_b_r_value, condition_b_p_value, condition_b_stats_valid = (
             compute_linear_regression_maps(
-                predictor_b_transformed_array if cond_b_ready else np.array([], dtype=np.float64),
+                predictor_b_effective_array
+                if cond_b_ready and predictor_b_zscore_valid
+                else np.array([], dtype=np.float64),
                 epochs_b_array if cond_b_ready else np.empty_like(epochs_b_array[:0]),
                 n_features=len(feature_names),
                 n_times=len(time_axis_eval),
             )
         )
-
-        empty_metric = np.full((len(feature_names), len(time_axis_eval)), np.nan, dtype=np.float64)
-        condition_a_slope_standardized_predictor = empty_metric.copy()
-        condition_b_slope_standardized_predictor = empty_metric.copy()
-        condition_a_slope_standardized_full = empty_metric.copy()
-        condition_b_slope_standardized_full = empty_metric.copy()
-
-        predictor_a_standardized, predictor_a_standardized_valid = zscore_predictor_values(
-            predictor_a_transformed_array
-        )
-        predictor_b_standardized, predictor_b_standardized_valid = zscore_predictor_values(
-            predictor_b_transformed_array
-        )
-        if cond_a_ready and predictor_a_standardized_valid:
-            condition_a_slope_standardized_predictor = compute_linear_regression_maps(
-                predictor_a_standardized,
-                epochs_a_array,
-                n_features=len(feature_names),
-                n_times=len(time_axis_eval),
-            )[0]
-            epochs_a_standardized, epochs_a_standardized_valid = zscore_epochs_across_trials(
-                epochs_a_array
-            )
-            if epochs_a_standardized_valid:
-                condition_a_slope_standardized_full = compute_linear_regression_maps(
-                    predictor_a_standardized,
-                    epochs_a_standardized,
-                    n_features=len(feature_names),
-                    n_times=len(time_axis_eval),
-                )[0]
-        if cond_b_ready and predictor_b_standardized_valid:
-            condition_b_slope_standardized_predictor = compute_linear_regression_maps(
-                predictor_b_standardized,
-                epochs_b_array,
-                n_features=len(feature_names),
-                n_times=len(time_axis_eval),
-            )[0]
-            epochs_b_standardized, epochs_b_standardized_valid = zscore_epochs_across_trials(
-                epochs_b_array
-            )
-            if epochs_b_standardized_valid:
-                condition_b_slope_standardized_full = compute_linear_regression_maps(
-                    predictor_b_standardized,
-                    epochs_b_standardized,
-                    n_features=len(feature_names),
-                    n_times=len(time_axis_eval),
-                )[0]
 
         condition_a_p_value_corrected = correct_p_values(
             condition_a_p_value,
@@ -408,7 +395,7 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 "min_trials_per_condition": self.params.min_trials_per_condition,
                 "drop_partial_epochs": self.params.drop_partial_epochs,
                 "predictor": self.params.predictor,
-                "predictor_scaling": self.params.predictor_scaling,
+                "predictor_zscore": self.params.predictor_zscore,
                 "predictor_transform_by_condition": {
                     condition: {
                         "scale": float(transform.scale),
@@ -428,21 +415,17 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 "window_samples": window_sample_count,
                 "effective_n_bins": effective_n_bins,
                 "binning_mode": binning_mode,
-                "activity_scaling": self.params.activity_scaling,
+                "activity_zscore": self.params.activity_zscore,
                 "activity_baseline_tmin_s": self.params.activity_baseline_tmin_s,
                 "activity_baseline_tmax_s": self.params.activity_baseline_tmax_s,
             },
             condition_a_slope=condition_a_slope,
-            condition_a_slope_standardized_predictor=condition_a_slope_standardized_predictor,
-            condition_a_slope_standardized_full=condition_a_slope_standardized_full,
             condition_a_intercept=condition_a_intercept,
             condition_a_r_value=condition_a_r_value,
             condition_a_p_value=condition_a_p_value,
             condition_a_p_value_corrected=condition_a_p_value_corrected,
             condition_a_significant_mask=condition_a_significant_mask,
             condition_b_slope=condition_b_slope,
-            condition_b_slope_standardized_predictor=condition_b_slope_standardized_predictor,
-            condition_b_slope_standardized_full=condition_b_slope_standardized_full,
             condition_b_intercept=condition_b_intercept,
             condition_b_r_value=condition_b_r_value,
             condition_b_p_value=condition_b_p_value,
@@ -478,11 +461,11 @@ class TrialSlopeStatsProcessing(BaseProcessing):
             region_channels=region_channels,
             window_ms=self.params.window_ms,
             n_bins=self.params.n_bins,
-            activity_scaling=self.params.activity_scaling,
+            activity_zscore=self.params.activity_zscore,
             activity_baseline_tmin_s=self.params.activity_baseline_tmin_s,
             activity_baseline_tmax_s=self.params.activity_baseline_tmax_s,
             predictor=self.params.predictor,
-            predictor_scaling=self.params.predictor_scaling,
+            predictor_zscore=self.params.predictor_zscore,
             predictor_transform_by_condition={
                 condition: {
                     "scale": float(transform.scale),
@@ -598,16 +581,26 @@ class TrialSlopeStatsProcessing(BaseProcessing):
     def _scale_predictor_values(
         self,
         predictor_values: np.ndarray,
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, bool]:
         values = np.asarray(predictor_values, dtype=np.float64).reshape(-1)
         if values.size == 0:
-            return values.copy()
-        if self.params.predictor_scaling == "none":
-            return values.copy()
+            return values.copy(), True
+        if self.params.predictor_zscore == "none":
+            return values.copy(), True
         scaled, valid = zscore_predictor_values(values)
         if valid:
-            return scaled
-        return np.full_like(values, np.nan, dtype=np.float64)
+            return scaled, True
+        return np.full_like(values, np.nan, dtype=np.float64), False
+
+    def _store_effective_predictor_values(
+        self,
+        trials: list[ResolvedTrial],
+        predictor_values: np.ndarray,
+    ) -> None:
+        for trial, value in zip(trials, np.asarray(predictor_values, dtype=np.float64).ravel()):
+            trial.metadata["predictor_value"] = (
+                float(value) if np.isfinite(value) else np.nan
+            )
 
 
 def _to_float_or_nan(value: object) -> float:

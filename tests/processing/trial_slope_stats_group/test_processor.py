@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import uuid
 from pathlib import Path
@@ -50,12 +51,11 @@ def _write_slope_stats_h5(
     condition_b_mean: np.ndarray | None = None,
     condition_a_r_value: np.ndarray | None = None,
     condition_b_r_value: np.ndarray | None = None,
-    condition_a_slope_standardized_predictor: np.ndarray | None = None,
-    condition_b_slope_standardized_predictor: np.ndarray | None = None,
-    condition_a_slope_standardized_full: np.ndarray | None = None,
-    condition_b_slope_standardized_full: np.ndarray | None = None,
     condition_labels: tuple[str, str] = ("accepted", "rejected"),
-    activity_scaling: str = "none",
+    predictor: str = "predictor_value",
+    predictor_zscore: str = "none",
+    predictor_transform_by_condition: dict[str, dict[str, float]] | None = None,
+    activity_zscore: str = "none",
     activity_baseline_tmin_s: float = -0.2,
     activity_baseline_tmax_s: float = 0.0,
     source_ieeg_files: list[str] | None = None,
@@ -73,39 +73,15 @@ def _write_slope_stats_h5(
         condition_a_r_value = np.full((n_ch, n_t), 0.5, dtype=np.float64)
     if condition_b_r_value is None:
         condition_b_r_value = np.full((n_ch, n_t), 0.4, dtype=np.float64)
-    if condition_a_slope_standardized_predictor is None:
-        condition_a_slope_standardized_predictor = condition_a_slope.astype(np.float64)
-    if condition_b_slope_standardized_predictor is None:
-        condition_b_slope_standardized_predictor = condition_b_slope.astype(np.float64)
-    if condition_a_slope_standardized_full is None:
-        condition_a_slope_standardized_full = condition_a_slope.astype(np.float64)
-    if condition_b_slope_standardized_full is None:
-        condition_b_slope_standardized_full = condition_b_slope.astype(np.float64)
 
     with h5py.File(path, "w") as fh:
         reg = fh.create_group("regression")
         ca = reg.create_group("condition_a")
         ca.create_dataset("slope", data=condition_a_slope.astype(np.float64))
-        ca.create_dataset(
-            "slope_standardized_predictor",
-            data=condition_a_slope_standardized_predictor.astype(np.float64),
-        )
-        ca.create_dataset(
-            "slope_standardized_full",
-            data=condition_a_slope_standardized_full.astype(np.float64),
-        )
         ca.create_dataset("r_value", data=condition_a_r_value.astype(np.float64))
         ca.create_dataset("p_value", data=np.full((n_ch, n_t), 0.01, dtype=np.float64))
         cb = reg.create_group("condition_b")
         cb.create_dataset("slope", data=condition_b_slope.astype(np.float64))
-        cb.create_dataset(
-            "slope_standardized_predictor",
-            data=condition_b_slope_standardized_predictor.astype(np.float64),
-        )
-        cb.create_dataset(
-            "slope_standardized_full",
-            data=condition_b_slope_standardized_full.astype(np.float64),
-        )
         cb.create_dataset("r_value", data=condition_b_r_value.astype(np.float64))
         cb.create_dataset("p_value", data=np.full((n_ch, n_t), 0.05, dtype=np.float64))
 
@@ -130,7 +106,18 @@ def _write_slope_stats_h5(
         meta.create_dataset("window_ms", data=0.0)
         meta.create_dataset("n_bins", data=0)
         meta.create_dataset("effective_n_bins", data=n_t)
-        meta.create_dataset("activity_scaling", data=activity_scaling, dtype=str_dtype)
+        meta.create_dataset("predictor", data=predictor, dtype=str_dtype)
+        meta.create_dataset("predictor_zscore", data=predictor_zscore, dtype=str_dtype)
+        meta.create_dataset(
+            "predictor_transform_by_condition_json",
+            data=json.dumps(
+                predictor_transform_by_condition or {},
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            dtype=str_dtype,
+        )
+        meta.create_dataset("activity_zscore", data=activity_zscore, dtype=str_dtype)
         meta.create_dataset("activity_baseline_tmin_s", data=activity_baseline_tmin_s)
         meta.create_dataset("activity_baseline_tmax_s", data=activity_baseline_tmax_s)
 
@@ -173,8 +160,8 @@ def test_build_compatible_groups_splits_heterogeneous_inputs() -> None:
         shutil.rmtree(case_dir, ignore_errors=True)
 
 
-def test_build_compatible_groups_splits_activity_scaling_inputs() -> None:
-    case_dir = _make_case_dir("groups_split_activity_scaling")
+def test_build_compatible_groups_splits_activity_zscore_inputs() -> None:
+    case_dir = _make_case_dir("groups_split_activity_zscore")
     try:
         time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
         slope = np.ones((2, 3), dtype=np.float64)
@@ -188,7 +175,7 @@ def test_build_compatible_groups_splits_activity_scaling_inputs() -> None:
             time_s=time_s,
             condition_a_slope=slope,
             condition_b_slope=slope,
-            activity_scaling="zscore_by_baseline",
+            activity_zscore="baseline",
         )
 
         files = [

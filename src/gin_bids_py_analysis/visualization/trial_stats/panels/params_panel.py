@@ -66,7 +66,7 @@ class ParamsPanel(QWidget):
             atlas_regions=list(params.atlas_regions),
             window_ms=params.window_ms,
             n_bins=params.n_bins,
-            activity_scaling=params.activity_scaling,
+            activity_zscore=params.activity_zscore,
             activity_baseline_tmin_s=params.activity_baseline_tmin_s,
             activity_baseline_tmax_s=params.activity_baseline_tmax_s,
         )
@@ -122,8 +122,8 @@ class ParamsPanel(QWidget):
 
         self._predictor_scaling = QComboBox()
         self._predictor_scaling.addItem("none")
-        self._predictor_scaling.addItem("zscore_within_condition")
-        form.addRow("Predictor scaling", self._predictor_scaling)
+        self._predictor_scaling.addItem("within_condition")
+        form.addRow("Predictor z-score", self._predictor_scaling)
 
         # min_trials_per_condition
         self._min_trials = QSpinBox()
@@ -178,8 +178,8 @@ class ParamsPanel(QWidget):
 
         self._activity_scaling = QComboBox()
         self._activity_scaling.addItem("none")
-        self._activity_scaling.addItem("zscore_by_baseline")
-        form.addRow("Activity scaling", self._activity_scaling)
+        self._activity_scaling.addItem("baseline")
+        form.addRow("Activity z-score", self._activity_scaling)
 
         self._activity_baseline_tmin = QDoubleSpinBox()
         self._activity_baseline_tmin.setRange(-3600.0, 3600.0)
@@ -249,7 +249,7 @@ class ParamsPanel(QWidget):
         # Populate initial values
         self.set_params(params)
         self._predictor.setText(self._slope_params.predictor)
-        idx_scale = self._predictor_scaling.findText(self._slope_params.predictor_scaling)
+        idx_scale = self._predictor_scaling.findText(self._slope_params.predictor_zscore)
         if idx_scale >= 0:
             self._predictor_scaling.setCurrentIndex(idx_scale)
         if default_mode not in {"ttest", "slope"}:
@@ -300,7 +300,7 @@ class ParamsPanel(QWidget):
                 atlas_regions=atlas_regions,
                 window_ms=self._window_ms.value(),
                 n_bins=self._n_bins.value(),
-                activity_scaling=self._activity_scaling.currentText(),
+                activity_zscore=self._activity_scaling.currentText(),
                 activity_baseline_tmin_s=self._activity_baseline_tmin.value(),
                 activity_baseline_tmax_s=self._activity_baseline_tmax.value(),
                 channel_significance_mode=self._sig_mode.currentText(),
@@ -344,14 +344,14 @@ class ParamsPanel(QWidget):
                 min_trials_per_condition=max(3, self._min_trials.value()),
                 drop_partial_epochs=self._drop_partial.isChecked(),
                 predictor=self._predictor.text().strip(),
-                predictor_scaling=self._predictor_scaling.currentText(),
+                predictor_zscore=self._predictor_scaling.currentText(),
                 p_value_correction_method=self._correction.currentText(),
                 significance_alpha=self._alpha.value(),
                 atlas_name=atlas_name,
                 atlas_regions=atlas_regions,
                 window_ms=self._window_ms.value(),
                 n_bins=self._n_bins.value(),
-                activity_scaling=self._activity_scaling.currentText(),
+                activity_zscore=self._activity_scaling.currentText(),
                 activity_baseline_tmin_s=self._activity_baseline_tmin.value(),
                 activity_baseline_tmax_s=self._activity_baseline_tmax.value(),
             )
@@ -381,7 +381,8 @@ class ParamsPanel(QWidget):
         self._atlas_regions.setText(", ".join(params.atlas_regions))
         self._window_ms.setValue(params.window_ms)
         self._n_bins.setValue(params.n_bins)
-        idx_activity = self._activity_scaling.findText(params.activity_scaling)
+        self._refresh_activity_scaling_options(is_slope=False)
+        idx_activity = self._activity_scaling.findText(params.activity_zscore)
         if idx_activity >= 0:
             self._activity_scaling.setCurrentIndex(idx_activity)
         self._activity_baseline_tmin.setValue(params.activity_baseline_tmin_s)
@@ -408,7 +409,7 @@ class ParamsPanel(QWidget):
         self._min_trials.setValue(max(3, params.min_trials_per_condition))
         self._drop_partial.setChecked(params.drop_partial_epochs)
         self._predictor.setText(params.predictor)
-        idx_scale = self._predictor_scaling.findText(params.predictor_scaling)
+        idx_scale = self._predictor_scaling.findText(params.predictor_zscore)
         if idx_scale >= 0:
             self._predictor_scaling.setCurrentIndex(idx_scale)
         idx_corr = self._correction.findText(params.p_value_correction_method)
@@ -419,7 +420,8 @@ class ParamsPanel(QWidget):
         self._atlas_regions.setText(", ".join(params.atlas_regions))
         self._window_ms.setValue(params.window_ms)
         self._n_bins.setValue(params.n_bins)
-        idx_activity = self._activity_scaling.findText(params.activity_scaling)
+        self._refresh_activity_scaling_options(is_slope=True)
+        idx_activity = self._activity_scaling.findText(params.activity_zscore)
         if idx_activity >= 0:
             self._activity_scaling.setCurrentIndex(idx_activity)
         self._activity_baseline_tmin.setValue(params.activity_baseline_tmin_s)
@@ -459,12 +461,27 @@ class ParamsPanel(QWidget):
         self._set_form_row_visible(self._sig_duration_threshold, not is_slope)
         if is_slope and self._correction.currentText() == "permutation":
             self._correction.setCurrentText("fdr_bh")
+        self._refresh_activity_scaling_options(is_slope=is_slope)
         self._on_activity_scaling_changed(self._activity_scaling.currentText())
 
     def _on_activity_scaling_changed(self, scaling: str) -> None:
-        enabled = scaling.strip().lower() == "zscore_by_baseline"
+        enabled = scaling.strip().lower() == "baseline"
         self._activity_baseline_tmin.setEnabled(enabled)
         self._activity_baseline_tmax.setEnabled(enabled)
+
+    def _refresh_activity_scaling_options(self, *, is_slope: bool) -> None:
+        current = self._activity_scaling.currentText().strip()
+        options = ["none", "baseline"]
+        if is_slope:
+            options.append("across_trials")
+        self._activity_scaling.blockSignals(True)
+        self._activity_scaling.clear()
+        for option in options:
+            self._activity_scaling.addItem(option)
+        idx = self._activity_scaling.findText(current if current in options else "none")
+        if idx >= 0:
+            self._activity_scaling.setCurrentIndex(idx)
+        self._activity_scaling.blockSignals(False)
 
     def _on_window_ms_changed(self, value: float) -> None:
         if value > 0.0 and self._n_bins.value() > 0:

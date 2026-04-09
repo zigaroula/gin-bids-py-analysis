@@ -83,12 +83,6 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
             return np.asarray(ds[:], dtype=np.float64) if ds is not None else empty.copy()
 
         condition_a_slope = _read_2d("regression/condition_a/slope")
-        condition_a_slope_standardized_predictor = _read_2d(
-            "regression/condition_a/slope_standardized_predictor"
-        )
-        condition_a_slope_standardized_full = _read_2d(
-            "regression/condition_a/slope_standardized_full"
-        )
         condition_a_intercept = _read_2d("regression/condition_a/intercept")
         condition_a_r_value = _read_2d("regression/condition_a/r_value")
         condition_a_p_value = _read_2d("regression/condition_a/p_value")
@@ -101,12 +95,6 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
         )
 
         condition_b_slope = _read_2d("regression/condition_b/slope")
-        condition_b_slope_standardized_predictor = _read_2d(
-            "regression/condition_b/slope_standardized_predictor"
-        )
-        condition_b_slope_standardized_full = _read_2d(
-            "regression/condition_b/slope_standardized_full"
-        )
         condition_b_intercept = _read_2d("regression/condition_b/intercept")
         condition_b_r_value = _read_2d("regression/condition_b/r_value")
         condition_b_p_value = _read_2d("regression/condition_b/p_value")
@@ -163,7 +151,11 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
 
         sfreq = float_scalar(dataset_or_none(fh, "meta/sampling_frequency_hz"), default=0.0)
         predictor = str_scalar(dataset_or_none(fh, "meta/predictor"), default="")
-        predictor_scaling = str_scalar(dataset_or_none(fh, "meta/predictor_scaling"), default="none")
+        predictor_zscore = str_scalar(dataset_or_none(fh, "meta/predictor_zscore"), default="")
+        if not predictor_zscore:
+            raise ValueError(
+                f"{path.name}: meta/predictor_zscore is required; old slope-result schemas are not supported."
+            )
         predictor_transform_raw = str_scalar(
             dataset_or_none(fh, "meta/predictor_transform_by_condition_json"),
             default="{}",
@@ -175,10 +167,14 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
         p_value_correction_method = str_scalar(dataset_or_none(fh, "meta/p_value_correction_method"), default="fdr_bh")
         significance_alpha = float_scalar(dataset_or_none(fh, "meta/significance_alpha"), default=0.05)
         stats_valid = bool(dataset_or_none(fh, "meta/stats_valid")[()]) if dataset_or_none(fh, "meta/stats_valid") is not None else bool(condition_a_stats_valid or condition_b_stats_valid)
-        activity_scaling = str_scalar(
-            dataset_or_none(fh, "meta/activity_scaling"),
-            default="none",
+        activity_zscore = str_scalar(
+            dataset_or_none(fh, "meta/activity_zscore"),
+            default="",
         )
+        if not activity_zscore:
+            raise ValueError(
+                f"{path.name}: meta/activity_zscore is required; old slope-result schemas are not supported."
+            )
         activity_baseline_tmin_s = float_scalar(
             dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
             default=-0.2,
@@ -245,21 +241,17 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
     return TrialSlopeStatsProcessingResult(
         source_group=source_group,
         metadata={
-            "activity_scaling": activity_scaling,
+            "activity_zscore": activity_zscore,
             "activity_baseline_tmin_s": activity_baseline_tmin_s,
             "activity_baseline_tmax_s": activity_baseline_tmax_s,
         },
         condition_a_slope=condition_a_slope,
-        condition_a_slope_standardized_predictor=condition_a_slope_standardized_predictor,
-        condition_a_slope_standardized_full=condition_a_slope_standardized_full,
         condition_a_intercept=condition_a_intercept,
         condition_a_r_value=condition_a_r_value,
         condition_a_p_value=condition_a_p_value,
         condition_a_p_value_corrected=condition_a_p_value_corrected,
         condition_a_significant_mask=condition_a_significant_mask,
         condition_b_slope=condition_b_slope,
-        condition_b_slope_standardized_predictor=condition_b_slope_standardized_predictor,
-        condition_b_slope_standardized_full=condition_b_slope_standardized_full,
         condition_b_intercept=condition_b_intercept,
         condition_b_r_value=condition_b_r_value,
         condition_b_p_value=condition_b_p_value,
@@ -294,11 +286,11 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
         region_channels=region_channels,
         window_ms=window_ms,
         n_bins=n_bins,
-        activity_scaling=activity_scaling,
+        activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
         predictor=predictor,
-        predictor_scaling=predictor_scaling,
+        predictor_zscore=predictor_zscore,
         predictor_transform_by_condition=predictor_transform_by_condition,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,
@@ -375,8 +367,6 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
     reg_b = getattr(regression, "condition_b", None)
 
     condition_a_slope = _mat_2d(reg_a, "slope")
-    condition_a_slope_standardized_predictor = _mat_2d(reg_a, "slope_standardized_predictor")
-    condition_a_slope_standardized_full = _mat_2d(reg_a, "slope_standardized_full")
     condition_a_intercept = _mat_2d(reg_a, "intercept")
     condition_a_r_value = _mat_2d(reg_a, "r_value")
     condition_a_p_value = _mat_2d(reg_a, "p_value")
@@ -389,8 +379,6 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
     )
 
     condition_b_slope = _mat_2d(reg_b, "slope")
-    condition_b_slope_standardized_predictor = _mat_2d(reg_b, "slope_standardized_predictor")
-    condition_b_slope_standardized_full = _mat_2d(reg_b, "slope_standardized_full")
     condition_b_intercept = _mat_2d(reg_b, "intercept")
     condition_b_r_value = _mat_2d(reg_b, "r_value")
     condition_b_p_value = _mat_2d(reg_b, "p_value")
@@ -446,7 +434,11 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
 
     sfreq = mat_float(getattr(meta, "sampling_frequency_hz", None), default=0.0)
     predictor = mat_str(getattr(meta, "predictor", None), default="")
-    predictor_scaling = mat_str(getattr(meta, "predictor_scaling", None), default="none")
+    predictor_zscore = mat_str(getattr(meta, "predictor_zscore", None), default="")
+    if not predictor_zscore:
+        raise ValueError(
+            f"{path.name}: meta.predictor_zscore is required; old slope-result schemas are not supported."
+        )
     predictor_transform_raw = mat_str(
         getattr(meta, "predictor_transform_by_condition_json", None),
         default="{}",
@@ -458,7 +450,11 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
     p_value_correction_method = mat_str(getattr(meta, "p_value_correction_method", None), default="fdr_bh")
     significance_alpha = mat_float(getattr(meta, "significance_alpha", None), default=0.05)
     stats_valid = bool(mat_int(getattr(meta, "stats_valid", None), default=int(condition_a_stats_valid or condition_b_stats_valid)))
-    activity_scaling = mat_str(getattr(meta, "activity_scaling", None), default="none")
+    activity_zscore = mat_str(getattr(meta, "activity_zscore", None), default="")
+    if not activity_zscore:
+        raise ValueError(
+            f"{path.name}: meta.activity_zscore is required; old slope-result schemas are not supported."
+        )
     activity_baseline_tmin_s = mat_float(
         getattr(meta, "activity_baseline_tmin_s", None),
         default=-0.2,
@@ -482,21 +478,17 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
     return TrialSlopeStatsProcessingResult(
         source_group=source_group,
         metadata={
-            "activity_scaling": activity_scaling,
+            "activity_zscore": activity_zscore,
             "activity_baseline_tmin_s": activity_baseline_tmin_s,
             "activity_baseline_tmax_s": activity_baseline_tmax_s,
         },
         condition_a_slope=condition_a_slope,
-        condition_a_slope_standardized_predictor=condition_a_slope_standardized_predictor,
-        condition_a_slope_standardized_full=condition_a_slope_standardized_full,
         condition_a_intercept=condition_a_intercept,
         condition_a_r_value=condition_a_r_value,
         condition_a_p_value=condition_a_p_value,
         condition_a_p_value_corrected=condition_a_p_value_corrected,
         condition_a_significant_mask=condition_a_significant_mask,
         condition_b_slope=condition_b_slope,
-        condition_b_slope_standardized_predictor=condition_b_slope_standardized_predictor,
-        condition_b_slope_standardized_full=condition_b_slope_standardized_full,
         condition_b_intercept=condition_b_intercept,
         condition_b_r_value=condition_b_r_value,
         condition_b_p_value=condition_b_p_value,
@@ -531,11 +523,11 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
         region_channels={},
         window_ms=window_ms,
         n_bins=n_bins,
-        activity_scaling=activity_scaling,
+        activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
         predictor=predictor,
-        predictor_scaling=predictor_scaling,
+        predictor_zscore=predictor_zscore,
         predictor_transform_by_condition=predictor_transform_by_condition,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,

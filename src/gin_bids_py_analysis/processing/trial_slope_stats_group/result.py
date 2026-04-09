@@ -97,7 +97,7 @@ class TrialSlopeStatsGroupProcessingResult(BaseProcessingResult):
     """Per-ROI concatenated epoch-mean activity for condition B.  Same structure."""
 
     # --- Analysis parameters stored in the result for provenance ---
-    source_metric: str = "raw_slope"
+    source_metric: str = "slope"
     contrast_mode: str = "paired"
     p_value_correction_method: str = "none"
     significance_alpha: float = 0.05

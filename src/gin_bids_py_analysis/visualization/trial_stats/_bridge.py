@@ -102,6 +102,15 @@ def _write_hdf5_structure(
     meta.create_dataset("n_bins", data=int(result.n_bins))
     n_times = result.time_axis_s.shape[0]
     meta.create_dataset("effective_n_bins", data=n_times)
+    meta.create_dataset("activity_zscore", data=np.bytes_(str(result.activity_zscore)))
+    meta.create_dataset(
+        "activity_baseline_tmin_s",
+        data=float(result.activity_baseline_tmin_s),
+    )
+    meta.create_dataset(
+        "activity_baseline_tmax_s",
+        data=float(result.activity_baseline_tmax_s),
+    )
 
     # stats
     stats = fh.create_group("stats")

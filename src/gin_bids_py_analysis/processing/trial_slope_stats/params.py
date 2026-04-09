@@ -63,11 +63,11 @@ class TrialSlopeStatsParams(BaseProcessingParams):
             "Each entry is shaped as {condition_label: {scale: float, offset: float}}."
         ),
     )
-    predictor_scaling: Literal["none", "zscore_within_condition"] = Field(
+    predictor_zscore: Literal["none", "within_condition"] = Field(
         default="none",
         description=(
-            "Predictor scaling mode applied within each condition after the affine "
-            "transform. 'none' keeps transformed values; 'zscore_within_condition' "
+            "Predictor z-score mode applied within each condition after the affine "
+            "transform. 'none' keeps transformed values; 'within_condition' "
             "z-scores the predictor across kept trials within each condition."
         ),
     )
@@ -108,27 +108,29 @@ class TrialSlopeStatsParams(BaseProcessingParams):
             "binning. Cannot be combined with window_ms > 0."
         ),
     )
-    activity_scaling: Literal["none", "zscore_by_baseline"] = Field(
+    activity_zscore: Literal["none", "baseline", "across_trials"] = Field(
         default="none",
         description=(
-            "Optional scaling applied to the input activity before per-condition regression. "
+            "Optional activity z-score applied before per-condition regression. "
             "'none' keeps the original units. "
-            "'zscore_by_baseline' z-scores activity relative to a pooled baseline window, "
-            "independently for each channel/ROI."
+            "'baseline' z-scores activity relative to a pooled baseline window, "
+            "independently for each channel/ROI. "
+            "'across_trials' z-scores activity within each condition across the "
+            "trial axis, independently for each channel/ROI and time sample."
         ),
     )
     activity_baseline_tmin_s: float = Field(
         default=-0.2,
         description=(
             "Baseline window start in seconds, relative to the anchor event. "
-            "Used only when activity_scaling='zscore_by_baseline'."
+            "Used only when activity_zscore='baseline'."
         ),
     )
     activity_baseline_tmax_s: float = Field(
         default=0.0,
         description=(
             "Baseline window end in seconds, relative to the anchor event. "
-            "Used only when activity_scaling='zscore_by_baseline'."
+            "Used only when activity_zscore='baseline'."
         ),
     )
     experiment_start_event_code: str | None = Field(
@@ -242,16 +244,16 @@ class TrialSlopeStatsParams(BaseProcessingParams):
             raise ValueError(
                 "activity_baseline_tmax_s must be greater than activity_baseline_tmin_s."
             )
-        if self.activity_scaling == "zscore_by_baseline":
+        if self.activity_zscore == "baseline":
             if self.activity_baseline_tmin_s < self.tmin_s:
                 raise ValueError(
                     "activity_baseline_tmin_s must be within the epoch window when "
-                    "activity_scaling='zscore_by_baseline'."
+                    "activity_zscore='baseline'."
                 )
             if self.activity_baseline_tmax_s > self.tmax_s:
                 raise ValueError(
                     "activity_baseline_tmax_s must be within the epoch window when "
-                    "activity_scaling='zscore_by_baseline'."
+                    "activity_zscore='baseline'."
                 )
         return self
 

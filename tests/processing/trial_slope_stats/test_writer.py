@@ -95,11 +95,11 @@ def _make_result(tmp_path: Path) -> TrialSlopeStatsProcessingResult:
         source_electrodes_files=[],
         analysis_level="channel",
         analysis_type="slope_regression",
-        activity_scaling="zscore_by_baseline",
+        activity_zscore="baseline",
         activity_baseline_tmin_s=-0.2,
         activity_baseline_tmax_s=0.0,
         predictor="predictor_value",
-        predictor_scaling="none",
+        predictor_zscore="none",
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
         condition_a_stats_valid=True,
@@ -123,7 +123,7 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
 
     with h5py.File(output_path, "r") as fh:
         assert fh["meta"]["analysis_type"].asstr()[()] == "slope_regression"
-        assert fh["meta"]["activity_scaling"].asstr()[()] == "zscore_by_baseline"
+        assert fh["meta"]["activity_zscore"].asstr()[()] == "baseline"
         assert float(fh["meta"]["activity_baseline_tmin_s"][()]) == pytest.approx(-0.2)
         assert float(fh["meta"]["activity_baseline_tmax_s"][()]) == pytest.approx(0.0)
         assert fh["regression"]["condition_a"]["slope"].shape == (2, 3)
@@ -146,7 +146,7 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
     np.testing.assert_allclose(loaded.condition_a_epoch_means, result.condition_a_epoch_means)
     np.testing.assert_allclose(loaded.condition_b_epoch_means, result.condition_b_epoch_means)
     assert loaded.predictor == "predictor_value"
-    assert loaded.activity_scaling == "zscore_by_baseline"
+    assert loaded.activity_zscore == "baseline"
     assert loaded.activity_baseline_tmin_s == pytest.approx(-0.2)
     assert loaded.activity_baseline_tmax_s == pytest.approx(0.0)
 

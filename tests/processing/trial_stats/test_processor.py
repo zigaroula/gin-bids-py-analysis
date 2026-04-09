@@ -951,7 +951,7 @@ def test_process_group_activity_zscore_preserves_ttest_statistics(
     z_result = TrialStatsProcessing(
         TrialStatsParams(
             **base_params,
-            activity_scaling="zscore_by_baseline",
+            activity_zscore="baseline",
             activity_baseline_tmin_s=0.0,
             activity_baseline_tmax_s=0.1,
         ),
@@ -961,8 +961,8 @@ def test_process_group_activity_zscore_preserves_ttest_statistics(
     np.testing.assert_allclose(z_result.t_values, raw_result.t_values)
     np.testing.assert_allclose(z_result.p_values, raw_result.p_values)
     np.testing.assert_array_equal(z_result.significant_mask, raw_result.significant_mask)
-    assert z_result.activity_scaling == "zscore_by_baseline"
-    assert z_result.metadata["activity_scaling"] == "zscore_by_baseline"
+    assert z_result.activity_zscore == "baseline"
+    assert z_result.metadata["activity_zscore"] == "baseline"
     assert z_result.activity_baseline_tmin_s == pytest.approx(0.0)
     assert z_result.activity_baseline_tmax_s == pytest.approx(0.1)
     assert not np.allclose(z_result.mean_difference, raw_result.mean_difference)

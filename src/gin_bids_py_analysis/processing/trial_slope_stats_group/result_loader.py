@@ -158,7 +158,7 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
             condition_labels = ("condition_a", "condition_b")
         source_metric = str_scalar(
             dataset_or_none(fh, "meta/source_metric"),
-            default="raw_slope",
+            default="slope",
         )
         contrast_mode = str_scalar(
             dataset_or_none(fh, "meta/contrast_mode"),
@@ -178,10 +178,16 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
             "contrast_mode": contrast_mode,
             "roi_mode": roi_mode,
             "atlas_name": atlas_name,
-            "activity_scaling": str_scalar(
-                dataset_or_none(fh, "meta/activity_scaling"),
+            "predictor": str_scalar(dataset_or_none(fh, "meta/predictor"), default=""),
+            "predictor_zscore": str_scalar(
+                dataset_or_none(fh, "meta/predictor_zscore"),
                 default="none",
             ),
+            "predictor_transform_by_condition_json": str_scalar(
+                dataset_or_none(fh, "meta/predictor_transform_by_condition_json"),
+                default="{}",
+            ),
+            "activity_zscore": _require_group_activity_zscore_hdf5(fh=fh, path=path),
             "activity_baseline_tmin_s": float_scalar(
                 dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
                 default=-0.2,
@@ -489,7 +495,7 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         condition_labels = ("condition_a", "condition_b")
     source_metric = mat_str(
         getattr(meta, "source_metric", None),
-        default="raw_slope",
+        default="slope",
     )
     contrast_mode = mat_str(
         getattr(meta, "contrast_mode", None),
@@ -509,7 +515,13 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         "contrast_mode": contrast_mode,
         "roi_mode": roi_mode,
         "atlas_name": atlas_name,
-        "activity_scaling": mat_str(getattr(meta, "activity_scaling", None), default="none"),
+        "predictor": mat_str(getattr(meta, "predictor", None), default=""),
+        "predictor_zscore": mat_str(getattr(meta, "predictor_zscore", None), default="none"),
+        "predictor_transform_by_condition_json": mat_str(
+            getattr(meta, "predictor_transform_by_condition_json", None),
+            default="{}",
+        ),
+        "activity_zscore": _require_group_activity_zscore_mat(meta, path=path),
         "activity_baseline_tmin_s": mat_float(
             getattr(meta, "activity_baseline_tmin_s", None),
             default=-0.2,
@@ -674,3 +686,25 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         condition_b_scatter_predictor=scatter_pred_b_m,
         condition_b_scatter_activity=scatter_act_b_m,
     )
+
+
+def _require_group_activity_zscore_hdf5(*, fh: h5py.File, path: Path) -> str:
+    ds = dataset_or_none(fh, "meta/activity_zscore")
+    if ds is None:
+        raise ValueError(
+            f"{path.name}: unsupported legacy trial_slope_stats_group schema; "
+            "meta/activity_zscore is required."
+        )
+    return str_scalar(ds, default="none")
+
+
+def _require_group_activity_zscore_mat(meta: object, path: Path) -> str:
+    raw = getattr(meta, "activity_zscore", None)
+    if raw is None:
+        raise ValueError(
+            f"{path.name}: unsupported legacy trial_slope_stats_group schema; "
+            "meta.activity_zscore is required."
+        )
+    from gin_bids_py_analysis.processing.utils.matlab import mat_str
+
+    return mat_str(raw, default="none")

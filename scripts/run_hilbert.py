@@ -30,7 +30,7 @@ BIDS_ROOT = Path(r"E:\data_clarissa\valuation\bids")
 FILE_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    #"subject": "epi18",
+    #"subject": "TOU2022TISa",
     #"run": "01",
 }
 

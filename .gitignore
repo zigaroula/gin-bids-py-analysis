@@ -38,3 +38,6 @@ Thumbs.db
 # Temp
 .tmp/
 .temp/
+
+# Source code
+src/source_code/

@@ -131,10 +131,28 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
                         meta.create_dataset(key, data=float(val))
                     else:
                         meta.create_dataset(key, data=int(val))
-            if "activity_scaling" in result.metadata:
+            if "predictor" in result.metadata:
                 meta.create_dataset(
-                    "activity_scaling",
-                    data=str(result.metadata["activity_scaling"]),
+                    "predictor",
+                    data=str(result.metadata["predictor"]),
+                    dtype=str_dtype,
+                )
+            if "predictor_zscore" in result.metadata:
+                meta.create_dataset(
+                    "predictor_zscore",
+                    data=str(result.metadata["predictor_zscore"]),
+                    dtype=str_dtype,
+                )
+            if "predictor_transform_by_condition_json" in result.metadata:
+                meta.create_dataset(
+                    "predictor_transform_by_condition_json",
+                    data=str(result.metadata["predictor_transform_by_condition_json"]),
+                    dtype=str_dtype,
+                )
+            if "activity_zscore" in result.metadata:
+                meta.create_dataset(
+                    "activity_zscore",
+                    data=str(result.metadata["activity_zscore"]),
                     dtype=str_dtype,
                 )
             if "activity_baseline_tmin_s" in result.metadata:
@@ -309,8 +327,16 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
             val = result.metadata.get(key)
             if val is not None:
                 meta_kwargs[key] = val
-        if "activity_scaling" in result.metadata:
-            meta_kwargs["activity_scaling"] = np.str_(str(result.metadata["activity_scaling"]))
+        if "predictor" in result.metadata:
+            meta_kwargs["predictor"] = np.str_(str(result.metadata["predictor"]))
+        if "predictor_zscore" in result.metadata:
+            meta_kwargs["predictor_zscore"] = np.str_(str(result.metadata["predictor_zscore"]))
+        if "predictor_transform_by_condition_json" in result.metadata:
+            meta_kwargs["predictor_transform_by_condition_json"] = np.str_(
+                str(result.metadata["predictor_transform_by_condition_json"])
+            )
+        if "activity_zscore" in result.metadata:
+            meta_kwargs["activity_zscore"] = np.str_(str(result.metadata["activity_zscore"]))
         if "activity_baseline_tmin_s" in result.metadata:
             meta_kwargs["activity_baseline_tmin_s"] = float(result.metadata["activity_baseline_tmin_s"])
         if "activity_baseline_tmax_s" in result.metadata:
@@ -404,7 +430,7 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
             scatter_data=scatter_data_struct,
             provenance=prov_struct,
         )
-        savemat(str(output_path), {"data": data}, do_compression=True)
+        savemat(str(output_path), {"data": data}, do_compression=True, long_field_names=True)
 
 
 # ---------------------------------------------------------------------------

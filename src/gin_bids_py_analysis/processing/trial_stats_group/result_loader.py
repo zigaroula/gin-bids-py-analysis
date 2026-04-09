@@ -151,10 +151,13 @@ def _load_from_hdf5(path: Path) -> TrialStatsGroupProcessingResult:
         roi_mode = str_scalar(dataset_or_none(fh, "meta/roi_mode"), default="manual")
         atlas_name_raw = str_scalar(dataset_or_none(fh, "meta/atlas_name"), default="")
         atlas_name: str | None = atlas_name_raw.strip() or None
-        activity_scaling = str_scalar(
-            dataset_or_none(fh, "meta/activity_scaling"),
-            default="none",
-        )
+        activity_zscore_ds = dataset_or_none(fh, "meta/activity_zscore")
+        if activity_zscore_ds is None:
+            raise ValueError(
+                f"{path.name}: unsupported legacy trial_stats_group schema; "
+                "meta/activity_zscore is required."
+            )
+        activity_zscore = str_scalar(activity_zscore_ds, default="none")
         activity_baseline_tmin_s = float_scalar(
             dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
             default=-0.2,
@@ -264,7 +267,7 @@ def _load_from_hdf5(path: Path) -> TrialStatsGroupProcessingResult:
             "p_value_correction_method": p_value_correction_method,
             "significance_alpha": significance_alpha,
             "roi_mode": roi_mode,
-            "activity_scaling": activity_scaling,
+            "activity_zscore": activity_zscore,
             "activity_baseline_tmin_s": activity_baseline_tmin_s,
             "activity_baseline_tmax_s": activity_baseline_tmax_s,
         },
@@ -391,7 +394,13 @@ def _load_from_matlab(path: Path) -> TrialStatsGroupProcessingResult:
     roi_mode = mat_str(getattr(meta, "roi_mode", None), default="manual")
     atlas_name_raw = mat_str(getattr(meta, "atlas_name", None), default="")
     atlas_name: str | None = atlas_name_raw.strip() or None
-    activity_scaling = mat_str(getattr(meta, "activity_scaling", None), default="none")
+    activity_zscore_raw = getattr(meta, "activity_zscore", None)
+    if activity_zscore_raw is None:
+        raise ValueError(
+            f"{path.name}: unsupported legacy trial_stats_group schema; "
+            "meta.activity_zscore is required."
+        )
+    activity_zscore = mat_str(activity_zscore_raw, default="none")
     activity_baseline_tmin_s = mat_float(
         getattr(meta, "activity_baseline_tmin_s", None),
         default=-0.2,
@@ -434,7 +443,7 @@ def _load_from_matlab(path: Path) -> TrialStatsGroupProcessingResult:
             "p_value_correction_method": p_value_correction_method,
             "significance_alpha": significance_alpha,
             "roi_mode": roi_mode,
-            "activity_scaling": activity_scaling,
+            "activity_zscore": activity_zscore,
             "activity_baseline_tmin_s": activity_baseline_tmin_s,
             "activity_baseline_tmax_s": activity_baseline_tmax_s,
         },

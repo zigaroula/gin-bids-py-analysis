@@ -100,8 +100,8 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
             meta_kwargs["n_bins"] = int(result.metadata["n_bins"])
         if "effective_n_bins" in result.metadata:
             meta_kwargs["effective_n_bins"] = int(result.metadata["effective_n_bins"])
-        if "activity_scaling" in result.metadata:
-            meta_kwargs["activity_scaling"] = np.str_(str(result.metadata["activity_scaling"]))
+        if "activity_zscore" in result.metadata:
+            meta_kwargs["activity_zscore"] = np.str_(str(result.metadata["activity_zscore"]))
         if "activity_baseline_tmin_s" in result.metadata:
             meta_kwargs["activity_baseline_tmin_s"] = float(result.metadata["activity_baseline_tmin_s"])
         if "activity_baseline_tmax_s" in result.metadata:
@@ -192,7 +192,7 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
                 provenance=prov_struct,
                 cluster_stats=cluster_stats_struct,
             )
-        savemat(str(output_path), {"data": data}, do_compression=True)
+        savemat(str(output_path), {"data": data}, do_compression=True, long_field_names=True)
 
     def _write_hdf5(self, result: TrialStatsGroupProcessingResult, output_path: Path) -> None:
         str_dtype = h5py.string_dtype(encoding="utf-8")
@@ -363,10 +363,10 @@ class TrialStatsGroupProcessingWriter(BaseProcessingWriter):
                     "effective_n_bins",
                     data=int(result.metadata["effective_n_bins"]),
                 )
-            if "activity_scaling" in result.metadata:
+            if "activity_zscore" in result.metadata:
                 meta_grp.create_dataset(
-                    "activity_scaling",
-                    data=str(result.metadata["activity_scaling"]),
+                    "activity_zscore",
+                    data=str(result.metadata["activity_zscore"]),
                     dtype=str_dtype,
                 )
             if "activity_baseline_tmin_s" in result.metadata:

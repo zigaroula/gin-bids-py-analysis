@@ -13,24 +13,12 @@ class TrialSlopeStatsProcessingResult(BaseProcessingResult):
     """Structured outputs for subject-level trial slope statistics."""
 
     condition_a_slope: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_a_slope_standardized_predictor: np.ndarray = field(
-        default_factory=lambda: np.array([])
-    )
-    condition_a_slope_standardized_full: np.ndarray = field(
-        default_factory=lambda: np.array([])
-    )
     condition_a_intercept: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_a_r_value: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_a_p_value: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_a_p_value_corrected: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_a_significant_mask: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_slope: np.ndarray = field(default_factory=lambda: np.array([]))
-    condition_b_slope_standardized_predictor: np.ndarray = field(
-        default_factory=lambda: np.array([])
-    )
-    condition_b_slope_standardized_full: np.ndarray = field(
-        default_factory=lambda: np.array([])
-    )
     condition_b_intercept: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_r_value: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_p_value: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -75,12 +63,12 @@ class TrialSlopeStatsProcessingResult(BaseProcessingResult):
     region_channels: dict[str, list[str]] = field(default_factory=dict)
     window_ms: float = 0.0
     n_bins: int = 0
-    activity_scaling: str = "none"
+    activity_zscore: str = "none"
     activity_baseline_tmin_s: float = -0.2
     activity_baseline_tmax_s: float = 0.0
 
     predictor: str = "predictor_value"
-    predictor_scaling: str = "none"
+    predictor_zscore: str = "none"
     predictor_transform_by_condition: dict[str, dict[str, float]] = field(default_factory=dict)
     p_value_correction_method: str = "fdr_bh"
     significance_alpha: float = 0.05
