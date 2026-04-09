@@ -954,6 +954,8 @@ def test_process_group_activity_zscore_preserves_ttest_statistics(
             activity_zscore="baseline",
             activity_baseline_tmin_s=0.0,
             activity_baseline_tmax_s=0.1,
+            activity_baseline_scope="global",
+            activity_baseline_remove_outlier_trial_means=True,
         ),
         resolver=_AlternatingResolver(),
     ).process_group(group)
@@ -965,16 +967,32 @@ def test_process_group_activity_zscore_preserves_ttest_statistics(
     assert z_result.metadata["activity_zscore"] == "baseline"
     assert z_result.activity_baseline_tmin_s == pytest.approx(0.0)
     assert z_result.activity_baseline_tmax_s == pytest.approx(0.1)
+    assert z_result.activity_baseline_scope == "global"
+    assert z_result.activity_baseline_remove_outlier_trial_means is True
+    assert z_result.metadata["activity_baseline_scope"] == "global"
+    assert z_result.metadata["activity_baseline_remove_outlier_trial_means"] is True
     assert not np.allclose(z_result.mean_difference, raw_result.mean_difference)
     baseline_mask = (z_result.time_axis_s >= 0.0) & (z_result.time_axis_s <= 0.1)
-    pooled_baseline = np.concatenate(
+    pooled_trial_means = np.concatenate(
         [
-            z_result.condition_a_epochs[:, :, baseline_mask],
-            z_result.condition_b_epochs[:, :, baseline_mask],
+            np.nanmean(
+                z_result.condition_a_epochs[:, :, baseline_mask],
+                axis=2,
+                dtype=np.float64,
+            ),
+            np.nanmean(
+                z_result.condition_b_epochs[:, :, baseline_mask],
+                axis=2,
+                dtype=np.float64,
+            ),
         ],
         axis=0,
     )
-    assert abs(float(np.nanmean(pooled_baseline))) < 1e-12
+    assert np.allclose(
+        np.nanmean(pooled_trial_means, axis=0, dtype=np.float64),
+        np.zeros((pooled_trial_means.shape[1],), dtype=np.float64),
+        atol=1e-12,
+    )
 
 
 def test_process_group_supports_numeric_condition_rules_and_audits_exclusions(

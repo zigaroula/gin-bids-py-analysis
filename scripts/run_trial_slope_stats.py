@@ -41,6 +41,7 @@ PARAMS = TrialSlopeStatsParams(
     condition_a="pleasant",
     condition_b="unpleasant",
     predictor="rating",
+    trial_activity_summary={"kind": "epoch_mean"},
     activity_zscore="none",
     activity_baseline_tmin_s=-0.2,
     activity_baseline_tmax_s=0.0,

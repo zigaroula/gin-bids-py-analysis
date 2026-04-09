@@ -6,6 +6,7 @@ import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
+from scipy.stats import linregress
 
 from gin_bids_py_analysis.processing.trial_slope_stats import TrialSlopeStatsProcessingResult
 from gin_bids_py_analysis.processing.trial_stats import TrialStatsProcessingResult
@@ -462,12 +463,12 @@ class PlotPanel(QWidget):
 
         pred_a, act_a, invalid_a = self._extract_scatter_series(
             predictor_values=result.condition_a_predictor_values,
-            epoch_means=result.condition_a_epoch_means,
+            summary_values=result.condition_a_trial_activity_summary_values,
             channel_idx=channel_idx,
         )
         pred_b, act_b, invalid_b = self._extract_scatter_series(
             predictor_values=result.condition_b_predictor_values,
-            epoch_means=result.condition_b_epoch_means,
+            summary_values=result.condition_b_trial_activity_summary_values,
             channel_idx=channel_idx,
         )
 
@@ -495,7 +496,12 @@ class PlotPanel(QWidget):
             return
 
         ax.set_xlabel(_predictor_axis_label(result.predictor, result.predictor_zscore))
-        ax.set_ylabel(_scatter_activity_axis_label(result.activity_zscore))
+        ax.set_ylabel(
+            _scatter_activity_axis_label(
+                result.trial_activity_summary_label,
+                result.activity_zscore,
+            )
+        )
         ax.set_title(
             self._format_channel_title(
                 ch_label=ch_label,
@@ -532,11 +538,11 @@ class PlotPanel(QWidget):
         self,
         *,
         predictor_values: np.ndarray,
-        epoch_means: np.ndarray,
+        summary_values: np.ndarray,
         channel_idx: int,
     ) -> tuple[np.ndarray, np.ndarray, bool]:
         predictor = np.asarray(predictor_values, dtype=np.float64).ravel()
-        activity = np.asarray(epoch_means, dtype=np.float64)
+        activity = np.asarray(summary_values, dtype=np.float64)
 
         if predictor.size == 0 and activity.size == 0:
             return np.empty(0, dtype=np.float64), np.empty(0, dtype=np.float64), False
@@ -579,15 +585,18 @@ class PlotPanel(QWidget):
             zorder=1,
         )
         if predictor.size >= 2:
-            coefs = np.polyfit(predictor, activity, 1)
-            x_range = np.array([predictor.min(), predictor.max()], dtype=np.float64)
-            ax.plot(
-                x_range,
-                np.polyval(coefs, x_range),
-                color=color,
-                linewidth=1.5,
-                zorder=2,
-            )
+            regression = _fit_scatter_regression(predictor, activity)
+            if regression is not None:
+                x_range = np.array([predictor.min(), predictor.max()], dtype=np.float64)
+                y_fit = regression.intercept + (regression.slope * x_range)
+                ax.plot(
+                    x_range,
+                    y_fit,
+                    color=color,
+                    linewidth=1.8 if regression.is_significant else 1.2,
+                    linestyle="-" if regression.is_significant else "--",
+                    zorder=2,
+                )
         summary_x, summary_y, summary_x_sem, summary_y_sem = _compute_scatter_summary_points(
             predictor,
             activity,
@@ -706,23 +715,22 @@ def _compute_scatter_summary_points(
 
     predictor = predictor[valid]
     activity = activity[valid]
-    order = np.argsort(predictor, kind="mergesort")
-    predictor = predictor[order]
-    activity = activity[order]
 
     n_bins = min(int(target_bins), int(predictor.size))
     if n_bins < 2:
         empty = np.empty(0, dtype=np.float64)
         return empty, empty, empty, empty
 
-    predictor_bins = np.array_split(predictor, n_bins)
-    activity_bins = np.array_split(activity, n_bins)
-
     mean_x: list[float] = []
     mean_y: list[float] = []
     sem_x: list[float] = []
     sem_y: list[float] = []
-    for predictor_bin, activity_bin in zip(predictor_bins, activity_bins):
+    edges = np.quantile(predictor, np.linspace(0.0, 1.0, n_bins + 1))
+
+    for lower, upper in zip(edges[:-1], edges[1:]):
+        in_bin = (predictor >= lower) & (predictor <= upper)
+        predictor_bin = predictor[in_bin]
+        activity_bin = activity[in_bin]
         if predictor_bin.size == 0:
             continue
         mean_x.append(float(np.nanmean(predictor_bin)))
@@ -753,18 +761,56 @@ def _activity_axis_label(activity_zscore: str) -> str:
     return "Amplitude"
 
 
-def _scatter_activity_axis_label(activity_zscore: str) -> str:
+def _scatter_activity_axis_label(summary_label: str, activity_zscore: str) -> str:
+    label = str(summary_label).strip() or "Epoch mean activity"
     if _is_activity_zscore_enabled(activity_zscore):
-        return "Epoch mean activity (z)"
-    return "Epoch mean activity"
+        return f"{label} (z)"
+    return label
 
 
 def _predictor_axis_label(predictor: str, predictor_zscore: str) -> str:
     base = predictor.strip() if predictor else "Predictor value"
-    if str(predictor_zscore).strip().lower() == "within_condition":
+    if str(predictor_zscore).strip().lower() in {"condition", "global"}:
         return f"{base} (z)"
     return base
 
 
 def _is_activity_zscore_enabled(activity_zscore: str) -> bool:
     return str(activity_zscore).strip().lower() in {"baseline", "across_trials"}
+
+
+class _ScatterRegressionResult:
+    def __init__(self, *, slope: float, intercept: float, p_value: float) -> None:
+        self.slope = float(slope)
+        self.intercept = float(intercept)
+        self.p_value = float(p_value)
+
+    @property
+    def is_significant(self) -> bool:
+        return np.isfinite(self.p_value) and self.p_value < 0.05
+
+
+def _fit_scatter_regression(
+    predictor_values: np.ndarray,
+    activity_values: np.ndarray,
+) -> _ScatterRegressionResult | None:
+    predictor = np.asarray(predictor_values, dtype=np.float64).ravel()
+    activity = np.asarray(activity_values, dtype=np.float64).ravel()
+    valid = np.isfinite(predictor) & np.isfinite(activity)
+    predictor = predictor[valid]
+    activity = activity[valid]
+    if predictor.size < 2:
+        return None
+    if np.nanmin(predictor) == np.nanmax(predictor):
+        return None
+    try:
+        fit = linregress(predictor, activity)
+    except ValueError:
+        return None
+    if not np.isfinite(fit.slope) or not np.isfinite(fit.intercept):
+        return None
+    return _ScatterRegressionResult(
+        slope=float(fit.slope),
+        intercept=float(fit.intercept),
+        p_value=float(fit.pvalue),
+    )

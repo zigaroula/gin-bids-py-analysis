@@ -2,7 +2,13 @@
 
 __version__ = "0.1.0"
 
-from .params import TrialSlopeStatsParams, TrialSlopeStatsWriterParams
+from .params import (
+    TrialActivitySummaryAnnotationEventSource,
+    TrialActivitySummaryConfig,
+    TrialActivitySummaryTableColumnSource,
+    TrialSlopeStatsParams,
+    TrialSlopeStatsWriterParams,
+)
 from .processor import TrialSlopeStatsProcessing
 from .result import TrialSlopeStatsProcessingResult
 from .result_loader import load_trial_slope_stats_result
@@ -15,6 +21,9 @@ __all__ = [
     "TableTrialResolver",
     "ConditionExpr",
     "ConditionDefinition",
+    "TrialActivitySummaryAnnotationEventSource",
+    "TrialActivitySummaryConfig",
+    "TrialActivitySummaryTableColumnSource",
     "TrialSlopeStatsParams",
     "TrialSlopeStatsProcessing",
     "TrialSlopeStatsProcessingResult",

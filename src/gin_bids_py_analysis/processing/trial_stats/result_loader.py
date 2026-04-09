@@ -26,6 +26,8 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
 
 from .result import TrialStatsProcessingResult
 
+_VALID_BASELINE_SCOPES = frozenset({"trial", "condition", "global"})
+
 
 def load_trial_stats_result(path: Path | str) -> TrialStatsProcessingResult:
     """Load a pre-computed ``TrialStatsProcessingResult`` from *path*.
@@ -192,6 +194,16 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
             dataset_or_none(fh, "meta/activity_baseline_tmax_s"),
             default=0.0,
         )
+        activity_baseline_scope = _validated_baseline_scope(
+            str_scalar(
+                dataset_or_none(fh, "meta/activity_baseline_scope"),
+                default="global",
+            ),
+            path.name,
+        )
+        activity_baseline_remove_outlier_trial_means = bool(
+            dataset_or_none(fh, "meta/activity_baseline_remove_outlier_trial_means")[()]
+        ) if dataset_or_none(fh, "meta/activity_baseline_remove_outlier_trial_means") is not None else False
         n_perms = int_scalar(dataset_or_none(fh, "meta/n_permutations"), default=0)
 
         # --- epochs (optional, present only when include_epochs=True) ---
@@ -239,6 +251,8 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
             "activity_zscore": activity_zscore,
             "activity_baseline_tmin_s": activity_baseline_tmin_s,
             "activity_baseline_tmax_s": activity_baseline_tmax_s,
+            "activity_baseline_scope": activity_baseline_scope,
+            "activity_baseline_remove_outlier_trial_means": activity_baseline_remove_outlier_trial_means,
             "n_permutations": (
                 permuted_t_values.shape[0]
                 if permuted_t_values is not None
@@ -271,6 +285,8 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
         activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
+        activity_baseline_scope=activity_baseline_scope,
+        activity_baseline_remove_outlier_trial_means=activity_baseline_remove_outlier_trial_means,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,
         stats_valid=stats_valid,
@@ -405,6 +421,16 @@ def _load_from_matlab(path: Path) -> TrialStatsProcessingResult:
         getattr(meta, "activity_baseline_tmax_s", None),
         default=0.0,
     )
+    activity_baseline_scope = _validated_baseline_scope(
+        mat_str(getattr(meta, "activity_baseline_scope", None), default="global"),
+        path.name,
+    )
+    activity_baseline_remove_outlier_trial_means = bool(
+        mat_int(
+            getattr(meta, "activity_baseline_remove_outlier_trial_means", None),
+            default=0,
+        )
+    )
 
     # --- provenance ---
     source_ieeg_files = (
@@ -423,6 +449,8 @@ def _load_from_matlab(path: Path) -> TrialStatsProcessingResult:
             "activity_zscore": activity_zscore,
             "activity_baseline_tmin_s": activity_baseline_tmin_s,
             "activity_baseline_tmax_s": activity_baseline_tmax_s,
+            "activity_baseline_scope": activity_baseline_scope,
+            "activity_baseline_remove_outlier_trial_means": activity_baseline_remove_outlier_trial_means,
         },
         t_values=t_values,
         p_values=p_values,
@@ -450,6 +478,8 @@ def _load_from_matlab(path: Path) -> TrialStatsProcessingResult:
         activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
+        activity_baseline_scope=activity_baseline_scope,
+        activity_baseline_remove_outlier_trial_means=activity_baseline_remove_outlier_trial_means,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,
         stats_valid=stats_valid,
@@ -459,3 +489,13 @@ def _load_from_matlab(path: Path) -> TrialStatsProcessingResult:
         source_ieeg_files=source_ieeg_files,
         source_electrodes_files=source_electrodes_files,
     )
+
+
+def _validated_baseline_scope(value: str, path_name: str) -> str:
+    cleaned = str(value).strip().lower() or "global"
+    if cleaned not in _VALID_BASELINE_SCOPES:
+        raise ValueError(
+            f"{path_name}: unsupported activity_baseline_scope={value!r}. "
+            "Valid values are 'trial', 'condition', and 'global'."
+        )
+    return cleaned

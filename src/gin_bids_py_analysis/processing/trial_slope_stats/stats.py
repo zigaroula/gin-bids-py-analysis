@@ -113,6 +113,68 @@ def zscore_predictor_values(
     return out, True
 
 
+def zscore_predictor_values_by_scope(
+    condition_a_values: np.ndarray,
+    condition_b_values: np.ndarray,
+    *,
+    scope: str,
+) -> tuple[np.ndarray, np.ndarray, bool, bool]:
+    """Return predictor arrays z-scored with the requested scope.
+
+    Parameters
+    ----------
+    condition_a_values, condition_b_values:
+        Predictor vectors for the two conditions.
+    scope:
+        One of ``"none"``, ``"condition"``, or ``"global"``.
+    """
+    arr_a = np.asarray(condition_a_values, dtype=np.float64).reshape(-1)
+    arr_b = np.asarray(condition_b_values, dtype=np.float64).reshape(-1)
+    mode = str(scope).strip().lower()
+
+    if mode == "none":
+        return arr_a.copy(), arr_b.copy(), True, True
+
+    if mode == "condition":
+        scaled_a, valid_a = _zscore_predictor_or_empty(arr_a)
+        scaled_b, valid_b = _zscore_predictor_or_empty(arr_b)
+        return scaled_a, scaled_b, valid_a, valid_b
+
+    if mode != "global":
+        raise ValueError(
+            f"Unsupported predictor z-score scope: {scope!r}. "
+            "Valid values are 'none', 'condition', and 'global'."
+        )
+
+    combined_parts = [arr for arr in (arr_a, arr_b) if arr.size > 0]
+    if not combined_parts:
+        return arr_a.copy(), arr_b.copy(), True, True
+
+    combined = np.concatenate(combined_parts)
+    scaled_combined, valid = zscore_predictor_values(combined)
+    if not valid:
+        scaled_a = np.full_like(arr_a, np.nan, dtype=np.float64) if arr_a.size > 0 else arr_a.copy()
+        scaled_b = np.full_like(arr_b, np.nan, dtype=np.float64) if arr_b.size > 0 else arr_b.copy()
+        return scaled_a, scaled_b, arr_a.size == 0, arr_b.size == 0
+
+    split = arr_a.size
+    scaled_a = scaled_combined[:split].copy()
+    scaled_b = scaled_combined[split:].copy()
+    return scaled_a, scaled_b, True, True
+
+
+def _zscore_predictor_or_empty(
+    predictor_values: np.ndarray,
+) -> tuple[np.ndarray, bool]:
+    arr = np.asarray(predictor_values, dtype=np.float64).reshape(-1)
+    if arr.size == 0:
+        return arr.copy(), True
+    scaled, valid = zscore_predictor_values(arr)
+    if valid:
+        return scaled, True
+    return np.full_like(arr, np.nan, dtype=np.float64), False
+
+
 def zscore_epochs_across_trials(
     epochs: np.ndarray,
 ) -> tuple[np.ndarray, bool]:

@@ -100,6 +100,11 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         },
         window_ms=100.0,
         n_bins=0,
+        activity_zscore="baseline",
+        activity_baseline_tmin_s=-0.1,
+        activity_baseline_tmax_s=0.0,
+        activity_baseline_scope="condition",
+        activity_baseline_remove_outlier_trial_means=True,
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
         stats_valid=True,
@@ -144,6 +149,11 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         assert list(fh["meta"]["atlas_region_channel_map"]["channel"].asstr()[:]) == ["CH01", "CH02", "CH03"]
         assert float(fh["meta"]["window_ms"][()]) == 100.0
         assert int(fh["meta"]["n_bins"][()]) == 0
+        assert fh["meta"]["activity_zscore"].asstr()[()] == "baseline"
+        assert float(fh["meta"]["activity_baseline_tmin_s"][()]) == pytest.approx(-0.1)
+        assert float(fh["meta"]["activity_baseline_tmax_s"][()]) == pytest.approx(0.0)
+        assert fh["meta"]["activity_baseline_scope"].asstr()[()] == "condition"
+        assert bool(fh["meta"]["activity_baseline_remove_outlier_trial_means"][()]) is True
         assert int(fh["meta"]["effective_n_bins"][()]) == 3
         assert fh["meta"]["binning_mode"].asstr()[()] == "window_ms"
         assert list(fh["provenance"]["source_ieeg_files"].asstr()[:]) == [str(primary.path)]
@@ -209,6 +219,11 @@ def test_writer_outputs_matlab_and_trial_table() -> None:
             region_channels={},
             window_ms=0.0,
             n_bins=0,
+            activity_zscore="baseline",
+            activity_baseline_tmin_s=-0.1,
+            activity_baseline_tmax_s=0.0,
+            activity_baseline_scope="global",
+            activity_baseline_remove_outlier_trial_means=True,
             p_value_correction_method="fdr_bh",
             significance_alpha=0.05,
             stats_valid=True,
@@ -254,6 +269,11 @@ def test_writer_outputs_matlab_and_trial_table() -> None:
         # trial counts array: 2-element after squeeze
         counts = np.atleast_1d(data.meta.trial_counts)
         assert int(counts[0]) == 3
+        assert str(data.meta.activity_zscore) == "baseline"
+        assert float(data.meta.activity_baseline_tmin_s) == pytest.approx(-0.1)
+        assert float(data.meta.activity_baseline_tmax_s) == pytest.approx(0.0)
+        assert str(data.meta.activity_baseline_scope) == "global"
+        assert bool(data.meta.activity_baseline_remove_outlier_trial_means) is True
 
         lines = trial_table_path.read_text(encoding="utf-8").strip().splitlines()
         assert lines[0].startswith("source_file\tanchor_event_index")
@@ -316,6 +336,8 @@ def _make_minimal_result(
         activity_zscore="baseline",
         activity_baseline_tmin_s=-0.2,
         activity_baseline_tmax_s=0.0,
+        activity_baseline_scope="global",
+        activity_baseline_remove_outlier_trial_means=True,
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
         stats_valid=True,
@@ -350,6 +372,8 @@ def test_writer_hdf5_channel_significant_mask_written_and_loaded(
         assert fh["meta"]["activity_zscore"].asstr()[()] == "baseline"
         assert float(fh["meta"]["activity_baseline_tmin_s"][()]) == pytest.approx(-0.2)
         assert float(fh["meta"]["activity_baseline_tmax_s"][()]) == pytest.approx(0.0)
+        assert fh["meta"]["activity_baseline_scope"].asstr()[()] == "global"
+        assert bool(fh["meta"]["activity_baseline_remove_outlier_trial_means"][()]) is True
 
     # Round-trip through the loader
     loaded = load_trial_stats_result(output_path)
@@ -358,6 +382,8 @@ def test_writer_hdf5_channel_significant_mask_written_and_loaded(
     assert loaded.activity_zscore == "baseline"
     assert loaded.activity_baseline_tmin_s == pytest.approx(-0.2)
     assert loaded.activity_baseline_tmax_s == pytest.approx(0.0)
+    assert loaded.activity_baseline_scope == "global"
+    assert loaded.activity_baseline_remove_outlier_trial_means is True
 
 
 def test_writer_hdf5_channel_significant_mask_absent_when_none(

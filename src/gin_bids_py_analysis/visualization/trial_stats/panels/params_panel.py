@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -29,6 +31,27 @@ def _merge_model_params(model: TrialStatsParams | TrialSlopeStatsParams, **updat
     payload = model.model_dump()
     payload.update(updates)
     return model.__class__(**payload)
+
+
+def _predictor_transform_to_json(value: object) -> str:
+    if not value:
+        return ""
+    if hasattr(value, "model_dump"):
+        value = value.model_dump()
+    if isinstance(value, dict):
+        normalized: dict[str, object] = {}
+        for key, item in value.items():
+            if hasattr(item, "model_dump"):
+                normalized[str(key)] = item.model_dump()
+            else:
+                normalized[str(key)] = item
+        return json.dumps(
+            normalized,
+            sort_keys=True,
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+    return ""
 
 
 class ParamsPanel(QWidget):
@@ -69,6 +92,8 @@ class ParamsPanel(QWidget):
             activity_zscore=params.activity_zscore,
             activity_baseline_tmin_s=params.activity_baseline_tmin_s,
             activity_baseline_tmax_s=params.activity_baseline_tmax_s,
+            activity_baseline_scope=params.activity_baseline_scope,
+            activity_baseline_remove_outlier_trial_means=params.activity_baseline_remove_outlier_trial_means,
         )
 
         outer = QVBoxLayout(self)
@@ -120,10 +145,40 @@ class ParamsPanel(QWidget):
         self._predictor.setPlaceholderText("predictor_value")
         form.addRow("Predictor", self._predictor)
 
+        self._predictor_transform = QLineEdit()
+        self._predictor_transform.setPlaceholderText(
+            '{"pleasant":{"scale":1,"offset":0},"unpleasant":{"scale":-1,"offset":0}}'
+        )
+        form.addRow("Predictor transform", self._predictor_transform)
+
         self._predictor_scaling = QComboBox()
         self._predictor_scaling.addItem("none")
-        self._predictor_scaling.addItem("within_condition")
+        self._predictor_scaling.addItem("condition")
+        self._predictor_scaling.addItem("global")
         form.addRow("Predictor z-score", self._predictor_scaling)
+
+        self._trial_activity_summary_kind = QComboBox()
+        self._trial_activity_summary_kind.addItem("epoch_mean")
+        self._trial_activity_summary_kind.addItem("anchor_to_response_mean")
+        form.addRow("Trial activity summary", self._trial_activity_summary_kind)
+
+        self._trial_activity_summary_source = QComboBox()
+        self._trial_activity_summary_source.addItem("table_column")
+        self._trial_activity_summary_source.addItem("annotation_event_code")
+        form.addRow("Response source", self._trial_activity_summary_source)
+
+        self._trial_activity_summary_response_column = QLineEdit()
+        self._trial_activity_summary_response_column.setPlaceholderText("response_time")
+        form.addRow("Response column", self._trial_activity_summary_response_column)
+
+        self._trial_activity_summary_response_units = QComboBox()
+        self._trial_activity_summary_response_units.addItem("s")
+        self._trial_activity_summary_response_units.addItem("ms")
+        form.addRow("Response units", self._trial_activity_summary_response_units)
+
+        self._trial_activity_summary_response_event_code = QLineEdit()
+        self._trial_activity_summary_response_event_code.setPlaceholderText("20")
+        form.addRow("Response event code", self._trial_activity_summary_response_event_code)
 
         # min_trials_per_condition
         self._min_trials = QSpinBox()
@@ -193,6 +248,21 @@ class ParamsPanel(QWidget):
         self._activity_baseline_tmax.setSingleStep(0.1)
         form.addRow("Activity baseline t max (s)", self._activity_baseline_tmax)
 
+        self._activity_baseline_scope = QComboBox()
+        self._activity_baseline_scope.addItem("trial")
+        self._activity_baseline_scope.addItem("condition")
+        self._activity_baseline_scope.addItem("global")
+        form.addRow("Activity baseline scope", self._activity_baseline_scope)
+
+        self._activity_baseline_remove_outliers = QCheckBox()
+        self._activity_baseline_remove_outliers.setToolTip(
+            "Remove outlier baseline trial-means before estimating the baseline reference."
+        )
+        form.addRow(
+            "Remove outlier trial means",
+            self._activity_baseline_remove_outliers,
+        )
+
         # Mutual exclusion: setting one to nonzero zeros the other
         self._window_ms.valueChanged.connect(self._on_window_ms_changed)
         self._n_bins.valueChanged.connect(self._on_n_bins_changed)
@@ -219,6 +289,12 @@ class ParamsPanel(QWidget):
         self._sig_mode.currentTextChanged.connect(self._on_sig_mode_changed)
         self._analysis_mode.currentTextChanged.connect(self._on_analysis_mode_changed)
         self._activity_scaling.currentTextChanged.connect(self._on_activity_scaling_changed)
+        self._trial_activity_summary_kind.currentTextChanged.connect(
+            self._on_trial_activity_summary_kind_changed
+        )
+        self._trial_activity_summary_source.currentTextChanged.connect(
+            self._on_trial_activity_summary_source_changed
+        )
 
         scroll.setWidget(form_widget)
         outer.addWidget(scroll, stretch=1)
@@ -249,9 +325,23 @@ class ParamsPanel(QWidget):
         # Populate initial values
         self.set_params(params)
         self._predictor.setText(self._slope_params.predictor)
+        self._predictor_transform.setText(
+            _predictor_transform_to_json(
+                self._slope_params.predictor_transform_by_condition
+            )
+        )
         idx_scale = self._predictor_scaling.findText(self._slope_params.predictor_zscore)
         if idx_scale >= 0:
             self._predictor_scaling.setCurrentIndex(idx_scale)
+        idx_baseline_scope = self._activity_baseline_scope.findText(
+            self._slope_params.activity_baseline_scope
+        )
+        if idx_baseline_scope >= 0:
+            self._activity_baseline_scope.setCurrentIndex(idx_baseline_scope)
+        self._activity_baseline_remove_outliers.setChecked(
+            self._slope_params.activity_baseline_remove_outlier_trial_means
+        )
+        self._set_trial_activity_summary_widgets_from_params(self._slope_params)
         if default_mode not in {"ttest", "slope"}:
             default_mode = "ttest"
         if default_mode == "slope":
@@ -303,6 +393,8 @@ class ParamsPanel(QWidget):
                 activity_zscore=self._activity_scaling.currentText(),
                 activity_baseline_tmin_s=self._activity_baseline_tmin.value(),
                 activity_baseline_tmax_s=self._activity_baseline_tmax.value(),
+                activity_baseline_scope=self._activity_baseline_scope.currentText(),
+                activity_baseline_remove_outlier_trial_means=self._activity_baseline_remove_outliers.isChecked(),
                 channel_significance_mode=self._sig_mode.currentText(),
                 channel_significance_duration_threshold_ms=self._sig_duration_threshold.value(),
             )
@@ -333,6 +425,19 @@ class ParamsPanel(QWidget):
             for r in self._atlas_regions.text().split(",")
             if r.strip()
         ]
+        transform_text = self._predictor_transform.text().strip()
+        try:
+            predictor_transform_by_condition = (
+                json.loads(transform_text) if transform_text else {}
+            )
+        except json.JSONDecodeError as exc:
+            QMessageBox.warning(
+                self,
+                "Invalid parameters",
+                "Predictor transform must be valid JSON shaped like "
+                '{"condition":{"scale":1,"offset":0}}.',
+            )
+            raise ValueError("Invalid predictor transform JSON.") from exc
         try:
             params = _merge_model_params(
                 self._slope_params,
@@ -344,6 +449,7 @@ class ParamsPanel(QWidget):
                 min_trials_per_condition=max(3, self._min_trials.value()),
                 drop_partial_epochs=self._drop_partial.isChecked(),
                 predictor=self._predictor.text().strip(),
+                predictor_transform_by_condition=predictor_transform_by_condition,
                 predictor_zscore=self._predictor_scaling.currentText(),
                 p_value_correction_method=self._correction.currentText(),
                 significance_alpha=self._alpha.value(),
@@ -354,6 +460,9 @@ class ParamsPanel(QWidget):
                 activity_zscore=self._activity_scaling.currentText(),
                 activity_baseline_tmin_s=self._activity_baseline_tmin.value(),
                 activity_baseline_tmax_s=self._activity_baseline_tmax.value(),
+                activity_baseline_scope=self._activity_baseline_scope.currentText(),
+                activity_baseline_remove_outlier_trial_means=self._activity_baseline_remove_outliers.isChecked(),
+                trial_activity_summary=self._build_trial_activity_summary_payload(),
             )
             assert isinstance(params, TrialSlopeStatsParams)
             self._slope_params = params
@@ -387,6 +496,19 @@ class ParamsPanel(QWidget):
             self._activity_scaling.setCurrentIndex(idx_activity)
         self._activity_baseline_tmin.setValue(params.activity_baseline_tmin_s)
         self._activity_baseline_tmax.setValue(params.activity_baseline_tmax_s)
+        baseline_scope = getattr(params, "activity_baseline_scope", "global")
+        idx_baseline_scope = self._activity_baseline_scope.findText(str(baseline_scope))
+        if idx_baseline_scope >= 0:
+            self._activity_baseline_scope.setCurrentIndex(idx_baseline_scope)
+        self._activity_baseline_remove_outliers.setChecked(
+            bool(
+                getattr(
+                    params,
+                    "activity_baseline_remove_outlier_trial_means",
+                    False,
+                )
+            )
+        )
         idx = self._sig_mode.findText(params.channel_significance_mode)
         if idx >= 0:
             self._sig_mode.setCurrentIndex(idx)
@@ -409,6 +531,9 @@ class ParamsPanel(QWidget):
         self._min_trials.setValue(max(3, params.min_trials_per_condition))
         self._drop_partial.setChecked(params.drop_partial_epochs)
         self._predictor.setText(params.predictor)
+        self._predictor_transform.setText(
+            _predictor_transform_to_json(params.predictor_transform_by_condition)
+        )
         idx_scale = self._predictor_scaling.findText(params.predictor_zscore)
         if idx_scale >= 0:
             self._predictor_scaling.setCurrentIndex(idx_scale)
@@ -426,6 +551,17 @@ class ParamsPanel(QWidget):
             self._activity_scaling.setCurrentIndex(idx_activity)
         self._activity_baseline_tmin.setValue(params.activity_baseline_tmin_s)
         self._activity_baseline_tmax.setValue(params.activity_baseline_tmax_s)
+        idx_baseline_scope = self._activity_baseline_scope.findText(
+            params.activity_baseline_scope
+        )
+        if idx_baseline_scope >= 0:
+            self._activity_baseline_scope.setCurrentIndex(idx_baseline_scope)
+        self._activity_baseline_remove_outliers.setChecked(
+            params.activity_baseline_remove_outlier_trial_means
+        )
+        self._set_trial_activity_summary_widgets_from_params(params)
+        self._on_activity_scaling_changed(self._activity_scaling.currentText())
+        self._refresh_trial_activity_summary_controls()
 
     @property
     def analysis_mode(self) -> str:
@@ -455,7 +591,11 @@ class ParamsPanel(QWidget):
     def _on_analysis_mode_changed(self, mode: str) -> None:
         is_slope = mode.strip().lower() == "slope"
         self._set_form_row_visible(self._predictor, is_slope)
+        self._set_form_row_visible(self._predictor_transform, is_slope)
         self._set_form_row_visible(self._predictor_scaling, is_slope)
+        self._set_form_row_visible(self._trial_activity_summary_kind, is_slope)
+        self._set_form_row_visible(self._activity_baseline_scope, True)
+        self._set_form_row_visible(self._activity_baseline_remove_outliers, True)
         self._set_form_row_visible(self._equal_var, not is_slope)
         self._set_form_row_visible(self._sig_mode, not is_slope)
         self._set_form_row_visible(self._sig_duration_threshold, not is_slope)
@@ -463,11 +603,14 @@ class ParamsPanel(QWidget):
             self._correction.setCurrentText("fdr_bh")
         self._refresh_activity_scaling_options(is_slope=is_slope)
         self._on_activity_scaling_changed(self._activity_scaling.currentText())
+        self._refresh_trial_activity_summary_controls()
 
     def _on_activity_scaling_changed(self, scaling: str) -> None:
         enabled = scaling.strip().lower() == "baseline"
         self._activity_baseline_tmin.setEnabled(enabled)
         self._activity_baseline_tmax.setEnabled(enabled)
+        self._activity_baseline_scope.setEnabled(enabled)
+        self._activity_baseline_remove_outliers.setEnabled(enabled)
 
     def _refresh_activity_scaling_options(self, *, is_slope: bool) -> None:
         current = self._activity_scaling.currentText().strip()
@@ -482,6 +625,12 @@ class ParamsPanel(QWidget):
         if idx >= 0:
             self._activity_scaling.setCurrentIndex(idx)
         self._activity_scaling.blockSignals(False)
+
+    def _on_trial_activity_summary_kind_changed(self, _: str) -> None:
+        self._refresh_trial_activity_summary_controls()
+
+    def _on_trial_activity_summary_source_changed(self, _: str) -> None:
+        self._refresh_trial_activity_summary_controls()
 
     def _on_window_ms_changed(self, value: float) -> None:
         if value > 0.0 and self._n_bins.value() > 0:
@@ -500,5 +649,82 @@ class ParamsPanel(QWidget):
         if label_widget is not None:
             label_widget.setVisible(visible)
         field_widget.setVisible(visible)
+
+    def _build_trial_activity_summary_payload(self) -> dict[str, object]:
+        kind = self._trial_activity_summary_kind.currentText().strip()
+        payload: dict[str, object] = {
+            "kind": kind,
+            "missing_response_policy": "drop_trial",
+        }
+        if kind != "anchor_to_response_mean":
+            payload["response"] = None
+            return payload
+
+        source = self._trial_activity_summary_source.currentText().strip()
+        if source == "table_column":
+            payload["response"] = {
+                "source": source,
+                "column": self._trial_activity_summary_response_column.text().strip(),
+                "units": self._trial_activity_summary_response_units.currentText().strip(),
+            }
+        else:
+            payload["response"] = {
+                "source": source,
+                "event_code": self._trial_activity_summary_response_event_code.text().strip(),
+                "occurrence": "first_after_anchor",
+            }
+        return payload
+
+    def _set_trial_activity_summary_widgets_from_params(
+        self,
+        params: TrialSlopeStatsParams,
+    ) -> None:
+        summary = params.trial_activity_summary
+        idx_kind = self._trial_activity_summary_kind.findText(summary.kind)
+        if idx_kind >= 0:
+            self._trial_activity_summary_kind.setCurrentIndex(idx_kind)
+
+        response = summary.response
+        if response is not None:
+            idx_source = self._trial_activity_summary_source.findText(response.source)
+            if idx_source >= 0:
+                self._trial_activity_summary_source.setCurrentIndex(idx_source)
+            if response.source == "table_column":
+                self._trial_activity_summary_response_column.setText(response.column)
+                idx_units = self._trial_activity_summary_response_units.findText(response.units)
+                if idx_units >= 0:
+                    self._trial_activity_summary_response_units.setCurrentIndex(idx_units)
+                self._trial_activity_summary_response_event_code.clear()
+            else:
+                self._trial_activity_summary_response_event_code.setText(response.event_code)
+        else:
+            self._trial_activity_summary_source.setCurrentText("table_column")
+            self._trial_activity_summary_response_column.clear()
+            self._trial_activity_summary_response_units.setCurrentText("s")
+            self._trial_activity_summary_response_event_code.clear()
+
+    def _refresh_trial_activity_summary_controls(self) -> None:
+        is_slope = self.analysis_mode == "slope"
+        summary_kind = self._trial_activity_summary_kind.currentText().strip()
+        show_anchor_controls = is_slope and summary_kind == "anchor_to_response_mean"
+        source = self._trial_activity_summary_source.currentText().strip()
+        show_table_controls = show_anchor_controls and source == "table_column"
+        show_annotation_controls = (
+            show_anchor_controls and source == "annotation_event_code"
+        )
+
+        self._set_form_row_visible(self._trial_activity_summary_source, show_anchor_controls)
+        self._set_form_row_visible(
+            self._trial_activity_summary_response_column,
+            show_table_controls,
+        )
+        self._set_form_row_visible(
+            self._trial_activity_summary_response_units,
+            show_table_controls,
+        )
+        self._set_form_row_visible(
+            self._trial_activity_summary_response_event_code,
+            show_annotation_controls,
+        )
 
 

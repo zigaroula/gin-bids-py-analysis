@@ -154,6 +154,24 @@ class TrialStatsParams(BaseProcessingParams):
             "Used only when activity_zscore='baseline'."
         ),
     )
+    activity_baseline_scope: Literal["trial", "condition", "global"] = Field(
+        default="global",
+        description=(
+            "Scope used to build the baseline reference when "
+            "activity_zscore='baseline'. 'trial' z-scores each trial using its "
+            "own baseline samples. 'condition' computes a per-feature reference "
+            "from per-trial baseline means within each condition. 'global' pools "
+            "per-trial baseline means across both conditions."
+        ),
+    )
+    activity_baseline_remove_outlier_trial_means: bool = Field(
+        default=False,
+        description=(
+            "When True and activity_zscore='baseline' with scope 'condition' or "
+            "'global', remove outlier baseline trial-means before estimating the "
+            "baseline mean/std reference."
+        ),
+    )
     experiment_start_event_code: str | None = Field(
         default=None,
         description=(

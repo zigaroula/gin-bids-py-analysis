@@ -66,10 +66,16 @@ class TrialSlopeStatsProcessingResult(BaseProcessingResult):
     activity_zscore: str = "none"
     activity_baseline_tmin_s: float = -0.2
     activity_baseline_tmax_s: float = 0.0
+    activity_baseline_scope: str = "global"
+    activity_baseline_remove_outlier_trial_means: bool = False
 
     predictor: str = "predictor_value"
     predictor_zscore: str = "none"
     predictor_transform_by_condition: dict[str, dict[str, float]] = field(default_factory=dict)
+    trial_activity_summary_kind: str = "epoch_mean"
+    trial_activity_summary_missing_response_policy: str = "drop_trial"
+    trial_activity_summary_source: dict[str, str] = field(default_factory=dict)
+    trial_activity_summary_label: str = "Epoch mean activity"
     p_value_correction_method: str = "fdr_bh"
     significance_alpha: float = 0.05
 
@@ -82,6 +88,20 @@ class TrialSlopeStatsProcessingResult(BaseProcessingResult):
 
     condition_b_epochs: np.ndarray = field(default_factory=lambda: np.array([]))
     """Individual trial epochs for condition B (n_trials, n_channels, n_times)."""
+
+    condition_a_trial_activity_summary_values: np.ndarray = field(
+        default_factory=lambda: np.array([])
+    )
+    """Canonical per-trial activity summary values for condition A.
+    Shape ``(n_channels_or_rois, n_trials_a)``.
+    """
+
+    condition_b_trial_activity_summary_values: np.ndarray = field(
+        default_factory=lambda: np.array([])
+    )
+    """Canonical per-trial activity summary values for condition B.
+    Shape ``(n_channels_or_rois, n_trials_b)``.
+    """
 
     condition_a_epoch_means: np.ndarray = field(default_factory=lambda: np.array([]))
     """Per-trial mean activity over the epoch time window, condition A.

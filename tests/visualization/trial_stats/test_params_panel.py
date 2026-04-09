@@ -33,6 +33,8 @@ class TestParamsPanelRoundTrip:
         assert recovered.activity_zscore == "none"
         assert recovered.activity_baseline_tmin_s == pytest.approx(-0.2)
         assert recovered.activity_baseline_tmax_s == pytest.approx(0.0)
+        assert recovered.activity_baseline_scope == "global"
+        assert recovered.activity_baseline_remove_outlier_trial_means is False
 
     def test_set_then_get(self, qtbot, default_params):
         panel = ParamsPanel(default_params)
@@ -56,6 +58,8 @@ class TestParamsPanelRoundTrip:
             activity_zscore="baseline",
             activity_baseline_tmin_s=-0.1,
             activity_baseline_tmax_s=0.0,
+            activity_baseline_scope="condition",
+            activity_baseline_remove_outlier_trial_means=True,
         )
         panel.set_params(new_params)
         recovered = panel.get_params()
@@ -73,6 +77,8 @@ class TestParamsPanelRoundTrip:
         assert recovered.activity_zscore == "baseline"
         assert recovered.activity_baseline_tmin_s == pytest.approx(-0.1)
         assert recovered.activity_baseline_tmax_s == pytest.approx(0.0)
+        assert recovered.activity_baseline_scope == "condition"
+        assert recovered.activity_baseline_remove_outlier_trial_means is True
 
     def test_atlas_fields_round_trip(self, qtbot, default_params):
         panel = ParamsPanel(default_params)
@@ -125,9 +131,10 @@ class TestParamsPanelRoundTrip:
         assert panel._compute_btn.isEnabled()
 
     def test_slope_mode_round_trip(self, qtbot, default_params, default_slope_params):
+        slope_params = default_slope_params.model_copy(update={"predictor_zscore": "global"})
         panel = ParamsPanel(
             default_params,
-            slope_params=default_slope_params,
+            slope_params=slope_params,
             default_mode="slope",
         )
         qtbot.addWidget(panel)
@@ -136,6 +143,7 @@ class TestParamsPanelRoundTrip:
         assert mode == "slope"
         assert isinstance(params, TrialSlopeStatsParams)
         assert params.predictor == default_slope_params.predictor
+        assert params.predictor_zscore == "global"
 
     def test_slope_mode_round_trip_preserves_activity_zscore(self, qtbot, default_params, default_slope_params):
         slope_params = default_slope_params.model_copy(
@@ -143,6 +151,8 @@ class TestParamsPanelRoundTrip:
                 "activity_zscore": "baseline",
                 "activity_baseline_tmin_s": -0.1,
                 "activity_baseline_tmax_s": 0.0,
+                "activity_baseline_scope": "global",
+                "activity_baseline_remove_outlier_trial_means": True,
             }
         )
         panel = ParamsPanel(
@@ -158,6 +168,52 @@ class TestParamsPanelRoundTrip:
         assert params.activity_zscore == "baseline"
         assert params.activity_baseline_tmin_s == pytest.approx(-0.1)
         assert params.activity_baseline_tmax_s == pytest.approx(0.0)
+        assert params.activity_baseline_scope == "global"
+        assert params.activity_baseline_remove_outlier_trial_means is True
+
+    def test_slope_mode_baseline_scope_widgets_follow_baseline_scaling(
+        self,
+        qtbot,
+        default_params,
+        default_slope_params,
+    ):
+        panel = ParamsPanel(
+            default_params,
+            slope_params=default_slope_params.model_copy(
+                update={"activity_zscore": "none"}
+            ),
+            default_mode="slope",
+        )
+        qtbot.addWidget(panel)
+
+        assert panel._activity_baseline_scope.isEnabled() is False
+        assert panel._activity_baseline_remove_outliers.isEnabled() is False
+
+        panel._activity_scaling.setCurrentText("baseline")
+
+        assert panel._activity_baseline_scope.isEnabled() is True
+        assert panel._activity_baseline_remove_outliers.isEnabled() is True
+
+    def test_ttest_mode_baseline_scope_widgets_follow_baseline_scaling(
+        self,
+        qtbot,
+        default_params,
+    ):
+        panel = ParamsPanel(
+            default_params.model_copy(update={"activity_zscore": "none"}),
+        )
+        qtbot.addWidget(panel)
+
+        assert panel.analysis_mode == "ttest"
+        assert panel._activity_baseline_scope.isHidden() is False
+        assert panel._activity_baseline_remove_outliers.isHidden() is False
+        assert panel._activity_baseline_scope.isEnabled() is False
+        assert panel._activity_baseline_remove_outliers.isEnabled() is False
+
+        panel._activity_scaling.setCurrentText("baseline")
+
+        assert panel._activity_baseline_scope.isEnabled() is True
+        assert panel._activity_baseline_remove_outliers.isEnabled() is True
 
     def test_ttest_round_trip_preserves_script_only_fields(self, qtbot, default_params):
         params = default_params.model_copy(
@@ -166,6 +222,8 @@ class TestParamsPanelRoundTrip:
                 "permutation_seed": 123,
                 "experiment_start_event_code": "EXP_START",
                 "experiment_end_event_code": "EXP_END",
+                "activity_baseline_scope": "trial",
+                "activity_baseline_remove_outlier_trial_means": True,
             }
         )
         panel = ParamsPanel(params)
@@ -177,6 +235,8 @@ class TestParamsPanelRoundTrip:
         assert recovered.permutation_seed == 123
         assert recovered.experiment_start_event_code == "EXP_START"
         assert recovered.experiment_end_event_code == "EXP_END"
+        assert recovered.activity_baseline_scope == "trial"
+        assert recovered.activity_baseline_remove_outlier_trial_means is True
 
     def test_slope_round_trip_preserves_script_only_fields(self, qtbot, default_params, default_slope_params):
         slope_params = TrialSlopeStatsParams(
@@ -187,6 +247,9 @@ class TestParamsPanelRoundTrip:
                         "accepted": {"scale": 1.0, "offset": 0.0},
                         "rejected": {"scale": -1.0, "offset": 0.5},
                     },
+                    "predictor_zscore": "condition",
+                    "activity_baseline_scope": "condition",
+                    "activity_baseline_remove_outlier_trial_means": True,
                     "experiment_start_event_code": "EXP_START",
                     "experiment_end_event_code": "EXP_END",
                 }
@@ -203,9 +266,81 @@ class TestParamsPanelRoundTrip:
 
         assert mode == "slope"
         assert isinstance(params, TrialSlopeStatsParams)
+        assert params.predictor_zscore == "condition"
         assert params.predictor_transform_by_condition["rejected"].scale == pytest.approx(-1.0)
         assert params.predictor_transform_by_condition["rejected"].offset == pytest.approx(0.5)
+        assert params.activity_baseline_scope == "condition"
+        assert params.activity_baseline_remove_outlier_trial_means is True
         assert params.experiment_start_event_code == "EXP_START"
         assert params.experiment_end_event_code == "EXP_END"
+
+    def test_slope_round_trip_supports_trial_activity_summary_table_source(
+        self,
+        qtbot,
+        default_params,
+        default_slope_params,
+    ):
+        slope_params = TrialSlopeStatsParams(
+            **(
+                default_slope_params.model_dump()
+                | {
+                    "trial_activity_summary": {
+                        "kind": "anchor_to_response_mean",
+                        "response": {
+                            "source": "table_column",
+                            "column": "rt",
+                            "units": "ms",
+                        },
+                    }
+                }
+            )
+        )
+        panel = ParamsPanel(
+            default_params,
+            slope_params=slope_params,
+            default_mode="slope",
+        )
+        qtbot.addWidget(panel)
+
+        mode, params = panel.get_mode_and_params()
+
+        assert mode == "slope"
+        assert isinstance(params, TrialSlopeStatsParams)
+        assert params.trial_activity_summary.kind == "anchor_to_response_mean"
+        assert params.trial_activity_summary.response is not None
+        assert params.trial_activity_summary.response.source == "table_column"
+        assert params.trial_activity_summary.response.column == "rt"
+        assert params.trial_activity_summary.response.units == "ms"
+
+    def test_slope_summary_source_widgets_follow_selected_summary_mode(
+        self,
+        qtbot,
+        default_params,
+        default_slope_params,
+    ):
+        panel = ParamsPanel(
+            default_params,
+            slope_params=default_slope_params,
+            default_mode="slope",
+        )
+        qtbot.addWidget(panel)
+
+        assert panel._trial_activity_summary_source.isHidden() is True
+        assert panel._trial_activity_summary_response_column.isHidden() is True
+        assert panel._trial_activity_summary_response_event_code.isHidden() is True
+
+        panel._trial_activity_summary_kind.setCurrentText("anchor_to_response_mean")
+        panel._trial_activity_summary_source.setCurrentText("table_column")
+
+        assert panel._trial_activity_summary_source.isHidden() is False
+        assert panel._trial_activity_summary_response_column.isHidden() is False
+        assert panel._trial_activity_summary_response_units.isHidden() is False
+        assert panel._trial_activity_summary_response_event_code.isHidden() is True
+
+        panel._trial_activity_summary_source.setCurrentText("annotation_event_code")
+
+        assert panel._trial_activity_summary_response_column.isHidden() is True
+        assert panel._trial_activity_summary_response_units.isHidden() is True
+        assert panel._trial_activity_summary_response_event_code.isHidden() is False
 
 

@@ -92,19 +92,16 @@ def zscore_activity_by_baseline(
     *,
     baseline_tmin_s: float,
     baseline_tmax_s: float,
+    baseline_scope: Literal["trial", "condition", "global"] = "global",
+    remove_outlier_trial_means: bool = False,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Z-score pooled condition activity relative to a baseline window.
+    """Z-score activity relative to a baseline window.
 
-    The baseline reference is computed per feature by pooling all baseline
-    samples from both conditions across the trial and time dimensions. The same
-    feature-wise affine transform is then applied to the full epoch. This makes
-    the transform independent of the post-event effect of interest and keeps
-    condition-comparison statistics invariant.
-
-    When the pooled baseline standard deviation is non-finite or zero for a
-    feature, the helper falls back to baseline-centering only for that feature
-    (division by 1 instead of 0) to avoid infs while preserving deviations from
-    baseline.
+    ``baseline_scope="trial"`` uses each trial's own baseline samples.
+    ``"condition"`` computes a separate reference for each condition from the
+    per-trial baseline means of that condition. ``"global"`` computes one shared
+    reference from the per-trial baseline means pooled across both conditions,
+    which matches the MATLAB direction used for the current alignment work.
     """
     arr_a = np.asarray(epochs_a, dtype=np.float64)
     arr_b = np.asarray(epochs_b, dtype=np.float64)
@@ -134,21 +131,162 @@ def zscore_activity_by_baseline(
             f"[{time_axis[0]}, {time_axis[-1]}]."
         )
 
-    pooled_parts = [arr[:, :, baseline_mask] for arr in (arr_a, arr_b) if arr.shape[0] > 0]
-    if not pooled_parts:
+    scope = str(baseline_scope).strip().lower()
+    if scope == "trial":
+        return (
+            _zscore_activity_by_trial_baseline(arr_a, baseline_mask),
+            _zscore_activity_by_trial_baseline(arr_b, baseline_mask),
+        )
+
+    if scope == "condition":
+        return (
+            _zscore_activity_by_trial_mean_reference(
+                arr_a,
+                baseline_mask,
+                remove_outlier_trial_means=remove_outlier_trial_means,
+            ),
+            _zscore_activity_by_trial_mean_reference(
+                arr_b,
+                baseline_mask,
+                remove_outlier_trial_means=remove_outlier_trial_means,
+            ),
+        )
+
+    if scope != "global":
+        raise ValueError(
+            f"Unsupported baseline_scope: {baseline_scope!r}. "
+            "Valid values are 'trial', 'condition', and 'global'."
+        )
+
+    trial_means_parts = [
+        _trial_baseline_means(arr, baseline_mask)
+        for arr in (arr_a, arr_b)
+        if arr.shape[0] > 0
+    ]
+    if not trial_means_parts:
         return arr_a.copy(), arr_b.copy()
 
-    pooled_baseline = np.concatenate(pooled_parts, axis=0)
-    mean = np.nanmean(pooled_baseline, axis=(0, 2), dtype=np.float64)
-    std = np.nanstd(pooled_baseline, axis=(0, 2), ddof=1, dtype=np.float64)
+    reference_mean, reference_scale = _baseline_reference_from_trial_means(
+        np.concatenate(trial_means_parts, axis=0),
+        remove_outlier_trial_means=remove_outlier_trial_means,
+    )
+    return (
+        _apply_feature_reference(arr_a, reference_mean, reference_scale),
+        _apply_feature_reference(arr_b, reference_mean, reference_scale),
+    )
+
+
+def _zscore_activity_by_trial_baseline(
+    epochs: np.ndarray,
+    baseline_mask: np.ndarray,
+) -> np.ndarray:
+    arr = np.asarray(epochs, dtype=np.float64)
+    if arr.shape[0] == 0:
+        return arr.copy()
+    baseline = arr[:, :, baseline_mask]
+    mean = np.nanmean(baseline, axis=2, dtype=np.float64)
+    std = np.nanstd(baseline, axis=2, ddof=1, dtype=np.float64)
     scale = np.where(np.isfinite(std) & (std > 0.0), std, 1.0)
+    centered = arr - mean[:, :, np.newaxis]
+    out = centered / scale[:, :, np.newaxis]
+    out[~np.isfinite(arr)] = np.nan
+    return out
 
-    def _scale(arr: np.ndarray) -> np.ndarray:
-        if arr.shape[0] == 0:
-            return arr.copy()
-        centered = arr - mean[np.newaxis, :, np.newaxis]
-        out = centered / scale[np.newaxis, :, np.newaxis]
-        out[~np.isfinite(arr)] = np.nan
-        return out
 
-    return _scale(arr_a), _scale(arr_b)
+def _zscore_activity_by_trial_mean_reference(
+    epochs: np.ndarray,
+    baseline_mask: np.ndarray,
+    *,
+    remove_outlier_trial_means: bool,
+) -> np.ndarray:
+    arr = np.asarray(epochs, dtype=np.float64)
+    if arr.shape[0] == 0:
+        return arr.copy()
+    trial_means = _trial_baseline_means(arr, baseline_mask)
+    reference_mean, reference_scale = _baseline_reference_from_trial_means(
+        trial_means,
+        remove_outlier_trial_means=remove_outlier_trial_means,
+    )
+    return _apply_feature_reference(arr, reference_mean, reference_scale)
+
+
+def _trial_baseline_means(
+    epochs: np.ndarray,
+    baseline_mask: np.ndarray,
+) -> np.ndarray:
+    arr = np.asarray(epochs, dtype=np.float64)
+    if arr.shape[0] == 0:
+        return np.empty((0, arr.shape[1]), dtype=np.float64)
+    return np.nanmean(arr[:, :, baseline_mask], axis=2, dtype=np.float64)
+
+
+def _baseline_reference_from_trial_means(
+    trial_means: np.ndarray,
+    *,
+    remove_outlier_trial_means: bool,
+) -> tuple[np.ndarray, np.ndarray]:
+    means = np.asarray(trial_means, dtype=np.float64)
+    if means.ndim != 2:
+        raise ValueError(
+            "trial_means must be 2-D with shape (n_trials, n_features)."
+        )
+    if means.shape[0] == 0:
+        empty = np.empty((means.shape[1],), dtype=np.float64)
+        return empty, empty
+
+    if remove_outlier_trial_means:
+        cleaned = _remove_outlier_trial_means(means)
+    else:
+        cleaned = means
+
+    reference_mean = np.nanmean(cleaned, axis=0, dtype=np.float64)
+    reference_std = np.nanstd(cleaned, axis=0, ddof=1, dtype=np.float64)
+    reference_scale = np.where(
+        np.isfinite(reference_std) & (reference_std > 0.0),
+        reference_std,
+        1.0,
+    )
+    return reference_mean, reference_scale
+
+
+def _apply_feature_reference(
+    epochs: np.ndarray,
+    reference_mean: np.ndarray,
+    reference_scale: np.ndarray,
+) -> np.ndarray:
+    arr = np.asarray(epochs, dtype=np.float64)
+    if arr.shape[0] == 0:
+        return arr.copy()
+    centered = arr - reference_mean[np.newaxis, :, np.newaxis]
+    out = centered / reference_scale[np.newaxis, :, np.newaxis]
+    out[~np.isfinite(arr)] = np.nan
+    return out
+
+
+def _remove_outlier_trial_means(trial_means: np.ndarray) -> np.ndarray:
+    """Approximate MATLAB ``rmoutliers`` on per-feature trial means.
+
+    The default MATLAB method is median/MAD-based. We mirror that here so the
+    boolean option stays simple while remaining close to the intended behavior.
+    """
+    arr = np.asarray(trial_means, dtype=np.float64).copy()
+    if arr.ndim != 2 or arr.shape[0] == 0:
+        return arr
+
+    for feature_idx in range(arr.shape[1]):
+        values = arr[:, feature_idx]
+        finite_mask = np.isfinite(values)
+        finite_values = values[finite_mask]
+        if finite_values.size < 3:
+            continue
+        median = float(np.nanmedian(finite_values))
+        mad = float(np.nanmedian(np.abs(finite_values - median)))
+        if not np.isfinite(mad) or mad <= 0.0:
+            continue
+        scaled_mad = 1.4826 * mad
+        threshold = 3.0 * scaled_mad
+        outlier_mask = np.abs(finite_values - median) > threshold
+        if np.any(outlier_mask):
+            finite_indices = np.flatnonzero(finite_mask)
+            arr[finite_indices[outlier_mask], feature_idx] = np.nan
+    return arr

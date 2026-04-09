@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 
 import numpy as np
+from mne import Annotations
 
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.bids.matching import files_matching_entities, shared_entities
@@ -27,6 +29,10 @@ from gin_bids_py_analysis.processing.utils.statistics import (
     correct_p_values,
     zscore_activity_by_baseline,
 )
+from gin_bids_py_analysis.processing.utils.events import (
+    AnnotationEvent,
+    parse_annotation_description,
+)
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from .params import TrialSlopeStatsParams
@@ -34,7 +40,7 @@ from .result import TrialSlopeStatsProcessingResult
 from .stats import (
     compute_linear_regression_maps,
     zscore_epochs_across_trials,
-    zscore_predictor_values,
+    zscore_predictor_values_by_scope,
 )
 
 
@@ -157,6 +163,11 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                     )
 
                 normalized_trials = self._normalize_trials_for_slope(resolved_trials)
+                normalized_trials = self._attach_trial_activity_summary_metadata(
+                    raw_annotations=raw.annotations,
+                    anchor_events=anchor_events,
+                    trials=normalized_trials,
+                )
                 extraction = extract_epochs_with_mne(
                     raw,
                     anchor_samples=anchor_samples,
@@ -233,6 +244,8 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 time_axis_ref,
                 baseline_tmin_s=self.params.activity_baseline_tmin_s,
                 baseline_tmax_s=self.params.activity_baseline_tmax_s,
+                baseline_scope=self.params.activity_baseline_scope,
+                remove_outlier_trial_means=self.params.activity_baseline_remove_outlier_trial_means,
             )
             activity_a_zscore_valid = True
             activity_b_zscore_valid = True
@@ -314,10 +327,13 @@ class TrialSlopeStatsProcessing(BaseProcessing):
             and activity_b_zscore_valid
         )
 
-        predictor_a_effective_array, predictor_a_zscore_valid = self._scale_predictor_values(
+        (
+            predictor_a_effective_array,
+            predictor_b_effective_array,
+            predictor_a_zscore_valid,
+            predictor_b_zscore_valid,
+        ) = self._scale_predictor_values_pair(
             predictor_a_transformed_array,
-        )
-        predictor_b_effective_array, predictor_b_zscore_valid = self._scale_predictor_values(
             predictor_b_transformed_array,
         )
         self._store_effective_predictor_values(
@@ -377,6 +393,25 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 for region, indices in zip(feature_names, feature_indices_ref)
             }
 
+        condition_a_epoch_means = self._compute_epoch_means(epochs_a_array, len(feature_names))
+        condition_b_epoch_means = self._compute_epoch_means(epochs_b_array, len(feature_names))
+        condition_a_trial_activity_summary_values = self._compute_trial_activity_summary_values(
+            epochs=epochs_a_array,
+            time_axis_s=time_axis_eval,
+            trials=kept_trials_a,
+            fallback_epoch_means=condition_a_epoch_means,
+            n_features=len(feature_names),
+        )
+        condition_b_trial_activity_summary_values = self._compute_trial_activity_summary_values(
+            epochs=epochs_b_array,
+            time_axis_s=time_axis_eval,
+            trials=kept_trials_b,
+            fallback_epoch_means=condition_b_epoch_means,
+            n_features=len(feature_names),
+        )
+        trial_activity_summary_source = self._serialize_trial_activity_summary_source()
+        trial_activity_summary_label = self._trial_activity_summary_label()
+
         return TrialSlopeStatsProcessingResult(
             source_group=group,
             output_entities=shared_entities(
@@ -418,6 +453,15 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 "activity_zscore": self.params.activity_zscore,
                 "activity_baseline_tmin_s": self.params.activity_baseline_tmin_s,
                 "activity_baseline_tmax_s": self.params.activity_baseline_tmax_s,
+                "activity_baseline_scope": self.params.activity_baseline_scope,
+                "activity_baseline_remove_outlier_trial_means": self.params.activity_baseline_remove_outlier_trial_means,
+                "trial_activity_summary": json.loads(
+                    self.params.trial_activity_summary.model_dump_json()
+                ),
+                "trial_activity_summary_kind": self.params.trial_activity_summary.kind,
+                "trial_activity_summary_missing_response_policy": self.params.trial_activity_summary.missing_response_policy,
+                "trial_activity_summary_source": trial_activity_summary_source,
+                "trial_activity_summary_label": trial_activity_summary_label,
             },
             condition_a_slope=condition_a_slope,
             condition_a_intercept=condition_a_intercept,
@@ -464,6 +508,8 @@ class TrialSlopeStatsProcessing(BaseProcessing):
             activity_zscore=self.params.activity_zscore,
             activity_baseline_tmin_s=self.params.activity_baseline_tmin_s,
             activity_baseline_tmax_s=self.params.activity_baseline_tmax_s,
+            activity_baseline_scope=self.params.activity_baseline_scope,
+            activity_baseline_remove_outlier_trial_means=self.params.activity_baseline_remove_outlier_trial_means,
             predictor=self.params.predictor,
             predictor_zscore=self.params.predictor_zscore,
             predictor_transform_by_condition={
@@ -473,6 +519,10 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 }
                 for condition, transform in self.params.predictor_transform_by_condition.items()
             },
+            trial_activity_summary_kind=self.params.trial_activity_summary.kind,
+            trial_activity_summary_missing_response_policy=self.params.trial_activity_summary.missing_response_policy,
+            trial_activity_summary_source=trial_activity_summary_source,
+            trial_activity_summary_label=trial_activity_summary_label,
             p_value_correction_method=self.params.p_value_correction_method,
             significance_alpha=self.params.significance_alpha,
             condition_a_stats_valid=condition_a_stats_valid,
@@ -480,16 +530,10 @@ class TrialSlopeStatsProcessing(BaseProcessing):
             stats_valid=bool(condition_a_stats_valid or condition_b_stats_valid),
             condition_a_epochs=epochs_a_array,
             condition_b_epochs=epochs_b_array,
-            condition_a_epoch_means=(
-                epochs_a_array.mean(axis=2).T.astype(np.float64)
-                if epochs_a_array.ndim == 3 and epochs_a_array.size > 0
-                else np.empty((len(feature_names), 0), dtype=np.float64)
-            ),
-            condition_b_epoch_means=(
-                epochs_b_array.mean(axis=2).T.astype(np.float64)
-                if epochs_b_array.ndim == 3 and epochs_b_array.size > 0
-                else np.empty((len(feature_names), 0), dtype=np.float64)
-            ),
+            condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
+            condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
+            condition_a_epoch_means=condition_a_epoch_means,
+            condition_b_epoch_means=condition_b_epoch_means,
         )
 
     def _normalize_trials_for_slope(
@@ -578,19 +622,16 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 f"condition_b exactly. Expected {expected!r}, got {labels!r}."
             )
 
-    def _scale_predictor_values(
+    def _scale_predictor_values_pair(
         self,
-        predictor_values: np.ndarray,
-    ) -> tuple[np.ndarray, bool]:
-        values = np.asarray(predictor_values, dtype=np.float64).reshape(-1)
-        if values.size == 0:
-            return values.copy(), True
-        if self.params.predictor_zscore == "none":
-            return values.copy(), True
-        scaled, valid = zscore_predictor_values(values)
-        if valid:
-            return scaled, True
-        return np.full_like(values, np.nan, dtype=np.float64), False
+        predictor_values_a: np.ndarray,
+        predictor_values_b: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, bool, bool]:
+        return zscore_predictor_values_by_scope(
+            predictor_values_a,
+            predictor_values_b,
+            scope=self.params.predictor_zscore,
+        )
 
     def _store_effective_predictor_values(
         self,
@@ -601,6 +642,161 @@ class TrialSlopeStatsProcessing(BaseProcessing):
             trial.metadata["predictor_value"] = (
                 float(value) if np.isfinite(value) else np.nan
             )
+
+    def _attach_trial_activity_summary_metadata(
+        self,
+        *,
+        raw_annotations: Annotations,
+        anchor_events: list[AnnotationEvent],
+        trials: list[ResolvedTrial],
+    ) -> list[ResolvedTrial]:
+        if self.params.trial_activity_summary.kind != "anchor_to_response_mean":
+            return trials
+
+        response_source = self.params.trial_activity_summary.response
+        if response_source is None:
+            return trials
+
+        if response_source.source == "table_column":
+            response_times_s = self._response_times_from_table_column(
+                trials,
+                column=response_source.column,
+                units=response_source.units,
+            )
+        else:
+            response_times_s = self._response_times_from_annotations(
+                raw_annotations,
+                anchor_events,
+                event_code=response_source.event_code,
+            )
+
+        updated_trials: list[ResolvedTrial] = []
+        for trial, response_time_s in zip(trials, response_times_s):
+            metadata = dict(trial.metadata)
+            metadata["trial_activity_summary_response_time_s"] = (
+                float(response_time_s) if np.isfinite(response_time_s) else np.nan
+            )
+            updated_trials.append(replace(trial, metadata=metadata))
+        return updated_trials
+
+    def _response_times_from_table_column(
+        self,
+        trials: list[ResolvedTrial],
+        *,
+        column: str,
+        units: str,
+    ) -> np.ndarray:
+        scale = 1.0 if units == "s" else 0.001
+        response_times = np.full((len(trials),), np.nan, dtype=np.float64)
+        for idx, trial in enumerate(trials):
+            value = _to_float_or_nan(trial.metadata.get(column))
+            if np.isfinite(value):
+                response_times[idx] = float(value) * scale
+        return response_times
+
+    def _response_times_from_annotations(
+        self,
+        raw_annotations: Annotations,
+        anchor_events: list[AnnotationEvent],
+        *,
+        event_code: str,
+    ) -> np.ndarray:
+        response_times = np.full((len(anchor_events),), np.nan, dtype=np.float64)
+        if not anchor_events:
+            return response_times
+
+        target = str(event_code).strip()
+        if not target:
+            return response_times
+
+        response_onsets_s: list[float] = []
+        for annotation in raw_annotations:
+            onset_s = float(annotation["onset"])
+            description = str(annotation["description"])
+            if _annotation_matches_event_code(description, target):
+                response_onsets_s.append(onset_s)
+        if not response_onsets_s:
+            return response_times
+
+        response_onsets = np.asarray(sorted(response_onsets_s), dtype=np.float64)
+        anchor_onsets = np.asarray([event.onset_s for event in anchor_events], dtype=np.float64)
+
+        for idx, anchor_onset_s in enumerate(anchor_onsets):
+            next_anchor_onset_s = (
+                float(anchor_onsets[idx + 1]) if idx + 1 < anchor_onsets.size else float("inf")
+            )
+            insert_at = int(np.searchsorted(response_onsets, anchor_onset_s, side="right"))
+            if insert_at >= response_onsets.size:
+                continue
+            response_onset_s = float(response_onsets[insert_at])
+            if response_onset_s >= next_anchor_onset_s:
+                continue
+            response_times[idx] = response_onset_s - float(anchor_onset_s)
+        return response_times
+
+    def _compute_epoch_means(
+        self,
+        epochs: np.ndarray,
+        n_features: int,
+    ) -> np.ndarray:
+        if epochs.ndim == 3 and epochs.size > 0:
+            return epochs.mean(axis=2).T.astype(np.float64)
+        return np.empty((n_features, 0), dtype=np.float64)
+
+    def _compute_trial_activity_summary_values(
+        self,
+        *,
+        epochs: np.ndarray,
+        time_axis_s: np.ndarray,
+        trials: list[ResolvedTrial],
+        fallback_epoch_means: np.ndarray,
+        n_features: int,
+    ) -> np.ndarray:
+        if self.params.trial_activity_summary.kind == "epoch_mean":
+            return np.asarray(fallback_epoch_means, dtype=np.float64)
+
+        if epochs.ndim != 3 or epochs.size == 0:
+            return np.empty((n_features, 0), dtype=np.float64)
+
+        summary = np.full((epochs.shape[0], n_features), np.nan, dtype=np.float64)
+        time_axis = np.asarray(time_axis_s, dtype=np.float64).ravel()
+        summary_window_start_s = 0.0
+        summary_window_end_s = float(self.params.tmax_s)
+        boundary_tol_s = 1e-12
+
+        for trial_idx, trial in enumerate(trials):
+            response_time_s = _to_float_or_nan(
+                trial.metadata.get("trial_activity_summary_response_time_s")
+            )
+            if not np.isfinite(response_time_s):
+                continue
+            if response_time_s <= summary_window_start_s or response_time_s > summary_window_end_s:
+                continue
+            time_mask = (
+                (time_axis >= summary_window_start_s - boundary_tol_s)
+                & (time_axis <= response_time_s + boundary_tol_s)
+            )
+            if not np.any(time_mask):
+                continue
+            summary[trial_idx, :] = np.nanmean(
+                epochs[trial_idx][:, time_mask],
+                axis=1,
+                dtype=np.float64,
+            )
+
+        return summary.T.astype(np.float64)
+
+    def _serialize_trial_activity_summary_source(self) -> dict[str, str]:
+        response_source = self.params.trial_activity_summary.response
+        if response_source is None:
+            return {}
+        serialized = response_source.model_dump()
+        return {str(key): str(value) for key, value in serialized.items() if value is not None}
+
+    def _trial_activity_summary_label(self) -> str:
+        if self.params.trial_activity_summary.kind == "anchor_to_response_mean":
+            return "Mean activity (trigger to response)"
+        return "Epoch mean activity"
 
 
 def _to_float_or_nan(value: object) -> float:
@@ -629,6 +825,22 @@ def _apply_affine_transform(
         return float("nan")
     transformed = (float(scale) * float(value)) + float(offset)
     return transformed if np.isfinite(transformed) else float("nan")
+
+
+def _annotation_matches_event_code(description: str, event_code: str) -> bool:
+    full_description = str(description).strip()
+    target = str(event_code).strip()
+    if not full_description or not target:
+        return False
+    event_type, parsed_description, parsed_code = parse_annotation_description(full_description)
+    del event_type
+    candidates = {
+        full_description,
+        parsed_description.strip(),
+    }
+    if parsed_code is not None:
+        candidates.add(str(parsed_code).strip())
+    return target in candidates
 
 
 

@@ -140,6 +140,10 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             activity_zscore=str(result.activity_zscore),
             activity_baseline_tmin_s=float(result.activity_baseline_tmin_s),
             activity_baseline_tmax_s=float(result.activity_baseline_tmax_s),
+            activity_baseline_scope=str(result.activity_baseline_scope),
+            activity_baseline_remove_outlier_trial_means=bool(
+                result.activity_baseline_remove_outlier_trial_means
+            ),
             window_samples=int(result.metadata.get("window_samples", 0)),
             effective_n_bins=effective_n_bins,
             binning_mode=binning_mode,
@@ -434,6 +438,15 @@ class TrialStatsProcessingWriter(BaseProcessingWriter):
             meta_grp.create_dataset(
                 "activity_baseline_tmax_s",
                 data=float(result.activity_baseline_tmax_s),
+            )
+            meta_grp.create_dataset(
+                "activity_baseline_scope",
+                data=str(result.activity_baseline_scope),
+                dtype=str_dtype,
+            )
+            meta_grp.create_dataset(
+                "activity_baseline_remove_outlier_trial_means",
+                data=bool(result.activity_baseline_remove_outlier_trial_means),
             )
             meta_grp.create_dataset(
                 "window_samples",

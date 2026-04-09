@@ -49,6 +49,8 @@ PARAMS = TrialStatsParams(
     activity_zscore="none",
     activity_baseline_tmin_s=-0.2,
     activity_baseline_tmax_s=0.0,
+    activity_baseline_scope="global",
+    activity_baseline_remove_outlier_trial_means=False,
     p_value_correction_method="fdr_bh",
     significance_alpha=0.05,
 )

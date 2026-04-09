@@ -45,6 +45,8 @@ class TrialStatsProcessingResult(BaseProcessingResult):
     activity_zscore: str = "none"
     activity_baseline_tmin_s: float = -0.2
     activity_baseline_tmax_s: float = 0.0
+    activity_baseline_scope: str = "global"
+    activity_baseline_remove_outlier_trial_means: bool = False
     p_value_correction_method: str = "fdr_bh"
     significance_alpha: float = 0.05
     stats_valid: bool = False

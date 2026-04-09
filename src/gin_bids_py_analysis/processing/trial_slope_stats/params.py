@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -19,6 +19,95 @@ class PredictorAffineTransform(BaseModel):
         if not float("-inf") < float(value) < float("inf"):
             raise ValueError("Predictor transform values must be finite.")
         return float(value)
+
+
+class TrialActivitySummaryTableColumnSource(BaseModel):
+    """Resolve response timing from a trial metadata column."""
+
+    source: Literal["table_column"] = Field(default="table_column")
+    column: str = Field(
+        description="Resolved-trial metadata column containing response timing."
+    )
+    units: Literal["s", "ms"] = Field(
+        default="s",
+        description="Units used by the response timing column.",
+    )
+
+    @field_validator("column", mode="before")
+    @classmethod
+    def _validate_column(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("trial_activity_summary.response.column must be non-empty.")
+        return cleaned
+
+
+class TrialActivitySummaryAnnotationEventSource(BaseModel):
+    """Resolve response timing from annotations in the raw recording."""
+
+    source: Literal["annotation_event_code"] = Field(default="annotation_event_code")
+    event_code: str = Field(
+        description="Annotation event code identifying the response event."
+    )
+    occurrence: Literal["first_after_anchor"] = Field(
+        default="first_after_anchor",
+        description=(
+            "Response event selection policy. Only 'first_after_anchor' is "
+            "currently supported."
+        ),
+    )
+
+    @field_validator("event_code", mode="before")
+    @classmethod
+    def _validate_event_code(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError(
+                "trial_activity_summary.response.event_code must be non-empty."
+            )
+        return cleaned
+
+
+TrialActivitySummaryResponseSource = Annotated[
+    TrialActivitySummaryTableColumnSource | TrialActivitySummaryAnnotationEventSource,
+    Field(discriminator="source"),
+]
+
+
+class TrialActivitySummaryConfig(BaseModel):
+    """Configuration for the per-trial activity summary used by scatter plots."""
+
+    kind: Literal["epoch_mean", "anchor_to_response_mean"] = Field(
+        default="epoch_mean",
+        description=(
+            "Summary computed for each trial and feature. 'epoch_mean' averages the "
+            "whole epoched window. 'anchor_to_response_mean' averages from t=0 to "
+            "a response boundary resolved from either a trial metadata column or an "
+            "annotation event code."
+        ),
+    )
+    missing_response_policy: Literal["drop_trial"] = Field(
+        default="drop_trial",
+        description=(
+            "Policy applied when no valid response boundary can be resolved. "
+            "Currently this marks the summary value as NaN for that trial."
+        ),
+    )
+    response: TrialActivitySummaryResponseSource | None = Field(
+        default=None,
+        description=(
+            "Response-boundary source used when kind='anchor_to_response_mean'."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _validate_response(self) -> "TrialActivitySummaryConfig":
+        if self.kind == "anchor_to_response_mean" and self.response is None:
+            raise ValueError(
+                "trial_activity_summary.response must be provided when "
+                "kind='anchor_to_response_mean'."
+            )
+        return self
 
 
 class TrialSlopeStatsParams(BaseProcessingParams):
@@ -63,12 +152,21 @@ class TrialSlopeStatsParams(BaseProcessingParams):
             "Each entry is shaped as {condition_label: {scale: float, offset: float}}."
         ),
     )
-    predictor_zscore: Literal["none", "within_condition"] = Field(
+    predictor_zscore: Literal["none", "condition", "global"] = Field(
         default="none",
         description=(
             "Predictor z-score mode applied within each condition after the affine "
-            "transform. 'none' keeps transformed values; 'within_condition' "
-            "z-scores the predictor across kept trials within each condition."
+            "transform. 'none' keeps transformed values; 'condition' "
+            "z-scores the predictor across kept trials within each condition; "
+            "'global' z-scores the predictor across all kept trials from both "
+            "conditions together."
+        ),
+    )
+    trial_activity_summary: TrialActivitySummaryConfig = Field(
+        default_factory=TrialActivitySummaryConfig,
+        description=(
+            "Per-trial activity summary stored in the result and consumed by the "
+            "channel-level scatter plot."
         ),
     )
     p_value_correction_method: Literal["none", "fdr_bh", "bonferroni"] = Field(
@@ -131,6 +229,24 @@ class TrialSlopeStatsParams(BaseProcessingParams):
         description=(
             "Baseline window end in seconds, relative to the anchor event. "
             "Used only when activity_zscore='baseline'."
+        ),
+    )
+    activity_baseline_scope: Literal["trial", "condition", "global"] = Field(
+        default="global",
+        description=(
+            "Scope used to build the baseline reference when "
+            "activity_zscore='baseline'. 'trial' z-scores each trial using its "
+            "own baseline samples. 'condition' computes a per-feature reference "
+            "from per-trial baseline means within each condition. 'global' pools "
+            "per-trial baseline means across both conditions."
+        ),
+    )
+    activity_baseline_remove_outlier_trial_means: bool = Field(
+        default=False,
+        description=(
+            "When True and activity_zscore='baseline' with scope 'condition' or "
+            "'global', remove outlier baseline trial-means before estimating the "
+            "baseline mean/std reference."
         ),
     )
     experiment_start_event_code: str | None = Field(
@@ -214,6 +330,23 @@ class TrialSlopeStatsParams(BaseProcessingParams):
                 transform_dict["offset"] = float(raw_transform["offset"])
             cleaned[condition] = transform_dict
         return cleaned
+
+    @field_validator("trial_activity_summary", mode="before")
+    @classmethod
+    def _coerce_trial_activity_summary(
+        cls,
+        value: object,
+    ) -> TrialActivitySummaryConfig | dict[str, object]:
+        if value in (None, ""):
+            return {}
+        if isinstance(value, TrialActivitySummaryConfig):
+            return value
+        if not isinstance(value, dict):
+            raise ValueError(
+                "trial_activity_summary must be a mapping shaped like "
+                "{'kind': 'epoch_mean' | 'anchor_to_response_mean', ...}."
+            )
+        return value
 
     @model_validator(mode="after")
     def _validate(self) -> "TrialSlopeStatsParams":

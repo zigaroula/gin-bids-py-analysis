@@ -256,6 +256,8 @@ class TrialStatsProcessing(BaseProcessing):
                 time_axis_ref,
                 baseline_tmin_s=self.params.activity_baseline_tmin_s,
                 baseline_tmax_s=self.params.activity_baseline_tmax_s,
+                baseline_scope=self.params.activity_baseline_scope,
+                remove_outlier_trial_means=self.params.activity_baseline_remove_outlier_trial_means,
             )
 
         time_axis_eval = time_axis_ref
@@ -438,6 +440,8 @@ class TrialStatsProcessing(BaseProcessing):
                 "activity_zscore": self.params.activity_zscore,
                 "activity_baseline_tmin_s": self.params.activity_baseline_tmin_s,
                 "activity_baseline_tmax_s": self.params.activity_baseline_tmax_s,
+                "activity_baseline_scope": self.params.activity_baseline_scope,
+                "activity_baseline_remove_outlier_trial_means": self.params.activity_baseline_remove_outlier_trial_means,
                 "channel_significance_mode": self.params.channel_significance_mode,
                 "channel_significance_duration_threshold_ms": self.params.channel_significance_duration_threshold_ms,
             },
@@ -473,6 +477,8 @@ class TrialStatsProcessing(BaseProcessing):
             activity_zscore=self.params.activity_zscore,
             activity_baseline_tmin_s=self.params.activity_baseline_tmin_s,
             activity_baseline_tmax_s=self.params.activity_baseline_tmax_s,
+            activity_baseline_scope=self.params.activity_baseline_scope,
+            activity_baseline_remove_outlier_trial_means=self.params.activity_baseline_remove_outlier_trial_means,
             p_value_correction_method=self.params.p_value_correction_method,
             significance_alpha=self.params.significance_alpha,
             stats_valid=stats_valid,

@@ -44,26 +44,47 @@ PARAMS = TrialSlopeStatsParams(
     condition_a="pleasant",
     condition_b="unpleasant",
     predictor="rating",
-    predictor_transform_by_condition={"unpleasant": {"scale": -0.5, "offset": -25}, "pleasant": {"scale": 0.5, "offset": 25}},
+    predictor_transform_by_condition={
+        "pleasant": {"scale": 1.0, "offset": 0.0},
+        "unpleasant": {"scale": -1.0, "offset": 0.0},
+    },
+    predictor_zscore="global",
     activity_zscore="baseline",
     activity_baseline_tmin_s=-0.5,
     activity_baseline_tmax_s=0.0,
+    activity_baseline_scope="global",
+    activity_baseline_remove_outlier_trial_means=True,
     p_value_correction_method="none",
     significance_alpha=0.05,
+    trial_activity_summary={
+        "kind": "anchor_to_response_mean",
+        "response": {"source": "table_column", "column": "RT", "units": "s"},
+    }
+    
 )
 
 RESOLVER = TableTrialResolver(
     conditions=[
         {
             "label": "pleasant",
-            "when": {"column": "pleasant", "op": "==", "value": 2},
+            "when": {
+                "all": [
+                    {"column": "pleasant", "op": "==", "value": 1},
+                    {"column": "rating", "op": ">=", "value": 0},
+                ]
+            },
         },
         {
             "label": "unpleasant",
-            "when": {"column": "pleasant", "op": "==", "value": 1},
+            "when": {
+                "all": [
+                    {"column": "pleasant", "op": "==", "value": 2},
+                    {"column": "rating", "op": ">=", "value": 0},
+                ]
+            },
         },
     ],
-    extract_columns=["rating"],
+    extract_columns=["rating", "RT"],
 )
 
 ROI_CSV_FILES = {

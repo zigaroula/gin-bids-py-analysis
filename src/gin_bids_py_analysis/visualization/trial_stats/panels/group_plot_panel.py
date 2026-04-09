@@ -1059,7 +1059,7 @@ def _group_predictor_axis_label(result: object) -> str:
         predictor = str(metadata.get("predictor", ""))
         predictor_zscore = str(metadata.get("predictor_zscore", "none"))
     base = predictor.strip() or "Predictor value"
-    if predictor_zscore.strip().lower() == "within_condition":
+    if predictor_zscore.strip().lower() in {"condition", "global"}:
         return f"{base} (z)"
     return base
 

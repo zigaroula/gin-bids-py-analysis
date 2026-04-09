@@ -242,7 +242,7 @@ def test_trial_stats_params_rejects_baseline_outside_epoch_when_baseline_scaling
         )
 
 
-def test_zscore_activity_by_baseline_uses_pooled_baseline_window() -> None:
+def test_zscore_activity_by_baseline_global_uses_trial_mean_reference() -> None:
     epochs_a = np.array(
         [
             [[1.0, 2.0, 11.0]],
@@ -266,17 +266,23 @@ def test_zscore_activity_by_baseline_uses_pooled_baseline_window() -> None:
         baseline_tmin_s=-0.2,
         baseline_tmax_s=0.0,
     )
-    pooled_baseline = np.concatenate([z_a[:, :, :2], z_b[:, :, :2]], axis=0)
+    pooled_trial_means = np.concatenate(
+        [
+            np.nanmean(z_a[:, :, :2], axis=2),
+            np.nanmean(z_b[:, :, :2], axis=2),
+        ],
+        axis=0,
+    )
 
     assert z_a.shape == epochs_a.shape
     assert z_b.shape == epochs_b.shape
     np.testing.assert_allclose(
-        np.nanmean(pooled_baseline, axis=(0, 2)),
+        np.nanmean(pooled_trial_means, axis=0),
         np.zeros((1,)),
         atol=1e-12,
     )
     np.testing.assert_allclose(
-        np.nanstd(pooled_baseline, axis=(0, 2), ddof=1),
+        np.nanstd(pooled_trial_means, axis=0, ddof=1),
         np.ones((1,)),
         atol=1e-12,
     )
@@ -297,6 +303,97 @@ def test_zscore_activity_by_baseline_falls_back_to_centering_when_variance_is_ze
 
     np.testing.assert_allclose(z_a, [[[0.0, 0.0, 2.0]]])
     np.testing.assert_allclose(z_b, [[[0.0, 0.0, -2.0]]])
+
+
+def test_zscore_activity_by_baseline_trial_uses_each_trial_reference() -> None:
+    epochs_a = np.array(
+        [
+            [[1.0, 3.0, 11.0]],
+            [[2.0, 4.0, 12.0]],
+        ],
+        dtype=np.float64,
+    )
+    epochs_b = np.empty((0, 1, 3), dtype=np.float64)
+    time_axis_s = np.array([-0.2, 0.0, 0.2], dtype=np.float64)
+
+    z_a, z_b = zscore_activity_by_baseline(
+        epochs_a,
+        epochs_b,
+        time_axis_s,
+        baseline_tmin_s=-0.2,
+        baseline_tmax_s=0.0,
+        baseline_scope="trial",
+    )
+
+    np.testing.assert_allclose(np.nanmean(z_a[:, :, :2], axis=2), np.zeros((2, 1)))
+    np.testing.assert_allclose(np.nanstd(z_a[:, :, :2], axis=2, ddof=1), np.ones((2, 1)))
+    assert z_b.shape == epochs_b.shape
+
+
+def test_zscore_activity_by_baseline_condition_centers_each_condition_separately() -> None:
+    epochs_a = np.array(
+        [
+            [[1.0, 1.0, 10.0]],
+            [[2.0, 2.0, 11.0]],
+            [[3.0, 3.0, 12.0]],
+        ],
+        dtype=np.float64,
+    )
+    epochs_b = np.array(
+        [
+            [[101.0, 101.0, 20.0]],
+            [[102.0, 102.0, 21.0]],
+            [[103.0, 103.0, 22.0]],
+        ],
+        dtype=np.float64,
+    )
+    time_axis_s = np.array([-0.2, 0.0, 0.2], dtype=np.float64)
+
+    z_a, z_b = zscore_activity_by_baseline(
+        epochs_a,
+        epochs_b,
+        time_axis_s,
+        baseline_tmin_s=-0.2,
+        baseline_tmax_s=0.0,
+        baseline_scope="condition",
+    )
+
+    np.testing.assert_allclose(np.nanmean(np.nanmean(z_a[:, :, :2], axis=2), axis=0), np.zeros((1,)))
+    np.testing.assert_allclose(np.nanmean(np.nanmean(z_b[:, :, :2], axis=2), axis=0), np.zeros((1,)))
+
+
+def test_zscore_activity_by_baseline_global_outlier_removal_changes_reference() -> None:
+    epochs_a = np.array(
+        [
+            [[1.0, 1.0, 10.0]],
+            [[2.0, 2.0, 11.0]],
+            [[100.0, 100.0, 12.0]],
+        ],
+        dtype=np.float64,
+    )
+    epochs_b = np.empty((0, 1, 3), dtype=np.float64)
+    time_axis_s = np.array([-0.2, 0.0, 0.2], dtype=np.float64)
+
+    z_without, _ = zscore_activity_by_baseline(
+        epochs_a,
+        epochs_b,
+        time_axis_s,
+        baseline_tmin_s=-0.2,
+        baseline_tmax_s=0.0,
+        baseline_scope="global",
+        remove_outlier_trial_means=False,
+    )
+    z_with, _ = zscore_activity_by_baseline(
+        epochs_a,
+        epochs_b,
+        time_axis_s,
+        baseline_tmin_s=-0.2,
+        baseline_tmax_s=0.0,
+        baseline_scope="global",
+        remove_outlier_trial_means=True,
+    )
+
+    assert not np.allclose(z_with, z_without, equal_nan=True)
 
 
 # ---------------------------------------------------------------------------

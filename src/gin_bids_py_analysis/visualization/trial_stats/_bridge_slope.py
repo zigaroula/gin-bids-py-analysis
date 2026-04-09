@@ -103,6 +103,28 @@ def _write_hdf5_structure(
             )
         ),
     )
+    meta.create_dataset(
+        "trial_activity_summary_kind",
+        data=np.bytes_(str(result.trial_activity_summary_kind)),
+    )
+    meta.create_dataset(
+        "trial_activity_summary_missing_response_policy",
+        data=np.bytes_(str(result.trial_activity_summary_missing_response_policy)),
+    )
+    meta.create_dataset(
+        "trial_activity_summary_source_json",
+        data=np.bytes_(
+            json.dumps(
+                result.trial_activity_summary_source,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        ),
+    )
+    meta.create_dataset(
+        "trial_activity_summary_label",
+        data=np.bytes_(str(result.trial_activity_summary_label)),
+    )
     meta.create_dataset("activity_zscore", data=np.bytes_(str(result.activity_zscore)))
     meta.create_dataset(
         "activity_baseline_tmin_s",
@@ -159,6 +181,29 @@ def _write_hdf5_structure(
         scatter_grp = fh.create_group("scatter")
         scatter_grp.create_dataset("condition_a_epoch_means", data=em_a)
         scatter_grp.create_dataset("condition_b_epoch_means", data=em_b)
+
+    summary_a = np.asarray(result.condition_a_trial_activity_summary_values, dtype=np.float64)
+    summary_b = np.asarray(result.condition_b_trial_activity_summary_values, dtype=np.float64)
+    if summary_a.ndim == 2 and summary_b.ndim == 2:
+        summary_grp = fh.create_group("trial_activity_summary")
+        summary_grp.create_dataset("condition_a_values", data=summary_a)
+        summary_grp.create_dataset("condition_b_values", data=summary_b)
+        summary_grp.create_dataset("kind", data=np.bytes_(str(result.trial_activity_summary_kind)))
+        summary_grp.create_dataset(
+            "missing_response_policy",
+            data=np.bytes_(str(result.trial_activity_summary_missing_response_policy)),
+        )
+        summary_grp.create_dataset(
+            "source_json",
+            data=np.bytes_(
+                json.dumps(
+                    result.trial_activity_summary_source,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            ),
+        )
+        summary_grp.create_dataset("label", data=np.bytes_(str(result.trial_activity_summary_label)))
 
 
 def _build_in_memory_bids_file_with_handle(

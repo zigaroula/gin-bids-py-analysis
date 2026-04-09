@@ -62,6 +62,39 @@ class _SlopeResolver:
         return out
 
 
+class _SlopeResolverWithMetadata:
+    def __init__(
+        self,
+        labels: list[str],
+        predictors: list[object],
+        metadata_rows: list[dict[str, object]],
+    ) -> None:
+        self._labels = labels
+        self._predictors = predictors
+        self._metadata_rows = metadata_rows
+
+    def resolve_trials(self, group, ieeg_file, anchor_events):
+        del group
+        out = []
+        for index, event in enumerate(anchor_events):
+            metadata = {
+                "predictor_value": self._predictors[index],
+                **self._metadata_rows[index],
+            }
+            out.append(
+                ResolvedTrial(
+                    source_file=ieeg_file,
+                    anchor_event_index=index,
+                    anchor_event_code=event.code,
+                    anchor_onset_s=event.onset_s,
+                    anchor_duration_s=event.duration_s,
+                    label=self._labels[index],
+                    metadata=metadata,
+                )
+            )
+        return out
+
+
 def test_process_group_computes_condition_slopes(tmp_path: Path) -> None:
     ieeg_file = _make_bids_file(
         tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
@@ -118,6 +151,14 @@ def test_process_group_computes_condition_slopes(tmp_path: Path) -> None:
     assert result.condition_b_stats_valid is True
     np.testing.assert_allclose(result.condition_a_slope, np.full((1, 3), 2.0), atol=1e-8)
     np.testing.assert_allclose(result.condition_b_slope, np.full((1, 3), -1.0), atol=1e-8)
+    np.testing.assert_allclose(
+        result.condition_a_trial_activity_summary_values,
+        result.condition_a_epoch_means,
+    )
+    np.testing.assert_allclose(
+        result.condition_b_trial_activity_summary_values,
+        result.condition_b_epoch_means,
+    )
     assert result.condition_a_trial_count == 3
     assert result.condition_b_trial_count == 3
 
@@ -403,3 +444,297 @@ def test_process_group_supports_numeric_condition_rules_with_predictor_extractio
     assert any(trial.exclusion_reason == "no_matching_condition" for trial in result.resolved_trials)
     np.testing.assert_allclose(result.condition_a_slope, np.full((1, 3), 2.0), atol=1e-8)
     np.testing.assert_allclose(result.condition_b_slope, np.full((1, 3), -1.0), atol=1e-8)
+
+
+def test_process_group_predictor_zscore_condition_scales_each_condition_independently(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 100), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
+    predictors = [1.0, 10.0, 2.0, 20.0, 3.0, 30.0]
+
+    for onset, predictor in zip(onsets, predictors):
+        start = int(onset * sfreq)
+        data[0, start : start + 3] = predictor
+
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * len(onsets),
+        description=["Stimulus/S  10"] * len(onsets),
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    result = TrialSlopeStatsProcessing(
+        TrialSlopeStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            predictor="predictor_value",
+            predictor_zscore="condition",
+            min_trials_per_condition=3,
+            p_value_correction_method="none",
+        ),
+        resolver=_SlopeResolver(labels, predictors),
+    ).process_group(BIDSFileGroup(primary=ieeg_file))
+
+    np.testing.assert_allclose(np.nanmean(result.condition_a_predictor_values), 0.0, atol=1e-12)
+    np.testing.assert_allclose(np.nanstd(result.condition_a_predictor_values, ddof=1), 1.0, atol=1e-12)
+    np.testing.assert_allclose(np.nanmean(result.condition_b_predictor_values), 0.0, atol=1e-12)
+    np.testing.assert_allclose(np.nanstd(result.condition_b_predictor_values, ddof=1), 1.0, atol=1e-12)
+
+
+def test_process_group_predictor_zscore_global_scales_both_conditions_together(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 100), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
+    predictors = [1.0, 10.0, 2.0, 20.0, 3.0, 30.0]
+
+    for onset, predictor in zip(onsets, predictors):
+        start = int(onset * sfreq)
+        data[0, start : start + 3] = predictor
+
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * len(onsets),
+        description=["Stimulus/S  10"] * len(onsets),
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    result = TrialSlopeStatsProcessing(
+        TrialSlopeStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            predictor="predictor_value",
+            predictor_zscore="global",
+            min_trials_per_condition=3,
+            p_value_correction_method="none",
+        ),
+        resolver=_SlopeResolver(labels, predictors),
+    ).process_group(BIDSFileGroup(primary=ieeg_file))
+
+    pooled = np.concatenate(
+        [result.condition_a_predictor_values, result.condition_b_predictor_values]
+    )
+    np.testing.assert_allclose(np.nanmean(pooled), 0.0, atol=1e-12)
+    np.testing.assert_allclose(np.nanstd(pooled, ddof=1), 1.0, atol=1e-12)
+    assert not np.isclose(np.nanmean(result.condition_a_predictor_values), 0.0)
+    assert not np.isclose(np.nanmean(result.condition_b_predictor_values), 0.0)
+    assert result.condition_a_stats_valid is True
+    assert result.condition_b_stats_valid is True
+
+
+def test_process_group_trial_activity_summary_anchor_to_response_from_table_column(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 120), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
+    predictors = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
+    metadata_rows = [
+        {"rt_ms": 200},
+        {"rt_ms": 400},
+        {"rt_ms": -100},
+        {"rt_ms": 200},
+        {"rt_ms": 600},
+        {"rt_ms": None},
+    ]
+
+    for onset in onsets:
+        start = int(onset * sfreq)
+        data[0, start : start + 5] = np.array([1, 2, 3, 4, 5], dtype=np.float32)
+
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * len(onsets),
+        description=["Stimulus/S  10"] * len(onsets),
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    result = TrialSlopeStatsProcessing(
+        TrialSlopeStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.4,
+            condition_a="accepted",
+            condition_b="rejected",
+            predictor="predictor_value",
+            min_trials_per_condition=3,
+            p_value_correction_method="none",
+            trial_activity_summary={
+                "kind": "anchor_to_response_mean",
+                "response": {
+                    "source": "table_column",
+                    "column": "rt_ms",
+                    "units": "ms",
+                },
+            },
+        ),
+        resolver=_SlopeResolverWithMetadata(labels, predictors, metadata_rows),
+    ).process_group(BIDSFileGroup(primary=ieeg_file))
+
+    np.testing.assert_allclose(
+        result.condition_a_epoch_means,
+        np.full((1, 3), 3.0, dtype=np.float64),
+    )
+    np.testing.assert_allclose(
+        result.condition_b_epoch_means,
+        np.full((1, 3), 3.0, dtype=np.float64),
+    )
+    np.testing.assert_allclose(
+        result.condition_a_trial_activity_summary_values,
+        np.array([[2.0, np.nan, np.nan]], dtype=np.float64),
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        result.condition_b_trial_activity_summary_values,
+        np.array([[3.0, 2.0, np.nan]], dtype=np.float64),
+        equal_nan=True,
+    )
+    assert result.trial_activity_summary_kind == "anchor_to_response_mean"
+    assert result.trial_activity_summary_source["column"] == "rt_ms"
+    assert result.condition_a_trial_count == 3
+    assert result.condition_b_trial_count == 3
+
+
+def test_process_group_trial_activity_summary_anchor_to_response_from_annotations(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 140), dtype=np.float32)
+    anchor_onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
+    predictors = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
+
+    for onset in anchor_onsets:
+        start = int(onset * sfreq)
+        data[0, start : start + 5] = np.array([1, 2, 3, 4, 5], dtype=np.float32)
+
+    annotations = Annotations(
+        onset=[
+            1.0,
+            2.0,
+            2.2,
+            2.4,
+            3.0,
+            3.2,
+            4.0,
+            4.1,
+            4.3,
+            5.0,
+            6.0,
+            6.2,
+        ],
+        duration=[0.0] * 12,
+        description=[
+            "Stimulus/S  10",
+            "Stimulus/S  10",
+            "Response/R  20",
+            "Response/R  20",
+            "Stimulus/S  10",
+            "Response/R  20",
+            "Stimulus/S  10",
+            "Response/R  20",
+            "Response/R  20",
+            "Stimulus/S  10",
+            "Stimulus/S  10",
+            "Response/R  20",
+        ],
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    result = TrialSlopeStatsProcessing(
+        TrialSlopeStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.4,
+            condition_a="accepted",
+            condition_b="rejected",
+            predictor="predictor_value",
+            min_trials_per_condition=3,
+            p_value_correction_method="none",
+            trial_activity_summary={
+                "kind": "anchor_to_response_mean",
+                "response": {
+                    "source": "annotation_event_code",
+                    "event_code": "20",
+                    "occurrence": "first_after_anchor",
+                },
+            },
+        ),
+        resolver=_SlopeResolver(labels, predictors),
+    ).process_group(BIDSFileGroup(primary=ieeg_file))
+
+    np.testing.assert_allclose(
+        result.condition_a_trial_activity_summary_values,
+        np.array([[np.nan, 2.0, np.nan]], dtype=np.float64),
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        result.condition_b_trial_activity_summary_values,
+        np.array([[2.0, 1.5, 2.0]], dtype=np.float64),
+        equal_nan=True,
+    )
+    assert result.trial_activity_summary_source["event_code"] == "20"

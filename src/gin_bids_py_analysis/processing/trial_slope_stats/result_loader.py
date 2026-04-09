@@ -27,6 +27,10 @@ from gin_bids_py_analysis.processing.utils.matlab import (
 
 from .result import TrialSlopeStatsProcessingResult
 
+_VALID_PREDICTOR_ZSCORE_MODES = frozenset({"none", "condition", "global"})
+_VALID_BASELINE_SCOPES = frozenset({"trial", "condition", "global"})
+_VALID_TRIAL_ACTIVITY_SUMMARY_KINDS = frozenset({"epoch_mean", "anchor_to_response_mean"})
+
 
 def load_trial_slope_stats_result(path: Path | str) -> TrialSlopeStatsProcessingResult:
     """Load a pre-computed TrialSlopeStatsProcessingResult from *path*."""
@@ -156,6 +160,7 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
             raise ValueError(
                 f"{path.name}: meta/predictor_zscore is required; old slope-result schemas are not supported."
             )
+        predictor_zscore = _validated_predictor_zscore(predictor_zscore, path.name)
         predictor_transform_raw = str_scalar(
             dataset_or_none(fh, "meta/predictor_transform_by_condition_json"),
             default="{}",
@@ -164,6 +169,33 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
             predictor_transform_by_condition = json.loads(predictor_transform_raw) if predictor_transform_raw else {}
         except json.JSONDecodeError:
             predictor_transform_by_condition = {}
+        trial_activity_summary_kind = _validated_trial_activity_summary_kind(
+            str_scalar(
+                dataset_or_none(fh, "meta/trial_activity_summary_kind"),
+                default="epoch_mean",
+            ),
+            path.name,
+        )
+        trial_activity_summary_missing_response_policy = str_scalar(
+            dataset_or_none(fh, "meta/trial_activity_summary_missing_response_policy"),
+            default="drop_trial",
+        ) or "drop_trial"
+        trial_activity_summary_source_raw = str_scalar(
+            dataset_or_none(fh, "meta/trial_activity_summary_source_json"),
+            default="{}",
+        )
+        try:
+            trial_activity_summary_source = (
+                json.loads(trial_activity_summary_source_raw)
+                if trial_activity_summary_source_raw
+                else {}
+            )
+        except json.JSONDecodeError:
+            trial_activity_summary_source = {}
+        trial_activity_summary_label = str_scalar(
+            dataset_or_none(fh, "meta/trial_activity_summary_label"),
+            default="Epoch mean activity",
+        ) or "Epoch mean activity"
         p_value_correction_method = str_scalar(dataset_or_none(fh, "meta/p_value_correction_method"), default="fdr_bh")
         significance_alpha = float_scalar(dataset_or_none(fh, "meta/significance_alpha"), default=0.05)
         stats_valid = bool(dataset_or_none(fh, "meta/stats_valid")[()]) if dataset_or_none(fh, "meta/stats_valid") is not None else bool(condition_a_stats_valid or condition_b_stats_valid)
@@ -183,6 +215,14 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
             dataset_or_none(fh, "meta/activity_baseline_tmax_s"),
             default=0.0,
         )
+        activity_baseline_scope = str_scalar(
+            dataset_or_none(fh, "meta/activity_baseline_scope"),
+            default="global",
+        )
+        activity_baseline_scope = _validated_baseline_scope(activity_baseline_scope, path.name)
+        activity_baseline_remove_outlier_trial_means = bool(
+            dataset_or_none(fh, "meta/activity_baseline_remove_outlier_trial_means")[()]
+        ) if dataset_or_none(fh, "meta/activity_baseline_remove_outlier_trial_means") is not None else False
 
         atlas_name_raw = str_scalar(dataset_or_none(fh, "meta/atlas_name"), default="")
         atlas_name = atlas_name_raw.strip() or None
@@ -225,6 +265,58 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
             condition_a_epoch_means = np.array([])
             condition_b_epoch_means = np.array([])
 
+        if "trial_activity_summary" in fh:
+            tg = fh["trial_activity_summary"]
+            condition_a_trial_activity_summary_values = (
+                np.asarray(tg["condition_a_values"][:], dtype=np.float64)
+                if "condition_a_values" in tg
+                else np.empty((n_features, 0), dtype=np.float64)
+            )
+            condition_b_trial_activity_summary_values = (
+                np.asarray(tg["condition_b_values"][:], dtype=np.float64)
+                if "condition_b_values" in tg
+                else np.empty((n_features, 0), dtype=np.float64)
+            )
+            trial_activity_summary_kind = _validated_trial_activity_summary_kind(
+                str_scalar(dataset_or_none(tg, "kind"), default=trial_activity_summary_kind),
+                path.name,
+            )
+            trial_activity_summary_missing_response_policy = str_scalar(
+                dataset_or_none(tg, "missing_response_policy"),
+                default=trial_activity_summary_missing_response_policy,
+            ) or trial_activity_summary_missing_response_policy
+            trial_activity_summary_source_raw = str_scalar(
+                dataset_or_none(tg, "source_json"),
+                default=json.dumps(trial_activity_summary_source, sort_keys=True),
+            )
+            try:
+                trial_activity_summary_source = (
+                    json.loads(trial_activity_summary_source_raw)
+                    if trial_activity_summary_source_raw
+                    else {}
+                )
+            except json.JSONDecodeError:
+                trial_activity_summary_source = {}
+            trial_activity_summary_label = str_scalar(
+                dataset_or_none(tg, "label"),
+                default=trial_activity_summary_label,
+            ) or trial_activity_summary_label
+        else:
+            condition_a_trial_activity_summary_values = (
+                np.asarray(condition_a_epoch_means, dtype=np.float64)
+                if np.asarray(condition_a_epoch_means).ndim == 2
+                else np.empty((n_features, 0), dtype=np.float64)
+            )
+            condition_b_trial_activity_summary_values = (
+                np.asarray(condition_b_epoch_means, dtype=np.float64)
+                if np.asarray(condition_b_epoch_means).ndim == 2
+                else np.empty((n_features, 0), dtype=np.float64)
+            )
+            trial_activity_summary_kind = "epoch_mean"
+            trial_activity_summary_missing_response_policy = "drop_trial"
+            trial_activity_summary_source = {}
+            trial_activity_summary_label = "Epoch mean activity"
+
         source_ieeg_files = []
         source_table_files = []
         source_electrodes_files = []
@@ -244,6 +336,12 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
             "activity_zscore": activity_zscore,
             "activity_baseline_tmin_s": activity_baseline_tmin_s,
             "activity_baseline_tmax_s": activity_baseline_tmax_s,
+            "activity_baseline_scope": activity_baseline_scope,
+            "activity_baseline_remove_outlier_trial_means": activity_baseline_remove_outlier_trial_means,
+            "trial_activity_summary_kind": trial_activity_summary_kind,
+            "trial_activity_summary_missing_response_policy": trial_activity_summary_missing_response_policy,
+            "trial_activity_summary_source": trial_activity_summary_source,
+            "trial_activity_summary_label": trial_activity_summary_label,
         },
         condition_a_slope=condition_a_slope,
         condition_a_intercept=condition_a_intercept,
@@ -289,9 +387,15 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
         activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
+        activity_baseline_scope=activity_baseline_scope,
+        activity_baseline_remove_outlier_trial_means=activity_baseline_remove_outlier_trial_means,
         predictor=predictor,
         predictor_zscore=predictor_zscore,
         predictor_transform_by_condition=predictor_transform_by_condition,
+        trial_activity_summary_kind=trial_activity_summary_kind,
+        trial_activity_summary_missing_response_policy=trial_activity_summary_missing_response_policy,
+        trial_activity_summary_source=trial_activity_summary_source,
+        trial_activity_summary_label=trial_activity_summary_label,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,
         condition_a_stats_valid=condition_a_stats_valid,
@@ -299,6 +403,8 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
         stats_valid=stats_valid,
         condition_a_epochs=condition_a_epochs,
         condition_b_epochs=condition_b_epochs,
+        condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
+        condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
         condition_a_epoch_means=condition_a_epoch_means,
         condition_b_epoch_means=condition_b_epoch_means,
     )
@@ -426,6 +532,54 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
     ).ravel()
     condition_a_epoch_means = _mat_feature_trial_2d(scatter, "condition_a_epoch_means")
     condition_b_epoch_means = _mat_feature_trial_2d(scatter, "condition_b_epoch_means")
+    trial_activity_summary_kind = "epoch_mean"
+    trial_activity_summary_missing_response_policy = "drop_trial"
+    trial_activity_summary_source = {}
+    trial_activity_summary_label = "Epoch mean activity"
+    trial_activity_summary = getattr(data, "trial_activity_summary", None)
+    if trial_activity_summary is not None:
+        condition_a_trial_activity_summary_values = _mat_feature_trial_2d(
+            trial_activity_summary,
+            "condition_a_values",
+        )
+        condition_b_trial_activity_summary_values = _mat_feature_trial_2d(
+            trial_activity_summary,
+            "condition_b_values",
+        )
+        trial_activity_summary_kind = _validated_trial_activity_summary_kind(
+            mat_str(
+                getattr(trial_activity_summary, "kind", None),
+                default=trial_activity_summary_kind,
+            ),
+            path.name,
+        )
+        trial_activity_summary_missing_response_policy = mat_str(
+            getattr(trial_activity_summary, "missing_response_policy", None),
+            default=trial_activity_summary_missing_response_policy,
+        ) or trial_activity_summary_missing_response_policy
+        trial_activity_summary_source_raw = mat_str(
+            getattr(trial_activity_summary, "source_json", None),
+            default=json.dumps(trial_activity_summary_source, sort_keys=True),
+        )
+        try:
+            trial_activity_summary_source = (
+                json.loads(trial_activity_summary_source_raw)
+                if trial_activity_summary_source_raw
+                else {}
+            )
+        except json.JSONDecodeError:
+            trial_activity_summary_source = {}
+        trial_activity_summary_label = mat_str(
+            getattr(trial_activity_summary, "label", None),
+            default=trial_activity_summary_label,
+        ) or trial_activity_summary_label
+    else:
+        condition_a_trial_activity_summary_values = condition_a_epoch_means
+        condition_b_trial_activity_summary_values = condition_b_epoch_means
+        trial_activity_summary_kind = "epoch_mean"
+        trial_activity_summary_missing_response_policy = "drop_trial"
+        trial_activity_summary_source = {}
+        trial_activity_summary_label = "Epoch mean activity"
 
     counts_raw = getattr(meta, "trial_counts", None)
     counts = np.asarray(counts_raw, dtype=np.int64).ravel() if counts_raw is not None else np.array([], dtype=np.int64)
@@ -439,6 +593,7 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
         raise ValueError(
             f"{path.name}: meta.predictor_zscore is required; old slope-result schemas are not supported."
         )
+    predictor_zscore = _validated_predictor_zscore(predictor_zscore, path.name)
     predictor_transform_raw = mat_str(
         getattr(meta, "predictor_transform_by_condition_json", None),
         default="{}",
@@ -447,6 +602,30 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
         predictor_transform_by_condition = json.loads(predictor_transform_raw) if predictor_transform_raw else {}
     except json.JSONDecodeError:
         predictor_transform_by_condition = {}
+    trial_activity_summary_kind = _validated_trial_activity_summary_kind(
+        mat_str(getattr(meta, "trial_activity_summary_kind", None), default="epoch_mean"),
+        path.name,
+    )
+    trial_activity_summary_missing_response_policy = mat_str(
+        getattr(meta, "trial_activity_summary_missing_response_policy", None),
+        default="drop_trial",
+    ) or "drop_trial"
+    trial_activity_summary_source_raw = mat_str(
+        getattr(meta, "trial_activity_summary_source_json", None),
+        default="{}",
+    )
+    try:
+        trial_activity_summary_source = (
+            json.loads(trial_activity_summary_source_raw)
+            if trial_activity_summary_source_raw
+            else {}
+        )
+    except json.JSONDecodeError:
+        trial_activity_summary_source = {}
+    trial_activity_summary_label = mat_str(
+        getattr(meta, "trial_activity_summary_label", None),
+        default="Epoch mean activity",
+    ) or "Epoch mean activity"
     p_value_correction_method = mat_str(getattr(meta, "p_value_correction_method", None), default="fdr_bh")
     significance_alpha = mat_float(getattr(meta, "significance_alpha", None), default=0.05)
     stats_valid = bool(mat_int(getattr(meta, "stats_valid", None), default=int(condition_a_stats_valid or condition_b_stats_valid)))
@@ -462,6 +641,16 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
     activity_baseline_tmax_s = mat_float(
         getattr(meta, "activity_baseline_tmax_s", None),
         default=0.0,
+    )
+    activity_baseline_scope = _validated_baseline_scope(
+        mat_str(getattr(meta, "activity_baseline_scope", None), default="global"),
+        path.name,
+    )
+    activity_baseline_remove_outlier_trial_means = bool(
+        mat_int(
+            getattr(meta, "activity_baseline_remove_outlier_trial_means", None),
+            default=0,
+        )
     )
 
     atlas_name_raw = mat_str(getattr(meta, "atlas_name", None), default="")
@@ -481,6 +670,12 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
             "activity_zscore": activity_zscore,
             "activity_baseline_tmin_s": activity_baseline_tmin_s,
             "activity_baseline_tmax_s": activity_baseline_tmax_s,
+            "activity_baseline_scope": activity_baseline_scope,
+            "activity_baseline_remove_outlier_trial_means": activity_baseline_remove_outlier_trial_means,
+            "trial_activity_summary_kind": trial_activity_summary_kind,
+            "trial_activity_summary_missing_response_policy": trial_activity_summary_missing_response_policy,
+            "trial_activity_summary_source": trial_activity_summary_source,
+            "trial_activity_summary_label": trial_activity_summary_label,
         },
         condition_a_slope=condition_a_slope,
         condition_a_intercept=condition_a_intercept,
@@ -526,9 +721,15 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
         activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
+        activity_baseline_scope=activity_baseline_scope,
+        activity_baseline_remove_outlier_trial_means=activity_baseline_remove_outlier_trial_means,
         predictor=predictor,
         predictor_zscore=predictor_zscore,
         predictor_transform_by_condition=predictor_transform_by_condition,
+        trial_activity_summary_kind=trial_activity_summary_kind,
+        trial_activity_summary_missing_response_policy=trial_activity_summary_missing_response_policy,
+        trial_activity_summary_source=trial_activity_summary_source,
+        trial_activity_summary_label=trial_activity_summary_label,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,
         condition_a_stats_valid=condition_a_stats_valid,
@@ -536,6 +737,43 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
         stats_valid=stats_valid,
         condition_a_epochs=np.array([]),
         condition_b_epochs=np.array([]),
+        condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
+        condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
         condition_a_epoch_means=condition_a_epoch_means,
         condition_b_epoch_means=condition_b_epoch_means,
     )
+
+
+def _validated_predictor_zscore(value: str, path_name: str) -> str:
+    cleaned = str(value).strip().lower()
+    if cleaned == "within_condition":
+        raise ValueError(
+            f"{path_name}: meta/predictor_zscore='within_condition' is no longer supported. "
+            "Use 'condition' or recompute the result with the updated pipeline."
+        )
+    if cleaned not in _VALID_PREDICTOR_ZSCORE_MODES:
+        raise ValueError(
+            f"{path_name}: unsupported predictor_zscore={value!r}. "
+            "Valid values are 'none', 'condition', and 'global'."
+        )
+    return cleaned
+
+
+def _validated_baseline_scope(value: str, path_name: str) -> str:
+    cleaned = str(value).strip().lower() or "global"
+    if cleaned not in _VALID_BASELINE_SCOPES:
+        raise ValueError(
+            f"{path_name}: unsupported activity_baseline_scope={value!r}. "
+            "Valid values are 'trial', 'condition', and 'global'."
+        )
+    return cleaned
+
+
+def _validated_trial_activity_summary_kind(value: str, path_name: str) -> str:
+    cleaned = str(value).strip().lower() or "epoch_mean"
+    if cleaned not in _VALID_TRIAL_ACTIVITY_SUMMARY_KINDS:
+        raise ValueError(
+            f"{path_name}: unsupported trial_activity_summary_kind={value!r}. "
+            "Valid values are 'epoch_mean' and 'anchor_to_response_mean'."
+        )
+    return cleaned

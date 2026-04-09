@@ -8,6 +8,7 @@ import pytest
 from gin_bids_py_analysis.visualization.trial_stats.panels.plot_panel import (
     PlotPanel,
     _compute_scatter_summary_points,
+    _predictor_axis_label,
 )
 
 
@@ -138,13 +139,42 @@ class TestPlotPanel:
 
         assert panel._ax_scatter.get_ylabel() == "Epoch mean activity (z)"
 
+    def test_predictor_axis_label_marks_condition_and_global_zscore(self):
+        assert _predictor_axis_label("rating", "condition") == "rating (z)"
+        assert _predictor_axis_label("rating", "global") == "rating (z)"
+        assert _predictor_axis_label("rating", "none") == "rating"
+
+    def test_slope_scatter_uses_dashed_regression_when_not_significant(
+        self,
+        qtbot,
+        synthetic_slope_result,
+    ):
+        synthetic_slope_result.condition_a_predictor_values = np.arange(12, dtype=np.float64)
+        synthetic_slope_result.condition_b_predictor_values = np.arange(11, dtype=np.float64)
+        synthetic_slope_result.condition_a_trial_activity_summary_values[0] = np.array(
+            [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+            dtype=np.float64,
+        )
+        synthetic_slope_result.condition_b_trial_activity_summary_values[0] = np.array(
+            [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+            dtype=np.float64,
+        )
+        panel = PlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_result, channel_idx=0)
+
+        assert any(
+            line.get_linestyle() == "--" for line in panel._ax_scatter.lines
+        )
+
     def test_slope_scatter_shows_placeholder_when_epoch_means_missing(
         self,
         qtbot,
         synthetic_slope_result,
     ):
-        synthetic_slope_result.condition_a_epoch_means = np.array([])
-        synthetic_slope_result.condition_b_epoch_means = np.array([])
+        synthetic_slope_result.condition_a_trial_activity_summary_values = np.array([])
+        synthetic_slope_result.condition_b_trial_activity_summary_values = np.array([])
         panel = PlotPanel()
         qtbot.addWidget(panel)
 
@@ -157,10 +187,24 @@ class TestPlotPanel:
         qtbot,
         synthetic_slope_result,
     ):
-        synthetic_slope_result.condition_b_epoch_means = np.ones((4, 10), dtype=np.float64)
+        synthetic_slope_result.condition_b_trial_activity_summary_values = np.ones((4, 10), dtype=np.float64)
         panel = PlotPanel()
         qtbot.addWidget(panel)
 
         panel.update_plots(synthetic_slope_result, channel_idx=0)
 
         assert panel._ax_scatter.texts[0].get_text() == "No scatter data available"
+
+    def test_slope_scatter_uses_trial_activity_summary_label(
+        self,
+        qtbot,
+        synthetic_slope_result,
+    ):
+        synthetic_slope_result.trial_activity_summary_kind = "anchor_to_response_mean"
+        synthetic_slope_result.trial_activity_summary_label = "Mean activity (trigger to response)"
+        panel = PlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_result, channel_idx=0)
+
+        assert panel._ax_scatter.get_ylabel() == "Mean activity (trigger to response)"
