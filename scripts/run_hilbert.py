@@ -12,6 +12,7 @@ from gin_bids_py_analysis.processing.hilbert import (
     HilbertProcessingWriter,
     HilbertWriterParams,
     NormalizationMode,
+    ProcessingMethod,
 )
 from gin_bids_py_analysis.processing.utils.channels import (
     BipolarDirection,
@@ -23,7 +24,7 @@ from gin_bids_py_analysis.processing.utils.channels import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"E:\data_clarissa\valuation\bids")
+BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
 
 # BIDS entity filters: only files matching ALL of these will be processed.
 # Remove any key you don't want to filter on.
@@ -40,6 +41,7 @@ PARAMS = HilbertParams(
     f_min=50,
     f_max=150,
     f_step=10,
+    method=ProcessingMethod.SPM2ENV,
     downsampled_frequency_hz=64.0,
     smoothing_windows_ms= [0, 250, 500, 1000, 2500, 5000],
     montage_mode=MontageMode.BIPOLAR,
@@ -52,7 +54,7 @@ PARAMS = HilbertParams(
 
 WRITER_PARAMS = HilbertWriterParams(
     bids_root=BIDS_ROOT,
-    output_description="gamma",
+    output_description="bga",
     output_format="brainvision"
 )
 

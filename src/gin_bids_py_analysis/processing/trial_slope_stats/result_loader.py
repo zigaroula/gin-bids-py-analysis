@@ -30,6 +30,9 @@ from .result import TrialSlopeStatsProcessingResult
 _VALID_PREDICTOR_ZSCORE_MODES = frozenset({"none", "condition", "global"})
 _VALID_BASELINE_SCOPES = frozenset({"trial", "condition", "global"})
 _VALID_TRIAL_ACTIVITY_SUMMARY_KINDS = frozenset({"epoch_mean", "anchor_to_response_mean"})
+_VALID_TRIAL_ACTIVITY_SUMMARY_MISSING_RESPONSE_POLICIES = frozenset(
+    {"clamp_to_epoch", "drop_trial"}
+)
 
 
 def load_trial_slope_stats_result(path: Path | str) -> TrialSlopeStatsProcessingResult:
@@ -176,10 +179,14 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
             ),
             path.name,
         )
-        trial_activity_summary_missing_response_policy = str_scalar(
+        trial_activity_summary_missing_response_policy = _validated_trial_activity_summary_missing_response_policy(
+            str_scalar(
             dataset_or_none(fh, "meta/trial_activity_summary_missing_response_policy"),
             default="drop_trial",
-        ) or "drop_trial"
+            )
+            or "drop_trial",
+            path.name,
+        )
         trial_activity_summary_source_raw = str_scalar(
             dataset_or_none(fh, "meta/trial_activity_summary_source_json"),
             default="{}",
@@ -281,10 +288,16 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
                 str_scalar(dataset_or_none(tg, "kind"), default=trial_activity_summary_kind),
                 path.name,
             )
-            trial_activity_summary_missing_response_policy = str_scalar(
-                dataset_or_none(tg, "missing_response_policy"),
-                default=trial_activity_summary_missing_response_policy,
-            ) or trial_activity_summary_missing_response_policy
+            trial_activity_summary_missing_response_policy = (
+                _validated_trial_activity_summary_missing_response_policy(
+                    str_scalar(
+                        dataset_or_none(tg, "missing_response_policy"),
+                        default=trial_activity_summary_missing_response_policy,
+                    )
+                    or trial_activity_summary_missing_response_policy,
+                    path.name,
+                )
+            )
             trial_activity_summary_source_raw = str_scalar(
                 dataset_or_none(tg, "source_json"),
                 default=json.dumps(trial_activity_summary_source, sort_keys=True),
@@ -553,10 +566,16 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
             ),
             path.name,
         )
-        trial_activity_summary_missing_response_policy = mat_str(
-            getattr(trial_activity_summary, "missing_response_policy", None),
-            default=trial_activity_summary_missing_response_policy,
-        ) or trial_activity_summary_missing_response_policy
+        trial_activity_summary_missing_response_policy = (
+            _validated_trial_activity_summary_missing_response_policy(
+                mat_str(
+                    getattr(trial_activity_summary, "missing_response_policy", None),
+                    default=trial_activity_summary_missing_response_policy,
+                )
+                or trial_activity_summary_missing_response_policy,
+                path.name,
+            )
+        )
         trial_activity_summary_source_raw = mat_str(
             getattr(trial_activity_summary, "source_json", None),
             default=json.dumps(trial_activity_summary_source, sort_keys=True),
@@ -606,10 +625,16 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
         mat_str(getattr(meta, "trial_activity_summary_kind", None), default="epoch_mean"),
         path.name,
     )
-    trial_activity_summary_missing_response_policy = mat_str(
-        getattr(meta, "trial_activity_summary_missing_response_policy", None),
-        default="drop_trial",
-    ) or "drop_trial"
+    trial_activity_summary_missing_response_policy = (
+        _validated_trial_activity_summary_missing_response_policy(
+            mat_str(
+                getattr(meta, "trial_activity_summary_missing_response_policy", None),
+                default="drop_trial",
+            )
+            or "drop_trial",
+            path.name,
+        )
+    )
     trial_activity_summary_source_raw = mat_str(
         getattr(meta, "trial_activity_summary_source_json", None),
         default="{}",
@@ -775,5 +800,18 @@ def _validated_trial_activity_summary_kind(value: str, path_name: str) -> str:
         raise ValueError(
             f"{path_name}: unsupported trial_activity_summary_kind={value!r}. "
             "Valid values are 'epoch_mean' and 'anchor_to_response_mean'."
+        )
+    return cleaned
+
+
+def _validated_trial_activity_summary_missing_response_policy(
+    value: str,
+    path_name: str,
+) -> str:
+    cleaned = str(value).strip().lower() or "drop_trial"
+    if cleaned not in _VALID_TRIAL_ACTIVITY_SUMMARY_MISSING_RESPONSE_POLICIES:
+        raise ValueError(
+            f"{path_name}: unsupported trial_activity_summary_missing_response_policy="
+            f"{value!r}. Valid values are 'clamp_to_epoch' and 'drop_trial'."
         )
     return cleaned

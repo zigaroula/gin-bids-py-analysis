@@ -23,12 +23,12 @@ from gin_bids_py_analysis.visualization.trial_stats import launch_slope
 # ---------------------------------------------------------------------------
 
 # Kept aligned with scripts/run_trial_slope_stats.py inputs.
-BIDS_ROOT = Path(r"E:\data_clarissa\valuation\bids")
+BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
 
 IEEG_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    "desc": "gammasm250",
+    "desc": "bgasm250",
 }
 
 SECONDARY_FILTERS = [
@@ -39,7 +39,7 @@ SECONDARY_FILTERS = [
 PARAMS = TrialSlopeStatsParams(
     anchor_event_codes=["11", "12"],
     experiment_start_event_code="5",
-    tmin_s=-1.0,
+    tmin_s=-0.5,
     tmax_s=5.0,
     condition_a="pleasant",
     condition_b="unpleasant",
@@ -50,8 +50,8 @@ PARAMS = TrialSlopeStatsParams(
     },
     predictor_zscore="global",
     activity_zscore="baseline",
-    activity_baseline_tmin_s=-0.5,
-    activity_baseline_tmax_s=0.0,
+    activity_baseline_tmin_s=-0.25,
+    activity_baseline_tmax_s=-0.05,
     activity_baseline_scope="global",
     activity_baseline_remove_outlier_trial_means=True,
     p_value_correction_method="none",
@@ -59,8 +59,14 @@ PARAMS = TrialSlopeStatsParams(
     trial_activity_summary={
         "kind": "anchor_to_response_mean",
         "response": {"source": "table_column", "column": "RT", "units": "s"},
+    },
+    epoch_cleaning={
+        "reject_trials_by_epoch_mean": True,
+        "reject_trials_by_epoch_max": True,
+        "reject_channels_by_trial_mean_spread": True,
+        "reject_channels_by_trial_max_spread": True,
+        "max_nan_trial_ratio": 0.25,
     }
-    
 )
 
 RESOLVER = TableTrialResolver(
@@ -88,9 +94,9 @@ RESOLVER = TableTrialResolver(
 )
 
 ROI_CSV_FILES = {
-    "vmPFC": Path(r"E:\data_clarissa\valuation\csv\PFCvm_elecs_tbl.csv"),
-    "daINS": Path(r"E:\data_clarissa\valuation\csv\aINS_dors_elecs_tbl.csv"),
-    "vaINS": Path(r"E:\data_clarissa\valuation\csv\aINS_vent_elecs_tbl.csv"),
+    "vmPFC": Path(r"D:\data_clarissa\valuation\csv\PFCvm_elecs_tbl.csv"),
+    "daINS": Path(r"D:\data_clarissa\valuation\csv\aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"D:\data_clarissa\valuation\csv\aINS_vent_elecs_tbl.csv"),
 }
 
 GROUP_PARAM_KWARGS = {

@@ -20,6 +20,7 @@ def test_params_validate_core_constraints() -> None:
     assert params.activity_baseline_tmax_s == pytest.approx(0.0)
     assert params.activity_baseline_scope == "global"
     assert params.activity_baseline_remove_outlier_trial_means is False
+    assert params.trial_activity_summary.missing_response_policy == "clamp_to_epoch"
 
 
 def test_params_reject_equal_conditions() -> None:

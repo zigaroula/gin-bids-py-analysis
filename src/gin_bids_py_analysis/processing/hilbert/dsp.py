@@ -10,16 +10,30 @@ Pipeline overview
 1. Build a uniform frequency-bin grid and clamp it to the Nyquist limit
    (Shannon clamp).
 2. Optionally re-reference channels to a bipolar montage.
-3. For each channel:
-   a. For each adjacent pair of bins (subband):
-      - Apply a FIR band-pass filter in the frequency domain.
-      - Compute the analytic signal via Hilbert coefficients.
-      - Take the magnitude → amplitude envelope (float32).
-   b. Optionally resample each envelope to a target frequency.
-   c. Optionally normalise to a percentage of the mid-recording baseline.
+3. For each channel, apply FIR band-pass filtering and Hilbert transform to
+   obtain per-subband amplitude envelopes, then combine according to the
+   selected :class:`~gin_bids_py_analysis.processing.hilbert.params.ProcessingMethod`:
+
+   **LOCALIZER** (default — matches the CRNL Localizer implementation):
+
+   a. For each subband: apply FIR band-pass filter → Hilbert → magnitude
+      envelope (float32).
+   b. Resample each subband envelope to the target frequency.
+   c. Normalise to a percentage of the mid-recording baseline.
    d. Average the resulting envelopes across all subbands.
-   e. Optionally apply a fixed-divisor sliding-average smoother for each requested
-      window length.
+   e. Apply a fixed-divisor sliding-average smoother for each requested
+      window length (at the downsampled rate).
+
+   **SPM2ENV** (matches the Matlab ``spm2env.m`` pipeline):
+
+   a. For each subband: apply FIR band-pass filter → Hilbert → magnitude
+      envelope (float32).
+   b. Normalise each subband envelope to a percentage of the mid-recording
+      baseline at the native recording frequency.
+   c. Average the resulting envelopes across all subbands.
+   d. Apply the smoother for each requested window length at the native
+      recording frequency.
+   e. Resample the smoothed signal to the target frequency.
 """
 
 from __future__ import annotations
@@ -45,7 +59,7 @@ if TYPE_CHECKING:
 
 from gin_bids_py_analysis.processing.hilbert.fir import FirBandPass
 from gin_bids_py_analysis.processing.utils.channels import build_montage
-from gin_bids_py_analysis.processing.hilbert.params import NormalizationMode
+from gin_bids_py_analysis.processing.hilbert.params import NormalizationMode, ProcessingMethod
 
 
 # ---------------------------------------------------------------------------
@@ -276,17 +290,27 @@ def process_channel(
 ) -> dict[int, np.ndarray]:
     """Run the full Hilbert-band envelope pipeline on a single channel.
 
-    Steps:
+    Steps (step 1 is common to both methods):
 
     1. For each adjacent bin pair (subband):
        a. Build (or retrieve from cache) a :class:`FirBandPass` filter.
        b. Apply the filter → amplitude envelope (float32).
-    2. Optionally resample each envelope with
-       :func:`scipy.signal.resample_poly`.
-    3. Optionally normalise to percentage of baseline.
+
+    **LOCALIZER** (default):
+
+    2. Resample each subband envelope with :func:`scipy.signal.resample_poly`.
+    3. Normalise to percentage of baseline.
     4. Average the resulting envelopes across subbands.
     5. For each smoothing window: apply :func:`moving_average`
        (or identity for ``window_ms = 0``), then optionally subtract 100.
+
+    **SPM2ENV**:
+
+    2. Normalise each subband envelope to percentage of baseline at native ``fs``.
+    3. Average the resulting envelopes across subbands.
+    4. For each smoothing window: apply :func:`moving_average` at native ``fs``
+       (or identity for ``window_ms = 0``), then optionally subtract 100,
+       then resample with :func:`scipy.signal.resample_poly`.
 
     Args:
         signal_1d: 1-D array ``[n_samples]``.
@@ -339,48 +363,79 @@ def process_channel(
     envelopes_2d = np.abs(analytics).astype(np.float32)           # [n_sub, n_samples] float32
 
     # ------------------------------------------------------------------
-    # Step 2: polyphase resample to exact target frequency.
-    # scipy.signal.resample_poly applies an anti-aliasing FIR filter
-    # and produces exactly ceil(n_samples * up / down) output samples.
-    # ------------------------------------------------------------------
-    if params.downsampled_frequency_hz is not None:
-        _g = math.gcd(int(params.downsampled_frequency_hz), int(fs))
-        _up = int(params.downsampled_frequency_hz) // _g
-        _down = int(fs) // _g
-        envelopes_2d = resample_poly(envelopes_2d, _up, _down, axis=1).astype(np.float32)
-
-    # ------------------------------------------------------------------
-    # Step 3: normalisation — delegates to standalone functions which
-    # handle both 1-D and 2-D arrays via axis=-1 / keepdims.
+    # Steps 2-5 depend on the processing method:
+    #
+    #   LOCALIZER: resample → normalise → average → smooth at fs_eff
+    #   SPM2ENV:   normalise → average → smooth at fs  → resample
     # ------------------------------------------------------------------
     nm = params.normalization_mode
-    if nm.is_percent:
-        envelopes_2d = normalize_percent(envelopes_2d)
-    elif nm == NormalizationMode.DB:
-        envelopes_2d = normalize_db(envelopes_2d)
 
-    # ------------------------------------------------------------------
-    # Step 4: average across subbands → 1-D [n_samples_eff] float32
-    # ------------------------------------------------------------------
-    mean_data = np.sum(envelopes_2d, axis=0, dtype=np.float32) / n_subbands
+    if params.method == ProcessingMethod.LOCALIZER:
+        # Step 2: polyphase resample to exact target frequency.
+        # scipy.signal.resample_poly applies an anti-aliasing FIR filter
+        # and produces exactly ceil(n_samples * up / down) output samples.
+        if params.downsampled_frequency_hz is not None:
+            _g = math.gcd(int(params.downsampled_frequency_hz), int(fs))
+            _up = int(params.downsampled_frequency_hz) // _g
+            _down = int(fs) // _g
+            envelopes_2d = resample_poly(envelopes_2d, _up, _down, axis=1).astype(np.float32)
 
-    # ------------------------------------------------------------------
-    # Step 5: smoothing windows
-    # ------------------------------------------------------------------
-    fs_eff = params.downsampled_frequency_hz if params.downsampled_frequency_hz is not None else fs
-    result: dict[int, np.ndarray] = {}
+        # Step 3: normalisation — delegates to standalone functions which
+        # handle both 1-D and 2-D arrays via axis=-1 / keepdims.
+        if nm.is_percent:
+            envelopes_2d = normalize_percent(envelopes_2d)
+        elif nm == NormalizationMode.DB:
+            envelopes_2d = normalize_db(envelopes_2d)
 
-    for window_ms in params.smoothing_windows_ms:
-        if window_ms == 0:
-            smoothed = mean_data.copy()
-        else:
-            coefficient = int((fs_eff * window_ms) / 1000)
-            smoothed = moving_average(mean_data, coefficient)
+        # Step 4: average across subbands → 1-D [n_samples_eff] float32
+        mean_data = np.sum(envelopes_2d, axis=0, dtype=np.float32) / n_subbands
 
-        if params.normalization_mode.is_centered:
-            smoothed = (smoothed - 100.0).astype(np.float32)
+        # Step 5: smoothing windows
+        fs_eff = params.downsampled_frequency_hz if params.downsampled_frequency_hz is not None else fs
+        result: dict[int, np.ndarray] = {}
 
-        result[window_ms] = smoothed
+        for window_ms in params.smoothing_windows_ms:
+            if window_ms == 0:
+                smoothed = mean_data.copy()
+            else:
+                coefficient = int((fs_eff * window_ms) / 1000)
+                smoothed = moving_average(mean_data, coefficient)
+
+            if nm.is_centered:
+                smoothed = (smoothed - 100.0).astype(np.float32)
+
+            result[window_ms] = smoothed
+
+    else:  # ProcessingMethod.SPM2ENV
+        # Step 2: normalise each subband at native recording frequency.
+        if nm.is_percent:
+            envelopes_2d = normalize_percent(envelopes_2d)
+        elif nm == NormalizationMode.DB:
+            envelopes_2d = normalize_db(envelopes_2d)
+
+        # Step 3: average across subbands → 1-D [n_samples] at native fs
+        mean_data = np.sum(envelopes_2d, axis=0, dtype=np.float32) / n_subbands
+
+        # Step 4+5: per window — smooth at native fs, then resample.
+        result = {}
+
+        for window_ms in params.smoothing_windows_ms:
+            if window_ms == 0:
+                smoothed = mean_data.copy()
+            else:
+                coefficient = int((fs * window_ms) / 1000)
+                smoothed = moving_average(mean_data, coefficient)
+
+            if nm.is_centered:
+                smoothed = (smoothed - 100.0).astype(np.float32)
+
+            if params.downsampled_frequency_hz is not None:
+                _g = math.gcd(int(params.downsampled_frequency_hz), int(fs))
+                _up = int(params.downsampled_frequency_hz) // _g
+                _down = int(fs) // _g
+                smoothed = resample_poly(smoothed, _up, _down).astype(np.float32)
+
+            result[window_ms] = smoothed
 
     return result
 

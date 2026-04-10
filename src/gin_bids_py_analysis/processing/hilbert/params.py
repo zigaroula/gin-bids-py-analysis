@@ -71,6 +71,19 @@ class NormalizationMode(str, Enum):
         return self == NormalizationMode.PERCENT_CENTERED
 
 
+class ProcessingMethod(str, Enum):
+    """Order of operations used in the Hilbert-band envelope pipeline.
+
+    * ``LOCALIZER`` - normalise and smooth *after* downsampling (default,
+      matches the CRNL Localizer implementation).
+    * ``SPM2ENV`` - normalise and smooth *at the native recording frequency*,
+      then downsample (matches the Matlab ``spm2env.m`` pipeline).
+    """
+
+    LOCALIZER = "localizer"
+    SPM2ENV = "spm2env"
+
+
 class HilbertParams(BaseProcessingParams):
     """Parameters for the Hilbert-band envelope pipeline.
 
@@ -81,6 +94,11 @@ class HilbertParams(BaseProcessingParams):
 
     If the highest bin exceeds the Nyquist frequency (``fs/2``), the grid is
     silently clamped (Shannon clamp) before processing.
+
+    The ``method`` field selects the order of operations: ``LOCALIZER``
+    (default) downsamples first and then normalises and smooths; ``SPM2ENV``
+    normalises and smooths at the native recording frequency and downsamples
+    last (matches the Matlab ``spm2env.m`` pipeline).
 
     Example::
 
@@ -174,6 +192,15 @@ class HilbertParams(BaseProcessingParams):
             "baseline; ``PERCENT_CENTERED`` does the same and then subtracts 100 so "
             "the baseline region sits at 0; ``DB`` uses "
             "``20*log10(amplitude / baseline)``; ``NONE`` skips normalization."
+        ),
+    )
+    method: ProcessingMethod = Field(
+        default=ProcessingMethod.LOCALIZER,
+        description=(
+            "Order of operations in the envelope pipeline. "
+            "``LOCALIZER`` (default) downsamples first, then normalises and smooths. "
+            "``SPM2ENV`` normalises and smooths at the native recording frequency, "
+            "then downsamples (matches the Matlab ``spm2env.m`` pipeline)."
         ),
     )
 

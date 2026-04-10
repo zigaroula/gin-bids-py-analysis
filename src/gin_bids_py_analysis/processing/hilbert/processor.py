@@ -106,6 +106,7 @@ class HilbertProcessing(BaseProcessing):
                 "unit_label": self.params.normalization_mode.unit_label,
                 "unit": self.params.normalization_mode.unit,
                 "scale_factor": self.params.normalization_mode.scale_factor,
+                "processing_method": self.params.method.value,
             },
             original_events=original_events,
         )

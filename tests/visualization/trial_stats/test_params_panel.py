@@ -307,6 +307,7 @@ class TestParamsPanelRoundTrip:
         assert mode == "slope"
         assert isinstance(params, TrialSlopeStatsParams)
         assert params.trial_activity_summary.kind == "anchor_to_response_mean"
+        assert params.trial_activity_summary.missing_response_policy == "clamp_to_epoch"
         assert params.trial_activity_summary.response is not None
         assert params.trial_activity_summary.response.source == "table_column"
         assert params.trial_activity_summary.response.column == "rt"

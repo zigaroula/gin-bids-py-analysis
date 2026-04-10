@@ -158,6 +158,32 @@ def extract_epochs_with_mne(
             time_axis_s=fallback_time_axis,
         )
 
+    # Deduplicate by anchor sample index to avoid MNE's RuntimeError when two
+    # anchor events round to the same sample ("Event time samples were not unique").
+    # The first occurrence wins; subsequent duplicates are marked as excluded.
+    seen_samples: set[int] = set()
+    dedup_kept_indices: list[int] = []
+    for ki in kept_indices:
+        samp = int(anchor_samples[ki])
+        if samp in seen_samples:
+            updated_trials[ki] = replace(
+                trials[ki],
+                keep=False,
+                exclusion_reason=trials[ki].exclusion_reason or "duplicate_anchor_sample",
+            )
+        else:
+            seen_samples.add(samp)
+            dedup_kept_indices.append(ki)
+    kept_indices = dedup_kept_indices
+
+    if not kept_indices:
+        return EpochExtractionResult(
+            epochs=np.empty((0, len(raw.ch_names), len(fallback_time_axis)), dtype=np.float64),
+            kept_trials=[],
+            updated_trials=updated_trials,
+            time_axis_s=fallback_time_axis,
+        )
+
     events = np.column_stack(
         [
             anchor_samples[np.asarray(kept_indices, dtype=np.int64)],

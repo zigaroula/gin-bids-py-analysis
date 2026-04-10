@@ -632,7 +632,7 @@ def test_process_group_trial_activity_summary_anchor_to_response_from_table_colu
     )
     np.testing.assert_allclose(
         result.condition_a_trial_activity_summary_values,
-        np.array([[2.0, np.nan, np.nan]], dtype=np.float64),
+        np.array([[2.0, np.nan, 3.0]], dtype=np.float64),
         equal_nan=True,
     )
     np.testing.assert_allclose(
@@ -644,6 +644,83 @@ def test_process_group_trial_activity_summary_anchor_to_response_from_table_colu
     assert result.trial_activity_summary_source["column"] == "rt_ms"
     assert result.condition_a_trial_count == 3
     assert result.condition_b_trial_count == 3
+
+
+def test_process_group_trial_activity_summary_anchor_to_response_drop_trial_policy(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 120), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
+    predictors = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
+    metadata_rows = [
+        {"rt_ms": 200},
+        {"rt_ms": 400},
+        {"rt_ms": -100},
+        {"rt_ms": 200},
+        {"rt_ms": 600},
+        {"rt_ms": None},
+    ]
+
+    for onset in onsets:
+        start = int(onset * sfreq)
+        data[0, start : start + 5] = np.array([1, 2, 3, 4, 5], dtype=np.float32)
+
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * len(onsets),
+        description=["Stimulus/S  10"] * len(onsets),
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    result = TrialSlopeStatsProcessing(
+        TrialSlopeStatsParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.4,
+            condition_a="accepted",
+            condition_b="rejected",
+            predictor="predictor_value",
+            min_trials_per_condition=3,
+            p_value_correction_method="none",
+            trial_activity_summary={
+                "kind": "anchor_to_response_mean",
+                "missing_response_policy": "drop_trial",
+                "response": {
+                    "source": "table_column",
+                    "column": "rt_ms",
+                    "units": "ms",
+                },
+            },
+        ),
+        resolver=_SlopeResolverWithMetadata(labels, predictors, metadata_rows),
+    ).process_group(BIDSFileGroup(primary=ieeg_file))
+
+    np.testing.assert_allclose(
+        result.condition_a_trial_activity_summary_values,
+        np.array([[2.0, np.nan, np.nan]], dtype=np.float64),
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        result.condition_b_trial_activity_summary_values,
+        np.array([[3.0, 2.0, np.nan]], dtype=np.float64),
+        equal_nan=True,
+    )
+    assert result.trial_activity_summary_missing_response_policy == "drop_trial"
 
 
 def test_process_group_trial_activity_summary_anchor_to_response_from_annotations(

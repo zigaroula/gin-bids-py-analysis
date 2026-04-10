@@ -49,7 +49,58 @@ def compute_linear_regression_maps(
     if not np.isfinite(var_x) or var_x <= 0.0:
         return empty.copy(), empty.copy(), empty.copy(), empty.copy(), False
 
-    # Flatten feature x time so regression is computed in one vectorized pass.
+    # NaN-aware path: when per-channel NaN patterns are present (from trial-level
+    # cleaning), each channel is regressed independently using only its valid trials.
+    if not np.all(np.isfinite(y)):
+        slope_out = np.full((n_features, n_times), np.nan, dtype=np.float64)
+        intercept_out = np.full((n_features, n_times), np.nan, dtype=np.float64)
+        r_out = np.full((n_features, n_times), np.nan, dtype=np.float64)
+        p_out = np.full((n_features, n_times), np.nan, dtype=np.float64)
+        any_valid_channel = False
+        for ch in range(n_features):
+            # A trial is NaN for this channel if any time sample is non-finite;
+            # apply_trial_nan_mask guarantees the mask is uniform across the time axis,
+            # so checking timepoint 0 is sufficient.
+            valid = np.isfinite(y[:, ch, 0])
+            x_ch = x[valid]
+            y_ch = y[valid, ch, :]  # [n_valid, n_times]
+            n_ch = int(x_ch.shape[0])
+            if n_ch < 3:
+                continue
+            var_x_ch = float(np.nanvar(x_ch, ddof=1))
+            if not (np.isfinite(var_x_ch) and var_x_ch > 0.0):
+                continue
+            x_mean_ch = float(np.nanmean(x_ch))
+            y_mean_ch = np.nanmean(y_ch, axis=0)  # [n_times]
+            x_c = x_ch - x_mean_ch
+            y_c = y_ch - y_mean_ch[np.newaxis, :]
+            cov_ch = np.dot(x_c, y_c) / float(n_ch - 1)  # [n_times]
+            slope_ch = cov_ch / var_x_ch
+            intercept_ch = y_mean_ch - slope_ch * x_mean_ch
+            var_y_ch = np.nanvar(y_ch, axis=0, ddof=1)
+            denom_ch = np.sqrt(var_x_ch * var_y_ch)
+            r_ch = np.full(n_times, np.nan, dtype=np.float64)
+            corr_mask_ch = np.isfinite(denom_ch) & (denom_ch > 0.0)
+            r_ch[corr_mask_ch] = np.clip(
+                cov_ch[corr_mask_ch] / denom_ch[corr_mask_ch], -1.0, 1.0
+            )
+            df_ch = float(n_ch - 2)
+            p_ch = np.full(n_times, np.nan, dtype=np.float64)
+            valid_t_ch = np.isfinite(r_ch) & (np.abs(r_ch) < 1.0)
+            if np.any(valid_t_ch):
+                r_sq_ch = np.square(r_ch[valid_t_ch], dtype=np.float64)
+                t_vals_ch = r_ch[valid_t_ch] * np.sqrt(df_ch / (1.0 - r_sq_ch))
+                p_ch[valid_t_ch] = 2.0 * student_t.sf(np.abs(t_vals_ch), df_ch)
+            perfect_ch = np.isfinite(r_ch) & (np.abs(r_ch) >= 1.0)
+            p_ch[perfect_ch] = 0.0
+            slope_out[ch] = slope_ch
+            intercept_out[ch] = intercept_ch
+            r_out[ch] = r_ch
+            p_out[ch] = p_ch
+            any_valid_channel = True
+        return slope_out, intercept_out, r_out, p_out, any_valid_channel
+
+    # Dense (no-NaN) path: vectorized over all features and time samples at once.
     y_flat = y.reshape(n_trials, -1)
     x_mean = float(np.nanmean(x))
     y_mean = np.nanmean(y_flat, axis=0, dtype=np.float64)

@@ -86,11 +86,13 @@ class TrialActivitySummaryConfig(BaseModel):
             "annotation event code."
         ),
     )
-    missing_response_policy: Literal["drop_trial"] = Field(
-        default="drop_trial",
+    missing_response_policy: Literal["clamp_to_epoch", "drop_trial"] = Field(
+        default="clamp_to_epoch",
         description=(
-            "Policy applied when no valid response boundary can be resolved. "
-            "Currently this marks the summary value as NaN for that trial."
+            "Policy applied when the resolved response boundary falls outside the "
+            "epoched window or cannot produce a valid averaging interval. "
+            "'clamp_to_epoch' truncates overly long response times to the epoch "
+            "end; 'drop_trial' marks the summary value as NaN for that trial."
         ),
     )
     response: TrialActivitySummaryResponseSource | None = Field(
@@ -108,6 +110,88 @@ class TrialActivitySummaryConfig(BaseModel):
                 "kind='anchor_to_response_mean'."
             )
         return self
+
+
+class EpochCleaningConfig(BaseModel):
+    """Configuration for epoch-level and channel-level quality control.
+
+    Two cleaning levels can be enabled independently:
+
+    *Level A – trial-channel NaN masking.*
+        Trials are NaN-masked per channel when their temporal mean or maximum
+        deviates more than ``threshold_factor × std`` from the channel's
+        across-trial mean (mean-based, matching Matlab's ``rmoutliers(...,
+        'mean', 'ThresholdFactor', std_thresh)`` with ``std_thresh = 3``).
+
+    *Level B – channel exclusion.*
+        Channels are dropped when their across-trial spread is an outlier in the
+        channel population (``ThresholdFactor = 1`` in the Matlab pipeline), or
+        when more than ``max_nan_trial_ratio`` of their trials are NaN.
+
+    Level A is applied before Level B so that NaN trial counts from Level A are
+    included when evaluating the NaN-trial ratio for Level B.
+    """
+
+    reject_trials_by_epoch_mean: bool = Field(
+        default=False,
+        description=(
+            "Level A: NaN-mask (trial, channel) pairs where the trial epoch mean "
+            "deviates more than epoch_mean_threshold_factor × std from the "
+            "channel's across-trial mean."
+        ),
+    )
+    epoch_mean_threshold_factor: float = Field(
+        default=3.0,
+        gt=0.0,
+        description="Outlier threshold (in std) for Level A mean-based trial rejection.",
+    )
+    reject_trials_by_epoch_max: bool = Field(
+        default=False,
+        description=(
+            "Level A: NaN-mask (trial, channel) pairs where the trial epoch maximum "
+            "deviates more than epoch_max_threshold_factor × std from the "
+            "channel's across-trial mean of maxima."
+        ),
+    )
+    epoch_max_threshold_factor: float = Field(
+        default=3.0,
+        gt=0.0,
+        description="Outlier threshold (in std) for Level A max-based trial rejection.",
+    )
+    reject_by_trial_mean_spread: bool = Field(
+        default=False,
+        description=(
+            "Level B: exclude channels whose across-trial standard deviation of "
+            "per-trial epoch means is an outlier in the channel population."
+        ),
+    )
+    trial_mean_spread_threshold: float = Field(
+        default=1.0,
+        gt=0.0,
+        description="Outlier threshold (in std) for Level B mean-spread channel rejection.",
+    )
+    reject_by_trial_max_spread: bool = Field(
+        default=False,
+        description=(
+            "Level B: exclude channels whose across-trial standard deviation of "
+            "per-trial epoch maxima is an outlier in the channel population."
+        ),
+    )
+    trial_max_spread_threshold: float = Field(
+        default=1.0,
+        gt=0.0,
+        description="Outlier threshold (in std) for Level B max-spread channel rejection.",
+    )
+    max_nan_trial_ratio: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Level B: exclude channels where the fraction of NaN trials (including "
+            "those NaN-masked by Level A) meets or exceeds this threshold. "
+            "None disables the check."
+        ),
+    )
 
 
 class TrialSlopeStatsParams(BaseProcessingParams):
@@ -247,6 +331,16 @@ class TrialSlopeStatsParams(BaseProcessingParams):
             "When True and activity_zscore='baseline' with scope 'condition' or "
             "'global', remove outlier baseline trial-means before estimating the "
             "baseline mean/std reference."
+        ),
+    )
+    epoch_cleaning: EpochCleaningConfig = Field(
+        default_factory=EpochCleaningConfig,
+        description=(
+            "Epoch-level and channel-level quality control applied after epoch "
+            "stacking and before activity z-scoring. "
+            "Level A NaN-masks outlier (trial, channel) pairs; "
+            "Level B excludes channels with high trial-spread or NaN ratio. "
+            "All flags are False/None by default (no cleaning)."
         ),
     )
     experiment_start_event_code: str | None = Field(

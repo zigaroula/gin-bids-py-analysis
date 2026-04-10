@@ -111,7 +111,7 @@ def _make_result(tmp_path: Path) -> TrialSlopeStatsProcessingResult:
         predictor="predictor_value",
         predictor_zscore="none",
         trial_activity_summary_kind="anchor_to_response_mean",
-        trial_activity_summary_missing_response_policy="drop_trial",
+        trial_activity_summary_missing_response_policy="clamp_to_epoch",
         trial_activity_summary_source={
             "source": "table_column",
             "column": "rt",
@@ -188,6 +188,7 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
     assert loaded.activity_baseline_tmax_s == pytest.approx(0.0)
     assert loaded.activity_baseline_scope == "global"
     assert loaded.activity_baseline_remove_outlier_trial_means is True
+    assert loaded.trial_activity_summary_missing_response_policy == "clamp_to_epoch"
 
 
 def test_writer_outputs_matlab(tmp_path: Path) -> None:

@@ -25,6 +25,12 @@ from gin_bids_py_analysis.processing.hilbert.dsp import (
     moving_average,
     normalize_db,
     normalize_percent,
+    process_channel,
+)
+from gin_bids_py_analysis.processing.hilbert.params import (
+    HilbertParams,
+    NormalizationMode,
+    ProcessingMethod,
 )
 from gin_bids_py_analysis.processing.utils.channels import build_montage
 
@@ -532,3 +538,70 @@ class TestFirBandPass:
         fir = FirBandPass(f_low=50.0, f_high=60.0, fs=fs, signal_length=len(t))
         envelope = fir.apply(signal)
         assert np.mean(envelope[200:]) < 0.1
+
+
+# ---------------------------------------------------------------------------
+# process_channel — ProcessingMethod.SPM2ENV
+# ---------------------------------------------------------------------------
+
+
+class TestProcessChannelSpm2env:
+    """Tests for the SPM2ENV processing method path in process_channel."""
+
+    FS = 1024.0  # native recording frequency used in all fixtures
+
+    @pytest.fixture()
+    def signal_and_bins(self):
+        """5-second broadband signal at FS and matching frequency bins."""
+        rng = np.random.default_rng(99)
+        n = int(self.FS * 5)
+        signal = rng.standard_normal(n).astype(np.float32)
+        bins = build_frequency_bins(50.0, 150.0, 10.0)
+        return signal, bins
+
+    def _params(self, method, smoothing_windows_ms=None, downsampled_frequency_hz=64.0):
+        return HilbertParams(
+            f_min=50.0,
+            f_max=150.0,
+            f_step=10.0,
+            downsampled_frequency_hz=downsampled_frequency_hz,
+            smoothing_windows_ms=smoothing_windows_ms or [0],
+            normalization_mode=NormalizationMode.PERCENT,
+            method=method,
+        )
+
+    def test_output_shape_matches_localizer(self, signal_and_bins):
+        """SPM2ENV and LOCALIZER produce arrays with the same shape."""
+        signal, bins = signal_and_bins
+        p_loc = self._params(ProcessingMethod.LOCALIZER, smoothing_windows_ms=[0, 250])
+        p_spm = self._params(ProcessingMethod.SPM2ENV, smoothing_windows_ms=[0, 250])
+        out_loc = process_channel(signal, self.FS, bins, p_loc)
+        out_spm = process_channel(signal, self.FS, bins, p_spm)
+        assert set(out_loc.keys()) == set(out_spm.keys())
+        for w in out_loc:
+            assert out_loc[w].shape == out_spm[w].shape
+
+    def test_output_dtype_is_float32(self, signal_and_bins):
+        signal, bins = signal_and_bins
+        p = self._params(ProcessingMethod.SPM2ENV, smoothing_windows_ms=[0, 250])
+        out = process_channel(signal, self.FS, bins, p)
+        for arr in out.values():
+            assert arr.dtype == np.float32
+
+    def test_methods_differ_when_smoothing_nonzero(self, signal_and_bins):
+        """Smoothing before vs after downsampling must produce different values."""
+        signal, bins = signal_and_bins
+        p_loc = self._params(ProcessingMethod.LOCALIZER, smoothing_windows_ms=[250], downsampled_frequency_hz=100.0)
+        p_spm = self._params(ProcessingMethod.SPM2ENV, smoothing_windows_ms=[250], downsampled_frequency_hz=100.0)
+        out_loc = process_channel(signal, self.FS, bins, p_loc)
+        out_spm = process_channel(signal, self.FS, bins, p_spm)
+        assert not np.allclose(out_loc[250], out_spm[250], rtol=1e-3)
+
+    def test_methods_agree_without_smoothing_and_without_downsampling(self, signal_and_bins):
+        """With no smoothing and no downsampling both methods follow identical steps."""
+        signal, bins = signal_and_bins
+        p_loc = self._params(ProcessingMethod.LOCALIZER, smoothing_windows_ms=[0], downsampled_frequency_hz=None)
+        p_spm = self._params(ProcessingMethod.SPM2ENV, smoothing_windows_ms=[0], downsampled_frequency_hz=None)
+        out_loc = process_channel(signal, self.FS, bins, p_loc)
+        out_spm = process_channel(signal, self.FS, bins, p_spm)
+        np.testing.assert_allclose(out_loc[0], out_spm[0], rtol=1e-5)

@@ -69,11 +69,26 @@ class TrialSlopeStatsProcessingResult(BaseProcessingResult):
     activity_baseline_scope: str = "global"
     activity_baseline_remove_outlier_trial_means: bool = False
 
+    excluded_channels: dict[str, str] = field(default_factory=dict)
+    """Channels removed by Level B cleaning; maps channel name to comma-joined reason(s).
+
+    Possible reason tokens: ``"trial_mean_spread"``, ``"trial_max_spread"``,
+    ``"nan_trial_ratio"``.  Empty when epoch cleaning is disabled.
+    """
+    excluded_trial_channel_pairs: dict[str, list[int]] = field(default_factory=dict)
+    """Trials NaN-masked per channel by Level A cleaning.
+
+    Maps channel name to a list of pooled trial indices (0-based, conditions A
+    and B concatenated in the order they were stacked: indices ``0 … n_a-1``
+    belong to condition A and indices ``n_a … n_a+n_b-1`` to condition B).
+    Empty when Level A cleaning is disabled or produced no rejects.
+    """
+
     predictor: str = "predictor_value"
     predictor_zscore: str = "none"
     predictor_transform_by_condition: dict[str, dict[str, float]] = field(default_factory=dict)
     trial_activity_summary_kind: str = "epoch_mean"
-    trial_activity_summary_missing_response_policy: str = "drop_trial"
+    trial_activity_summary_missing_response_policy: str = "clamp_to_epoch"
     trial_activity_summary_source: dict[str, str] = field(default_factory=dict)
     trial_activity_summary_label: str = "Epoch mean activity"
     p_value_correction_method: str = "fdr_bh"

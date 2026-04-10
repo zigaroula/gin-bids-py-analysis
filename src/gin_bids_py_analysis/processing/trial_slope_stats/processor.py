@@ -33,6 +33,15 @@ from gin_bids_py_analysis.processing.utils.events import (
     AnnotationEvent,
     parse_annotation_description,
 )
+from gin_bids_py_analysis.processing.utils.epoch_quality import (
+    apply_channel_exclusions,
+    apply_trial_nan_mask,
+    detect_outlier_trial_channel_pairs_by_max,
+    detect_outlier_trial_channel_pairs_by_mean,
+    reject_channels_by_nan_trial_ratio,
+    reject_channels_by_trial_max_spread,
+    reject_channels_by_trial_mean_spread,
+)
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from .params import TrialSlopeStatsParams
@@ -236,6 +245,104 @@ class TrialSlopeStatsProcessing(BaseProcessing):
         predictor_b_raw_array = np.asarray(predictor_b_raw, dtype=np.float64)
         predictor_a_transformed_array = np.asarray(predictor_a_transformed, dtype=np.float64)
         predictor_b_transformed_array = np.asarray(predictor_b_transformed, dtype=np.float64)
+
+        # -------------------------------------------------------------------
+        # Epoch cleaning (Level A: trial-channel NaN masking;
+        #                 Level B: channel exclusion)
+        # Applied on the pooled conditions before activity z-scoring so that
+        # channel-level decisions are consistent across conditions.
+        # -------------------------------------------------------------------
+        excluded_channels: dict[str, str] = {}
+        excluded_trial_channel_pairs: dict[str, list[int]] = {}
+
+        cfg = self.params.epoch_cleaning
+        any_level_a = cfg.reject_trials_by_epoch_mean or cfg.reject_trials_by_epoch_max
+        any_level_b = (
+            cfg.reject_by_trial_mean_spread
+            or cfg.reject_by_trial_max_spread
+            or cfg.max_nan_trial_ratio is not None
+        )
+
+        if (any_level_a or any_level_b) and (
+            epochs_a_array.shape[0] + epochs_b_array.shape[0]
+        ) > 0:
+            n_a = epochs_a_array.shape[0]
+            epochs_pooled = np.concatenate([epochs_a_array, epochs_b_array], axis=0)
+
+            # --- Level A ---
+            if any_level_a:
+                nan_tc_mask = np.zeros(
+                    (epochs_pooled.shape[0], len(feature_names)), dtype=bool
+                )
+                if cfg.reject_trials_by_epoch_mean:
+                    nan_tc_mask |= detect_outlier_trial_channel_pairs_by_mean(
+                        epochs_pooled,
+                        threshold_factor=cfg.epoch_mean_threshold_factor,
+                    )
+                if cfg.reject_trials_by_epoch_max:
+                    nan_tc_mask |= detect_outlier_trial_channel_pairs_by_max(
+                        epochs_pooled,
+                        threshold_factor=cfg.epoch_max_threshold_factor,
+                    )
+                if np.any(nan_tc_mask):
+                    epochs_pooled = apply_trial_nan_mask(epochs_pooled, nan_tc_mask)
+                    for ch_idx, ch_name in enumerate(feature_names):
+                        trial_indices = [
+                            int(t) for t in np.where(nan_tc_mask[:, ch_idx])[0]
+                        ]
+                        if trial_indices:
+                            excluded_trial_channel_pairs[ch_name] = trial_indices
+
+            # --- Level B ---
+            if any_level_b:
+                reason_masks: dict[str, np.ndarray] = {}
+                ch_excl_mask = np.zeros(len(feature_names), dtype=bool)
+                if cfg.reject_by_trial_mean_spread:
+                    m = reject_channels_by_trial_mean_spread(
+                        epochs_pooled,
+                        threshold_factor=cfg.trial_mean_spread_threshold,
+                    )
+                    ch_excl_mask |= m
+                    reason_masks["trial_mean_spread"] = m
+                if cfg.reject_by_trial_max_spread:
+                    m = reject_channels_by_trial_max_spread(
+                        epochs_pooled,
+                        threshold_factor=cfg.trial_max_spread_threshold,
+                    )
+                    ch_excl_mask |= m
+                    reason_masks["trial_max_spread"] = m
+                if cfg.max_nan_trial_ratio is not None:
+                    m = reject_channels_by_nan_trial_ratio(
+                        epochs_pooled,
+                        max_ratio=cfg.max_nan_trial_ratio,
+                    )
+                    ch_excl_mask |= m
+                    reason_masks["nan_trial_ratio"] = m
+                if np.any(ch_excl_mask):
+                    for ch_idx, ch_name in enumerate(feature_names):
+                        if ch_excl_mask[ch_idx]:
+                            reasons = [
+                                r for r, mask in reason_masks.items() if mask[ch_idx]
+                            ]
+                            excluded_channels[ch_name] = ",".join(reasons)
+                    # Excluded channels entirely subsume their Level A entries.
+                    for ch_name in excluded_channels:
+                        excluded_trial_channel_pairs.pop(ch_name, None)
+                    epochs_pooled, feature_names, _ = apply_channel_exclusions(
+                        epochs_pooled,
+                        list(feature_names),
+                        ch_excl_mask,
+                    )
+                    # Keep feature_indices_ref aligned with feature_names (atlas mode).
+                    if atlas_mode and feature_indices_ref is not None:
+                        feature_indices_ref = [
+                            indices
+                            for indices, excl in zip(feature_indices_ref, ch_excl_mask)
+                            if not excl
+                        ]
+
+            epochs_a_array = epochs_pooled[:n_a]
+            epochs_b_array = epochs_pooled[n_a:]
 
         if self.params.activity_zscore == "baseline":
             epochs_a_array, epochs_b_array = zscore_activity_by_baseline(
@@ -455,6 +562,9 @@ class TrialSlopeStatsProcessing(BaseProcessing):
                 "activity_baseline_tmax_s": self.params.activity_baseline_tmax_s,
                 "activity_baseline_scope": self.params.activity_baseline_scope,
                 "activity_baseline_remove_outlier_trial_means": self.params.activity_baseline_remove_outlier_trial_means,
+                "epoch_cleaning": json.loads(
+                    self.params.epoch_cleaning.model_dump_json()
+                ),
                 "trial_activity_summary": json.loads(
                     self.params.trial_activity_summary.model_dump_json()
                 ),
@@ -510,6 +620,8 @@ class TrialSlopeStatsProcessing(BaseProcessing):
             activity_baseline_tmax_s=self.params.activity_baseline_tmax_s,
             activity_baseline_scope=self.params.activity_baseline_scope,
             activity_baseline_remove_outlier_trial_means=self.params.activity_baseline_remove_outlier_trial_means,
+            excluded_channels=excluded_channels,
+            excluded_trial_channel_pairs=excluded_trial_channel_pairs,
             predictor=self.params.predictor,
             predictor_zscore=self.params.predictor_zscore,
             predictor_transform_by_condition={
@@ -763,6 +875,11 @@ class TrialSlopeStatsProcessing(BaseProcessing):
         summary_window_start_s = 0.0
         summary_window_end_s = float(self.params.tmax_s)
         boundary_tol_s = 1e-12
+        missing_response_policy = (
+            str(self.params.trial_activity_summary.missing_response_policy)
+            .strip()
+            .lower()
+        )
 
         for trial_idx, trial in enumerate(trials):
             response_time_s = _to_float_or_nan(
@@ -770,8 +887,13 @@ class TrialSlopeStatsProcessing(BaseProcessing):
             )
             if not np.isfinite(response_time_s):
                 continue
-            if response_time_s <= summary_window_start_s or response_time_s > summary_window_end_s:
+            if response_time_s <= summary_window_start_s:
                 continue
+            if response_time_s > summary_window_end_s:
+                if missing_response_policy == "clamp_to_epoch":
+                    response_time_s = summary_window_end_s
+                else:
+                    continue
             time_mask = (
                 (time_axis >= summary_window_start_s - boundary_tol_s)
                 & (time_axis <= response_time_s + boundary_tol_s)

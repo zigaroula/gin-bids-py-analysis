@@ -654,7 +654,7 @@ class ParamsPanel(QWidget):
         kind = self._trial_activity_summary_kind.currentText().strip()
         payload: dict[str, object] = {
             "kind": kind,
-            "missing_response_policy": "drop_trial",
+            "missing_response_policy": "clamp_to_epoch",
         }
         if kind != "anchor_to_response_mean":
             payload["response"] = None

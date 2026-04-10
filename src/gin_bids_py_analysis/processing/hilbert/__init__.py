@@ -9,6 +9,7 @@ from .params import (
     HilbertWriterParams,
     MontageMode,
     NormalizationMode,
+    ProcessingMethod,
 )
 from .processor import HilbertProcessing
 from .result import HilbertProcessingResult
@@ -24,4 +25,5 @@ __all__ = [
     "HilbertWriterParams",
     "MontageMode",
     "NormalizationMode",
+    "ProcessingMethod",
 ]

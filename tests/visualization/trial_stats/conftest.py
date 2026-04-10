@@ -189,7 +189,7 @@ def synthetic_slope_result(default_slope_params: TrialSlopeStatsParams) -> Trial
         predictor="predictor_value",
         predictor_zscore="none",
         trial_activity_summary_kind="epoch_mean",
-        trial_activity_summary_missing_response_policy="drop_trial",
+        trial_activity_summary_missing_response_policy="clamp_to_epoch",
         trial_activity_summary_source={},
         trial_activity_summary_label="Epoch mean activity",
         p_value_correction_method="fdr_bh",
