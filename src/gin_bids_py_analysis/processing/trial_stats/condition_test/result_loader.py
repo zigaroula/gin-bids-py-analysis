@@ -1,8 +1,8 @@
-"""Load a pre-computed ``TrialStatsProcessingResult`` from disk.
+"""Load a pre-computed ``ConditionTestProcessingResult`` from disk.
 
 Supports the HDF5 (``.h5`` / ``.hdf5``) and MATLAB (``.mat``) formats written
-by ``TrialStatsProcessingWriter``.  The returned result object contains the
-same fields as one produced by ``TrialStatsProcessing.process_group()`` and can
+by ``ConditionTestProcessingWriter``.  The returned result object contains the
+same fields as one produced by ``ConditionTestProcessing.process_group()`` and can
 be fed directly to the visualization layer without re-running the processing
 pipeline.
 """
@@ -24,23 +24,23 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
     str_scalar,
 )
 
-from .result import TrialStatsProcessingResult
+from .result import ConditionTestProcessingResult
 
 _VALID_BASELINE_SCOPES = frozenset({"trial", "condition", "global"})
 
 
-def load_trial_stats_result(path: Path | str) -> TrialStatsProcessingResult:
-    """Load a pre-computed ``TrialStatsProcessingResult`` from *path*.
+def load_condition_test_result(path: Path | str) -> ConditionTestProcessingResult:
+    """Load a pre-computed ``ConditionTestProcessingResult`` from *path*.
 
     Parameters
     ----------
     path:
         Path to an ``.h5``/``.hdf5`` or ``.mat`` trial-stats file written by
-        ``TrialStatsProcessingWriter``.
+        ``ConditionTestProcessingWriter``.
 
     Returns
     -------
-    TrialStatsProcessingResult
+    ConditionTestProcessingResult
         A fully populated result object ready for visualization.  Fields that
         are optional in the file (e.g. epochs, permuted t-values) are set to
         empty arrays / ``None`` when absent.
@@ -66,7 +66,7 @@ def load_trial_stats_result(path: Path | str) -> TrialStatsProcessingResult:
 # ---------------------------------------------------------------------------
 
 
-def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
+def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
     with h5py.File(path, "r") as fh:
         # --- axes (channel / region names + time) ---
         analysis_level = str_scalar(
@@ -245,7 +245,7 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
             source_electrodes_files = []
 
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
-    return TrialStatsProcessingResult(
+    return ConditionTestProcessingResult(
         source_group=source_group,
         metadata={
             "activity_zscore": activity_zscore,
@@ -304,7 +304,7 @@ def _load_from_hdf5(path: Path) -> TrialStatsProcessingResult:
 # ---------------------------------------------------------------------------
 
 
-def _load_from_matlab(path: Path) -> TrialStatsProcessingResult:
+def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
     from gin_bids_py_analysis.processing.utils.matlab import (
         mat_float,
         mat_int,
@@ -443,7 +443,7 @@ def _load_from_matlab(path: Path) -> TrialStatsProcessingResult:
     )
 
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
-    return TrialStatsProcessingResult(
+    return ConditionTestProcessingResult(
         source_group=source_group,
         metadata={
             "activity_zscore": activity_zscore,

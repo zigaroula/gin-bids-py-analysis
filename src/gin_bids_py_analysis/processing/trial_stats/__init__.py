@@ -1,11 +1,30 @@
-"""Subject-level trial statistics on iEEG recordings."""
+"""Shared trial-statistics domain package."""
 
-__version__ = "0.1.0"
-
-from .params import TrialStatsParams, TrialStatsWriterParams
-from .processor import TrialStatsProcessing
-from .result import TrialStatsProcessingResult
-from .writer import TrialStatsProcessingWriter
+from .params import BaseTrialStatsParams, BaseTrialStatsWriterParams
+from .processor import BaseTrialStatsProcessing
+from .result import BaseTrialStatsProcessingResult
+from .writer import BaseTrialStatsProcessingWriter
+from .condition_test import (
+    ConditionTestParams,
+    ConditionTestProcessing,
+    ConditionTestProcessingResult,
+    ConditionTestProcessingWriter,
+    ConditionTestWriterParams,
+    load_condition_test_result,
+)
+from .regression import (
+    EpochCleaningConfig,
+    PredictorAffineTransform,
+    RegressionParams,
+    RegressionProcessing,
+    RegressionProcessingResult,
+    RegressionProcessingWriter,
+    RegressionWriterParams,
+    TrialActivitySummaryAnnotationEventSource,
+    TrialActivitySummaryConfig,
+    TrialActivitySummaryTableColumnSource,
+    load_regression_result,
+)
 from ..utils.condition_rules import ConditionDefinition, ConditionExpr
 from ..utils.trial_resolver import TableTrialResolver, TrialResolver
 
@@ -14,9 +33,26 @@ __all__ = [
     "TableTrialResolver",
     "ConditionExpr",
     "ConditionDefinition",
-    "TrialStatsParams",
-    "TrialStatsProcessing",
-    "TrialStatsProcessingResult",
-    "TrialStatsProcessingWriter",
-    "TrialStatsWriterParams",
+    "BaseTrialStatsParams",
+    "BaseTrialStatsWriterParams",
+    "BaseTrialStatsProcessingResult",
+    "BaseTrialStatsProcessing",
+    "BaseTrialStatsProcessingWriter",
+    "ConditionTestParams",
+    "ConditionTestProcessing",
+    "ConditionTestProcessingResult",
+    "ConditionTestProcessingWriter",
+    "ConditionTestWriterParams",
+    "load_condition_test_result",
+    "PredictorAffineTransform",
+    "TrialActivitySummaryTableColumnSource",
+    "TrialActivitySummaryAnnotationEventSource",
+    "TrialActivitySummaryConfig",
+    "EpochCleaningConfig",
+    "RegressionParams",
+    "RegressionProcessing",
+    "RegressionProcessingResult",
+    "RegressionProcessingWriter",
+    "RegressionWriterParams",
+    "load_regression_result",
 ]

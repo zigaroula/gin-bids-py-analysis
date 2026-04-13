@@ -11,10 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
-from gin_bids_py_analysis.processing.trial_stats import (
-    TableTrialResolver,
-    TrialStatsParams,
-)
+from gin_bids_py_analysis.processing.trial_stats import TableTrialResolver
+from gin_bids_py_analysis.processing.trial_stats.condition_test import ConditionTestParams
 from gin_bids_py_analysis.processing.trial_stats_group import TrialStatsGroupParams
 from gin_bids_py_analysis.visualization.trial_stats import launch
 
@@ -38,7 +36,7 @@ SECONDARY_FILTERS = [
     {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
 ]
 
-PARAMS = TrialStatsParams(
+PARAMS = ConditionTestParams(
     anchor_event_codes=["10"],
     tmin_s=-2.0,
     tmax_s=2.0,

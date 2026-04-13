@@ -1,4 +1,4 @@
-"""Load a pre-computed TrialSlopeStatsProcessingResult from disk."""
+"""Load a pre-computed RegressionProcessingResult from disk."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from gin_bids_py_analysis.processing.utils.matlab import (
     matlab_safe_name,
 )
 
-from .result import TrialSlopeStatsProcessingResult
+from .result import RegressionProcessingResult
 
 _VALID_PREDICTOR_ZSCORE_MODES = frozenset({"none", "condition", "global"})
 _VALID_BASELINE_SCOPES = frozenset({"trial", "condition", "global"})
@@ -35,8 +35,8 @@ _VALID_TRIAL_ACTIVITY_SUMMARY_MISSING_RESPONSE_POLICIES = frozenset(
 )
 
 
-def load_trial_slope_stats_result(path: Path | str) -> TrialSlopeStatsProcessingResult:
-    """Load a pre-computed TrialSlopeStatsProcessingResult from *path*."""
+def load_regression_result(path: Path | str) -> RegressionProcessingResult:
+    """Load a pre-computed RegressionProcessingResult from *path*."""
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Trial slope stats file not found: {path}")
@@ -46,7 +46,7 @@ def load_trial_slope_stats_result(path: Path | str) -> TrialSlopeStatsProcessing
     return _load_from_hdf5(path)
 
 
-def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
+def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
     with h5py.File(path, "r") as fh:
         analysis_type = str_scalar(dataset_or_none(fh, "meta/analysis_type"), default="")
         if analysis_type and analysis_type != "slope_regression":
@@ -343,7 +343,7 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
                 source_electrodes_files = decode_str_array(np.asarray(prov["source_electrodes_files"][:], dtype=object))
 
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
-    return TrialSlopeStatsProcessingResult(
+    return RegressionProcessingResult(
         source_group=source_group,
         metadata={
             "activity_zscore": activity_zscore,
@@ -423,7 +423,7 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsProcessingResult:
     )
 
 
-def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
+def _load_from_matlab(path: Path) -> RegressionProcessingResult:
     from scipy.io import loadmat
 
     mat = loadmat(str(path), squeeze_me=True, struct_as_record=False)
@@ -689,7 +689,7 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsProcessingResult:
     source_electrodes_files = mat_str_list(getattr(prov, "source_electrodes_files", None)) if prov is not None else []
 
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
-    return TrialSlopeStatsProcessingResult(
+    return RegressionProcessingResult(
         source_group=source_group,
         metadata={
             "activity_zscore": activity_zscore,

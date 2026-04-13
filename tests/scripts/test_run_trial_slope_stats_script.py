@@ -44,10 +44,10 @@ def test_run_trial_slope_stats_script_main_smoke(monkeypatch) -> None:
                 return [
                     case_dir
                     / "derivatives"
-                    / "trial_slope_stats"
+                    / "regression"
                     / "sub-01"
                     / "ieeg"
-                    / "sub-01_task-decid_desc-trialslopestats_stats.h5"
+                    / "sub-01_task-decid_desc-regression_stats.h5"
                 ]
 
         class _FakeWriter:
@@ -56,11 +56,11 @@ def test_run_trial_slope_stats_script_main_smoke(monkeypatch) -> None:
 
         monkeypatch.setattr(module, "BIDSDataset", _FakeDataset)
         monkeypatch.setattr(module, "build_subject_groups", lambda *_args, **_kwargs: ["dummy"])
-        monkeypatch.setattr(module, "TrialSlopeStatsProcessing", _FakeProcessor)
-        monkeypatch.setattr(module, "TrialSlopeStatsProcessingWriter", _FakeWriter)
+        monkeypatch.setattr(module, "RegressionProcessing", _FakeProcessor)
+        monkeypatch.setattr(module, "RegressionProcessingWriter", _FakeWriter)
 
         out_paths = module.main()
         assert len(out_paths) == 1
-        assert "trial_slope_stats" in str(out_paths[0])
+        assert "regression" in str(out_paths[0])
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)

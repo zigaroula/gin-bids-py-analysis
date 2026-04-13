@@ -3,9 +3,10 @@
 BIDS-based iEEG analysis pipelines:
 - `hilbert` (band envelope extraction)
 - `delphos` (HFO/spike detection)
-- `trial_stats` (subject-level condition statistics)
-- `trial_slope_stats` (subject-level condition-specific slope regression)
-- `trial_stats_group` (group-level ROI statistics from `trial_stats`)
+- `condition_test` (subject-level condition statistics)
+- `regression` (subject-level condition-specific slope regression)
+- `trial_stats_group` (group-level ROI statistics from `condition_test`)
+- `trial_slope_stats_group` (group-level ROI statistics from `regression`)
 
 ## Installation (venv, by OS)
 
@@ -103,9 +104,10 @@ out_paths = processor.run(files, writer, n_jobs=1)
 ## Typical Pipeline Order
 
 1. `hilbert` or `delphos` from raw iEEG (`scope="raw"`).
-2. `trial_stats` from chosen iEEG derivatives (often Hilbert BrainVision outputs).
-3. `trial_slope_stats` from chosen iEEG derivatives when your analysis is `gamma ~ continuous_value`.
-4. `trial_stats_group` from `trial_stats` outputs (`scope="trial_stats"`).
+2. `condition_test` from chosen iEEG derivatives (often Hilbert BrainVision outputs).
+3. `regression` from chosen iEEG derivatives when your analysis is `gamma ~ continuous_value`.
+4. `trial_stats_group` from `condition_test` outputs (`scope="condition_test"`).
+5. `trial_slope_stats_group` from `regression` outputs (`scope="regression"`).
 
 ## Pipeline Details and Configuration
 
@@ -140,7 +142,7 @@ Important naming behavior:
 - The writer appends `sm<window_ms>` to `desc`.
 - Example: `output_description="gamma"` and window `0` -> `desc-gammasm0`.
 
-This is why `trial_stats` often filters with `desc: "gammasm0"`.
+This is why `condition_test` often filters with `desc: "gammasm0"`.
 
 ### 2) Delphos (`scripts/run_delphos.py`)
 
@@ -171,7 +173,7 @@ Writer configuration (`DelphosWriterParams`):
   - `*_events.tsv` (event rows)
   - `*_rates.tsv` (per-channel event rates)
 
-### 3) Trial Stats (subject level) (`scripts/run_trial_stats.py`)
+### 3) Condition Test (subject level) (`scripts/run_trial_stats.py`)
 
 Run:
 
@@ -186,7 +188,8 @@ Input selection and grouping:
 - `SECONDARY_FILTERS`: extra TSV/CSV files (behavior, electrodes, etc.).
 - `build_subject_groups(...)`: builds one file group per subject.
 
-Core configuration in `TrialStatsParams` (`src/gin_bids_py_analysis/processing/trial_stats/params.py`):
+Core configuration in `ConditionTestParams`
+(`src/gin_bids_py_analysis/processing/trial_stats/condition_test/params.py`):
 - Required:
   - `anchor_event_codes`
   - `tmin_s`, `tmax_s`
@@ -250,19 +253,21 @@ TableTrialResolver(
 )
 ```
 
-Writer configuration (`TrialStatsWriterParams`):
+Writer configuration (`ConditionTestWriterParams`):
 - `output_format`: `"hdf5"` or `"matlab"`
 - `include_epochs`: include per-trial epoch arrays (larger files)
 
 Outputs:
 - `*_stats.h5` or `*_stats.mat`
 - plus a companion `*_trials.tsv` audit table
+- default derivatives target: `derivatives/condition_test/...`
+- default subject `desc`: `conditiontest`
 
 Note for downstream `trial_stats_group`:
-- `trial_stats_group` requires channel-level `trial_stats` inputs.
-- If you plan to run group stats later, keep `atlas_name=None` in `trial_stats`.
+- `trial_stats_group` requires channel-level `condition_test` inputs.
+- If you plan to run group stats later, keep `atlas_name=None` in `condition_test`.
 
-### 4) Trial Slope Stats (subject level) (`scripts/run_trial_slope_stats.py`)
+### 4) Regression (subject level) (`scripts/run_trial_slope_stats.py`)
 
 Run:
 
@@ -273,8 +278,8 @@ python scripts/run_trial_slope_stats.py
 This pipeline computes, for each condition separately, a linear regression
 between epoched gamma activity and a continuous predictor value coming from TSV/CSV.
 
-Core configuration in `TrialSlopeStatsParams`
-(`src/gin_bids_py_analysis/processing/trial_slope_stats/params.py`):
+Core configuration in `RegressionParams`
+(`src/gin_bids_py_analysis/processing/trial_stats/regression/params.py`):
 - Required:
   - `anchor_event_codes`
   - `tmin_s`, `tmax_s`
@@ -286,28 +291,27 @@ Core configuration in `TrialSlopeStatsParams`
 - Statistical controls:
   - `p_value_correction_method` (`none`, `fdr_bh`, `bonferroni`)
   - `significance_alpha`
-  - `predictor_scaling` (`none` in V1)
+  - `predictor_zscore` (`none`, `condition`, `global`)
 - Feature space and binning:
-  - same `atlas_name` / `atlas_regions` behavior as `trial_stats`
+  - same `atlas_name` / `atlas_regions` behavior as `condition_test`
   - same `window_ms` / `n_bins` mutual exclusivity
 
 Resolver configuration:
-- Use `TableTrialResolver` as in `trial_stats`.
+- Use `TableTrialResolver` as in `condition_test`.
 - To inject the predictor from table columns into trial metadata, use:
   - `extract_columns=["<column_name>"]`.
 - Trials with missing/non-numeric predictor values are excluded and tagged
   with `invalid_predictor_value`.
 
-Writer configuration (`TrialSlopeStatsWriterParams`):
+Writer configuration (`RegressionWriterParams`):
 - `output_format`: `"hdf5"` or `"matlab"`
 - `include_epochs`: optional per-trial epoch arrays
 
 Outputs:
 - `*_stats.h5` or `*_stats.mat`
 - companion `*_trials.tsv` with predictor audit columns (`predictor_raw`, `predictor_value`)
-
-Current scope:
-- Subject-level only in V1 (no `trial_slope_stats_group` pipeline).
+- default derivatives target: `derivatives/regression/...`
+- default subject `desc`: `regression`
 
 ### 5) Trial Stats Group (group level ROI) (`scripts/run_trial_stats_group.py`)
 
@@ -317,10 +321,10 @@ Run:
 python scripts/run_trial_stats_group.py
 ```
 
-This pipeline consumes many `trial_stats` outputs and performs one-sample ROI statistics against 0 over time.
+This pipeline consumes many `condition_test` outputs and performs one-sample ROI statistics against 0 over time.
 
 Input discovery:
-- `TRIAL_STATS_FILTERS` should point to your `trial_stats` derivatives (often `.h5`).
+- `TRIAL_STATS_FILTERS` should point to your `condition_test` derivatives (often `.h5`).
 - `build_trial_stats_compatible_groups(...)` automatically splits files into compatible sets (same task, condition labels, time axis, and binning signature).
 
 Core configuration in `TrialStatsGroupParams` (`src/gin_bids_py_analysis/processing/trial_stats_group/params.py`):
@@ -346,13 +350,13 @@ There are two ways to visualize trial-stats results:
 
 1. Interactive UI:
    - Script: `scripts/visualize_trial_stats.py`
-   - Uses `TrialStatsParams` (ttest mode) or `TrialSlopeStatsParams` via `launch_slope(...)`.
-   - Group tab is available only in ttest mode.
+   - Uses `ConditionTestParams` (ttest mode) or `RegressionParams` via `launch_slope(...)`.
+   - Group tab supports both `trial_stats_group` and `trial_slope_stats_group`.
    - Requires viz dependencies (`pip install -e ".[viz]"`).
 
 2. Static inspection:
    - Script: `scripts/inspect_trial_stats.py`
-   - Reads one or more `*_stats.h5` files and produces a summary figure/console recap.
+   - Reads subject-level `condition_test` / `regression` outputs or group-level outputs and produces a summary figure/console recap.
 
 ## Running Tests
 

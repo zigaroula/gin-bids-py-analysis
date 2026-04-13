@@ -10,10 +10,10 @@ import pytest
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_slope_stats import TrialSlopeStatsParams
-from gin_bids_py_analysis.processing.trial_slope_stats.result import TrialSlopeStatsProcessingResult
-from gin_bids_py_analysis.processing.trial_stats import TrialStatsParams
-from gin_bids_py_analysis.processing.trial_stats.result import TrialStatsProcessingResult
+from gin_bids_py_analysis.processing.trial_stats import RegressionParams
+from gin_bids_py_analysis.processing.trial_stats import RegressionProcessingResult
+from gin_bids_py_analysis.processing.trial_stats import ConditionTestParams
+from gin_bids_py_analysis.processing.trial_stats import ConditionTestProcessingResult
 
 
 # ---------------------------------------------------------------------------
@@ -37,8 +37,8 @@ def _make_bids_file(path: Path, entities: dict) -> BIDSFile:
 
 
 @pytest.fixture()
-def default_params() -> TrialStatsParams:
-    return TrialStatsParams(
+def default_params() -> ConditionTestParams:
+    return ConditionTestParams(
         anchor_event_codes=["10"],
         tmin_s=-1.0,
         tmax_s=2.0,
@@ -50,8 +50,8 @@ def default_params() -> TrialStatsParams:
 
 
 @pytest.fixture()
-def synthetic_result(default_params: TrialStatsParams) -> TrialStatsProcessingResult:
-    """TrialStatsProcessingResult filled with synthetic arrays (n_channels=4, n_times=60)."""
+def synthetic_result(default_params: ConditionTestParams) -> ConditionTestProcessingResult:
+    """ConditionTestProcessingResult filled with synthetic arrays (n_channels=4, n_times=60)."""
     rng = np.random.default_rng(seed=42)
     n_ch, n_t = 4, 60
 
@@ -68,7 +68,7 @@ def synthetic_result(default_params: TrialStatsParams) -> TrialStatsProcessingRe
     mean_a = rng.standard_normal((n_ch, n_t))
     mean_b = rng.standard_normal((n_ch, n_t))
 
-    return TrialStatsProcessingResult(
+    return ConditionTestProcessingResult(
         source_group=group,
         metadata={},
         output_entities=None,
@@ -108,8 +108,8 @@ def synthetic_result(default_params: TrialStatsParams) -> TrialStatsProcessingRe
 
 
 @pytest.fixture()
-def default_slope_params() -> TrialSlopeStatsParams:
-    return TrialSlopeStatsParams(
+def default_slope_params() -> RegressionParams:
+    return RegressionParams(
         anchor_event_codes=["10"],
         tmin_s=-1.0,
         tmax_s=2.0,
@@ -122,7 +122,7 @@ def default_slope_params() -> TrialSlopeStatsParams:
 
 
 @pytest.fixture()
-def synthetic_slope_result(default_slope_params: TrialSlopeStatsParams) -> TrialSlopeStatsProcessingResult:
+def synthetic_slope_result(default_slope_params: RegressionParams) -> RegressionProcessingResult:
     rng = np.random.default_rng(seed=123)
     n_ch, n_t = 4, 60
 
@@ -145,7 +145,7 @@ def synthetic_slope_result(default_slope_params: TrialSlopeStatsParams) -> Trial
     epoch_means_a = rng.standard_normal((n_ch, 12))
     epoch_means_b = rng.standard_normal((n_ch, 11))
 
-    return TrialSlopeStatsProcessingResult(
+    return RegressionProcessingResult(
         source_group=group,
         metadata={},
         output_entities=None,

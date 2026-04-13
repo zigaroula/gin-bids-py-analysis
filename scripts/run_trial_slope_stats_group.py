@@ -1,5 +1,5 @@
 """
-Group-level ROI statistics on trial_slope_stats outputs - run script.
+Group-level ROI statistics on regression outputs - run script.
 Edit the parameters below and run: python scripts/run_trial_slope_stats_group.py
 """
 
@@ -38,10 +38,10 @@ SECONDARY_FILTERS = [
     {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
 ]
 
-# Query trial_slope_stats channel-level outputs from derivatives/trial_slope_stats.
-# desc must match TrialSlopeStatsWriterParams(output_description=...) used upstream.
+# Query regression channel-level outputs from derivatives/regression.
+# desc must match RegressionWriterParams(output_description=...) used upstream.
 TRIAL_SLOPE_STATS_FILTERS = {
-    "scope": "trial_slope_stats",
+    "scope": "regression",
     "suffix": "stats",
     "extension": ".h5",
     "desc": "correlation",
@@ -176,7 +176,7 @@ def main() -> list[Path]:
     files = _load_trial_slope_stats_files(ds)
     groups = _build_groups(files)
     print(
-        f"Found {len(files)} trial_slope_stats file(s) grouped into {len(groups)} "
+        f"Found {len(files)} regression file(s) grouped into {len(groups)} "
         f"compatible run(s). Running with n_jobs={N_JOBS}."
     )
 

@@ -10,12 +10,12 @@ if TYPE_CHECKING:
     from gin_bids_py_analysis.processing.trial_slope_stats_group import (
         TrialSlopeStatsGroupParams,
     )
-    from gin_bids_py_analysis.processing.trial_slope_stats import (
-        TrialSlopeStatsParams,
+    from gin_bids_py_analysis.processing.trial_stats import (
+        RegressionParams,
     )
     from gin_bids_py_analysis.processing.trial_stats import (
         TrialResolver,
-        TrialStatsParams,
+        ConditionTestParams,
     )
     from gin_bids_py_analysis.processing.trial_stats_group.params import (
         TrialStatsGroupParams,
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 def launch(
     subject_groups: dict[str, "BIDSFileGroup"],
-    params: "TrialStatsParams",
+    params: "ConditionTestParams",
     resolver: "TrialResolver",
     group_params: "TrialStatsGroupParams | None" = None,
     bids_root: Path | None = None,
@@ -39,7 +39,7 @@ def launch(
     subject_groups:
         Mapping of ``subject_id → BIDSFileGroup`` for all subjects to visualize.
     params:
-        Default ``TrialStatsParams`` to pre-populate the parameters panel.
+        Default ``ConditionTestParams`` to pre-populate the parameters panel.
     resolver:
         The ``TrialResolver`` configured for this dataset.
     group_params:
@@ -71,7 +71,7 @@ def launch(
 
 def launch_slope(
     subject_groups: dict[str, "BIDSFileGroup"],
-    params: "TrialSlopeStatsParams",
+    params: "RegressionParams",
     resolver: "TrialResolver",
     group_params: "TrialSlopeStatsGroupParams | None" = None,
     bids_root: Path | None = None,
@@ -87,13 +87,13 @@ def launch_slope(
             "Install with: pip install 'gin-bids-py-analysis[viz]'"
         ) from exc
 
-    from gin_bids_py_analysis.processing.trial_stats import TrialStatsParams
+    from gin_bids_py_analysis.processing.trial_stats import ConditionTestParams
 
     app = QApplication.instance() or QApplication(sys.argv)
 
     from .window import TrialStatsWindow
 
-    fallback_ttest_params = TrialStatsParams(
+    fallback_ttest_params = ConditionTestParams(
         anchor_event_codes=list(params.anchor_event_codes),
         tmin_s=params.tmin_s,
         tmax_s=params.tmax_s,
@@ -133,7 +133,7 @@ def launch_precomputed(
     """Launch the trial statistics viewer loading pre-computed result files.
 
     Use this entry point when the per-subject statistics have already been
-    written to disk by ``TrialStatsProcessingWriter`` (for example after a slow
+    written to disk by the subject-level writers (for example after a slow
     permutation run) and you want to visualize the saved results without
     re-running the pipeline.
 

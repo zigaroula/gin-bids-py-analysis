@@ -1,4 +1,4 @@
-"""Dialog for configuring TrialStatsWriterParams before saving results."""
+"""Dialog for configuring ConditionTestWriterParams before saving results."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gin_bids_py_analysis.processing.trial_stats import TrialStatsWriterParams
+from gin_bids_py_analysis.processing.trial_stats import ConditionTestWriterParams
 
 
 class SaveTrialStatsDialog(QDialog):
@@ -40,8 +40,8 @@ class SaveTrialStatsDialog(QDialog):
         bids_root: Path,
         parent: QWidget | None = None,
         *,
-        default_pipeline_label: str = "trial_stats",
-        default_output_description: str = "trialstats",
+        default_pipeline_label: str = "condition_test",
+        default_output_description: str = "conditiontest",
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Save results")
@@ -116,9 +116,9 @@ class SaveTrialStatsDialog(QDialog):
     # Public API
     # ------------------------------------------------------------------
 
-    def get_writer_params(self) -> TrialStatsWriterParams:
-        """Build a :class:`TrialStatsWriterParams` from the current dialog values."""
-        return TrialStatsWriterParams(**self.get_common_writer_kwargs())
+    def get_writer_params(self) -> ConditionTestWriterParams:
+        """Build a :class:`ConditionTestWriterParams` from the current dialog values."""
+        return ConditionTestWriterParams(**self.get_common_writer_kwargs())
 
     def get_common_writer_kwargs(self) -> dict[str, object]:
         """Return dialog values as kwargs accepted by trial-stats writers."""

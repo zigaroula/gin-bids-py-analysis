@@ -8,18 +8,16 @@ from typing import TYPE_CHECKING, Callable
 from PySide6.QtCore import QThread, Signal
 
 from gin_bids_py_analysis.bids import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_slope_stats import (
-    TrialSlopeStatsParams,
-    TrialSlopeStatsProcessing,
-)
 from gin_bids_py_analysis.processing.trial_stats import (
-    TrialStatsParams,
-    TrialStatsProcessing,
+    ConditionTestParams,
+    ConditionTestProcessing,
+    RegressionParams,
+    RegressionProcessing,
 )
 
 if TYPE_CHECKING:
-    from gin_bids_py_analysis.processing.trial_slope_stats.result import (
-        TrialSlopeStatsProcessingResult,
+    from gin_bids_py_analysis.processing.trial_stats import (
+        RegressionProcessingResult,
     )
     from gin_bids_py_analysis.processing.trial_slope_stats_group.params import (
         TrialSlopeStatsGroupParams,
@@ -30,11 +28,11 @@ if TYPE_CHECKING:
     from gin_bids_py_analysis.processing.trial_slope_stats_group.writer import (
         TrialSlopeStatsGroupProcessingWriter,
     )
-    from gin_bids_py_analysis.processing.trial_stats.result import (
-        TrialStatsProcessingResult,
+    from gin_bids_py_analysis.processing.trial_stats import (
+        ConditionTestProcessingResult,
     )
-    from gin_bids_py_analysis.processing.trial_stats.writer import (
-        TrialStatsProcessingWriter,
+    from gin_bids_py_analysis.processing.trial_stats import (
+        ConditionTestProcessingWriter,
     )
     from gin_bids_py_analysis.processing.trial_stats_group.params import (
         TrialStatsGroupParams,
@@ -94,27 +92,27 @@ class PreloadWorker(QThread):
 
 
 class ComputeWorker(QThread):
-    """Run TrialStatsProcessing in a background thread.
+    """Run ConditionTestProcessing in a background thread.
 
     Parameters
     ----------
     processor:
-        A freshly constructed ``TrialStatsProcessing`` instance.
+        A freshly constructed ``ConditionTestProcessing`` instance.
     group:
         The ``BIDSFileGroup`` for the subject to process.
 
     Signals
     -------
-    result_ready : emitted with the ``TrialStatsProcessingResult`` on success.
+    result_ready : emitted with the ``ConditionTestProcessingResult`` on success.
     error        : emitted with the exception message string on failure.
     """
 
-    result_ready = Signal(object)  # TrialStatsProcessingResult
+    result_ready = Signal(object)  # ConditionTestProcessingResult
     error = Signal(str)
 
     def __init__(
         self,
-        processor: TrialStatsProcessing | TrialSlopeStatsProcessing,
+        processor: ConditionTestProcessing | RegressionProcessing,
         group: BIDSFileGroup,
         parent=None,
     ) -> None:
@@ -131,13 +129,13 @@ class ComputeWorker(QThread):
 
 
 class ComputeAllWorker(QThread):
-    """Run TrialStatsProcessing for every subject group sequentially in a background thread.
+    """Run ConditionTestProcessing for every subject group sequentially in a background thread.
 
     Parameters
     ----------
     processor_factory:
-        Callable that accepts a ``TrialStatsParams`` and returns a fresh
-        ``TrialStatsProcessing`` instance.  Called once per subject.
+        Callable that accepts a ``ConditionTestParams`` and returns a fresh
+        ``ConditionTestProcessing`` instance.  Called once per subject.
     subject_groups:
         Mapping of subject id to ``BIDSFileGroup``.
     params:
@@ -152,19 +150,19 @@ class ComputeAllWorker(QThread):
     error        : str           — emitted with the exception message on failure.
     """
 
-    subject_done = Signal(str, object)   # subject_id, TrialStatsProcessingResult
-    all_done = Signal(object)            # dict[str, TrialStatsProcessingResult]
+    subject_done = Signal(str, object)   # subject_id, ConditionTestProcessingResult
+    all_done = Signal(object)            # dict[str, ConditionTestProcessingResult]
     progress = Signal(str)
     error = Signal(str)
 
     def __init__(
         self,
         processor_factory: Callable[
-            [TrialStatsParams | TrialSlopeStatsParams],
-            TrialStatsProcessing | TrialSlopeStatsProcessing,
+            [ConditionTestParams | RegressionParams],
+            ConditionTestProcessing | RegressionProcessing,
         ],
         subject_groups: dict[str, BIDSFileGroup],
-        params: TrialStatsParams | TrialSlopeStatsParams,
+        params: ConditionTestParams | RegressionParams,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -173,7 +171,7 @@ class ComputeAllWorker(QThread):
         self._params = params
 
     def run(self) -> None:
-        results: dict[str, TrialStatsProcessingResult] = {}
+        results: dict[str, ConditionTestProcessingResult] = {}
         total = len(self._subject_groups)
         try:
             for i, (subject_id, group) in enumerate(self._subject_groups.items(), start=1):
@@ -193,7 +191,7 @@ class GroupComputeWorker(QThread):
     Parameters
     ----------
     all_results:
-        Mapping of subject id to ``TrialStatsProcessingResult``.
+        Mapping of subject id to ``ConditionTestProcessingResult``.
     group_params:
         Parameters for the group-level analysis.
 
@@ -208,7 +206,7 @@ class GroupComputeWorker(QThread):
 
     def __init__(
         self,
-        all_results: dict[str, "TrialStatsProcessingResult | TrialSlopeStatsProcessingResult"],
+        all_results: dict[str, "ConditionTestProcessingResult | RegressionProcessingResult"],
         group_params: "TrialStatsGroupParams | TrialSlopeStatsGroupParams",
         parent=None,
     ) -> None:
@@ -247,14 +245,14 @@ class GroupComputeWorker(QThread):
 
 
 class WriteAllWorker(QThread):
-    """Write all per-subject ``TrialStatsProcessingResult`` objects in a background thread.
+    """Write all per-subject ``ConditionTestProcessingResult`` objects in a background thread.
 
     Parameters
     ----------
     results:
-        Mapping of subject id to ``TrialStatsProcessingResult``.
+        Mapping of subject id to ``ConditionTestProcessingResult``.
     writer:
-        A fully configured ``TrialStatsProcessingWriter`` instance.
+        A fully configured ``ConditionTestProcessingWriter`` instance.
 
     Signals
     -------
@@ -269,8 +267,8 @@ class WriteAllWorker(QThread):
 
     def __init__(
         self,
-        results: "dict[str, TrialStatsProcessingResult]",
-        writer: "TrialStatsProcessingWriter",
+        results: "dict[str, ConditionTestProcessingResult]",
+        writer: "ConditionTestProcessingWriter",
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -329,7 +327,7 @@ class LoadSubjectResultsWorker(QThread):
     """Load pre-computed subject results from files in a background thread.
 
     This worker reads ``.h5``/``.hdf5`` or ``.mat`` trial-stats files written
-    by ``TrialStatsProcessingWriter`` and reconstructs ``TrialStatsProcessingResult``
+    by ``ConditionTestProcessingWriter`` and reconstructs ``ConditionTestProcessingResult``
     objects without re-running any processing.
 
     Parameters
@@ -346,8 +344,8 @@ class LoadSubjectResultsWorker(QThread):
     error        : str           — emitted with the exception message on failure.
     """
 
-    subject_done = Signal(str, object)  # subject_id, TrialStatsProcessingResult
-    all_done = Signal(object)           # dict[str, TrialStatsProcessingResult]
+    subject_done = Signal(str, object)  # subject_id, ConditionTestProcessingResult
+    all_done = Signal(object)           # dict[str, ConditionTestProcessingResult]
     progress = Signal(str)
     error = Signal(str)
 
@@ -360,14 +358,16 @@ class LoadSubjectResultsWorker(QThread):
         self._subject_files = subject_files
 
     def run(self) -> None:
-        from gin_bids_py_analysis.processing.trial_slope_stats.result_loader import (
-            load_trial_slope_stats_result,
+        from gin_bids_py_analysis.processing.trial_stats import (
+            load_regression_result,
         )
-        from gin_bids_py_analysis.processing.trial_stats.result_loader import (
-            load_trial_stats_result,
+        from gin_bids_py_analysis.processing.trial_stats import (
+            load_condition_test_result,
         )
 
-        results: dict[str, "TrialStatsProcessingResult"] = {}
+        results: dict[
+            str, "ConditionTestProcessingResult | RegressionProcessingResult"
+        ] = {}
         total = len(self._subject_files)
         try:
             for i, (subject_id, path) in enumerate(self._subject_files.items(), start=1):
@@ -376,8 +376,8 @@ class LoadSubjectResultsWorker(QThread):
                 )
                 result = _load_subject_result_auto(
                     path,
-                    load_trial_stats_result=load_trial_stats_result,
-                    load_trial_slope_stats_result=load_trial_slope_stats_result,
+                    load_condition_test_result=load_condition_test_result,
+                    load_regression_result=load_regression_result,
                 )
                 results[subject_id] = result
                 self.subject_done.emit(subject_id, result)
@@ -435,8 +435,8 @@ class LoadGroupResultWorker(QThread):
 def _load_subject_result_auto(
     path: Path,
     *,
-    load_trial_stats_result,
-    load_trial_slope_stats_result,
+    load_condition_test_result,
+    load_regression_result,
 ):
     suffix = path.suffix.lower()
     if suffix in {".h5", ".hdf5"}:
@@ -451,20 +451,20 @@ def _load_subject_result_auto(
                     except Exception:
                         analysis_type = ""
             if analysis_type == "slope_regression":
-                return load_trial_slope_stats_result(path)
-            return load_trial_stats_result(path)
+                return load_regression_result(path)
+            return load_condition_test_result(path)
         except Exception:
             # Fallback: try slope loader first, then classic trial-stats.
             try:
-                return load_trial_slope_stats_result(path)
+                return load_regression_result(path)
             except Exception:
-                return load_trial_stats_result(path)
+                return load_condition_test_result(path)
 
     # MATLAB and others: optimistic slope-first fallback strategy.
     try:
-        return load_trial_slope_stats_result(path)
+        return load_regression_result(path)
     except Exception:
-        return load_trial_stats_result(path)
+        return load_condition_test_result(path)
 
 
 def _load_group_result_auto(

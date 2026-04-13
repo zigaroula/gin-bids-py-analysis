@@ -1,4 +1,4 @@
-"""Right panel: TrialStatsParams form + Compute button."""
+"""Right panel: ConditionTestParams form + Compute button."""
 
 from __future__ import annotations
 
@@ -22,11 +22,11 @@ from PySide6.QtWidgets import (
 )
 from pydantic import ValidationError
 
-from gin_bids_py_analysis.processing.trial_slope_stats import TrialSlopeStatsParams
-from gin_bids_py_analysis.processing.trial_stats import TrialStatsParams
+from gin_bids_py_analysis.processing.trial_stats import RegressionParams
+from gin_bids_py_analysis.processing.trial_stats import ConditionTestParams
 
 
-def _merge_model_params(model: TrialStatsParams | TrialSlopeStatsParams, **updates: object) -> TrialStatsParams | TrialSlopeStatsParams:
+def _merge_model_params(model: ConditionTestParams | RegressionParams, **updates: object) -> ConditionTestParams | RegressionParams:
     """Return a validated copy of *model* with widget-driven updates applied."""
     payload = model.model_dump()
     payload.update(updates)
@@ -55,7 +55,7 @@ def _predictor_transform_to_json(value: object) -> str:
 
 
 class ParamsPanel(QWidget):
-    """Right panel with all ``TrialStatsParams`` fields and a Compute button.
+    """Right panel with all ``ConditionTestParams`` fields and a Compute button.
 
     Signals
     -------
@@ -68,8 +68,8 @@ class ParamsPanel(QWidget):
 
     def __init__(
         self,
-        params: TrialStatsParams,
-        slope_params: TrialSlopeStatsParams | None = None,
+        params: ConditionTestParams,
+        slope_params: RegressionParams | None = None,
         default_mode: str = "ttest",
         parent: QWidget | None = None,
     ) -> None:
@@ -77,7 +77,7 @@ class ParamsPanel(QWidget):
         self.setMinimumWidth(280)
         self.setMaximumWidth(400)
         self._ttest_params = params
-        self._slope_params = slope_params or TrialSlopeStatsParams(
+        self._slope_params = slope_params or RegressionParams(
             anchor_event_codes=list(params.anchor_event_codes),
             tmin_s=params.tmin_s,
             tmax_s=params.tmax_s,
@@ -353,8 +353,8 @@ class ParamsPanel(QWidget):
     # Public API
     # ------------------------------------------------------------------
 
-    def get_params(self) -> TrialStatsParams:
-        """Parse current widget values into a ``TrialStatsParams``.
+    def get_params(self) -> ConditionTestParams:
+        """Parse current widget values into a ``ConditionTestParams``.
 
         Raises
         ------
@@ -398,22 +398,22 @@ class ParamsPanel(QWidget):
                 channel_significance_mode=self._sig_mode.currentText(),
                 channel_significance_duration_threshold_ms=self._sig_duration_threshold.value(),
             )
-            assert isinstance(params, TrialStatsParams)
+            assert isinstance(params, ConditionTestParams)
             self._ttest_params = params
             return params
         except (ValidationError, ValueError) as exc:
             QMessageBox.warning(self, "Invalid parameters", str(exc))
             raise ValueError(str(exc)) from exc
 
-    def get_mode_and_params(self) -> tuple[str, TrialStatsParams | TrialSlopeStatsParams]:
+    def get_mode_and_params(self) -> tuple[str, ConditionTestParams | RegressionParams]:
         """Return the selected analysis mode and its validated params object."""
         mode = self._analysis_mode.currentText().strip().lower()
         if mode == "slope":
             return mode, self.get_slope_params()
         return "ttest", self.get_params()
 
-    def get_slope_params(self) -> TrialSlopeStatsParams:
-        """Parse current widget values into a ``TrialSlopeStatsParams``."""
+    def get_slope_params(self) -> RegressionParams:
+        """Parse current widget values into a ``RegressionParams``."""
         anchor_codes = [
             code.strip()
             for code in self._anchor_codes.text().split(",")
@@ -464,15 +464,15 @@ class ParamsPanel(QWidget):
                 activity_baseline_remove_outlier_trial_means=self._activity_baseline_remove_outliers.isChecked(),
                 trial_activity_summary=self._build_trial_activity_summary_payload(),
             )
-            assert isinstance(params, TrialSlopeStatsParams)
+            assert isinstance(params, RegressionParams)
             self._slope_params = params
             return params
         except (ValidationError, ValueError) as exc:
             QMessageBox.warning(self, "Invalid parameters", str(exc))
             raise ValueError(str(exc)) from exc
 
-    def set_params(self, params: TrialStatsParams) -> None:
-        """Populate all widgets from a ``TrialStatsParams`` instance."""
+    def set_params(self, params: ConditionTestParams) -> None:
+        """Populate all widgets from a ``ConditionTestParams`` instance."""
         self._ttest_params = params
         self._anchor_codes.setText(", ".join(params.anchor_event_codes))
         self._tmin.setValue(params.tmin_s)
@@ -520,7 +520,7 @@ class ParamsPanel(QWidget):
         )
         self._analysis_mode.setCurrentText("ttest")
 
-    def set_slope_params(self, params: TrialSlopeStatsParams) -> None:
+    def set_slope_params(self, params: RegressionParams) -> None:
         """Populate shared + slope-specific widgets from slope params."""
         self._slope_params = params
         self._anchor_codes.setText(", ".join(params.anchor_event_codes))
@@ -677,7 +677,7 @@ class ParamsPanel(QWidget):
 
     def _set_trial_activity_summary_widgets_from_params(
         self,
-        params: TrialSlopeStatsParams,
+        params: RegressionParams,
     ) -> None:
         summary = params.trial_activity_summary
         idx_kind = self._trial_activity_summary_kind.findText(summary.kind)

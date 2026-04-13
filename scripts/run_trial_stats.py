@@ -8,12 +8,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
-from gin_bids_py_analysis.processing.trial_stats import (
-    TableTrialResolver,
-    TrialStatsParams,
-    TrialStatsProcessing,
-    TrialStatsProcessingWriter,
-    TrialStatsWriterParams,
+from gin_bids_py_analysis.processing.trial_stats import TableTrialResolver
+from gin_bids_py_analysis.processing.trial_stats.condition_test import (
+    ConditionTestParams,
+    ConditionTestProcessing,
+    ConditionTestProcessingWriter,
+    ConditionTestWriterParams,
 )
 
 # ---------------------------------------------------------------------------
@@ -36,7 +36,7 @@ SECONDARY_FILTERS = [
     {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
 ]
 
-PARAMS = TrialStatsParams(
+PARAMS = ConditionTestParams(
     anchor_event_codes=["10"],
     tmin_s=-2.0,
     tmax_s=2.0,
@@ -69,7 +69,7 @@ RESOLVER = TableTrialResolver(
     ],
 )
 
-WRITER_PARAMS = TrialStatsWriterParams(
+WRITER_PARAMS = ConditionTestWriterParams(
     bids_root=BIDS_ROOT,
     output_format="hdf5",
     output_description="simple"
@@ -83,8 +83,8 @@ if __name__ == "__main__":
     groups = build_subject_groups(ds, IEEG_FILTERS, SECONDARY_FILTERS)
     print(f"Found {len(groups)} subject group(s). Running with n_jobs={N_JOBS}.")
 
-    processor = TrialStatsProcessing(PARAMS, resolver=RESOLVER)
-    writer = TrialStatsProcessingWriter(WRITER_PARAMS)
+    processor = ConditionTestProcessing(PARAMS, resolver=RESOLVER)
+    writer = ConditionTestProcessingWriter(WRITER_PARAMS)
 
     out_paths = processor.run(groups, writer, n_jobs=N_JOBS)
     for path in out_paths:

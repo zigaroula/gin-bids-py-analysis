@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import shutil
 import uuid
@@ -45,11 +45,11 @@ def test_run_trial_stats_group_script_main_smoke(monkeypatch) -> None:
         module = _load_script_module()
 
         stats_file = _make_bids_file(
-            case_dir / "sub-01_task-decid_desc-trialstats_stats.h5",
+            case_dir / "sub-01_task-decid_desc-conditiontest_stats.h5",
             {
                 "subject": "01",
                 "task": "decid",
-                "desc": "trialstats",
+                "desc": "conditiontest",
                 "suffix": "stats",
                 "extension": ".h5",
                 "datatype": "ieeg",

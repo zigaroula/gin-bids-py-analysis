@@ -29,10 +29,10 @@ from PySide6.QtWidgets import (
 )
 
 from gin_bids_py_analysis.processing.trial_stats import (
-    TrialStatsProcessingResult,
+    ConditionTestProcessingResult,
 )
-from gin_bids_py_analysis.processing.trial_slope_stats import (
-    TrialSlopeStatsProcessingResult,
+from gin_bids_py_analysis.processing.trial_stats import (
+    RegressionProcessingResult,
 )
 
 from .panels.group_params_panel import GroupParamsPanel
@@ -112,8 +112,8 @@ class TrialStatsPrecomputedWindow(QMainWindow):
         self._subject_files = subject_files
         self._group_file = group_file
         self._group_params = group_params
-        self._current_result: TrialStatsProcessingResult | TrialSlopeStatsProcessingResult | None = None
-        self._all_results: dict[str, TrialStatsProcessingResult | TrialSlopeStatsProcessingResult] = {}
+        self._current_result: ConditionTestProcessingResult | RegressionProcessingResult | None = None
+        self._all_results: dict[str, ConditionTestProcessingResult | RegressionProcessingResult] = {}
         self._group_result: "TrialStatsGroupProcessingResult | None" = None
         self._load_worker: LoadSubjectResultsWorker | None = None
         self._load_group_worker: LoadGroupResultWorker | None = None
@@ -206,14 +206,14 @@ class TrialStatsPrecomputedWindow(QMainWindow):
         worker.start()
 
     def _on_subject_loaded(
-        self, subject_id: str, result: TrialStatsProcessingResult
+        self, subject_id: str, result: ConditionTestProcessingResult
     ) -> None:
         self._all_results[subject_id] = result
         if subject_id == self._subject_panel.current_subject:
             self._display_subject_result(subject_id, result)
 
     def _on_all_loaded(
-        self, results: dict[str, TrialStatsProcessingResult | TrialSlopeStatsProcessingResult]
+        self, results: dict[str, ConditionTestProcessingResult | RegressionProcessingResult]
     ) -> None:
         self._subject_panel.set_interactive(True)
         n = len(results)
@@ -248,7 +248,7 @@ class TrialStatsPrecomputedWindow(QMainWindow):
     def _display_subject_result(
         self,
         subject_id: str,
-        result: TrialStatsProcessingResult | TrialSlopeStatsProcessingResult,
+        result: ConditionTestProcessingResult | RegressionProcessingResult,
     ) -> None:
         self._current_result = result
         n_ok = len(self._all_results)

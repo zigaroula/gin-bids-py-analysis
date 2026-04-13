@@ -13,7 +13,7 @@ from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
 from gin_bids_py_analysis.bids.helpers import normalize_subject_value
-from gin_bids_py_analysis.processing.trial_slope_stats import TrialSlopeStatsParams
+from gin_bids_py_analysis.processing.trial_stats.regression import RegressionParams
 from gin_bids_py_analysis.processing.trial_slope_stats_group import TrialSlopeStatsGroupParams
 from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
 from gin_bids_py_analysis.visualization.trial_stats import launch_slope
@@ -36,7 +36,7 @@ SECONDARY_FILTERS = [
     {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
 ]
 
-PARAMS = TrialSlopeStatsParams(
+PARAMS = RegressionParams(
     anchor_event_codes=["11", "12"],
     experiment_start_event_code="5",
     tmin_s=-0.5,

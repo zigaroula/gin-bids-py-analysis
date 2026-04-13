@@ -261,7 +261,7 @@ def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
 def test_inspect_trial_stats_generates_png_for_single_bin() -> None:
     case_dir = _make_case_dir("single_bin")
     try:
-        stats_path = case_dir / "sub-01_desc-trialstats_stats.h5"
+        stats_path = case_dir / "sub-01_desc-conditiontest_stats.h5"
         _write_stats_h5(stats_path, n_regions=3, n_bins=1)
         _write_trial_table(stats_path)
 
@@ -279,7 +279,7 @@ def test_inspect_trial_stats_generates_png_for_single_bin() -> None:
 def test_inspect_trial_stats_generates_png_for_multibin_case() -> None:
     case_dir = _make_case_dir("multi_bin")
     try:
-        stats_path = case_dir / "sub-02_desc-trialstats_stats.h5"
+        stats_path = case_dir / "sub-02_desc-conditiontest_stats.h5"
         _write_stats_h5(stats_path, n_regions=4, n_bins=5)
         _write_trial_table(stats_path)
 
@@ -297,7 +297,7 @@ def test_inspect_trial_stats_generates_png_for_multibin_case() -> None:
 def test_inspect_trial_stats_handles_missing_optional_fields_and_no_save_figure() -> None:
     case_dir = _make_case_dir("legacy_fields")
     try:
-        stats_path = case_dir / "sub-03_desc-trialstats_stats.h5"
+        stats_path = case_dir / "sub-03_desc-conditiontest_stats.h5"
         _write_stats_h5(
             stats_path,
             n_regions=2,

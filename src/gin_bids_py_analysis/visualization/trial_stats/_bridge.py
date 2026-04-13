@@ -1,4 +1,4 @@
-"""Bridge between in-memory TrialStatsProcessingResult and TrialStatsGroupProcessing.
+"""Bridge between in-memory ConditionTestProcessingResult and TrialStatsGroupProcessing.
 
 ``TrialStatsGroupProcessing.process_group()`` reads HDF5 files through the
 ``BIDSFile.ensure_loaded()`` interface.  This module constructs a fully
@@ -25,8 +25,8 @@ from gin_bids_py_analysis.processing.trial_stats_group import (
 
 if TYPE_CHECKING:
     from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-    from gin_bids_py_analysis.processing.trial_stats.result import (
-        TrialStatsProcessingResult,
+    from gin_bids_py_analysis.processing.trial_stats import (
+        ConditionTestProcessingResult,
     )
 
 
@@ -50,7 +50,7 @@ class _MockPyBIDSFile:
 
 def _write_hdf5_structure(
     fh: h5py.File,
-    result: "TrialStatsProcessingResult",
+    result: "ConditionTestProcessingResult",
     subject_id: str,
 ) -> None:
     """Populate *fh* with the datasets read by ``_load_raw_from_hdf5``.
@@ -159,7 +159,7 @@ def _write_hdf5_structure(
 
 
 def _build_in_memory_bids_file_with_handle(
-    result: "TrialStatsProcessingResult",
+    result: "ConditionTestProcessingResult",
     subject_id: str,
 ) -> tuple[BIDSFile, h5py.File]:
     """Create an in-memory BIDSFile and return it together with the h5py handle.
@@ -190,10 +190,10 @@ def _build_in_memory_bids_file_with_handle(
 
 
 def build_in_memory_bids_file(
-    result: "TrialStatsProcessingResult",
+    result: "ConditionTestProcessingResult",
     subject_id: str,
 ) -> BIDSFile:
-    """Wrap one ``TrialStatsProcessingResult`` as a ``BIDSFile`` with an
+    """Wrap one ``ConditionTestProcessingResult`` as a ``BIDSFile`` with an
     in-memory HDF5 file attached.
 
     The returned ``BIDSFile`` behaves exactly like one pointing at a real
@@ -214,7 +214,7 @@ def build_in_memory_bids_file(
 
 @contextmanager
 def group_file_group_context(
-    results: dict[str, "TrialStatsProcessingResult"],
+    results: dict[str, "ConditionTestProcessingResult"],
     source_metric: str,
 ) -> Generator["BIDSFileGroup", None, None]:
     """Context manager that builds a ``BIDSFileGroup`` from in-memory results
@@ -227,7 +227,7 @@ def group_file_group_context(
     Parameters
     ----------
     results:
-        In-memory subject results produced by ``TrialStatsProcessing``.
+        In-memory subject results produced by ``ConditionTestProcessing``.
     source_metric:
         The metric that ``TrialStatsGroupProcessing`` will read.
 
@@ -268,7 +268,7 @@ def group_file_group_context(
 
 
 def build_group_file_group_from_results(
-    results: dict[str, "TrialStatsProcessingResult"],
+    results: dict[str, "ConditionTestProcessingResult"],
     source_metric: str,
 ) -> "BIDSFileGroup":
     """Build a ``BIDSFileGroup`` from a mapping of *subject_id → result*.
@@ -282,7 +282,7 @@ def build_group_file_group_from_results(
     Parameters
     ----------
     results:
-        In-memory subject results produced by `TrialStatsProcessing`.
+        In-memory subject results produced by `ConditionTestProcessing`.
     source_metric:
         The metric that ``TrialStatsGroupProcessing`` will read (e.g.
         ``"t_values"``, ``"mean_difference"``).

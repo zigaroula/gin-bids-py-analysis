@@ -7,11 +7,11 @@ from pydantic import Field, field_validator, model_validator
 from gin_bids_py_analysis.processing.base import BaseProcessingParams, BaseWriterParams
 
 
-class TrialStatsParams(BaseProcessingParams):
-    """Parameters for subject-level trial statistics on ieeg data."""
+class BaseTrialStatsParams(BaseProcessingParams):
+    """Shared parameter surface for subject-level trial statistics pipelines."""
 
     anchor_event_codes: list[str] = Field(
-        description="Event codes used to define the trial anchor in ieeg annotations."
+        description="Event codes used to define trial anchors in iEEG annotations."
     )
     tmin_s: float = Field(description="Epoch start relative to the anchor event, in seconds.")
     tmax_s: float = Field(description="Epoch end relative to the anchor event, in seconds.")
@@ -26,52 +26,24 @@ class TrialStatsParams(BaseProcessingParams):
     min_trials_per_condition: int = Field(
         default=2,
         ge=2,
-        description="Minimum number of kept trials required in each condition to report non-NaN statistics.",
+        description=(
+            "Minimum number of kept trials required in each condition to report "
+            "non-NaN subject-level statistics."
+        ),
     )
     drop_partial_epochs: bool = Field(
         default=True,
-        description="When True, exclude epochs that would extend outside the recording bounds.",
+        description="When True, exclude epochs that would extend outside recording bounds.",
     )
-    equal_var: bool = Field(
-        default=False,
-        description="Forwarded to scipy.stats.ttest_ind; False selects Welch's t-test.",
-    )
-    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni", "permutation"] = Field(
+    p_value_correction_method: str = Field(
         default="fdr_bh",
-        description=(
-            "Multiple-comparisons correction for p-values across all channel x time tests. "
-            "'fdr_bh' and 'bonferroni' use standard parametric approaches. "
-            "'permutation' computes pointwise p-values from the null t-distribution built by "
-            "randomly shuffling condition labels (requires n_permutations > 0). "
-            "Use 'none' to disable correction."
-        ),
-    )
-    n_permutations: int = Field(
-        default=0,
-        ge=0,
-        description=(
-            "Number of condition-label permutations to compute and store in the output. "
-            "0 disables permutation tests entirely. "
-            "A positive value generates a null t-value distribution for use as a standalone "
-            "correction method ('permutation') and/or as input to the group-level cluster "
-            "permutation test in trial_stats_group."
-        ),
-    )
-    permutation_seed: int | None = Field(
-        default=None,
-        description=(
-            "Seed for the NumPy random generator used during permutation testing. "
-            "None selects a non-reproducible random seed."
-        ),
+        description="Multiple-comparisons correction applied across feature x time tests.",
     )
     significance_alpha: float = Field(
         default=0.05,
         gt=0.0,
         lt=1.0,
-        description=(
-            "Significance threshold applied to (possibly corrected) p-values when building "
-            "the significance mask."
-        ),
+        description="Significance threshold applied to corrected p-values.",
     )
     atlas_name: str | None = Field(
         default=None,
@@ -82,63 +54,27 @@ class TrialStatsParams(BaseProcessingParams):
     )
     atlas_regions: list[str] = Field(
         default_factory=list,
-        description=(
-            "Optional subset of atlas region labels to include. "
-            "Used only when atlas_name is set."
-        ),
+        description="Optional subset of atlas regions to include when atlas_name is set.",
     )
     window_ms: float = Field(
         default=0.0,
         ge=0.0,
         description=(
-            "Temporal bin size in milliseconds. "
-            "0 disables window-based binning; >0 averages non-overlapping bins before stats. "
-            "If binning would leave a trailing 1-sample tail (common with inclusive epoch bounds), "
-            "that sample is merged into the previous bin. "
-            "Cannot be combined with n_bins > 0."
+            "Temporal bin size in milliseconds. 0 disables window binning; >0 averages "
+            "non-overlapping bins before subject-level statistics."
         ),
     )
     n_bins: int = Field(
         default=0,
         ge=-1,
         description=(
-            "Number of contiguous non-overlapping temporal bins. "
-            "0 or -1 disables count-based binning (sample-by-sample unless window_ms is used). "
-            "Cannot be combined with window_ms > 0."
+            "Number of contiguous non-overlapping temporal bins. 0 or -1 disables "
+            "count-based binning. Cannot be combined with window_ms > 0."
         ),
     )
-    channel_significance_mode: Literal["none", "single_bin", "duration"] = Field(
+    activity_zscore: str = Field(
         default="none",
-        description=(
-            "Method used to derive a per-channel significance flag "
-            "(``channel_significant_mask``, shape ``(n_channels,)``). "
-            "'none' disables per-channel significance (default, fully backward-compatible). "
-            "'single_bin' collapses each epoch to its temporal mean and runs a t-test across "
-            "trials, equivalent to running the pipeline with n_bins=1; "
-            "the same p_value_correction_method is applied across channels. "
-            "'duration' sums the duration of all significant bins in "
-            "``significant_mask`` and flags a channel if that total meets "
-            "``channel_significance_duration_threshold_ms``."
-        ),
-    )
-    channel_significance_duration_threshold_ms: float = Field(
-        default=100.0,
-        gt=0.0,
-        description=(
-            "Minimum total significant duration (in milliseconds) required to flag a channel "
-            "as significant in 'duration' mode. Each significant bin contributes its full bin "
-            "duration to the channel total. "
-            "Only used when channel_significance_mode='duration'."
-        ),
-    )
-    activity_zscore: Literal["none", "baseline"] = Field(
-        default="none",
-        description=(
-            "Optional activity z-score applied to the input activity before subject-level statistics. "
-            "'none' keeps the original units. "
-            "'baseline' z-scores activity relative to a pooled baseline window, "
-            "independently for each channel/ROI."
-        ),
+        description="Optional activity z-score mode applied before subject-level statistics.",
     )
     activity_baseline_tmin_s: float = Field(
         default=-0.2,
@@ -157,39 +93,28 @@ class TrialStatsParams(BaseProcessingParams):
     activity_baseline_scope: Literal["trial", "condition", "global"] = Field(
         default="global",
         description=(
-            "Scope used to build the baseline reference when "
-            "activity_zscore='baseline'. 'trial' z-scores each trial using its "
-            "own baseline samples. 'condition' computes a per-feature reference "
-            "from per-trial baseline means within each condition. 'global' pools "
-            "per-trial baseline means across both conditions."
+            "Scope used to build the baseline reference when activity_zscore='baseline'."
         ),
     )
     activity_baseline_remove_outlier_trial_means: bool = Field(
         default=False,
         description=(
-            "When True and activity_zscore='baseline' with scope 'condition' or "
-            "'global', remove outlier baseline trial-means before estimating the "
-            "baseline mean/std reference."
+            "When True and activity_zscore='baseline' with scope 'condition' or 'global', "
+            "remove outlier baseline trial-means before estimating the baseline reference."
         ),
     )
     experiment_start_event_code: str | None = Field(
         default=None,
         description=(
-            "Event code marking the experiment start. "
-            "The FIRST occurrence of this code in the recording defines the left boundary. "
-            "Anchor events with onset_s <= that boundary are excluded. "
-            "When absent or not found in the recording no filtering is applied. "
-            "The epoch window may still extend before the boundary."
+            "Event code marking the experiment start. The first occurrence defines the "
+            "left boundary for anchor filtering."
         ),
     )
     experiment_end_event_code: str | None = Field(
         default=None,
         description=(
-            "Event code marking the experiment end. "
-            "The LAST occurrence of this code in the recording defines the right boundary. "
-            "Anchor events with onset_s >= that boundary are excluded. "
-            "When absent or not found in the recording no filtering is applied. "
-            "The epoch window may still extend after the boundary."
+            "Event code marking the experiment end. The last occurrence defines the "
+            "right boundary for anchor filtering."
         ),
     )
 
@@ -221,7 +146,7 @@ class TrialStatsParams(BaseProcessingParams):
         return [str(item).strip() for item in value if str(item).strip()]
 
     @model_validator(mode="after")
-    def _check_window_and_labels(self) -> "TrialStatsParams":
+    def _validate_common(self) -> "BaseTrialStatsParams":
         if not self.anchor_event_codes:
             raise ValueError("anchor_event_codes must contain at least one event code.")
         if self.tmax_s <= self.tmin_s:
@@ -235,9 +160,7 @@ class TrialStatsParams(BaseProcessingParams):
         if self.n_bins < 0:
             self.n_bins = 0
         if self.window_ms > 0 and self.n_bins > 0:
-            raise ValueError(
-                "window_ms and n_bins are mutually exclusive; define only one."
-            )
+            raise ValueError("window_ms and n_bins are mutually exclusive; define only one.")
         if self.activity_baseline_tmax_s <= self.activity_baseline_tmin_s:
             raise ValueError(
                 "activity_baseline_tmax_s must be greater than activity_baseline_tmin_s."
@@ -253,24 +176,18 @@ class TrialStatsParams(BaseProcessingParams):
                     "activity_baseline_tmax_s must be within the epoch window when "
                     "activity_zscore='baseline'."
                 )
-        if self.p_value_correction_method == "permutation" and self.n_permutations == 0:
-            raise ValueError(
-                "p_value_correction_method='permutation' requires n_permutations > 0."
-            )
         return self
 
 
-class TrialStatsWriterParams(BaseWriterParams):
-    """Writer configuration for trial statistics outputs."""
+class BaseTrialStatsWriterParams(BaseWriterParams):
+    """Shared writer configuration for subject-level trial statistics outputs."""
 
-    pipeline_label: str = "trial_stats"
     output_modality: str = "ieeg"
     output_suffix: str = "stats"
-    output_description: str = "trialstats"
     output_format: Literal["hdf5", "matlab"] = Field(
         default="hdf5",
         description=(
-            "Output format for trial-stats results. "
+            "Output format for subject-level trial statistics results. "
             "'hdf5' writes an HDF5 file (.h5); 'matlab' writes a MATLAB file (.mat). "
             "A TSV companion trial table is written in both cases."
         ),
@@ -278,8 +195,7 @@ class TrialStatsWriterParams(BaseWriterParams):
     include_epochs: bool = Field(
         default=False,
         description=(
-            "When True, the individual per-trial epoch arrays (condition_a_epochs and "
-            "condition_b_epochs) are written to the output file in addition to the "
-            "per-channel means and statistics. This can significantly increase file size."
+            "When True, individual per-trial epoch arrays are written to the output file "
+            "in addition to summary statistics."
         ),
     )

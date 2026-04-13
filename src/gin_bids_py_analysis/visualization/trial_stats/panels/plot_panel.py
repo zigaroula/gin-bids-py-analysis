@@ -8,8 +8,8 @@ from matplotlib.figure import Figure
 from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
 from scipy.stats import linregress
 
-from gin_bids_py_analysis.processing.trial_slope_stats import TrialSlopeStatsProcessingResult
-from gin_bids_py_analysis.processing.trial_stats import TrialStatsProcessingResult
+from gin_bids_py_analysis.processing.trial_stats import RegressionProcessingResult
+from gin_bids_py_analysis.processing.trial_stats import ConditionTestProcessingResult
 
 _SCATTER_SUMMARY_TARGET_BINS = 5
 
@@ -91,7 +91,7 @@ class PlotPanel(QWidget):
 
     def update_plots(
         self,
-        result: TrialStatsProcessingResult | TrialSlopeStatsProcessingResult,
+        result: ConditionTestProcessingResult | RegressionProcessingResult,
         channel_idx: int,
     ) -> None:
         """Redraw all three plots for the given channel index.
@@ -117,7 +117,7 @@ class PlotPanel(QWidget):
 
     def _update_ttest_plots(
         self,
-        result: TrialStatsProcessingResult,
+        result: ConditionTestProcessingResult,
         channel_idx: int,
     ) -> None:
         ch = channel_idx
@@ -231,7 +231,7 @@ class PlotPanel(QWidget):
 
     def _update_slope_plots(
         self,
-        result: TrialSlopeStatsProcessingResult,
+        result: RegressionProcessingResult,
         channel_idx: int,
     ) -> None:
         ch = channel_idx
@@ -403,7 +403,7 @@ class PlotPanel(QWidget):
 
     def _draw_trial_matrix(
         self,
-        result: TrialStatsProcessingResult | TrialSlopeStatsProcessingResult,
+        result: ConditionTestProcessingResult | RegressionProcessingResult,
         channel_idx: int,
         t: np.ndarray,
         ch_label: str,
@@ -453,7 +453,7 @@ class PlotPanel(QWidget):
 
     def _draw_scatter_plot(
         self,
-        result: TrialSlopeStatsProcessingResult,
+        result: RegressionProcessingResult,
         channel_idx: int,
         ch_label: str,
     ) -> None:

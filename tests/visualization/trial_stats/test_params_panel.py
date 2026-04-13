@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from gin_bids_py_analysis.processing.trial_slope_stats import TrialSlopeStatsParams
-from gin_bids_py_analysis.processing.trial_stats import TrialStatsParams
+from gin_bids_py_analysis.processing.trial_stats import RegressionParams
+from gin_bids_py_analysis.processing.trial_stats import ConditionTestParams
 from gin_bids_py_analysis.visualization.trial_stats.panels.params_panel import ParamsPanel
 
 
@@ -40,7 +40,7 @@ class TestParamsPanelRoundTrip:
         panel = ParamsPanel(default_params)
         qtbot.addWidget(panel)
 
-        new_params = TrialStatsParams(
+        new_params = ConditionTestParams(
             anchor_event_codes=["5", "15"],
             tmin_s=-0.5,
             tmax_s=3.0,
@@ -84,7 +84,7 @@ class TestParamsPanelRoundTrip:
         panel = ParamsPanel(default_params)
         qtbot.addWidget(panel)
 
-        params_with_atlas = TrialStatsParams(
+        params_with_atlas = ConditionTestParams(
             anchor_event_codes=["10"],
             tmin_s=-1.0,
             tmax_s=2.0,
@@ -141,7 +141,7 @@ class TestParamsPanelRoundTrip:
 
         mode, params = panel.get_mode_and_params()
         assert mode == "slope"
-        assert isinstance(params, TrialSlopeStatsParams)
+        assert isinstance(params, RegressionParams)
         assert params.predictor == default_slope_params.predictor
         assert params.predictor_zscore == "global"
 
@@ -164,7 +164,7 @@ class TestParamsPanelRoundTrip:
 
         mode, params = panel.get_mode_and_params()
         assert mode == "slope"
-        assert isinstance(params, TrialSlopeStatsParams)
+        assert isinstance(params, RegressionParams)
         assert params.activity_zscore == "baseline"
         assert params.activity_baseline_tmin_s == pytest.approx(-0.1)
         assert params.activity_baseline_tmax_s == pytest.approx(0.0)
@@ -239,7 +239,7 @@ class TestParamsPanelRoundTrip:
         assert recovered.activity_baseline_remove_outlier_trial_means is True
 
     def test_slope_round_trip_preserves_script_only_fields(self, qtbot, default_params, default_slope_params):
-        slope_params = TrialSlopeStatsParams(
+        slope_params = RegressionParams(
             **(
                 default_slope_params.model_dump()
                 | {
@@ -265,7 +265,7 @@ class TestParamsPanelRoundTrip:
         mode, params = panel.get_mode_and_params()
 
         assert mode == "slope"
-        assert isinstance(params, TrialSlopeStatsParams)
+        assert isinstance(params, RegressionParams)
         assert params.predictor_zscore == "condition"
         assert params.predictor_transform_by_condition["rejected"].scale == pytest.approx(-1.0)
         assert params.predictor_transform_by_condition["rejected"].offset == pytest.approx(0.5)
@@ -280,7 +280,7 @@ class TestParamsPanelRoundTrip:
         default_params,
         default_slope_params,
     ):
-        slope_params = TrialSlopeStatsParams(
+        slope_params = RegressionParams(
             **(
                 default_slope_params.model_dump()
                 | {
@@ -305,7 +305,7 @@ class TestParamsPanelRoundTrip:
         mode, params = panel.get_mode_and_params()
 
         assert mode == "slope"
-        assert isinstance(params, TrialSlopeStatsParams)
+        assert isinstance(params, RegressionParams)
         assert params.trial_activity_summary.kind == "anchor_to_response_mean"
         assert params.trial_activity_summary.missing_response_policy == "clamp_to_epoch"
         assert params.trial_activity_summary.response is not None

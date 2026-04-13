@@ -9,9 +9,9 @@ from mne.io import RawArray
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_slope_stats import (
-    TrialSlopeStatsParams,
-    TrialSlopeStatsProcessing,
+from gin_bids_py_analysis.processing.trial_stats import (
+    RegressionParams,
+    RegressionProcessing,
 )
 from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
@@ -131,8 +131,8 @@ def test_process_group_computes_condition_slopes(tmp_path: Path) -> None:
     )
     ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
 
-    processor = TrialSlopeStatsProcessing(
-        TrialSlopeStatsParams(
+    processor = RegressionProcessing(
+        RegressionParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.2,
@@ -190,8 +190,8 @@ def test_process_group_excludes_invalid_predictor_trials(tmp_path: Path) -> None
     )
     ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
 
-    processor = TrialSlopeStatsProcessing(
-        TrialSlopeStatsParams(
+    processor = RegressionProcessing(
+        RegressionParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.2,
@@ -251,8 +251,8 @@ def test_process_group_experiment_start_code_filters_early_anchors(tmp_path: Pat
     labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
     predictors = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
 
-    processor = TrialSlopeStatsProcessing(
-        TrialSlopeStatsParams(
+    processor = RegressionProcessing(
+        RegressionParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.2,
@@ -328,12 +328,12 @@ def test_process_group_activity_zscore_preserves_regression_significance(
         p_value_correction_method="none",
     )
 
-    raw_result = TrialSlopeStatsProcessing(
-        TrialSlopeStatsParams(**base_params),
+    raw_result = RegressionProcessing(
+        RegressionParams(**base_params),
         resolver=_SlopeResolver(labels, predictors),
     ).process_group(group)
-    z_result = TrialSlopeStatsProcessing(
-        TrialSlopeStatsParams(
+    z_result = RegressionProcessing(
+        RegressionParams(
             **base_params,
             activity_zscore="baseline",
             activity_baseline_tmin_s=0.0,
@@ -423,8 +423,8 @@ def test_process_group_supports_numeric_condition_rules_with_predictor_extractio
         extract_columns=["score"],
     )
 
-    result = TrialSlopeStatsProcessing(
-        TrialSlopeStatsParams(
+    result = RegressionProcessing(
+        RegressionParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.2,
@@ -479,8 +479,8 @@ def test_process_group_predictor_zscore_condition_scales_each_condition_independ
     )
     ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
 
-    result = TrialSlopeStatsProcessing(
-        TrialSlopeStatsParams(
+    result = RegressionProcessing(
+        RegressionParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.2,
@@ -533,8 +533,8 @@ def test_process_group_predictor_zscore_global_scales_both_conditions_together(
     )
     ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
 
-    result = TrialSlopeStatsProcessing(
-        TrialSlopeStatsParams(
+    result = RegressionProcessing(
+        RegressionParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.2,
@@ -600,8 +600,8 @@ def test_process_group_trial_activity_summary_anchor_to_response_from_table_colu
     )
     ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
 
-    result = TrialSlopeStatsProcessing(
-        TrialSlopeStatsParams(
+    result = RegressionProcessing(
+        RegressionParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.4,
@@ -687,8 +687,8 @@ def test_process_group_trial_activity_summary_anchor_to_response_drop_trial_poli
     )
     ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
 
-    result = TrialSlopeStatsProcessing(
-        TrialSlopeStatsParams(
+    result = RegressionProcessing(
+        RegressionParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.4,
@@ -782,8 +782,8 @@ def test_process_group_trial_activity_summary_anchor_to_response_from_annotation
     )
     ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
 
-    result = TrialSlopeStatsProcessing(
-        TrialSlopeStatsParams(
+    result = RegressionProcessing(
+        RegressionParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.4,

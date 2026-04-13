@@ -16,25 +16,23 @@ from PySide6.QtWidgets import (
 )
 
 from gin_bids_py_analysis.bids import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_slope_stats import (
-    TrialSlopeStatsParams,
-    TrialSlopeStatsProcessing,
-    TrialSlopeStatsProcessingResult,
-    TrialSlopeStatsProcessingWriter,
-    TrialSlopeStatsWriterParams,
+from gin_bids_py_analysis.processing.trial_stats import (
+    ConditionTestParams,
+    ConditionTestProcessing,
+    ConditionTestProcessingResult,
+    ConditionTestProcessingWriter,
+    RegressionParams,
+    RegressionProcessing,
+    RegressionProcessingResult,
+    RegressionProcessingWriter,
+    RegressionWriterParams,
+    TrialResolver,
 )
 from gin_bids_py_analysis.processing.trial_slope_stats_group import (
     TrialSlopeStatsGroupParams,
     TrialSlopeStatsGroupProcessingResult,
     TrialSlopeStatsGroupProcessingWriter,
     TrialSlopeStatsGroupWriterParams,
-)
-from gin_bids_py_analysis.processing.trial_stats import (
-    TrialResolver,
-    TrialStatsParams,
-    TrialStatsProcessing,
-    TrialStatsProcessingResult,
-    TrialStatsProcessingWriter,
 )
 
 from .panels.group_params_panel import GroupParamsPanel
@@ -75,7 +73,7 @@ class TrialStatsWindow(QMainWindow):
     subject_groups:
         Mapping of subject id to ``BIDSFileGroup`` for that subject.
     default_params:
-        Initial ``TrialStatsParams`` to pre-populate the parameters panel.
+        Initial ``ConditionTestParams`` to pre-populate the parameters panel.
     resolver:
         The ``TrialResolver`` configured for this dataset.
     group_params:
@@ -89,12 +87,12 @@ class TrialStatsWindow(QMainWindow):
     def __init__(
         self,
         subject_groups: dict[str, BIDSFileGroup],
-        default_params: TrialStatsParams,
+        default_params: ConditionTestParams,
         resolver: TrialResolver,
         group_params: "TrialStatsGroupParams | None" = None,
         slope_group_params: TrialSlopeStatsGroupParams | None = None,
         bids_root: Path | None = None,
-        default_slope_params: TrialSlopeStatsParams | None = None,
+        default_slope_params: RegressionParams | None = None,
         default_mode: str = "ttest",
         parent: QWidget | None = None,
     ) -> None:
@@ -105,7 +103,7 @@ class TrialStatsWindow(QMainWindow):
         self._subject_groups = subject_groups
         self._resolver = resolver
         self._bids_root = bids_root
-        self._current_result: TrialStatsProcessingResult | TrialSlopeStatsProcessingResult | None = None
+        self._current_result: ConditionTestProcessingResult | RegressionProcessingResult | None = None
         self._current_worker: ComputeAllWorker | None = None
         # Guard variable: only accept results whose generation matches this value
         self._compute_generation: int = 0
@@ -117,7 +115,7 @@ class TrialStatsWindow(QMainWindow):
         self._write_worker: WriteAllWorker | None = None
         self._write_group_worker: WriteGroupWorker | None = None
         # Accumulated per-subject results; unlocks Group tab when all are done
-        self._all_results: dict[str, TrialStatsProcessingResult | TrialSlopeStatsProcessingResult] = {}
+        self._all_results: dict[str, ConditionTestProcessingResult | RegressionProcessingResult] = {}
         self._analysis_mode = default_mode if default_mode in {"ttest", "slope"} else "ttest"
 
         subject_ids = sorted(subject_groups.keys())
@@ -290,7 +288,7 @@ class TrialStatsWindow(QMainWindow):
 
     def _start_compute_all(
         self,
-        params: TrialStatsParams | TrialSlopeStatsParams | None = None,
+        params: ConditionTestParams | RegressionParams | None = None,
         mode: str | None = None,
     ) -> None:
         if params is None:
@@ -339,14 +337,14 @@ class TrialStatsWindow(QMainWindow):
         resolver = self._resolver
         if self._analysis_mode == "slope":
             processor_factory = (
-                lambda p: TrialSlopeStatsProcessing(
+                lambda p: RegressionProcessing(
                     p,  # type: ignore[arg-type]
                     resolver=resolver,
                 )
             )
         else:
             processor_factory = (
-                lambda p: TrialStatsProcessing(
+                lambda p: ConditionTestProcessing(
                     p,  # type: ignore[arg-type]
                     resolver=resolver,
                 )
@@ -374,7 +372,7 @@ class TrialStatsWindow(QMainWindow):
     def _on_subject_done(
         self,
         subject_id: str,
-        result: TrialStatsProcessingResult | TrialSlopeStatsProcessingResult,
+        result: ConditionTestProcessingResult | RegressionProcessingResult,
         generation: int,
     ) -> None:
         if generation != self._compute_generation:
@@ -388,7 +386,7 @@ class TrialStatsWindow(QMainWindow):
 
     def _on_all_done(
         self,
-        results: dict[str, TrialStatsProcessingResult | TrialSlopeStatsProcessingResult],
+        results: dict[str, ConditionTestProcessingResult | RegressionProcessingResult],
         generation: int,
     ) -> None:
         if generation != self._compute_generation:
@@ -433,7 +431,7 @@ class TrialStatsWindow(QMainWindow):
     def _display_subject_result(
         self,
         subject_id: str,
-        result: TrialStatsProcessingResult | TrialSlopeStatsProcessingResult,
+        result: ConditionTestProcessingResult | RegressionProcessingResult,
     ) -> None:
         """Update Subject tab plots for *result* (already in memory)."""
         self._current_result = result
@@ -541,10 +539,10 @@ class TrialStatsWindow(QMainWindow):
             return
 
         default_pipeline_label = (
-            "trial_slope_stats" if self._analysis_mode == "slope" else "trial_stats"
+            "regression" if self._analysis_mode == "slope" else "condition_test"
         )
         default_output_description = (
-            "trialslopestats" if self._analysis_mode == "slope" else "trialstats"
+            "regression" if self._analysis_mode == "slope" else "conditiontest"
         )
         dlg = SaveTrialStatsDialog(
             self._bids_root,
@@ -556,11 +554,11 @@ class TrialStatsWindow(QMainWindow):
             return
 
         if self._analysis_mode == "slope":
-            writer_params = TrialSlopeStatsWriterParams(**dlg.get_common_writer_kwargs())
-            writer = TrialSlopeStatsProcessingWriter(writer_params)
+            writer_params = RegressionWriterParams(**dlg.get_common_writer_kwargs())
+            writer = RegressionProcessingWriter(writer_params)
         else:
             writer_params = dlg.get_writer_params()
-            writer = TrialStatsProcessingWriter(writer_params)
+            writer = ConditionTestProcessingWriter(writer_params)
 
         n = len(self._all_results)
         self._params_panel.set_save_enabled(False)

@@ -1,5 +1,5 @@
 """
-Group-level ROI statistics on trial_stats outputs - run script.
+Group-level ROI statistics on condition_test outputs - run script.
 Edit the parameters below and run: python scripts/run_trial_stats_group.py
 """
 
@@ -22,9 +22,9 @@ from gin_bids_py_analysis.processing.trial_stats_group import (
 
 BIDS_ROOT = Path(r"E:\CBT\bids")
 
-# Query trial_stats channel-level outputs from derivatives/trial_stats.
+# Query condition_test channel-level outputs from derivatives/condition_test.
 TRIAL_STATS_FILTERS = {
-    "scope": "trial_stats",
+    "scope": "condition_test",
     "suffix": "stats",
     "extension": ".h5",
     # "task": "decid",
@@ -91,7 +91,7 @@ def main() -> list[Path]:
     files = _load_trial_stats_files(ds)
     groups = _build_groups(files, PARAMS)
     print(
-        f"Found {len(files)} trial_stats file(s) grouped into {len(groups)} compatible run(s). "
+        f"Found {len(files)} condition_test file(s) grouped into {len(groups)} compatible run(s). "
         f"Running with n_jobs={N_JOBS}."
     )
 

@@ -10,11 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
-from gin_bids_py_analysis.processing.trial_stats import (
-    TableTrialResolver,
-    TrialStatsParams,
-)
+from gin_bids_py_analysis.bids import BIDSDataset
 from gin_bids_py_analysis.processing.trial_stats_group import TrialStatsGroupParams
 from gin_bids_py_analysis.visualization.trial_stats import launch_precomputed
 
@@ -64,12 +60,12 @@ GROUP_PARAMS = TrialStatsGroupParams(
     }
 )
 
-# Discover subject-level stats files written by TrialStatsProcessingWriter.
+# Discover subject-level stats files written by ConditionTestProcessingWriter.
 STATS_FILTERS = {
     "suffix": "stats",
     "extension": ".h5",
-    "desc": "trialstats",
-    "scope": "trial_stats"
+    "desc": "conditiontest",
+    "scope": "condition_test"
 }
 
 GROUP_STATS_FILTERS = {

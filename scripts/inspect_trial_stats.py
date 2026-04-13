@@ -1,10 +1,10 @@
 """
 Inspect trial-stats outputs (.h5 + optional companion _trials.tsv) and generate a
-visual summary. Supports both subject-level trial_stats and group-level
-trial_stats_group outputs.
+visual summary. Supports subject-level `condition_test` / `regression` outputs
+and group-level `trial_stats_group` outputs.
 
 Examples:
-  python scripts/inspect_trial_stats.py --input E:\\CBT\\bids\\derivatives\\trial_stats\\sub-01\\ieeg\\sub-01_desc-trialstats_stats.h5
+  python scripts/inspect_trial_stats.py --input E:\\CBT\\bids\\derivatives\\condition_test\\sub-01\\ieeg\\sub-01_desc-conditiontest_stats.h5
   python scripts/inspect_trial_stats.py --bids-root E:\\CBT\\bids
   python scripts/inspect_trial_stats.py --bids-root E:\\CBT\\bids --no-save-figure
 """
@@ -68,7 +68,7 @@ class TrialStatsSnapshot:
     binning_mode: str
     source_metric: str = ""
     roi_mode: str = ""
-    pipeline_name: str = "trial_stats"
+    pipeline_name: str = "conditiontest"
     roi_channel_counts: np.ndarray = field(default_factory=lambda: np.array([]))
     roi_subject_counts: np.ndarray = field(default_factory=lambda: np.array([]))
 
@@ -351,9 +351,9 @@ def _load_snapshot(stats_path: Path) -> TrialStatsSnapshot:
 
         prov_grp = fh["provenance"] if "provenance" in fh else None
         pipeline_name = (
-            _str_scalar(prov_grp.get("pipeline_name"), default="trial_stats")
+            _str_scalar(prov_grp.get("pipeline_name"), default="conditiontest")
             if prov_grp is not None
-            else "trial_stats"
+            else "conditiontest"
         )
         source_metric = _str_scalar(meta_grp.get("source_metric"), default="")
         roi_mode = _str_scalar(meta_grp.get("roi_mode"), default="")

@@ -43,11 +43,11 @@ def test_writer_outputs_expected_hdf5_schema_and_group_path() -> None:
     case_dir = _make_case_dir("writer_schema")
     try:
         primary = _make_bids_file(
-            case_dir / "sub-01_task-decid_desc-trialstats_stats.h5",
+            case_dir / "sub-01_task-decid_desc-conditiontest_stats.h5",
             {
                 "subject": "01",
                 "task": "decid",
-                "desc": "trialstats",
+                "desc": "conditiontest",
                 "suffix": "stats",
                 "extension": ".h5",
                 "datatype": "ieeg",
@@ -129,11 +129,11 @@ def test_writer_outputs_matlab_format() -> None:
     case_dir = _make_case_dir("writer_matlab")
     try:
         primary = _make_bids_file(
-            case_dir / "sub-01_task-decid_desc-trialstats_stats.h5",
+            case_dir / "sub-01_task-decid_desc-conditiontest_stats.h5",
             {
                 "subject": "01",
                 "task": "decid",
-                "desc": "trialstats",
+                "desc": "conditiontest",
                 "suffix": "stats",
                 "extension": ".h5",
                 "datatype": "ieeg",

@@ -1,4 +1,4 @@
-"""Bridge between in-memory TrialSlopeStatsProcessingResult and slope-group processing.
+"""Bridge between in-memory RegressionProcessingResult and slope-group processing.
 
 ``TrialSlopeStatsGroupProcessing.process_group()`` expects BIDS-like ``*_stats.h5``
 files. This module builds an in-memory HDF5 file per subject matching the schema
@@ -24,8 +24,8 @@ from gin_bids_py_analysis.processing.trial_slope_stats_group import (
 
 if TYPE_CHECKING:
     from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-    from gin_bids_py_analysis.processing.trial_slope_stats.result import (
-        TrialSlopeStatsProcessingResult,
+    from gin_bids_py_analysis.processing.trial_stats import (
+        RegressionProcessingResult,
     )
 
 
@@ -39,7 +39,7 @@ class _MockPyBIDSFile:
 
 def _write_hdf5_structure(
     fh: h5py.File,
-    result: "TrialSlopeStatsProcessingResult",
+    result: "RegressionProcessingResult",
     subject_id: str,
 ) -> None:
     """Populate *fh* with datasets required by slope-group HDF5 reader."""
@@ -207,7 +207,7 @@ def _write_hdf5_structure(
 
 
 def _build_in_memory_bids_file_with_handle(
-    result: "TrialSlopeStatsProcessingResult",
+    result: "RegressionProcessingResult",
     subject_id: str,
 ) -> tuple[BIDSFile, h5py.File]:
     fake_path = Path(f"/in-memory/sub-{subject_id}_{uuid4().hex}_stats.h5")
@@ -229,7 +229,7 @@ def _build_in_memory_bids_file_with_handle(
 
 @contextmanager
 def group_file_group_context_slope(
-    results: dict[str, "TrialSlopeStatsProcessingResult"],
+    results: dict[str, "RegressionProcessingResult"],
 ) -> Generator["BIDSFileGroup", None, None]:
     """Build a slope-group compatible in-memory BIDSFileGroup and close handles."""
     if not results:

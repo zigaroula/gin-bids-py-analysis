@@ -8,11 +8,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset, build_subject_groups
-from gin_bids_py_analysis.processing.trial_slope_stats import (
-    TrialSlopeStatsParams,
-    TrialSlopeStatsProcessing,
-    TrialSlopeStatsProcessingWriter,
-    TrialSlopeStatsWriterParams,
+from gin_bids_py_analysis.processing.trial_stats.regression import (
+    RegressionParams,
+    RegressionProcessing,
+    RegressionProcessingWriter,
+    RegressionWriterParams,
 )
 from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
 
@@ -33,7 +33,7 @@ SECONDARY_FILTERS = [
     {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
 ]
 
-PARAMS = TrialSlopeStatsParams(
+PARAMS = RegressionParams(
     anchor_event_codes=["11", "12"],
     experiment_start_event_code="5",
     tmin_s=-1.0,
@@ -63,7 +63,7 @@ RESOLVER = TableTrialResolver(
     extract_columns=["rating"],
 )
 
-WRITER_PARAMS = TrialSlopeStatsWriterParams(
+WRITER_PARAMS = RegressionWriterParams(
     bids_root=BIDS_ROOT,
     output_format="hdf5",
     output_description="correlation",
@@ -77,8 +77,8 @@ def main() -> list[Path]:
     groups = build_subject_groups(ds, IEEG_FILTERS, SECONDARY_FILTERS)
     print(f"Found {len(groups)} subject group(s). Running with n_jobs={N_JOBS}.")
 
-    processor = TrialSlopeStatsProcessing(PARAMS, resolver=RESOLVER)
-    writer = TrialSlopeStatsProcessingWriter(WRITER_PARAMS)
+    processor = RegressionProcessing(PARAMS, resolver=RESOLVER)
+    writer = RegressionProcessingWriter(WRITER_PARAMS)
 
     out_paths = processor.run(groups, writer, n_jobs=N_JOBS)
     for path in out_paths:

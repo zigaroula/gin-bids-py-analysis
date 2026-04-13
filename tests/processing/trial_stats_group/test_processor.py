@@ -118,18 +118,18 @@ def test_build_trial_stats_compatible_groups_splits_heterogeneous_inputs() -> No
         time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
         data = np.ones((2, 3), dtype=np.float64)
 
-        path_a = case_dir / "sub-01_task-decid_desc-trialstats_stats.h5"
-        path_b = case_dir / "sub-02_task-decid_desc-trialstats_stats.h5"
-        path_c = case_dir / "sub-03_task-other_desc-trialstats_stats.h5"
+        path_a = case_dir / "sub-01_task-decid_desc-conditiontest_stats.h5"
+        path_b = case_dir / "sub-02_task-decid_desc-conditiontest_stats.h5"
+        path_c = case_dir / "sub-03_task-other_desc-conditiontest_stats.h5"
 
         _write_trial_stats_h5(path_a, channels=["A1", "A2"], time_s=time_s, mean_difference=data)
         _write_trial_stats_h5(path_b, channels=["A1", "A2"], time_s=time_s, mean_difference=data)
         _write_trial_stats_h5(path_c, channels=["A1", "A2"], time_s=time_s, mean_difference=data)
 
         files = [
-            _make_bids_file(path_a, {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
-            _make_bids_file(path_b, {"subject": "02", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
-            _make_bids_file(path_c, {"subject": "03", "task": "other", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
+            _make_bids_file(path_a, {"subject": "01", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
+            _make_bids_file(path_b, {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
+            _make_bids_file(path_c, {"subject": "03", "task": "other", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
         ]
 
         groups = build_trial_stats_compatible_groups(files, source_metric="mean_difference")
@@ -145,8 +145,8 @@ def test_build_trial_stats_compatible_groups_splits_activity_zscore_inputs() -> 
         time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
         data = np.ones((2, 3), dtype=np.float64)
 
-        path_a = case_dir / "sub-01_task-decid_desc-trialstats_stats.h5"
-        path_b = case_dir / "sub-02_task-decid_desc-trialstats_stats.h5"
+        path_a = case_dir / "sub-01_task-decid_desc-conditiontest_stats.h5"
+        path_b = case_dir / "sub-02_task-decid_desc-conditiontest_stats.h5"
         _write_trial_stats_h5(path_a, channels=["A1", "A2"], time_s=time_s, mean_difference=data)
         _write_trial_stats_h5(
             path_b,
@@ -157,8 +157,8 @@ def test_build_trial_stats_compatible_groups_splits_activity_zscore_inputs() -> 
         )
 
         files = [
-            _make_bids_file(path_a, {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
-            _make_bids_file(path_b, {"subject": "02", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
+            _make_bids_file(path_a, {"subject": "01", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
+            _make_bids_file(path_b, {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
         ]
 
         groups = build_trial_stats_compatible_groups(files, source_metric="mean_difference")
@@ -171,7 +171,7 @@ def test_build_trial_stats_compatible_groups_splits_activity_zscore_inputs() -> 
 def test_process_group_rejects_non_channel_trial_stats() -> None:
     case_dir = _make_case_dir("reject_non_channel")
     try:
-        stats_path = case_dir / "sub-01_task-decid_desc-trialstats_stats.h5"
+        stats_path = case_dir / "sub-01_task-decid_desc-conditiontest_stats.h5"
         _write_trial_stats_h5(
             stats_path,
             analysis_level="roi",
@@ -182,7 +182,7 @@ def test_process_group_rejects_non_channel_trial_stats() -> None:
 
         file = _make_bids_file(
             stats_path,
-            {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
+            {"subject": "01", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
         )
         processor = TrialStatsGroupProcessing(
             TrialStatsGroupParams(
@@ -202,7 +202,7 @@ def test_process_group_manual_mode_and_thresholds() -> None:
     try:
         time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
 
-        path_01 = case_dir / "sub-01_task-decid_desc-trialstats_stats.h5"
+        path_01 = case_dir / "sub-01_task-decid_desc-conditiontest_stats.h5"
         data_01 = np.array(
             [
                 [2.0, 2.0, 2.0],
@@ -213,7 +213,7 @@ def test_process_group_manual_mode_and_thresholds() -> None:
         )
         _write_trial_stats_h5(path_01, channels=["A1", "A2", "B1"], time_s=time_s, mean_difference=data_01)
 
-        path_02 = case_dir / "sub-02_task-decid_desc-trialstats_stats.h5"
+        path_02 = case_dir / "sub-02_task-decid_desc-conditiontest_stats.h5"
         data_02 = np.array(
             [
                 [1.5, 1.5, 1.5],
@@ -223,8 +223,8 @@ def test_process_group_manual_mode_and_thresholds() -> None:
         )
         _write_trial_stats_h5(path_02, channels=["A1", "B1"], time_s=time_s, mean_difference=data_02)
 
-        file_01 = _make_bids_file(path_01, {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"})
-        file_02 = _make_bids_file(path_02, {"subject": "02", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"})
+        file_01 = _make_bids_file(path_01, {"subject": "01", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"})
+        file_02 = _make_bids_file(path_02, {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"})
 
         processor = TrialStatsGroupProcessing(
             TrialStatsGroupParams(
@@ -267,7 +267,7 @@ def test_process_group_atlas_mode_uses_electrodes_mapping() -> None:
             encoding="utf-8",
         )
 
-        stats_path = case_dir / "sub-01_task-decid_desc-trialstats_stats.h5"
+        stats_path = case_dir / "sub-01_task-decid_desc-conditiontest_stats.h5"
         _write_trial_stats_h5(
             stats_path,
             channels=["A1", "B1"],
@@ -282,7 +282,7 @@ def test_process_group_atlas_mode_uses_electrodes_mapping() -> None:
             {
                 "subject": "01",
                 "task": "decid",
-                "desc": "trialstats",
+                "desc": "conditiontest",
                 "suffix": "stats",
                 "extension": ".h5",
                 "datatype": "ieeg",
@@ -324,7 +324,7 @@ def test_process_group_atlas_mode_with_nonexistent_ieeg_path() -> None:
             encoding="utf-8",
         )
 
-        stats_path = case_dir / "sub-01_task-decid_desc-trialstats_stats.h5"
+        stats_path = case_dir / "sub-01_task-decid_desc-conditiontest_stats.h5"
         _write_trial_stats_h5(
             stats_path,
             channels=["A1", "B1"],
@@ -339,7 +339,7 @@ def test_process_group_atlas_mode_with_nonexistent_ieeg_path() -> None:
             {
                 "subject": "01",
                 "task": "decid",
-                "desc": "trialstats",
+                "desc": "conditiontest",
                 "suffix": "stats",
                 "extension": ".h5",
                 "datatype": "ieeg",
@@ -371,7 +371,7 @@ def test_process_group_cluster_permutation_custom_mode() -> None:
         perm_01 = perm_rng.normal(0.0, 1.0, size=(20, 1, len(time_s))).astype(np.float64)
         perm_02 = perm_rng.normal(0.0, 1.0, size=(20, 1, len(time_s))).astype(np.float64)
 
-        path_01 = case_dir / "sub-01_task-decid_desc-trialstats_stats.h5"
+        path_01 = case_dir / "sub-01_task-decid_desc-conditiontest_stats.h5"
         _write_trial_stats_h5(
             path_01,
             channels=["A1"],
@@ -379,7 +379,7 @@ def test_process_group_cluster_permutation_custom_mode() -> None:
             mean_difference=np.array([[2.0, 2.0, 2.0, 0.5]], dtype=np.float64),
             permuted_t_values=perm_01,
         )
-        path_02 = case_dir / "sub-02_task-decid_desc-trialstats_stats.h5"
+        path_02 = case_dir / "sub-02_task-decid_desc-conditiontest_stats.h5"
         _write_trial_stats_h5(
             path_02,
             channels=["A1"],
@@ -390,11 +390,11 @@ def test_process_group_cluster_permutation_custom_mode() -> None:
 
         file_01 = _make_bids_file(
             path_01,
-            {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
+            {"subject": "01", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
         )
         file_02 = _make_bids_file(
             path_02,
-            {"subject": "02", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
+            {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
         )
 
         processor = TrialStatsGroupProcessing(
@@ -425,14 +425,14 @@ def test_process_group_cluster_permutation_mne_mode() -> None:
     case_dir = _make_case_dir("cluster_mne")
     try:
         time_s = np.array([0.0, 0.1, 0.2, 0.3], dtype=np.float64)
-        path_01 = case_dir / "sub-01_task-decid_desc-trialstats_stats.h5"
+        path_01 = case_dir / "sub-01_task-decid_desc-conditiontest_stats.h5"
         _write_trial_stats_h5(
             path_01,
             channels=["A1"],
             time_s=time_s,
             mean_difference=np.array([[2.0, 2.0, 2.0, 0.0]], dtype=np.float64),
         )
-        path_02 = case_dir / "sub-02_task-decid_desc-trialstats_stats.h5"
+        path_02 = case_dir / "sub-02_task-decid_desc-conditiontest_stats.h5"
         _write_trial_stats_h5(
             path_02,
             channels=["A1"],
@@ -442,11 +442,11 @@ def test_process_group_cluster_permutation_mne_mode() -> None:
 
         file_01 = _make_bids_file(
             path_01,
-            {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
+            {"subject": "01", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
         )
         file_02 = _make_bids_file(
             path_02,
-            {"subject": "02", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
+            {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
         )
 
         processor = TrialStatsGroupProcessing(
@@ -536,7 +536,7 @@ def _write_trial_stats_mat(
     prov_struct = make_struct(
         source_ieeg_files=np.array(source_ieeg_files or [], dtype=object),
         source_electrodes_files=np.array(source_electrodes_files or [], dtype=object),
-        pipeline_name=np.str_("trialstats"),
+        pipeline_name=np.str_("conditiontest"),
         pipeline_version=np.str_("test"),
     )
     data = make_struct(
@@ -555,7 +555,7 @@ def test_process_group_manual_mode_mat_input() -> None:
     try:
         time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
 
-        path_01 = case_dir / "sub-01_task-decid_desc-trialstats_stats.mat"
+        path_01 = case_dir / "sub-01_task-decid_desc-conditiontest_stats.mat"
         data_01 = np.array(
             [
                 [2.0, 2.0, 2.0],
@@ -566,7 +566,7 @@ def test_process_group_manual_mode_mat_input() -> None:
         )
         _write_trial_stats_mat(path_01, channels=["A1", "A2", "B1"], time_s=time_s, mean_difference=data_01)
 
-        path_02 = case_dir / "sub-02_task-decid_desc-trialstats_stats.mat"
+        path_02 = case_dir / "sub-02_task-decid_desc-conditiontest_stats.mat"
         data_02 = np.array(
             [
                 [1.5, 1.5, 1.5],
@@ -578,11 +578,11 @@ def test_process_group_manual_mode_mat_input() -> None:
 
         file_01 = _make_bids_file(
             path_01,
-            {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"},
+            {"subject": "01", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"},
         )
         file_02 = _make_bids_file(
             path_02,
-            {"subject": "02", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"},
+            {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"},
         )
 
         processor = TrialStatsGroupProcessing(
@@ -618,18 +618,18 @@ def test_build_compatible_groups_mat_files() -> None:
         time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
         data = np.ones((2, 3), dtype=np.float64)
 
-        path_a = case_dir / "sub-01_task-decid_desc-trialstats_stats.mat"
-        path_b = case_dir / "sub-02_task-decid_desc-trialstats_stats.mat"
-        path_c = case_dir / "sub-03_task-other_desc-trialstats_stats.mat"
+        path_a = case_dir / "sub-01_task-decid_desc-conditiontest_stats.mat"
+        path_b = case_dir / "sub-02_task-decid_desc-conditiontest_stats.mat"
+        path_c = case_dir / "sub-03_task-other_desc-conditiontest_stats.mat"
 
         _write_trial_stats_mat(path_a, channels=["A1", "A2"], time_s=time_s, mean_difference=data)
         _write_trial_stats_mat(path_b, channels=["A1", "A2"], time_s=time_s, mean_difference=data)
         _write_trial_stats_mat(path_c, channels=["A1", "A2"], time_s=time_s, mean_difference=data)
 
         files = [
-            _make_bids_file(path_a, {"subject": "01", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"}),
-            _make_bids_file(path_b, {"subject": "02", "task": "decid", "desc": "trialstats", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"}),
-            _make_bids_file(path_c, {"subject": "03", "task": "other", "desc": "trialstats", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"}),
+            _make_bids_file(path_a, {"subject": "01", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"}),
+            _make_bids_file(path_b, {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"}),
+            _make_bids_file(path_c, {"subject": "03", "task": "other", "desc": "conditiontest", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"}),
         ]
 
         groups = build_trial_stats_compatible_groups(files, source_metric="mean_difference")

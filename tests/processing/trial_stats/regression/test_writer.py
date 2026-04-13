@@ -9,11 +9,11 @@ import scipy.io
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_slope_stats import (
-    TrialSlopeStatsProcessingResult,
-    TrialSlopeStatsProcessingWriter,
-    TrialSlopeStatsWriterParams,
-    load_trial_slope_stats_result,
+from gin_bids_py_analysis.processing.trial_stats import (
+    RegressionProcessingResult,
+    RegressionProcessingWriter,
+    RegressionWriterParams,
+    load_regression_result,
 )
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 
@@ -28,7 +28,7 @@ def _make_bids_file(path: Path, entities: dict[str, str]) -> BIDSFile:
     return BIDSFile(_MockPyBIDSFile(str(path), entities))
 
 
-def _make_result(tmp_path: Path) -> TrialSlopeStatsProcessingResult:
+def _make_result(tmp_path: Path) -> RegressionProcessingResult:
     primary = _make_bids_file(
         tmp_path / "sub-01_task-decid_ieeg.vhdr",
         {
@@ -40,7 +40,7 @@ def _make_result(tmp_path: Path) -> TrialSlopeStatsProcessingResult:
         },
     )
     shape = (2, 3)
-    return TrialSlopeStatsProcessingResult(
+    return RegressionProcessingResult(
         source_group=BIDSFileGroup(primary=primary),
         output_entities={"subject": "01", "task": "decid"},
         condition_a_slope=np.full(shape, 1.0, dtype=np.float64),
@@ -128,10 +128,10 @@ def _make_result(tmp_path: Path) -> TrialSlopeStatsProcessingResult:
 
 def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
     result = _make_result(tmp_path)
-    writer = TrialSlopeStatsProcessingWriter(
-        TrialSlopeStatsWriterParams(
+    writer = RegressionProcessingWriter(
+        RegressionWriterParams(
             bids_root=tmp_path,
-            output_description="trialslopestats",
+            output_description="regression",
             output_format="hdf5",
         )
     )
@@ -169,7 +169,7 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
         )
         assert list(fh["trials"]["predictor_raw"].asstr()[:]) == ["1.0"]
 
-    loaded = load_trial_slope_stats_result(output_path)
+    loaded = load_regression_result(output_path)
     np.testing.assert_allclose(loaded.condition_a_slope, result.condition_a_slope)
     np.testing.assert_allclose(loaded.condition_b_p_value_corrected, result.condition_b_p_value_corrected)
     np.testing.assert_allclose(
@@ -193,10 +193,10 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
 
 def test_writer_outputs_matlab(tmp_path: Path) -> None:
     result = _make_result(tmp_path)
-    writer = TrialSlopeStatsProcessingWriter(
-        TrialSlopeStatsWriterParams(
+    writer = RegressionProcessingWriter(
+        RegressionWriterParams(
             bids_root=tmp_path,
-            output_description="trialslopestats",
+            output_description="regression",
             output_format="matlab",
         )
     )
@@ -207,7 +207,7 @@ def test_writer_outputs_matlab(tmp_path: Path) -> None:
     assert str(data.meta.analysis_type) == "slope_regression"
     assert data.regression.condition_a.slope.shape == (2, 3)
     assert str(data.trial_activity_summary.kind) == "anchor_to_response_mean"
-    loaded = load_trial_slope_stats_result(output_path)
+    loaded = load_regression_result(output_path)
     np.testing.assert_allclose(
         loaded.condition_a_trial_activity_summary_values,
         result.condition_a_trial_activity_summary_values,
@@ -222,10 +222,10 @@ def test_writer_outputs_matlab(tmp_path: Path) -> None:
 
 def test_loader_falls_back_to_legacy_epoch_means_for_trial_activity_summary(tmp_path: Path) -> None:
     result = _make_result(tmp_path)
-    writer = TrialSlopeStatsProcessingWriter(
-        TrialSlopeStatsWriterParams(
+    writer = RegressionProcessingWriter(
+        RegressionWriterParams(
             bids_root=tmp_path,
-            output_description="trialslopestats",
+            output_description="regression",
             output_format="hdf5",
         )
     )
@@ -234,7 +234,7 @@ def test_loader_falls_back_to_legacy_epoch_means_for_trial_activity_summary(tmp_
     with h5py.File(output_path, "a") as fh:
         del fh["trial_activity_summary"]
 
-    loaded = load_trial_slope_stats_result(output_path)
+    loaded = load_regression_result(output_path)
 
     assert loaded.trial_activity_summary_kind == "epoch_mean"
     assert loaded.trial_activity_summary_label == "Epoch mean activity"
@@ -250,10 +250,10 @@ def test_loader_falls_back_to_legacy_epoch_means_for_trial_activity_summary(tmp_
 
 def test_loader_rejects_legacy_within_condition_predictor_zscore(tmp_path: Path) -> None:
     result = _make_result(tmp_path)
-    writer = TrialSlopeStatsProcessingWriter(
-        TrialSlopeStatsWriterParams(
+    writer = RegressionProcessingWriter(
+        RegressionWriterParams(
             bids_root=tmp_path,
-            output_description="trialslopestats",
+            output_description="regression",
             output_format="hdf5",
         )
     )
@@ -268,6 +268,6 @@ def test_loader_rejects_legacy_within_condition_predictor_zscore(tmp_path: Path)
         )
 
     with pytest.raises(ValueError, match="within_condition"):
-        load_trial_slope_stats_result(output_path)
+        load_regression_result(output_path)
 
 

@@ -3,9 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
-from gin_bids_py_analysis.processing.trial_stats.params import TrialStatsParams
-from gin_bids_py_analysis.processing.trial_stats.stats import (
+from gin_bids_py_analysis.processing.trial_stats import ConditionTestParams
+from gin_bids_py_analysis.processing.trial_stats.condition_test.stats import (
     compute_bootstrap_difference_ci95,
     compute_condition_statistics,
     compute_duration_channel_significance,
@@ -14,6 +13,7 @@ from gin_bids_py_analysis.processing.trial_stats.stats import (
     compute_single_bin_channel_significance,
     extract_epochs,
 )
+from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 from gin_bids_py_analysis.processing.utils.statistics import (
     correct_p_values,
     zscore_activity_by_baseline,
@@ -109,7 +109,7 @@ def test_correct_p_values_fdr_bh_and_bonferroni() -> None:
 
 def test_trial_stats_params_rejects_atlas_regions_without_atlas_name() -> None:
     with pytest.raises(ValueError, match="atlas_regions requires atlas_name"):
-        TrialStatsParams(
+        ConditionTestParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.1,
@@ -118,7 +118,7 @@ def test_trial_stats_params_rejects_atlas_regions_without_atlas_name() -> None:
 
 def test_trial_stats_params_rejects_window_ms_and_n_bins_together() -> None:
     with pytest.raises(ValueError, match="window_ms and n_bins are mutually exclusive"):
-        TrialStatsParams(
+        ConditionTestParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.1,
@@ -223,7 +223,7 @@ def test_bootstrap_difference_ci95_returns_nan_when_trials_insufficient() -> Non
 
 def test_trial_stats_params_rejects_permutation_with_zero_n_permutations() -> None:
     with pytest.raises(ValueError, match="n_permutations"):
-        TrialStatsParams(
+        ConditionTestParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.1,
@@ -234,7 +234,7 @@ def test_trial_stats_params_rejects_permutation_with_zero_n_permutations() -> No
 
 def test_trial_stats_params_rejects_baseline_outside_epoch_when_baseline_scaling_enabled() -> None:
     with pytest.raises(ValueError, match="activity_baseline_tmin_s"):
-        TrialStatsParams(
+        ConditionTestParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.1,
