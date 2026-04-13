@@ -165,6 +165,38 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
                     "activity_baseline_tmax_s",
                     data=float(result.metadata["activity_baseline_tmax_s"]),
                 )
+            if "trial_activity_summary_kind" in result.metadata:
+                meta.create_dataset(
+                    "trial_activity_summary_kind",
+                    data=str(result.metadata["trial_activity_summary_kind"]),
+                    dtype=str_dtype,
+                )
+            if "trial_activity_summary_missing_response_policy" in result.metadata:
+                meta.create_dataset(
+                    "trial_activity_summary_missing_response_policy",
+                    data=str(
+                        result.metadata["trial_activity_summary_missing_response_policy"]
+                    ),
+                    dtype=str_dtype,
+                )
+            if "trial_activity_summary_source_json" in result.metadata:
+                meta.create_dataset(
+                    "trial_activity_summary_source_json",
+                    data=str(result.metadata["trial_activity_summary_source_json"]),
+                    dtype=str_dtype,
+                )
+            if "trial_activity_summary_label" in result.metadata:
+                meta.create_dataset(
+                    "trial_activity_summary_label",
+                    data=str(result.metadata["trial_activity_summary_label"]),
+                    dtype=str_dtype,
+                )
+            if "scatter_aggregation" in result.metadata:
+                meta.create_dataset(
+                    "scatter_aggregation",
+                    data=str(result.metadata["scatter_aggregation"]),
+                    dtype=str_dtype,
+                )
 
             # --- /excluded_rois ---
             excl = fh.create_group("excluded_rois")
@@ -341,6 +373,26 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
             meta_kwargs["activity_baseline_tmin_s"] = float(result.metadata["activity_baseline_tmin_s"])
         if "activity_baseline_tmax_s" in result.metadata:
             meta_kwargs["activity_baseline_tmax_s"] = float(result.metadata["activity_baseline_tmax_s"])
+        if "trial_activity_summary_kind" in result.metadata:
+            meta_kwargs["trial_activity_summary_kind"] = np.str_(
+                str(result.metadata["trial_activity_summary_kind"])
+            )
+        if "trial_activity_summary_missing_response_policy" in result.metadata:
+            meta_kwargs["trial_activity_summary_missing_response_policy"] = np.str_(
+                str(result.metadata["trial_activity_summary_missing_response_policy"])
+            )
+        if "trial_activity_summary_source_json" in result.metadata:
+            meta_kwargs["trial_activity_summary_source_json"] = np.str_(
+                str(result.metadata["trial_activity_summary_source_json"])
+            )
+        if "trial_activity_summary_label" in result.metadata:
+            meta_kwargs["trial_activity_summary_label"] = np.str_(
+                str(result.metadata["trial_activity_summary_label"])
+            )
+        if "scatter_aggregation" in result.metadata:
+            meta_kwargs["scatter_aggregation"] = np.str_(
+                str(result.metadata["scatter_aggregation"])
+            )
         meta_struct = make_struct(**meta_kwargs)
 
         contributions_struct = make_struct(

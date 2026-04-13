@@ -81,20 +81,20 @@ class TrialSlopeStatsGroupProcessingResult(BaseProcessingResult):
     contribution_labels: list = field(default_factory=list)
     """Per-ROI list of human-readable row labels formatted as ``"subject/channel"``."""
 
-    # --- Per-ROI scatter data (predictor value vs epoch mean activity) ---
+    # --- Per-ROI scatter data (predictor value vs per-trial activity summary) ---
     condition_a_scatter_predictor: list = field(default_factory=list)
     """Per-ROI concatenated predictor values for condition A.
     ``condition_a_scatter_predictor[roi_idx]`` is a 1-D array of shape ``(N_total,)``
     where N_total is the sum of trial counts across all contributing (subject, channel) pairs.
     """
     condition_a_scatter_activity: list = field(default_factory=list)
-    """Per-ROI concatenated epoch-mean activity for condition A.  Paired with
+    """Per-ROI concatenated trial-activity summary values for condition A. Paired with
     ``condition_a_scatter_predictor``; same shape ``(N_total,)``.
     """
     condition_b_scatter_predictor: list = field(default_factory=list)
-    """Per-ROI concatenated predictor values for condition B.  Same structure."""
+    """Per-ROI concatenated predictor values for condition B. Same structure."""
     condition_b_scatter_activity: list = field(default_factory=list)
-    """Per-ROI concatenated epoch-mean activity for condition B.  Same structure."""
+    """Per-ROI concatenated trial-activity summary values for condition B. Same structure."""
 
     # --- Analysis parameters stored in the result for provenance ---
     source_metric: str = "slope"

@@ -31,7 +31,7 @@ BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
 FILE_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    #"subject": "TOU2022TISa",
+    "subject": "TOU2021DUBl",
     #"run": "01",
 }
 
@@ -41,7 +41,7 @@ PARAMS = HilbertParams(
     f_min=50,
     f_max=150,
     f_step=10,
-    method=ProcessingMethod.SPM2ENV,
+    method=ProcessingMethod.LOCALIZER,
     downsampled_frequency_hz=64.0,
     smoothing_windows_ms= [0, 250, 500, 1000, 2500, 5000],
     montage_mode=MontageMode.BIPOLAR,
@@ -54,7 +54,7 @@ PARAMS = HilbertParams(
 
 WRITER_PARAMS = HilbertWriterParams(
     bids_root=BIDS_ROOT,
-    output_description="bga",
+    output_description="gamma",
     output_format="brainvision"
 )
 

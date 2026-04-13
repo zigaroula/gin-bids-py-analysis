@@ -20,6 +20,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .plot_panel import (
+    _SCATTER_SUMMARY_TARGET_BINS,
+    _compute_scatter_summary_points,
+    _fit_scatter_regression,
+    _scatter_activity_axis_label,
+)
+
 if TYPE_CHECKING:
     from gin_bids_py_analysis.processing.trial_slope_stats_group.result import (
         TrialSlopeStatsGroupProcessingResult,
@@ -730,8 +737,8 @@ class GroupPlotPanel(QWidget):
             roi_label=roi_label,
             cond_a_label=cond_a_label,
             cond_b_label=cond_b_label,
-            sig_slope=sig_slope,
             predictor_label=_group_predictor_axis_label(result),
+            activity_summary_label=_group_trial_activity_summary_label(result),
             activity_zscore=_group_activity_zscore(result),
         )
 
@@ -851,11 +858,11 @@ class GroupPlotPanel(QWidget):
         roi_label: str,
         cond_a_label: str,
         cond_b_label: str,
-        sig_slope: np.ndarray,
         predictor_label: str,
+        activity_summary_label: str,
         activity_zscore: str,
     ) -> None:
-        """Draw a predictor-vs-activity scatter plot with per-condition regression lines."""
+        """Draw a predictor-vs-activity scatter plot with per-condition summaries."""
         fig.clear()
         self._ax_scatter = fig.add_subplot(111)
         ax = self._ax_scatter
@@ -871,37 +878,48 @@ class GroupPlotPanel(QWidget):
                     ha="center", va="center", fontsize=9, color="gray")
             ax.set_title(f"{roi_label} — scatter", fontsize=9)
             ax.set_xlabel(predictor_label)
-            ax.set_ylabel(_group_scatter_activity_axis_label(activity_zscore))
+            ax.set_ylabel(
+                _scatter_activity_axis_label(activity_summary_label, activity_zscore)
+            )
             canvas.draw_idle()
             return
 
-        any_significant = bool(sig_slope.any()) if sig_slope.size > 0 else False
-        reg_ls = "-" if any_significant else "--"
-
-        if pred_a.size > 0:
-            ax.scatter(pred_a, act_a, color="steelblue", alpha=0.35, s=18,
-                       label=cond_a_label, linewidths=0)
-            if pred_a.size >= 2:
-                valid_a = np.isfinite(pred_a) & np.isfinite(act_a)
-                if valid_a.sum() >= 2:
-                    coefs_a = np.polyfit(pred_a[valid_a], act_a[valid_a], 1)
-                    x_range_a = np.array([pred_a[valid_a].min(), pred_a[valid_a].max()])
-                    ax.plot(x_range_a, np.polyval(coefs_a, x_range_a),
-                            color="steelblue", linewidth=1.5, linestyle=reg_ls)
-
-        if pred_b.size > 0:
-            ax.scatter(pred_b, act_b, color="tomato", alpha=0.35, s=18,
-                       label=cond_b_label, linewidths=0)
-            if pred_b.size >= 2:
-                valid_b = np.isfinite(pred_b) & np.isfinite(act_b)
-                if valid_b.sum() >= 2:
-                    coefs_b = np.polyfit(pred_b[valid_b], act_b[valid_b], 1)
-                    x_range_b = np.array([pred_b[valid_b].min(), pred_b[valid_b].max()])
-                    ax.plot(x_range_b, np.polyval(coefs_b, x_range_b),
-                            color="tomato", linewidth=1.5, linestyle=reg_ls)
+        plotted = False
+        plotted |= _plot_group_scatter_condition(
+            ax=ax,
+            predictor_values=pred_a,
+            activity_values=act_a,
+            color="steelblue",
+            label=cond_a_label,
+        )
+        plotted |= _plot_group_scatter_condition(
+            ax=ax,
+            predictor_values=pred_b,
+            activity_values=act_b,
+            color="tomato",
+            label=cond_b_label,
+        )
+        if not plotted:
+            ax.text(
+                0.5,
+                0.5,
+                "No scatter data available",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+                fontsize=9,
+                color="gray",
+            )
+            ax.set_title(f"{roi_label} — scatter", fontsize=9)
+            ax.set_xlabel(predictor_label)
+            ax.set_ylabel(
+                _scatter_activity_axis_label(activity_summary_label, activity_zscore)
+            )
+            canvas.draw_idle()
+            return
 
         ax.set_xlabel(predictor_label)
-        ax.set_ylabel(_group_scatter_activity_axis_label(activity_zscore))
+        ax.set_ylabel(_scatter_activity_axis_label(activity_summary_label, activity_zscore))
         ax.set_title(f"{roi_label} — predictor vs activity", fontsize=9)
         _safe_legend(ax)
         canvas.draw_idle()
@@ -1034,9 +1052,12 @@ def _group_activity_axis_label(result: object) -> str:
     return "mean region activity"
 
 
-def _group_scatter_activity_axis_label(activity_zscore: str) -> str:
-    if _is_group_activity_zscore_enabled(activity_zscore):
-        return "Epoch mean activity (z)"
+def _group_trial_activity_summary_label(result: object) -> str:
+    metadata = getattr(result, "metadata", {})
+    if isinstance(metadata, dict):
+        label = str(metadata.get("trial_activity_summary_label", "")).strip()
+        if label:
+            return label
     return "Epoch mean activity"
 
 
@@ -1049,6 +1070,73 @@ def _group_activity_zscore(result: object) -> str:
 
 def _is_group_activity_zscore_enabled(activity_zscore: str) -> bool:
     return str(activity_zscore).strip().lower() in {"baseline", "across_trials"}
+
+
+def _plot_group_scatter_condition(
+    *,
+    ax,
+    predictor_values: np.ndarray,
+    activity_values: np.ndarray,
+    color: str,
+    label: str,
+) -> bool:
+    predictor = np.asarray(predictor_values, dtype=np.float64).ravel()
+    activity = np.asarray(activity_values, dtype=np.float64).ravel()
+    valid = np.isfinite(predictor) & np.isfinite(activity)
+    if valid.sum() == 0:
+        return False
+
+    predictor = predictor[valid]
+    activity = activity[valid]
+    ax.scatter(
+        predictor,
+        activity,
+        color=color,
+        alpha=0.35,
+        s=18,
+        label=label,
+        linewidths=0,
+        zorder=1,
+    )
+    if predictor.size >= 2:
+        regression = _fit_scatter_regression(predictor, activity)
+        if regression is not None:
+            x_range = np.array([predictor.min(), predictor.max()], dtype=np.float64)
+            y_fit = regression.intercept + (regression.slope * x_range)
+            ax.plot(
+                x_range,
+                y_fit,
+                color=color,
+                linewidth=1.8 if regression.is_significant else 1.2,
+                linestyle="-" if regression.is_significant else "--",
+                zorder=2,
+            )
+    summary_x, summary_y, summary_x_sem, summary_y_sem = _compute_scatter_summary_points(
+        predictor,
+        activity,
+        target_bins=_SCATTER_SUMMARY_TARGET_BINS,
+    )
+    if summary_x.size > 0:
+        ax.errorbar(
+            summary_x,
+            summary_y,
+            xerr=summary_x_sem,
+            yerr=summary_y_sem,
+            fmt="o",
+            linestyle="none",
+            color=color,
+            ecolor=color,
+            elinewidth=1.6,
+            capsize=0,
+            markersize=8,
+            markerfacecolor=color,
+            markeredgecolor="black",
+            markeredgewidth=1.0,
+            alpha=1.0,
+            zorder=3,
+            label="_nolegend_",
+        )
+    return True
 
 
 def _group_predictor_axis_label(result: object) -> str:

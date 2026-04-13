@@ -72,6 +72,8 @@ class _RawSlopeStatsData:
     condition_b_predictor_values: np.ndarray  # (n_trials_b,)
     condition_a_epoch_means: np.ndarray       # (n_channels, n_trials_a)  or empty
     condition_b_epoch_means: np.ndarray       # (n_channels, n_trials_b)  or empty
+    condition_a_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_a) or empty
+    condition_b_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_b) or empty
     binning_mode: str
     window_ms: float
     n_bins: int
@@ -82,6 +84,10 @@ class _RawSlopeStatsData:
     activity_zscore: str
     activity_baseline_tmin_s: float
     activity_baseline_tmax_s: float
+    trial_activity_summary_kind: str
+    trial_activity_summary_missing_response_policy: str
+    trial_activity_summary_source: dict[str, str]
+    trial_activity_summary_label: str
     source_ieeg_files: list[str]
     source_electrodes_files: list[str]
 
@@ -103,6 +109,10 @@ class _SnapshotSignature:
     activity_zscore: str
     activity_baseline_tmin_s: float
     activity_baseline_tmax_s: float
+    trial_activity_summary_kind: str
+    trial_activity_summary_missing_response_policy: str
+    trial_activity_summary_source_json: str
+    trial_activity_summary_label: str
     analysis_level: str
 
     @property
@@ -123,6 +133,10 @@ class _SnapshotSignature:
             self.activity_zscore,
             self.activity_baseline_tmin_s,
             self.activity_baseline_tmax_s,
+            self.trial_activity_summary_kind,
+            self.trial_activity_summary_missing_response_policy,
+            self.trial_activity_summary_source_json,
+            self.trial_activity_summary_label,
             self.analysis_level,
         )
 
@@ -152,6 +166,8 @@ class _SlopeStatsSnapshot:
     condition_b_predictor_values: np.ndarray   # (n_trials_b,)
     condition_a_epoch_means: np.ndarray        # (n_channels, n_trials_a) or empty
     condition_b_epoch_means: np.ndarray        # (n_channels, n_trials_b) or empty
+    condition_a_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_a) or empty
+    condition_b_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_b) or empty
     analysis_level: str
     binning_mode: str
     window_ms: float
@@ -163,6 +179,10 @@ class _SlopeStatsSnapshot:
     activity_zscore: str
     activity_baseline_tmin_s: float
     activity_baseline_tmax_s: float
+    trial_activity_summary_kind: str
+    trial_activity_summary_missing_response_policy: str
+    trial_activity_summary_source: dict[str, str]
+    trial_activity_summary_label: str
     source_ieeg_files: list[str]
     source_electrodes_files: list[str]
     signature: _SnapshotSignature
@@ -186,8 +206,8 @@ class _ContributionRecord:
     predictor_b_transformed_values: np.ndarray  # (n_trials_b,)
     predictor_a_values: np.ndarray  # (n_trials_a,)
     predictor_b_values: np.ndarray  # (n_trials_b,)
-    epoch_means_a: np.ndarray       # (n_trials_a,)  mean activity per trial for this channel
-    epoch_means_b: np.ndarray       # (n_trials_b,)  mean activity per trial for this channel
+    scatter_activity_a: np.ndarray  # (n_trials_a,) trial activity summary per trial for this channel
+    scatter_activity_b: np.ndarray  # (n_trials_b,) trial activity summary per trial for this channel
 
 
 # ---------------------------------------------------------------------------
@@ -414,11 +434,24 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
             activity_b_contribution_samples.append(samples_mean_b)
             contribution_label_rows.append([f"{r.subject}/{r.channel}" for r in records])
 
-            # Scatter: concatenate per-trial (predictor, epoch_mean) pairs across all records
-            valid_pred_a = [r.predictor_a_values for r in records if r.predictor_a_values.size > 0]
-            valid_act_a = [r.epoch_means_a for r in records if r.epoch_means_a.size > 0]
-            valid_pred_b = [r.predictor_b_values for r in records if r.predictor_b_values.size > 0]
-            valid_act_b = [r.epoch_means_b for r in records if r.epoch_means_b.size > 0]
+            # Scatter: concatenate per-trial (predictor, activity-summary) pairs across records.
+            valid_pred_a: list[np.ndarray] = []
+            valid_act_a: list[np.ndarray] = []
+            valid_pred_b: list[np.ndarray] = []
+            valid_act_b: list[np.ndarray] = []
+            for record in records:
+                pred_a = np.asarray(record.predictor_a_values, dtype=np.float64).ravel()
+                act_a = np.asarray(record.scatter_activity_a, dtype=np.float64).ravel()
+                if pred_a.size > 0 and act_a.size > 0 and pred_a.size == act_a.size:
+                    valid_pred_a.append(pred_a)
+                    valid_act_a.append(act_a)
+
+                pred_b = np.asarray(record.predictor_b_values, dtype=np.float64).ravel()
+                act_b = np.asarray(record.scatter_activity_b, dtype=np.float64).ravel()
+                if pred_b.size > 0 and act_b.size > 0 and pred_b.size == act_b.size:
+                    valid_pred_b.append(pred_b)
+                    valid_act_b.append(act_b)
+
             scatter_a_predictor.append(
                 np.concatenate(valid_pred_a) if valid_pred_a else np.empty(0, dtype=np.float64)
             )
@@ -488,6 +521,17 @@ class TrialSlopeStatsGroupProcessing(BaseProcessing):
                 "activity_zscore": first.activity_zscore,
                 "activity_baseline_tmin_s": first.activity_baseline_tmin_s,
                 "activity_baseline_tmax_s": first.activity_baseline_tmax_s,
+                "trial_activity_summary_kind": first.trial_activity_summary_kind,
+                "trial_activity_summary_missing_response_policy": (
+                    first.trial_activity_summary_missing_response_policy
+                ),
+                "trial_activity_summary_source_json": json.dumps(
+                    first.trial_activity_summary_source,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                "trial_activity_summary_label": first.trial_activity_summary_label,
+                "scatter_aggregation": "trial_pool",
             },
             output_entities={"subject": "group"},
             slope_t_values=t_values_slope,
@@ -616,16 +660,22 @@ def _collect_manual_roi_records(
                         predictor_b_transformed_values=np.asarray(snapshot.condition_b_predictor_transformed_values, dtype=np.float64),
                         predictor_a_values=np.asarray(snapshot.condition_a_predictor_values, dtype=np.float64),
                         predictor_b_values=np.asarray(snapshot.condition_b_predictor_values, dtype=np.float64),
-                        epoch_means_a=(
-                            np.asarray(snapshot.condition_a_epoch_means[idx, :], dtype=np.float64)
-                            if snapshot.condition_a_epoch_means.ndim == 2
-                            and snapshot.condition_a_epoch_means.shape[0] > idx
+                        scatter_activity_a=(
+                            np.asarray(
+                                snapshot.condition_a_trial_activity_summary_values[idx, :],
+                                dtype=np.float64,
+                            )
+                            if snapshot.condition_a_trial_activity_summary_values.ndim == 2
+                            and snapshot.condition_a_trial_activity_summary_values.shape[0] > idx
                             else np.empty(0, dtype=np.float64)
                         ),
-                        epoch_means_b=(
-                            np.asarray(snapshot.condition_b_epoch_means[idx, :], dtype=np.float64)
-                            if snapshot.condition_b_epoch_means.ndim == 2
-                            and snapshot.condition_b_epoch_means.shape[0] > idx
+                        scatter_activity_b=(
+                            np.asarray(
+                                snapshot.condition_b_trial_activity_summary_values[idx, :],
+                                dtype=np.float64,
+                            )
+                            if snapshot.condition_b_trial_activity_summary_values.ndim == 2
+                            and snapshot.condition_b_trial_activity_summary_values.shape[0] > idx
                             else np.empty(0, dtype=np.float64)
                         ),
                     )
@@ -671,16 +721,22 @@ def _collect_atlas_roi_records(
                         predictor_b_transformed_values=np.asarray(snapshot.condition_b_predictor_transformed_values, dtype=np.float64),
                         predictor_a_values=np.asarray(snapshot.condition_a_predictor_values, dtype=np.float64),
                         predictor_b_values=np.asarray(snapshot.condition_b_predictor_values, dtype=np.float64),
-                        epoch_means_a=(
-                            np.asarray(snapshot.condition_a_epoch_means[idx, :], dtype=np.float64)
-                            if snapshot.condition_a_epoch_means.ndim == 2
-                            and snapshot.condition_a_epoch_means.shape[0] > idx
+                        scatter_activity_a=(
+                            np.asarray(
+                                snapshot.condition_a_trial_activity_summary_values[idx, :],
+                                dtype=np.float64,
+                            )
+                            if snapshot.condition_a_trial_activity_summary_values.ndim == 2
+                            and snapshot.condition_a_trial_activity_summary_values.shape[0] > idx
                             else np.empty(0, dtype=np.float64)
                         ),
-                        epoch_means_b=(
-                            np.asarray(snapshot.condition_b_epoch_means[idx, :], dtype=np.float64)
-                            if snapshot.condition_b_epoch_means.ndim == 2
-                            and snapshot.condition_b_epoch_means.shape[0] > idx
+                        scatter_activity_b=(
+                            np.asarray(
+                                snapshot.condition_b_trial_activity_summary_values[idx, :],
+                                dtype=np.float64,
+                            )
+                            if snapshot.condition_b_trial_activity_summary_values.ndim == 2
+                            and snapshot.condition_b_trial_activity_summary_values.shape[0] > idx
                             else np.empty(0, dtype=np.float64)
                         ),
                     )
@@ -880,6 +936,8 @@ def _load_slope_stats_snapshot(stats_file: BIDSFile) -> _SlopeStatsSnapshot:
         condition_b_predictor_values=raw.condition_b_predictor_values,
         condition_a_epoch_means=raw.condition_a_epoch_means,
         condition_b_epoch_means=raw.condition_b_epoch_means,
+        condition_a_trial_activity_summary_values=raw.condition_a_trial_activity_summary_values,
+        condition_b_trial_activity_summary_values=raw.condition_b_trial_activity_summary_values,
         analysis_level=raw.analysis_level,
         binning_mode=raw.binning_mode,
         window_ms=raw.window_ms,
@@ -891,6 +949,12 @@ def _load_slope_stats_snapshot(stats_file: BIDSFile) -> _SlopeStatsSnapshot:
         activity_zscore=raw.activity_zscore,
         activity_baseline_tmin_s=raw.activity_baseline_tmin_s,
         activity_baseline_tmax_s=raw.activity_baseline_tmax_s,
+        trial_activity_summary_kind=raw.trial_activity_summary_kind,
+        trial_activity_summary_missing_response_policy=(
+            raw.trial_activity_summary_missing_response_policy
+        ),
+        trial_activity_summary_source=raw.trial_activity_summary_source,
+        trial_activity_summary_label=raw.trial_activity_summary_label,
         source_ieeg_files=raw.source_ieeg_files,
         source_electrodes_files=raw.source_electrodes_files,
         signature=signature,
@@ -925,6 +989,18 @@ def _build_signature(
         activity_zscore=str(raw.activity_zscore or "none"),
         activity_baseline_tmin_s=float(raw.activity_baseline_tmin_s),
         activity_baseline_tmax_s=float(raw.activity_baseline_tmax_s),
+        trial_activity_summary_kind=str(raw.trial_activity_summary_kind or "epoch_mean"),
+        trial_activity_summary_missing_response_policy=str(
+            raw.trial_activity_summary_missing_response_policy or "drop_trial"
+        ),
+        trial_activity_summary_source_json=json.dumps(
+            raw.trial_activity_summary_source,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        trial_activity_summary_label=str(
+            raw.trial_activity_summary_label or "Epoch mean activity"
+        ),
         analysis_level=str(raw.analysis_level or "channel"),
     )
 
@@ -1034,6 +1110,74 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
             dataset_or_none(fh, "meta/activity_baseline_tmax_s"),
             default=0.0,
         )
+        condition_a_epoch_means = _read_epoch_means_hdf5(
+            stats_file,
+            "scatter/condition_a_epoch_means",
+        )
+        condition_b_epoch_means = _read_epoch_means_hdf5(
+            stats_file,
+            "scatter/condition_b_epoch_means",
+        )
+
+        trial_activity_summary_kind = "epoch_mean"
+        trial_activity_summary_missing_response_policy = "drop_trial"
+        trial_activity_summary_source: dict[str, str] = {}
+        trial_activity_summary_label = "Epoch mean activity"
+        if "trial_activity_summary" in fh:
+            tg = fh["trial_activity_summary"]
+            condition_a_trial_activity_summary_values = (
+                np.asarray(tg["condition_a_values"][:], dtype=np.float64)
+                if "condition_a_values" in tg
+                else np.empty((n_ch, 0), dtype=np.float64)
+            )
+            condition_b_trial_activity_summary_values = (
+                np.asarray(tg["condition_b_values"][:], dtype=np.float64)
+                if "condition_b_values" in tg
+                else np.empty((n_ch, 0), dtype=np.float64)
+            )
+            trial_activity_summary_kind = str_scalar(
+                dataset_or_none(tg, "kind"),
+                default=trial_activity_summary_kind,
+            )
+            trial_activity_summary_missing_response_policy = str_scalar(
+                dataset_or_none(tg, "missing_response_policy"),
+                default=trial_activity_summary_missing_response_policy,
+            )
+            trial_activity_summary_source_raw = str_scalar(
+                dataset_or_none(tg, "source_json"),
+                default="{}",
+            )
+            try:
+                loaded_summary_source = (
+                    json.loads(trial_activity_summary_source_raw)
+                    if trial_activity_summary_source_raw
+                    else {}
+                )
+                if isinstance(loaded_summary_source, dict):
+                    trial_activity_summary_source = {
+                        str(key): str(value)
+                        for key, value in loaded_summary_source.items()
+                    }
+            except json.JSONDecodeError:
+                trial_activity_summary_source = {}
+            trial_activity_summary_label = (
+                str_scalar(
+                    dataset_or_none(tg, "label"),
+                    default=trial_activity_summary_label,
+                )
+                or trial_activity_summary_label
+            )
+        else:
+            condition_a_trial_activity_summary_values = (
+                np.asarray(condition_a_epoch_means, dtype=np.float64)
+                if np.asarray(condition_a_epoch_means).ndim == 2
+                else np.empty((n_ch, 0), dtype=np.float64)
+            )
+            condition_b_trial_activity_summary_values = (
+                np.asarray(condition_b_epoch_means, dtype=np.float64)
+                if np.asarray(condition_b_epoch_means).ndim == 2
+                else np.empty((n_ch, 0), dtype=np.float64)
+            )
 
         source_ieeg_files: list[str] = []
         source_electrodes_files: list[str] = []
@@ -1085,8 +1229,10 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
         ),
         condition_a_predictor_values=_read_predictor_values_hdf5(stats_file, "predictor/condition_a_values"),
         condition_b_predictor_values=_read_predictor_values_hdf5(stats_file, "predictor/condition_b_values"),
-        condition_a_epoch_means=_read_epoch_means_hdf5(stats_file, "scatter/condition_a_epoch_means"),
-        condition_b_epoch_means=_read_epoch_means_hdf5(stats_file, "scatter/condition_b_epoch_means"),
+        condition_a_epoch_means=condition_a_epoch_means,
+        condition_b_epoch_means=condition_b_epoch_means,
+        condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
+        condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
         binning_mode=binning_mode,
         window_ms=window_ms,
         n_bins=n_bins,
@@ -1097,6 +1243,12 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
         activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
+        trial_activity_summary_kind=trial_activity_summary_kind,
+        trial_activity_summary_missing_response_policy=(
+            trial_activity_summary_missing_response_policy
+        ),
+        trial_activity_summary_source=trial_activity_summary_source,
+        trial_activity_summary_label=trial_activity_summary_label,
         source_ieeg_files=source_ieeg_files,
         source_electrodes_files=source_electrodes_files,
     )
@@ -1130,6 +1282,25 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
             return coerce_feature_time(
                 np.asarray(arr, dtype=np.float64), n_features=n_ch, n_times=n_t
             )
+
+        def _read_feature_trial_2d(obj: Any, attr: str) -> np.ndarray:
+            arr = getattr(obj, attr, None) if obj is not None else None
+            if arr is None:
+                return np.empty((n_ch, 0), dtype=np.float64)
+            out = np.asarray(arr, dtype=np.float64)
+            if out.size == 0:
+                return np.empty((n_ch, 0), dtype=np.float64)
+            if out.ndim != 2:
+                if out.size % max(n_ch, 1) != 0:
+                    return np.empty((n_ch, 0), dtype=np.float64)
+                return out.reshape(n_ch, -1)
+            if out.shape[0] == n_ch:
+                return out
+            if out.shape[1] == n_ch:
+                return out.T
+            if out.size % max(n_ch, 1) != 0:
+                return np.empty((n_ch, 0), dtype=np.float64)
+            return out.reshape(n_ch, -1)
 
         regression = getattr(data, "regression", None)
         cond_a_reg = getattr(regression, "condition_a", None) if regression is not None else None
@@ -1231,13 +1402,67 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
         condition_a_epoch_means: np.ndarray
         condition_b_epoch_means: np.ndarray
         if scatter_raw is not None:
-            raw_em_a = getattr(scatter_raw, "condition_a_epoch_means", None)
-            raw_em_b = getattr(scatter_raw, "condition_b_epoch_means", None)
-            condition_a_epoch_means = np.asarray(raw_em_a, dtype=np.float64) if raw_em_a is not None and np.asarray(raw_em_a).size > 0 else np.empty((n_ch, 0), dtype=np.float64)
-            condition_b_epoch_means = np.asarray(raw_em_b, dtype=np.float64) if raw_em_b is not None and np.asarray(raw_em_b).size > 0 else np.empty((n_ch, 0), dtype=np.float64)
+            condition_a_epoch_means = _read_feature_trial_2d(
+                scatter_raw,
+                "condition_a_epoch_means",
+            )
+            condition_b_epoch_means = _read_feature_trial_2d(
+                scatter_raw,
+                "condition_b_epoch_means",
+            )
         else:
             condition_a_epoch_means = np.empty((n_ch, 0), dtype=np.float64)
             condition_b_epoch_means = np.empty((n_ch, 0), dtype=np.float64)
+
+        trial_activity_summary_kind = "epoch_mean"
+        trial_activity_summary_missing_response_policy = "drop_trial"
+        trial_activity_summary_source: dict[str, str] = {}
+        trial_activity_summary_label = "Epoch mean activity"
+        trial_activity_summary = getattr(data, "trial_activity_summary", None)
+        if trial_activity_summary is not None:
+            condition_a_trial_activity_summary_values = _read_feature_trial_2d(
+                trial_activity_summary,
+                "condition_a_values",
+            )
+            condition_b_trial_activity_summary_values = _read_feature_trial_2d(
+                trial_activity_summary,
+                "condition_b_values",
+            )
+            trial_activity_summary_kind = mat_str(
+                getattr(trial_activity_summary, "kind", None),
+                default=trial_activity_summary_kind,
+            )
+            trial_activity_summary_missing_response_policy = mat_str(
+                getattr(trial_activity_summary, "missing_response_policy", None),
+                default=trial_activity_summary_missing_response_policy,
+            )
+            trial_activity_summary_source_raw = mat_str(
+                getattr(trial_activity_summary, "source_json", None),
+                default="{}",
+            )
+            try:
+                loaded_summary_source = (
+                    json.loads(trial_activity_summary_source_raw)
+                    if trial_activity_summary_source_raw
+                    else {}
+                )
+                if isinstance(loaded_summary_source, dict):
+                    trial_activity_summary_source = {
+                        str(key): str(value)
+                        for key, value in loaded_summary_source.items()
+                    }
+            except json.JSONDecodeError:
+                trial_activity_summary_source = {}
+            trial_activity_summary_label = (
+                mat_str(
+                    getattr(trial_activity_summary, "label", None),
+                    default=trial_activity_summary_label,
+                )
+                or trial_activity_summary_label
+            )
+        else:
+            condition_a_trial_activity_summary_values = condition_a_epoch_means
+            condition_b_trial_activity_summary_values = condition_b_epoch_means
 
     return _RawSlopeStatsData(
         analysis_level=analysis_level,
@@ -1266,6 +1491,8 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
         condition_b_predictor_values=condition_b_predictor_values,
         condition_a_epoch_means=condition_a_epoch_means,
         condition_b_epoch_means=condition_b_epoch_means,
+        condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
+        condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
         binning_mode=binning_mode,
         window_ms=window_ms,
         n_bins=n_bins,
@@ -1276,6 +1503,12 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
         activity_zscore=activity_zscore,
         activity_baseline_tmin_s=activity_baseline_tmin_s,
         activity_baseline_tmax_s=activity_baseline_tmax_s,
+        trial_activity_summary_kind=trial_activity_summary_kind,
+        trial_activity_summary_missing_response_policy=(
+            trial_activity_summary_missing_response_policy
+        ),
+        trial_activity_summary_source=trial_activity_summary_source,
+        trial_activity_summary_label=trial_activity_summary_label,
         source_ieeg_files=source_ieeg_files,
         source_electrodes_files=source_electrodes_files,
     )

@@ -28,7 +28,7 @@ BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
 IEEG_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    "desc": "bgasm250",
+    "desc": "gammasm250",
 }
 
 SECONDARY_FILTERS = [
@@ -48,7 +48,7 @@ PARAMS = TrialSlopeStatsParams(
         "pleasant": {"scale": 1.0, "offset": 0.0},
         "unpleasant": {"scale": -1.0, "offset": 0.0},
     },
-    predictor_zscore="global",
+    predictor_zscore="none",
     activity_zscore="baseline",
     activity_baseline_tmin_s=-0.25,
     activity_baseline_tmax_s=-0.05,

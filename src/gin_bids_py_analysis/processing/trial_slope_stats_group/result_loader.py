@@ -196,6 +196,29 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
                 dataset_or_none(fh, "meta/activity_baseline_tmax_s"),
                 default=0.0,
             ),
+            "trial_activity_summary_kind": str_scalar(
+                dataset_or_none(fh, "meta/trial_activity_summary_kind"),
+                default="epoch_mean",
+            ),
+            "trial_activity_summary_missing_response_policy": str_scalar(
+                dataset_or_none(
+                    fh,
+                    "meta/trial_activity_summary_missing_response_policy",
+                ),
+                default="drop_trial",
+            ),
+            "trial_activity_summary_source_json": str_scalar(
+                dataset_or_none(fh, "meta/trial_activity_summary_source_json"),
+                default="{}",
+            ),
+            "trial_activity_summary_label": str_scalar(
+                dataset_or_none(fh, "meta/trial_activity_summary_label"),
+                default="Epoch mean activity",
+            ),
+            "scatter_aggregation": str_scalar(
+                dataset_or_none(fh, "meta/scatter_aggregation"),
+                default="trial_pool",
+            ),
         }
         for key in ("binning_mode", "window_ms", "n_bins", "effective_n_bins"):
             ds = dataset_or_none(fh, f"meta/{key}")
@@ -529,6 +552,26 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         "activity_baseline_tmax_s": mat_float(
             getattr(meta, "activity_baseline_tmax_s", None),
             default=0.0,
+        ),
+        "trial_activity_summary_kind": mat_str(
+            getattr(meta, "trial_activity_summary_kind", None),
+            default="epoch_mean",
+        ),
+        "trial_activity_summary_missing_response_policy": mat_str(
+            getattr(meta, "trial_activity_summary_missing_response_policy", None),
+            default="drop_trial",
+        ),
+        "trial_activity_summary_source_json": mat_str(
+            getattr(meta, "trial_activity_summary_source_json", None),
+            default="{}",
+        ),
+        "trial_activity_summary_label": mat_str(
+            getattr(meta, "trial_activity_summary_label", None),
+            default="Epoch mean activity",
+        ),
+        "scatter_aggregation": mat_str(
+            getattr(meta, "scatter_aggregation", None),
+            default="trial_pool",
         ),
     }
 
