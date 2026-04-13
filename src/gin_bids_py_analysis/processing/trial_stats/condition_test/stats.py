@@ -8,7 +8,6 @@ from scipy.stats import ttest_ind
 
 from gin_bids_py_analysis.processing.utils.epoching import (
     EpochExtractionResult,
-    build_time_axis_s,
     _sample_offsets,
 )
 from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
@@ -68,45 +67,6 @@ def compute_permuted_statistics(
         stats = ttest_ind(perm_a, perm_b, axis=0, equal_var=equal_var, nan_policy="omit")
         out[i] = np.asarray(stats.statistic, dtype=np.float32)
 
-    return out
-
-
-def compute_permutation_p_values(
-    observed_t_values: np.ndarray,
-    permuted_t_values: np.ndarray,
-) -> np.ndarray:
-    """Compute pointwise permutation p-values from a null-t distribution.
-
-    For each ``(channel, time)`` position, p-values use the conservative
-    ``(count + 1) / (n_perm + 1)`` convention where ``count`` is the number of
-    permuted ``|t|``-values greater than or equal to the observed ``|t|``.
-
-    Parameters
-    ----------
-    observed_t_values : shape ``(n_channels, n_times)``
-    permuted_t_values : shape ``(n_perm, n_channels, n_times)``
-
-    Returns
-    -------
-    p_values : float64 array, shape ``(n_channels, n_times)``
-        NaN where ``observed_t_values`` is NaN.
-    """
-    obs = np.asarray(observed_t_values, dtype=np.float64)
-    perm = np.asarray(permuted_t_values, dtype=np.float64)
-    n_perm = perm.shape[0]
-
-    out = np.full(obs.shape, np.nan, dtype=np.float64)
-    if n_perm == 0:
-        return out
-
-    finite_mask = np.isfinite(obs)
-    if not finite_mask.any():
-        return out
-
-    abs_obs = np.abs(obs)
-    abs_perm = np.abs(perm)  # (n_perm, n_channels, n_times)
-    count = np.sum(abs_perm >= abs_obs[np.newaxis, :, :], axis=0)
-    out[finite_mask] = ((count + 1) / (n_perm + 1))[finite_mask]
     return out
 
 
@@ -254,10 +214,8 @@ def compute_single_bin_channel_significance(
     epochs_b: np.ndarray,
     *,
     equal_var: bool = False,
-    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni", "permutation"] = "fdr_bh",
+    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni"] = "fdr_bh",
     significance_alpha: float = 0.05,
-    n_permutations: int = 0,
-    rng: "np.random.Generator | None" = None,
 ) -> np.ndarray:
     """Derive a per-channel significance flag by collapsing epochs to their temporal mean.
 
@@ -265,9 +223,6 @@ def compute_single_bin_channel_significance(
     axis.  A two-sample t-test is then run across trials for each channel (equivalent to
     running the full pipeline with ``n_bins=1``).  The same ``p_value_correction_method``
     that controls the main analysis is applied, but only across the channel dimension.
-
-    For ``'permutation'`` correction, a separate null distribution is built by shuffling
-    condition labels on the epoch-mean data using ``n_permutations`` iterations.
 
     Parameters
     ----------
@@ -279,12 +234,6 @@ def compute_single_bin_channel_significance(
         Multiple-comparisons correction applied across channels.
     significance_alpha:
         Threshold applied to corrected p-values.
-    n_permutations:
-        Number of permutation iterations used when ``p_value_correction_method='permutation'``.
-        Ignored for other correction methods.
-    rng:
-        NumPy random Generator.  Required when ``p_value_correction_method='permutation'`` and
-        ``n_permutations > 0``.
 
     Returns
     -------
@@ -313,30 +262,10 @@ def compute_single_bin_channel_significance(
     )
     p_raw_1d = p_raw_2d[:, 0]  # (n_channels,)
 
-    if p_value_correction_method == "permutation" and n_permutations > 0:
-        if rng is None:
-            rng = np.random.default_rng()
-        permuted = compute_permuted_statistics(
-            means_a,
-            means_b,
-            n_permutations,
-            rng,
-            equal_var=equal_var,
-        )  # (n_perm, n_channels, 1)
-        t_obs_2d, *_ = compute_condition_statistics(
-            means_a,
-            means_b,
-            n_channels=n_channels,
-            n_times=1,
-            equal_var=equal_var,
-        )
-        p_corrected_2d = compute_permutation_p_values(t_obs_2d, permuted)
-        p_corrected_1d = p_corrected_2d[:, 0]
-    else:
-        p_corrected_1d = correct_p_values(
-            p_raw_1d.reshape(1, n_channels),
-            method=p_value_correction_method,
-        )[0]
+    p_corrected_1d = correct_p_values(
+        p_raw_1d.reshape(1, n_channels),
+        method=p_value_correction_method,
+    )[0]
 
     return np.isfinite(p_corrected_1d) & (p_corrected_1d < significance_alpha)
 
@@ -389,6 +318,3 @@ def compute_duration_channel_significance(
     duration_ms = significant_count * dt_ms
 
     return duration_ms >= threshold_ms
-
-
-

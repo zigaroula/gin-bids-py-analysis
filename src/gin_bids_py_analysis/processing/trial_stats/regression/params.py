@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from ..params import BaseTrialStatsParams, BaseTrialStatsWriterParams
+from ..params import (
+    BaseTrialStatsParams,
+    BaseTrialStatsWriterParams,
+    TrialActivitySummaryAnnotationEventSource,
+    TrialActivitySummaryConfig,
+    TrialActivitySummaryTableColumnSource,
+)
 
 _VALID_ACTIVITY_ZSCORE = frozenset({"none", "baseline", "across_trials"})
 _VALID_PVALUE_METHODS = frozenset({"none", "fdr_bh", "bonferroni"})
@@ -26,95 +32,6 @@ class PredictorAffineTransform(BaseModel):
         if not float("-inf") < float(value) < float("inf"):
             raise ValueError("Predictor transform values must be finite.")
         return float(value)
-
-
-class TrialActivitySummaryTableColumnSource(BaseModel):
-    """Resolve response timing from a trial metadata column."""
-
-    source: Literal["table_column"] = Field(default="table_column")
-    column: str = Field(
-        description="Resolved-trial metadata column containing response timing."
-    )
-    units: Literal["s", "ms"] = Field(
-        default="s",
-        description="Units used by the response timing column.",
-    )
-
-    @field_validator("column", mode="before")
-    @classmethod
-    def _validate_column(cls, value: object) -> str:
-        cleaned = str(value).strip()
-        if not cleaned:
-            raise ValueError("trial_activity_summary.response.column must be non-empty.")
-        return cleaned
-
-
-class TrialActivitySummaryAnnotationEventSource(BaseModel):
-    """Resolve response timing from annotations in the raw recording."""
-
-    source: Literal["annotation_event_code"] = Field(default="annotation_event_code")
-    event_code: str = Field(
-        description="Annotation event code identifying the response event."
-    )
-    occurrence: Literal["first_after_anchor"] = Field(
-        default="first_after_anchor",
-        description=(
-            "Response event selection policy. Only 'first_after_anchor' is "
-            "currently supported."
-        ),
-    )
-
-    @field_validator("event_code", mode="before")
-    @classmethod
-    def _validate_event_code(cls, value: object) -> str:
-        cleaned = str(value).strip()
-        if not cleaned:
-            raise ValueError(
-                "trial_activity_summary.response.event_code must be non-empty."
-            )
-        return cleaned
-
-
-TrialActivitySummaryResponseSource = Annotated[
-    TrialActivitySummaryTableColumnSource | TrialActivitySummaryAnnotationEventSource,
-    Field(discriminator="source"),
-]
-
-
-class TrialActivitySummaryConfig(BaseModel):
-    """Configuration for the per-trial activity summary used by scatter plots."""
-
-    kind: Literal["epoch_mean", "anchor_to_response_mean"] = Field(
-        default="epoch_mean",
-        description=(
-            "Summary computed for each trial and feature. 'epoch_mean' averages the "
-            "whole epoched window. 'anchor_to_response_mean' averages from t=0 to "
-            "a response boundary resolved from either a trial metadata column or an "
-            "annotation event code."
-        ),
-    )
-    missing_response_policy: Literal["clamp_to_epoch", "drop_trial"] = Field(
-        default="clamp_to_epoch",
-        description=(
-            "Policy applied when the resolved response boundary falls outside the "
-            "epoched window or cannot produce a valid averaging interval."
-        ),
-    )
-    response: TrialActivitySummaryResponseSource | None = Field(
-        default=None,
-        description=(
-            "Response-boundary source used when kind='anchor_to_response_mean'."
-        ),
-    )
-
-    @model_validator(mode="after")
-    def _validate_response(self) -> "TrialActivitySummaryConfig":
-        if self.kind == "anchor_to_response_mean" and self.response is None:
-            raise ValueError(
-                "trial_activity_summary.response must be provided when "
-                "kind='anchor_to_response_mean'."
-            )
-        return self
 
 
 class EpochCleaningConfig(BaseModel):
@@ -212,13 +129,6 @@ class RegressionParams(BaseTrialStatsParams):
             "Predictor z-score mode applied within each condition after the affine transform."
         ),
     )
-    trial_activity_summary: TrialActivitySummaryConfig = Field(
-        default_factory=TrialActivitySummaryConfig,
-        description=(
-            "Per-trial activity summary stored in the result and consumed by the "
-            "channel-level scatter plot."
-        ),
-    )
     epoch_cleaning: EpochCleaningConfig = Field(
         default_factory=EpochCleaningConfig,
         description=(
@@ -282,23 +192,6 @@ class RegressionParams(BaseTrialStatsParams):
                 transform_dict["offset"] = float(raw_transform["offset"])
             cleaned[condition] = transform_dict
         return cleaned
-
-    @field_validator("trial_activity_summary", mode="before")
-    @classmethod
-    def _coerce_trial_activity_summary(
-        cls,
-        value: object,
-    ) -> TrialActivitySummaryConfig | dict[str, object]:
-        if value in (None, ""):
-            return {}
-        if isinstance(value, TrialActivitySummaryConfig):
-            return value
-        if not isinstance(value, dict):
-            raise ValueError(
-                "trial_activity_summary must be a mapping shaped like "
-                "{'kind': 'epoch_mean' | 'anchor_to_response_mean', ...}."
-            )
-        return value
 
     @model_validator(mode="after")
     def _validate_regression(self) -> "RegressionParams":

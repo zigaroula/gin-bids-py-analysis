@@ -404,3 +404,60 @@ def test_writer_hdf5_channel_significant_mask_absent_when_none(
     loaded = load_condition_test_result(output_path)
     assert loaded.channel_significant_mask is None
 
+
+def test_writer_round_trips_trial_activity_summary_for_condition_test(
+    tmp_path: Path,
+) -> None:
+    from gin_bids_py_analysis.processing.trial_stats import load_condition_test_result
+
+    result = _make_minimal_result(tmp_path, channel_significant_mask=None)
+    result.trial_activity_summary_kind = "anchor_to_response_mean"
+    result.trial_activity_summary_missing_response_policy = "clamp_to_epoch"
+    result.trial_activity_summary_source = {
+        "source": "table_column",
+        "column": "rt_ms",
+        "units": "ms",
+    }
+    result.trial_activity_summary_label = "Mean activity (trigger to response)"
+    result.condition_a_trial_activity_summary_values = np.array(
+        [[2.0, np.nan]],
+        dtype=np.float64,
+    )
+    result.condition_b_trial_activity_summary_values = np.array(
+        [[3.0, 3.0]],
+        dtype=np.float64,
+    )
+    result.resolved_trials[0].metadata["trial_activity_summary_response_time_s"] = 0.2
+
+    writer = ConditionTestProcessingWriter(
+        ConditionTestWriterParams(bids_root=tmp_path)
+    )
+    output_path = writer.write(result)
+
+    with h5py.File(output_path, "r") as fh:
+        assert fh["meta"]["trial_activity_summary_kind"].asstr()[()] == "anchor_to_response_mean"
+        assert fh["trial_activity_summary"]["label"].asstr()[()] == "Mean activity (trigger to response)"
+        np.testing.assert_allclose(
+            fh["trial_activity_summary"]["condition_a_values"][:],
+            result.condition_a_trial_activity_summary_values,
+            equal_nan=True,
+        )
+        np.testing.assert_allclose(
+            fh["trials"]["trial_activity_summary_response_time_s"][:],
+            np.array([0.2], dtype=np.float64),
+        )
+
+    loaded = load_condition_test_result(output_path)
+    assert loaded.trial_activity_summary_kind == "anchor_to_response_mean"
+    assert loaded.trial_activity_summary_source["column"] == "rt_ms"
+    np.testing.assert_allclose(
+        loaded.condition_a_trial_activity_summary_values,
+        result.condition_a_trial_activity_summary_values,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        loaded.condition_b_trial_activity_summary_values,
+        result.condition_b_trial_activity_summary_values,
+        equal_nan=True,
+    )
+

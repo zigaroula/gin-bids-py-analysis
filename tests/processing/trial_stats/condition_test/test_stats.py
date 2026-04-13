@@ -8,7 +8,6 @@ from gin_bids_py_analysis.processing.trial_stats.condition_test.stats import (
     compute_bootstrap_difference_ci95,
     compute_condition_statistics,
     compute_duration_channel_significance,
-    compute_permutation_p_values,
     compute_permuted_statistics,
     compute_single_bin_channel_significance,
     extract_epochs,
@@ -127,7 +126,7 @@ def test_trial_stats_params_rejects_window_ms_and_n_bins_together() -> None:
         )
 
 
-# --- permutation tests ---
+# --- permutation-derived statistics ---
 
 
 def test_compute_permuted_statistics_shape_and_dtype() -> None:
@@ -151,34 +150,6 @@ def test_compute_permuted_statistics_empty_condition_returns_nan() -> None:
 
     assert out.shape == (10, 2, 5)
     assert np.all(np.isnan(out))
-
-
-def test_compute_permutation_p_values_perfect_separation() -> None:
-    """Observed t >> all permuted t: p should be the smallest non-zero value."""
-    rng = np.random.default_rng(7)
-    n_perm, n_ch, n_t = 100, 2, 4
-    # Permuted t-values all near zero
-    permuted = rng.standard_normal((n_perm, n_ch, n_t)).astype(np.float32) * 0.1
-    # Observed t-values far above any permuted value
-    observed = np.full((n_ch, n_t), 100.0, dtype=np.float64)
-
-    p = compute_permutation_p_values(observed, permuted)
-
-    assert p.shape == (n_ch, n_t)
-    assert np.allclose(p, 1.0 / (n_perm + 1))
-    assert np.all(p > 0.0)
-
-
-def test_compute_permutation_p_values_preserves_nan() -> None:
-    rng = np.random.default_rng(3)
-    permuted = rng.standard_normal((50, 1, 3)).astype(np.float32)
-    observed = np.array([[1.0, np.nan, 2.0]])
-
-    p = compute_permutation_p_values(observed, permuted)
-
-    assert np.isnan(p[0, 1])
-    assert np.isfinite(p[0, 0])
-    assert np.isfinite(p[0, 2])
 
 
 def test_bootstrap_difference_ci95_is_deterministic_with_seed() -> None:
@@ -221,14 +192,13 @@ def test_bootstrap_difference_ci95_returns_nan_when_trials_insufficient() -> Non
     assert np.all(np.isnan(high))
 
 
-def test_trial_stats_params_rejects_permutation_with_zero_n_permutations() -> None:
-    with pytest.raises(ValueError, match="n_permutations"):
+def test_trial_stats_params_rejects_permutation_correction_method() -> None:
+    with pytest.raises(ValueError, match="p_value_correction_method"):
         ConditionTestParams(
             anchor_event_codes=["10"],
             tmin_s=0.0,
             tmax_s=0.1,
             p_value_correction_method="permutation",
-            n_permutations=0,
         )
 
 
@@ -464,30 +434,6 @@ def test_compute_single_bin_channel_significance_bonferroni_correction() -> None
     )
 
     assert mask.shape == (n_channels,)
-    assert mask[0] is np.bool_(True)
-
-
-def test_compute_single_bin_channel_significance_permutation_mode() -> None:
-    rng = np.random.default_rng(42)
-    n_trials, n_channels, n_times = 10, 2, 4
-    epochs_a = np.zeros((n_trials, n_channels, n_times), dtype=np.float32)
-    epochs_b = np.zeros((n_trials, n_channels, n_times), dtype=np.float32)
-    # Large, consistent difference on channel 0; add tiny noise so std != 0
-    noise = rng.standard_normal((n_trials, 1, n_times)).astype(np.float32) * 0.01
-    epochs_a[:, 0:1, :] = 50.0 + noise
-    epochs_b[:, 0:1, :] = 0.0 + noise
-
-    mask = compute_single_bin_channel_significance(
-        epochs_a,
-        epochs_b,
-        p_value_correction_method="permutation",
-        significance_alpha=0.05,
-        n_permutations=200,
-        rng=np.random.default_rng(0),
-    )
-
-    assert mask.shape == (n_channels,)
-    assert mask.dtype == bool
     assert mask[0] is np.bool_(True)
 
 

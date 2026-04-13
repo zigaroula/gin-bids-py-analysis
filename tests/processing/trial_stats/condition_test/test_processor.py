@@ -84,6 +84,27 @@ class _AlternatingResolver:
         ]
 
 
+class _AlternatingResolverWithMetadata:
+    def __init__(self, metadata_rows: list[dict[str, object]]) -> None:
+        self._metadata_rows = metadata_rows
+
+    def resolve_trials(self, group, ieeg_file, anchor_events):
+        del group
+        labels = ["accepted", "rejected", "accepted", "rejected"]
+        return [
+            ResolvedTrial(
+                source_file=ieeg_file,
+                anchor_event_index=index,
+                anchor_event_code=event.code,
+                anchor_onset_s=event.onset_s,
+                anchor_duration_s=event.duration_s,
+                label=labels[index],
+                metadata=dict(self._metadata_rows[index]),
+            )
+            for index, event in enumerate(anchor_events)
+        ]
+
+
 def test_process_group_pools_multiple_ieeg_files_and_sets_shared_output_entities(
     tmp_path: Path,
 ) -> None:
@@ -155,6 +176,127 @@ def test_process_group_pools_multiple_ieeg_files_and_sets_shared_output_entities
     assert result.stats_valid is True
     assert np.all(result.mean_difference > 0)
     assert len(result.source_ieeg_files) == 2
+
+
+def test_process_group_exposes_epoch_mean_trial_activity_summary(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 60), dtype=np.float32)
+    data[:, 10:13] = 6.0
+    data[:, 20:23] = 1.0
+    data[:, 30:33] = 8.0
+    data[:, 40:43] = 2.0
+    annotations = Annotations(
+        onset=[1.0, 2.0, 3.0, 4.0],
+        duration=[0.0] * 4,
+        description=["Stimulus/S  10"] * 4,
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    result = ConditionTestProcessing(
+        ConditionTestParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            p_value_correction_method="none",
+        ),
+        resolver=_AlternatingResolver(),
+    ).process_group(BIDSFileGroup(primary=ieeg_file))
+
+    np.testing.assert_allclose(
+        result.condition_a_trial_activity_summary_values,
+        np.array([[6.0, 8.0]], dtype=np.float64),
+    )
+    np.testing.assert_allclose(
+        result.condition_b_trial_activity_summary_values,
+        np.array([[1.0, 2.0]], dtype=np.float64),
+    )
+    assert result.trial_activity_summary_kind == "epoch_mean"
+    assert result.trial_activity_summary_label == "Epoch mean activity"
+
+
+def test_process_group_supports_anchor_to_response_trial_activity_summary_for_condition_test(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 80), dtype=np.float32)
+    for onset in [1.0, 2.0, 3.0, 4.0]:
+        start = int(onset * sfreq)
+        data[0, start : start + 5] = np.array([1, 2, 3, 4, 5], dtype=np.float32)
+    annotations = Annotations(
+        onset=[1.0, 2.0, 3.0, 4.0],
+        duration=[0.0] * 4,
+        description=["Stimulus/S  10"] * 4,
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    metadata_rows = [
+        {"rt_ms": 200},
+        {"rt_ms": 400},
+        {"rt_ms": -100},
+        {"rt_ms": 600},
+    ]
+    result = ConditionTestProcessing(
+        ConditionTestParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.4,
+            condition_a="accepted",
+            condition_b="rejected",
+            p_value_correction_method="none",
+            trial_activity_summary={
+                "kind": "anchor_to_response_mean",
+                "response": {
+                    "source": "table_column",
+                    "column": "rt_ms",
+                    "units": "ms",
+                },
+            },
+        ),
+        resolver=_AlternatingResolverWithMetadata(metadata_rows),
+    ).process_group(BIDSFileGroup(primary=ieeg_file))
+
+    np.testing.assert_allclose(
+        result.condition_a_trial_activity_summary_values,
+        np.array([[2.0, np.nan]], dtype=np.float64),
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        result.condition_b_trial_activity_summary_values,
+        np.array([[3.0, 3.0]], dtype=np.float64),
+        equal_nan=True,
+    )
+    assert result.trial_activity_summary_kind == "anchor_to_response_mean"
+    assert result.trial_activity_summary_source["column"] == "rt_ms"
 
 
 def test_process_group_aggregates_channels_by_atlas_region(

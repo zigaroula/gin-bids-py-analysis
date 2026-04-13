@@ -73,12 +73,14 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
             writer = csv.writer(fh, delimiter="\t")
             writer.writerow(
                 self._trial_table_prefix_header()
+                + self._trial_table_shared_extra_header()
                 + self._trial_table_extra_header()
                 + self._trial_table_suffix_header()
             )
             for trial in result.resolved_trials:
                 writer.writerow(
                     self._trial_table_prefix_row(trial)
+                    + self._trial_table_shared_extra_row(trial)
                     + self._trial_table_extra_row(trial)
                     + self._trial_table_suffix_row(trial)
                 )
@@ -109,6 +111,15 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
     def _trial_table_extra_row(self, trial: object) -> list[object]:
         del trial
         return []
+
+    def _trial_table_shared_extra_header(self) -> list[str]:
+        return ["trial_activity_summary_response_time_s"]
+
+    def _trial_table_shared_extra_row(self, trial: object) -> list[object]:
+        metadata = getattr(trial, "metadata", {})
+        if not isinstance(metadata, dict):
+            return [float("nan")]
+        return [_to_float_or_nan(metadata.get("trial_activity_summary_response_time_s"))]
 
     def _trial_table_suffix_header(self) -> list[str]:
         return [
@@ -229,6 +240,30 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
             data=bool(result.activity_baseline_remove_outlier_trial_means),
         )
         meta_grp.create_dataset(
+            "trial_activity_summary_kind",
+            data=str(result.trial_activity_summary_kind),
+            dtype=str_dtype,
+        )
+        meta_grp.create_dataset(
+            "trial_activity_summary_missing_response_policy",
+            data=str(result.trial_activity_summary_missing_response_policy),
+            dtype=str_dtype,
+        )
+        meta_grp.create_dataset(
+            "trial_activity_summary_source_json",
+            data=json.dumps(
+                result.trial_activity_summary_source,
+                sort_keys=True,
+                ensure_ascii=True,
+            ),
+            dtype=str_dtype,
+        )
+        meta_grp.create_dataset(
+            "trial_activity_summary_label",
+            data=str(result.trial_activity_summary_label),
+            dtype=str_dtype,
+        )
+        meta_grp.create_dataset(
             "window_samples",
             data=int(result.metadata.get("window_samples", 0)),
         )
@@ -322,6 +357,16 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
             ),
             dtype=str_dtype,
         )
+        trial_grp.create_dataset(
+            "trial_activity_summary_response_time_s",
+            data=np.array(
+                [
+                    _to_float_or_nan(trial.metadata.get("trial_activity_summary_response_time_s"))
+                    for trial in result.resolved_trials
+                ],
+                dtype=np.float64,
+            ),
+        )
         self._write_hdf5_trial_extra(trial_grp, result, str_dtype)
 
         if result.condition_a_epochs.ndim == 3 and self.params.include_epochs:
@@ -342,6 +387,37 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
             epochs_grp.create_dataset(
                 "time_s",
                 data=np.asarray(result.time_axis_s, dtype=np.float64),
+            )
+
+        summary_a = np.asarray(result.condition_a_trial_activity_summary_values, dtype=np.float64)
+        summary_b = np.asarray(result.condition_b_trial_activity_summary_values, dtype=np.float64)
+        if summary_a.ndim == 2 and summary_b.ndim == 2:
+            summary_grp = fh.create_group("trial_activity_summary")
+            summary_grp.create_dataset("condition_a_values", data=summary_a)
+            summary_grp.create_dataset("condition_b_values", data=summary_b)
+            summary_grp.create_dataset(
+                "kind",
+                data=str(result.trial_activity_summary_kind),
+                dtype=str_dtype,
+            )
+            summary_grp.create_dataset(
+                "missing_response_policy",
+                data=str(result.trial_activity_summary_missing_response_policy),
+                dtype=str_dtype,
+            )
+            summary_grp.create_dataset(
+                "source_json",
+                data=json.dumps(
+                    result.trial_activity_summary_source,
+                    sort_keys=True,
+                    ensure_ascii=True,
+                ),
+                dtype=str_dtype,
+            )
+            summary_grp.create_dataset(
+                "label",
+                data=str(result.trial_activity_summary_label),
+                dtype=str_dtype,
             )
 
         prov_grp = fh.create_group("provenance")
@@ -410,6 +486,18 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
             "activity_baseline_remove_outlier_trial_means": bool(
                 result.activity_baseline_remove_outlier_trial_means
             ),
+            "trial_activity_summary_kind": np.str_(result.trial_activity_summary_kind),
+            "trial_activity_summary_missing_response_policy": np.str_(
+                result.trial_activity_summary_missing_response_policy
+            ),
+            "trial_activity_summary_source_json": np.str_(
+                json.dumps(
+                    result.trial_activity_summary_source,
+                    sort_keys=True,
+                    ensure_ascii=True,
+                )
+            ),
+            "trial_activity_summary_label": np.str_(result.trial_activity_summary_label),
             "window_samples": int(result.metadata.get("window_samples", 0)),
             "effective_n_bins": int(result.metadata.get("effective_n_bins", len(result.time_axis_s))),
             "binning_mode": str(
@@ -459,6 +547,13 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
                 ],
                 dtype=object,
             ),
+            "trial_activity_summary_response_time_s": np.array(
+                [
+                    _to_float_or_nan(trial.metadata.get("trial_activity_summary_response_time_s"))
+                    for trial in result.resolved_trials
+                ],
+                dtype=np.float64,
+            ),
         }
         trials_fields.update(self._build_matlab_trial_extra(result))
 
@@ -499,6 +594,28 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
             "meta": make_struct(**meta_fields),
             "trials": make_struct(**trials_fields),
             "epochs": epochs_struct,
+            "trial_activity_summary": make_struct(
+                condition_a_values=np.asarray(
+                    result.condition_a_trial_activity_summary_values,
+                    dtype=np.float64,
+                ),
+                condition_b_values=np.asarray(
+                    result.condition_b_trial_activity_summary_values,
+                    dtype=np.float64,
+                ),
+                kind=np.str_(result.trial_activity_summary_kind),
+                missing_response_policy=np.str_(
+                    result.trial_activity_summary_missing_response_policy
+                ),
+                source_json=np.str_(
+                    json.dumps(
+                        result.trial_activity_summary_source,
+                        sort_keys=True,
+                        ensure_ascii=True,
+                    )
+                ),
+                label=np.str_(result.trial_activity_summary_label),
+            ),
             "provenance": make_struct(
                 source_ieeg_files=np.array(result.source_ieeg_files, dtype=object),
                 source_table_files=np.array(result.source_table_files, dtype=object),
@@ -571,3 +688,13 @@ def _condition_inputs_json(trial: object) -> str:
     metadata = getattr(trial, "metadata", {})
     value = metadata.get("condition_inputs", {}) if isinstance(metadata, dict) else {}
     return json.dumps(value, sort_keys=True, ensure_ascii=True, default=str)
+
+
+def _to_float_or_nan(value: object) -> float:
+    if value is None:
+        return float("nan")
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return float("nan")
+    return out if np.isfinite(out) else float("nan")

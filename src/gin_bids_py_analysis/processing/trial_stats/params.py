@@ -1,10 +1,99 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from gin_bids_py_analysis.processing.base import BaseProcessingParams, BaseWriterParams
+
+
+class TrialActivitySummaryTableColumnSource(BaseModel):
+    """Resolve response timing from a trial metadata column."""
+
+    source: Literal["table_column"] = Field(default="table_column")
+    column: str = Field(
+        description="Resolved-trial metadata column containing response timing."
+    )
+    units: Literal["s", "ms"] = Field(
+        default="s",
+        description="Units used by the response timing column.",
+    )
+
+    @field_validator("column", mode="before")
+    @classmethod
+    def _validate_column(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("trial_activity_summary.response.column must be non-empty.")
+        return cleaned
+
+
+class TrialActivitySummaryAnnotationEventSource(BaseModel):
+    """Resolve response timing from annotations in the raw recording."""
+
+    source: Literal["annotation_event_code"] = Field(default="annotation_event_code")
+    event_code: str = Field(
+        description="Annotation event code identifying the response event."
+    )
+    occurrence: Literal["first_after_anchor"] = Field(
+        default="first_after_anchor",
+        description=(
+            "Response event selection policy. Only 'first_after_anchor' is "
+            "currently supported."
+        ),
+    )
+
+    @field_validator("event_code", mode="before")
+    @classmethod
+    def _validate_event_code(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError(
+                "trial_activity_summary.response.event_code must be non-empty."
+            )
+        return cleaned
+
+
+TrialActivitySummaryResponseSource = Annotated[
+    TrialActivitySummaryTableColumnSource | TrialActivitySummaryAnnotationEventSource,
+    Field(discriminator="source"),
+]
+
+
+class TrialActivitySummaryConfig(BaseModel):
+    """Configuration for the per-trial activity summary saved with results."""
+
+    kind: Literal["epoch_mean", "anchor_to_response_mean"] = Field(
+        default="epoch_mean",
+        description=(
+            "Summary computed for each trial and feature. 'epoch_mean' averages the "
+            "whole epoched window. 'anchor_to_response_mean' averages from t=0 to "
+            "a response boundary resolved from either a trial metadata column or an "
+            "annotation event code."
+        ),
+    )
+    missing_response_policy: Literal["clamp_to_epoch", "drop_trial"] = Field(
+        default="clamp_to_epoch",
+        description=(
+            "Policy applied when the resolved response boundary falls outside the "
+            "epoched window or cannot produce a valid averaging interval."
+        ),
+    )
+    response: TrialActivitySummaryResponseSource | None = Field(
+        default=None,
+        description=(
+            "Response-boundary source used when kind='anchor_to_response_mean'."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _validate_response(self) -> "TrialActivitySummaryConfig":
+        if self.kind == "anchor_to_response_mean" and self.response is None:
+            raise ValueError(
+                "trial_activity_summary.response must be provided when "
+                "kind='anchor_to_response_mean'."
+            )
+        return self
 
 
 class BaseTrialStatsParams(BaseProcessingParams):
@@ -117,6 +206,13 @@ class BaseTrialStatsParams(BaseProcessingParams):
             "right boundary for anchor filtering."
         ),
     )
+    trial_activity_summary: TrialActivitySummaryConfig = Field(
+        default_factory=TrialActivitySummaryConfig,
+        description=(
+            "Per-trial activity summary computed from the kept epoched data and saved "
+            "in the subject-level result."
+        ),
+    )
 
     @field_validator("experiment_start_event_code", "experiment_end_event_code", mode="before")
     @classmethod
@@ -144,6 +240,23 @@ class BaseTrialStatsParams(BaseProcessingParams):
             cleaned = value.strip()
             return [cleaned] if cleaned else []
         return [str(item).strip() for item in value if str(item).strip()]
+
+    @field_validator("trial_activity_summary", mode="before")
+    @classmethod
+    def _coerce_trial_activity_summary(
+        cls,
+        value: object,
+    ) -> TrialActivitySummaryConfig | dict[str, object]:
+        if value in (None, ""):
+            return {}
+        if isinstance(value, TrialActivitySummaryConfig):
+            return value
+        if not isinstance(value, dict):
+            raise ValueError(
+                "trial_activity_summary must be a mapping shaped like "
+                "{'kind': 'epoch_mean' | 'anchor_to_response_mean', ...}."
+            )
+        return value
 
     @model_validator(mode="after")
     def _validate_common(self) -> "BaseTrialStatsParams":

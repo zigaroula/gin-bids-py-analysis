@@ -7,7 +7,7 @@ from pydantic import Field, field_validator, model_validator
 from ..params import BaseTrialStatsParams, BaseTrialStatsWriterParams
 
 _VALID_ACTIVITY_ZSCORE = frozenset({"none", "baseline"})
-_VALID_PVALUE_METHODS = frozenset({"none", "fdr_bh", "bonferroni", "permutation"})
+_VALID_PVALUE_METHODS = frozenset({"none", "fdr_bh", "bonferroni"})
 
 
 def _normalize_choice(value: object) -> str:
@@ -69,16 +69,12 @@ class ConditionTestParams(BaseTrialStatsParams):
         if cleaned not in _VALID_PVALUE_METHODS:
             raise ValueError(
                 "p_value_correction_method must be one of "
-                "'none', 'fdr_bh', 'bonferroni', or 'permutation'."
+                "'none', 'fdr_bh', or 'bonferroni'."
             )
         return cleaned
 
     @model_validator(mode="after")
     def _validate_condition_test(self) -> "ConditionTestParams":
-        if self.p_value_correction_method == "permutation" and self.n_permutations == 0:
-            raise ValueError(
-                "p_value_correction_method='permutation' requires n_permutations > 0."
-            )
         return self
 
 

@@ -1,13 +1,15 @@
 """Regression subject-level trial statistics pipeline."""
 
+from ..params import (
+    TrialActivitySummaryAnnotationEventSource,
+    TrialActivitySummaryConfig,
+    TrialActivitySummaryTableColumnSource,
+)
 from .params import (
     EpochCleaningConfig,
     PredictorAffineTransform,
     RegressionParams,
     RegressionWriterParams,
-    TrialActivitySummaryAnnotationEventSource,
-    TrialActivitySummaryConfig,
-    TrialActivitySummaryTableColumnSource,
 )
 from .processor import RegressionProcessing
 from .result import RegressionProcessingResult

@@ -40,6 +40,16 @@ class BaseTrialStatsProcessingResult(BaseProcessingResult):
     activity_baseline_remove_outlier_trial_means: bool = False
     p_value_correction_method: str = "fdr_bh"
     significance_alpha: float = 0.05
+    trial_activity_summary_kind: str = "epoch_mean"
+    trial_activity_summary_missing_response_policy: str = "clamp_to_epoch"
+    trial_activity_summary_source: dict[str, str] = field(default_factory=dict)
+    trial_activity_summary_label: str = "Epoch mean activity"
     stats_valid: bool = False
     condition_a_epochs: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_epochs: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_a_trial_activity_summary_values: np.ndarray = field(
+        default_factory=lambda: np.array([])
+    )
+    condition_b_trial_activity_summary_values: np.ndarray = field(
+        default_factory=lambda: np.array([])
+    )

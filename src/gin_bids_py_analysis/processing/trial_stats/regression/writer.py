@@ -34,7 +34,6 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
             "predictor_value",
             "predictor_transform_scale",
             "predictor_transform_offset",
-            "trial_activity_summary_response_time_s",
         ]
 
     def _trial_table_extra_row(self, trial: object) -> list[object]:
@@ -46,7 +45,6 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
             _to_float_or_nan(metadata.get("predictor_value")),
             _to_float_or_nan(metadata.get("predictor_transform_scale")),
             _to_float_or_nan(metadata.get("predictor_transform_offset")),
-            _to_float_or_nan(metadata.get("trial_activity_summary_response_time_s")),
         ]
 
     def _write_hdf5_meta_extra(
@@ -69,30 +67,6 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
                 sort_keys=True,
                 ensure_ascii=True,
             ),
-            dtype=str_dtype,
-        )
-        meta_grp.create_dataset(
-            "trial_activity_summary_kind",
-            data=str(result.trial_activity_summary_kind),
-            dtype=str_dtype,
-        )
-        meta_grp.create_dataset(
-            "trial_activity_summary_missing_response_policy",
-            data=str(result.trial_activity_summary_missing_response_policy),
-            dtype=str_dtype,
-        )
-        meta_grp.create_dataset(
-            "trial_activity_summary_source_json",
-            data=json.dumps(
-                result.trial_activity_summary_source,
-                sort_keys=True,
-                ensure_ascii=True,
-            ),
-            dtype=str_dtype,
-        )
-        meta_grp.create_dataset(
-            "trial_activity_summary_label",
-            data=str(result.trial_activity_summary_label),
             dtype=str_dtype,
         )
         meta_grp.create_dataset("condition_a_stats_valid", data=bool(result.condition_a_stats_valid))
@@ -151,16 +125,6 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
             data=np.array(
                 [
                     _to_float_or_nan(trial.metadata.get("predictor_transform_offset"))
-                    for trial in result.resolved_trials
-                ],
-                dtype=np.float64,
-            ),
-        )
-        trial_grp.create_dataset(
-            "trial_activity_summary_response_time_s",
-            data=np.array(
-                [
-                    _to_float_or_nan(trial.metadata.get("trial_activity_summary_response_time_s"))
                     for trial in result.resolved_trials
                 ],
                 dtype=np.float64,
@@ -234,44 +198,6 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
                 data=result.condition_b_epoch_means.astype(np.float64),
             )
 
-        if (
-            result.condition_a_trial_activity_summary_values.ndim == 2
-            and result.condition_b_trial_activity_summary_values.ndim == 2
-        ):
-            summary_grp = fh.create_group("trial_activity_summary")
-            summary_grp.create_dataset(
-                "condition_a_values",
-                data=result.condition_a_trial_activity_summary_values.astype(np.float64),
-            )
-            summary_grp.create_dataset(
-                "condition_b_values",
-                data=result.condition_b_trial_activity_summary_values.astype(np.float64),
-            )
-            summary_grp.create_dataset(
-                "kind",
-                data=str(result.trial_activity_summary_kind),
-                dtype=str_dtype,
-            )
-            summary_grp.create_dataset(
-                "missing_response_policy",
-                data=str(result.trial_activity_summary_missing_response_policy),
-                dtype=str_dtype,
-            )
-            summary_grp.create_dataset(
-                "source_json",
-                data=json.dumps(
-                    result.trial_activity_summary_source,
-                    sort_keys=True,
-                    ensure_ascii=True,
-                ),
-                dtype=str_dtype,
-            )
-            summary_grp.create_dataset(
-                "label",
-                data=str(result.trial_activity_summary_label),
-                dtype=str_dtype,
-            )
-
     def _build_matlab_meta_extra(
         self,
         result: RegressionProcessingResult,
@@ -287,18 +213,6 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
                     ensure_ascii=True,
                 )
             ),
-            "trial_activity_summary_kind": np.str_(result.trial_activity_summary_kind),
-            "trial_activity_summary_missing_response_policy": np.str_(
-                result.trial_activity_summary_missing_response_policy
-            ),
-            "trial_activity_summary_source_json": np.str_(
-                json.dumps(
-                    result.trial_activity_summary_source,
-                    sort_keys=True,
-                    ensure_ascii=True,
-                )
-            ),
-            "trial_activity_summary_label": np.str_(result.trial_activity_summary_label),
             "condition_a_stats_valid": bool(result.condition_a_stats_valid),
             "condition_b_stats_valid": bool(result.condition_b_stats_valid),
         }
@@ -337,13 +251,6 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
             "predictor_transform_offset": np.array(
                 [
                     _to_float_or_nan(trial.metadata.get("predictor_transform_offset"))
-                    for trial in result.resolved_trials
-                ],
-                dtype=np.float64,
-            ),
-            "trial_activity_summary_response_time_s": np.array(
-                [
-                    _to_float_or_nan(trial.metadata.get("trial_activity_summary_response_time_s"))
                     for trial in result.resolved_trials
                 ],
                 dtype=np.float64,
@@ -399,20 +306,6 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
                 condition_b_values=np.asarray(result.condition_b_predictor_values, dtype=np.float64),
             ),
             "scatter": scatter_struct,
-            "trial_activity_summary": make_struct(
-                condition_a_values=result.condition_a_trial_activity_summary_values.astype(np.float64),
-                condition_b_values=result.condition_b_trial_activity_summary_values.astype(np.float64),
-                kind=np.str_(result.trial_activity_summary_kind),
-                missing_response_policy=np.str_(result.trial_activity_summary_missing_response_policy),
-                source_json=np.str_(
-                    json.dumps(
-                        result.trial_activity_summary_source,
-                        sort_keys=True,
-                        ensure_ascii=True,
-                    )
-                ),
-                label=np.str_(result.trial_activity_summary_label),
-            ),
             "means": make_struct(
                 **{
                     cond_a: result.condition_a_mean.astype(np.float64),

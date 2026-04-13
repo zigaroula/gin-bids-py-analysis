@@ -37,17 +37,7 @@ class RegressionProcessingResult(BaseTrialStatsProcessingResult):
     predictor: str = "predictor_value"
     predictor_zscore: str = "none"
     predictor_transform_by_condition: dict[str, dict[str, float]] = field(default_factory=dict)
-    trial_activity_summary_kind: str = "epoch_mean"
-    trial_activity_summary_missing_response_policy: str = "clamp_to_epoch"
-    trial_activity_summary_source: dict[str, str] = field(default_factory=dict)
-    trial_activity_summary_label: str = "Epoch mean activity"
     condition_a_stats_valid: bool = False
     condition_b_stats_valid: bool = False
-    condition_a_trial_activity_summary_values: np.ndarray = field(
-        default_factory=lambda: np.array([])
-    )
-    condition_b_trial_activity_summary_values: np.ndarray = field(
-        default_factory=lambda: np.array([])
-    )
     condition_a_epoch_means: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_epoch_means: np.ndarray = field(default_factory=lambda: np.array([]))

@@ -17,7 +17,6 @@ from .stats import (
     compute_bootstrap_difference_ci95,
     compute_condition_statistics,
     compute_duration_channel_significance,
-    compute_permutation_p_values,
     compute_permuted_statistics,
     compute_single_bin_channel_significance,
 )
@@ -142,30 +141,16 @@ class ConditionTestProcessing(BaseTrialStatsProcessing):
                 equal_var=self.params.equal_var,
             )
 
-        if self.params.p_value_correction_method == "permutation":
-            if permuted_t_values is not None:
-                p_values = compute_permutation_p_values(t_values, permuted_t_values)
-            else:
-                p_values = p_values_raw.copy()
-
         significant_mask = (p_values < self.params.significance_alpha) & np.isfinite(p_values)
 
         channel_significant_mask = None
         if self.params.channel_significance_mode == "single_bin" and stats_valid:
-            rng_csm = np.random.default_rng(self.params.permutation_seed)
-            n_perm_csm = (
-                self.params.n_permutations
-                if self.params.p_value_correction_method == "permutation"
-                else 0
-            )
             channel_significant_mask = compute_single_bin_channel_significance(
                 context.epochs_a,
                 context.epochs_b,
                 equal_var=self.params.equal_var,
                 p_value_correction_method=self.params.p_value_correction_method,
                 significance_alpha=self.params.significance_alpha,
-                n_permutations=n_perm_csm,
-                rng=rng_csm,
             )
         elif self.params.channel_significance_mode == "duration" and stats_valid:
             channel_significant_mask = compute_duration_channel_significance(

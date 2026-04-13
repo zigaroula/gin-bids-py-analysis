@@ -23,6 +23,29 @@ def test_base_params_normalize_common_fields() -> None:
     assert params.atlas_name == "dk"
     assert params.atlas_regions == ["insula"]
     assert params.n_bins == 0
+    assert params.trial_activity_summary.kind == "epoch_mean"
+
+
+def test_base_params_accepts_trial_activity_summary_payload() -> None:
+    params = BaseTrialStatsParams(
+        anchor_event_codes=["10"],
+        tmin_s=-1.0,
+        tmax_s=2.0,
+        trial_activity_summary={
+            "kind": "anchor_to_response_mean",
+            "missing_response_policy": "drop_trial",
+            "response": {
+                "source": "table_column",
+                "column": "rt_ms",
+                "units": "ms",
+            },
+        },
+    )
+
+    assert params.trial_activity_summary.kind == "anchor_to_response_mean"
+    assert params.trial_activity_summary.missing_response_policy == "drop_trial"
+    assert params.trial_activity_summary.response is not None
+    assert params.trial_activity_summary.response.source == "table_column"
 
 
 def test_base_params_reject_mutually_exclusive_binning() -> None:
@@ -36,7 +59,7 @@ def test_base_params_reject_mutually_exclusive_binning() -> None:
         )
 
 
-def test_condition_test_restricts_activity_zscore_and_permutations() -> None:
+def test_condition_test_restricts_activity_zscore_and_permutation_correction() -> None:
     with pytest.raises(ValueError, match="activity_zscore"):
         ConditionTestParams(
             anchor_event_codes=["10"],
@@ -45,14 +68,23 @@ def test_condition_test_restricts_activity_zscore_and_permutations() -> None:
             activity_zscore="across_trials",
         )
 
-    with pytest.raises(ValueError, match="n_permutations > 0"):
+    with pytest.raises(ValueError, match="p_value_correction_method"):
         ConditionTestParams(
             anchor_event_codes=["10"],
             tmin_s=-1.0,
             tmax_s=2.0,
             p_value_correction_method="permutation",
-            n_permutations=0,
         )
+
+    params = ConditionTestParams(
+        anchor_event_codes=["10"],
+        tmin_s=-1.0,
+        tmax_s=2.0,
+        p_value_correction_method="fdr_bh",
+        n_permutations=250,
+    )
+
+    assert params.n_permutations == 250
 
 
 def test_regression_accepts_across_trials_but_rejects_permutation_correction() -> None:

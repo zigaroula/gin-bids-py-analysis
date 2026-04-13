@@ -196,7 +196,7 @@ class ParamsPanel(QWidget):
 
         # p_value_correction_method
         self._correction = QComboBox()
-        for method in ("none", "fdr_bh", "bonferroni", "permutation"):
+        for method in ("none", "fdr_bh", "bonferroni"):
             self._correction.addItem(method)
         form.addRow("p-value correction", self._correction)
 
@@ -599,8 +599,6 @@ class ParamsPanel(QWidget):
         self._set_form_row_visible(self._equal_var, not is_slope)
         self._set_form_row_visible(self._sig_mode, not is_slope)
         self._set_form_row_visible(self._sig_duration_threshold, not is_slope)
-        if is_slope and self._correction.currentText() == "permutation":
-            self._correction.setCurrentText("fdr_bh")
         self._refresh_activity_scaling_options(is_slope=is_slope)
         self._on_activity_scaling_changed(self._activity_scaling.currentText())
         self._refresh_trial_activity_summary_controls()

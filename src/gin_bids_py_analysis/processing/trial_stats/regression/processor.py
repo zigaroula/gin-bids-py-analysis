@@ -6,7 +6,6 @@ from dataclasses import replace
 import json
 
 import numpy as np
-from mne import Annotations
 from mne.io import BaseRaw
 
 from gin_bids_py_analysis.bids.file import BIDSFile
@@ -20,7 +19,6 @@ from gin_bids_py_analysis.processing.utils.epoch_quality import (
     reject_channels_by_trial_max_spread,
     reject_channels_by_trial_mean_spread,
 )
-from gin_bids_py_analysis.processing.utils.events import AnnotationEvent, parse_annotation_description
 from gin_bids_py_analysis.processing.utils.statistics import compute_condition_mean, compute_condition_sem
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
@@ -58,8 +56,6 @@ class RegressionProcessing(BaseTrialStatsProcessing):
             "predictor_b_raw": [],
             "predictor_a_transformed": [],
             "predictor_b_transformed": [],
-            "kept_trials_a": [],
-            "kept_trials_b": [],
             "excluded_channels": {},
             "excluded_trial_channel_pairs": {},
             "activity_a_zscore_valid": True,
@@ -72,10 +68,10 @@ class RegressionProcessing(BaseTrialStatsProcessing):
         group: BIDSFileGroup,
         ieeg_file: BIDSFile,
         raw: BaseRaw,
-        anchor_events: list[AnnotationEvent],
+        anchor_events: list[object],
         trials: list[ResolvedTrial],
     ) -> list[ResolvedTrial]:
-        del group, ieeg_file
+        del group, ieeg_file, raw, anchor_events
         normalized: list[ResolvedTrial] = []
         supported_labels = {self.params.condition_a, self.params.condition_b}
         predictor_key = self.params.predictor
@@ -144,11 +140,7 @@ class RegressionProcessing(BaseTrialStatsProcessing):
                 continue
             normalized.append(replace(trial, metadata=metadata))
 
-        return self._attach_trial_activity_summary_metadata(
-            raw_annotations=raw.annotations,
-            anchor_events=anchor_events,
-            trials=normalized,
-        )
+        return normalized
 
     def _on_kept_trial_epoch(
         self,
@@ -164,13 +156,11 @@ class RegressionProcessing(BaseTrialStatsProcessing):
             state["predictor_a_transformed"].append(
                 _to_float_or_nan(trial.metadata.get("predictor_transformed_value"))
             )
-            state["kept_trials_a"].append(trial)
         else:
             state["predictor_b_raw"].append(_to_float_or_nan(trial.metadata.get("predictor_raw_value")))
             state["predictor_b_transformed"].append(
                 _to_float_or_nan(trial.metadata.get("predictor_transformed_value"))
             )
-            state["kept_trials_b"].append(trial)
 
     def _prepare_epochs_before_activity_zscore(
         self,
@@ -312,11 +302,6 @@ class RegressionProcessing(BaseTrialStatsProcessing):
                 for condition, transform in self.params.predictor_transform_by_condition.items()
             },
             "epoch_cleaning": json.loads(self.params.epoch_cleaning.model_dump_json()),
-            "trial_activity_summary": json.loads(self.params.trial_activity_summary.model_dump_json()),
-            "trial_activity_summary_kind": self.params.trial_activity_summary.kind,
-            "trial_activity_summary_missing_response_policy": self.params.trial_activity_summary.missing_response_policy,
-            "trial_activity_summary_source": self._serialize_trial_activity_summary_source(),
-            "trial_activity_summary_label": self._trial_activity_summary_label(),
         }
 
     def _compute_and_build_result(
@@ -331,8 +316,8 @@ class RegressionProcessing(BaseTrialStatsProcessing):
         predictor_b_transformed_array = np.asarray(
             context.state["predictor_b_transformed"], dtype=np.float64
         )
-        kept_trials_a: list[ResolvedTrial] = list(context.state["kept_trials_a"])
-        kept_trials_b: list[ResolvedTrial] = list(context.state["kept_trials_b"])
+        kept_trials_a = list(context.kept_trials_a)
+        kept_trials_b = list(context.kept_trials_b)
 
         n_features = len(context.feature_names)
         n_times = len(context.time_axis_eval)
@@ -426,22 +411,6 @@ class RegressionProcessing(BaseTrialStatsProcessing):
 
         condition_a_epoch_means = self._compute_epoch_means(context.epochs_a, n_features)
         condition_b_epoch_means = self._compute_epoch_means(context.epochs_b, n_features)
-        condition_a_trial_activity_summary_values = self._compute_trial_activity_summary_values(
-            epochs=context.epochs_a,
-            time_axis_s=context.time_axis_eval,
-            trials=kept_trials_a,
-            fallback_epoch_means=condition_a_epoch_means,
-            n_features=n_features,
-        )
-        condition_b_trial_activity_summary_values = self._compute_trial_activity_summary_values(
-            epochs=context.epochs_b,
-            time_axis_s=context.time_axis_eval,
-            trials=kept_trials_b,
-            fallback_epoch_means=condition_b_epoch_means,
-            n_features=n_features,
-        )
-        trial_activity_summary_source = self._serialize_trial_activity_summary_source()
-        trial_activity_summary_label = self._trial_activity_summary_label()
 
         return RegressionProcessingResult(
             **self._build_common_result_kwargs(context),
@@ -481,15 +450,9 @@ class RegressionProcessing(BaseTrialStatsProcessing):
                 }
                 for condition, transform in self.params.predictor_transform_by_condition.items()
             },
-            trial_activity_summary_kind=self.params.trial_activity_summary.kind,
-            trial_activity_summary_missing_response_policy=self.params.trial_activity_summary.missing_response_policy,
-            trial_activity_summary_source=trial_activity_summary_source,
-            trial_activity_summary_label=trial_activity_summary_label,
             condition_a_stats_valid=condition_a_stats_valid,
             condition_b_stats_valid=condition_b_stats_valid,
             stats_valid=bool(condition_a_stats_valid or condition_b_stats_valid),
-            condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
-            condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
             condition_a_epoch_means=condition_a_epoch_means,
             condition_b_epoch_means=condition_b_epoch_means,
         )
@@ -512,169 +475,6 @@ class RegressionProcessing(BaseTrialStatsProcessing):
     ) -> None:
         for trial, value in zip(trials, np.asarray(predictor_values, dtype=np.float64).ravel()):
             trial.metadata["predictor_value"] = float(value) if np.isfinite(value) else np.nan
-
-    def _attach_trial_activity_summary_metadata(
-        self,
-        *,
-        raw_annotations: Annotations,
-        anchor_events: list[AnnotationEvent],
-        trials: list[ResolvedTrial],
-    ) -> list[ResolvedTrial]:
-        if self.params.trial_activity_summary.kind != "anchor_to_response_mean":
-            return trials
-
-        response_source = self.params.trial_activity_summary.response
-        if response_source is None:
-            return trials
-
-        if response_source.source == "table_column":
-            response_times_s = self._response_times_from_table_column(
-                trials,
-                column=response_source.column,
-                units=response_source.units,
-            )
-        else:
-            response_times_s = self._response_times_from_annotations(
-                raw_annotations,
-                anchor_events,
-                event_code=response_source.event_code,
-            )
-
-        updated_trials: list[ResolvedTrial] = []
-        for trial, response_time_s in zip(trials, response_times_s):
-            metadata = dict(trial.metadata)
-            metadata["trial_activity_summary_response_time_s"] = (
-                float(response_time_s) if np.isfinite(response_time_s) else np.nan
-            )
-            updated_trials.append(replace(trial, metadata=metadata))
-        return updated_trials
-
-    def _response_times_from_table_column(
-        self,
-        trials: list[ResolvedTrial],
-        *,
-        column: str,
-        units: str,
-    ) -> np.ndarray:
-        scale = 1.0 if units == "s" else 0.001
-        response_times = np.full((len(trials),), np.nan, dtype=np.float64)
-        for idx, trial in enumerate(trials):
-            value = _to_float_or_nan(trial.metadata.get(column))
-            if np.isfinite(value):
-                response_times[idx] = float(value) * scale
-        return response_times
-
-    def _response_times_from_annotations(
-        self,
-        raw_annotations: Annotations,
-        anchor_events: list[AnnotationEvent],
-        *,
-        event_code: str,
-    ) -> np.ndarray:
-        response_times = np.full((len(anchor_events),), np.nan, dtype=np.float64)
-        if not anchor_events:
-            return response_times
-
-        target = str(event_code).strip()
-        if not target:
-            return response_times
-
-        response_onsets_s: list[float] = []
-        for annotation in raw_annotations:
-            onset_s = float(annotation["onset"])
-            description = str(annotation["description"])
-            if _annotation_matches_event_code(description, target):
-                response_onsets_s.append(onset_s)
-        if not response_onsets_s:
-            return response_times
-
-        response_onsets = np.asarray(sorted(response_onsets_s), dtype=np.float64)
-        anchor_onsets = np.asarray([event.onset_s for event in anchor_events], dtype=np.float64)
-
-        for idx, anchor_onset_s in enumerate(anchor_onsets):
-            next_anchor_onset_s = (
-                float(anchor_onsets[idx + 1]) if idx + 1 < anchor_onsets.size else float("inf")
-            )
-            insert_at = int(np.searchsorted(response_onsets, anchor_onset_s, side="right"))
-            if insert_at >= response_onsets.size:
-                continue
-            response_onset_s = float(response_onsets[insert_at])
-            if response_onset_s >= next_anchor_onset_s:
-                continue
-            response_times[idx] = response_onset_s - float(anchor_onset_s)
-        return response_times
-
-    def _compute_epoch_means(
-        self,
-        epochs: np.ndarray,
-        n_features: int,
-    ) -> np.ndarray:
-        if epochs.ndim == 3 and epochs.size > 0:
-            return epochs.mean(axis=2).T.astype(np.float64)
-        return np.empty((n_features, 0), dtype=np.float64)
-
-    def _compute_trial_activity_summary_values(
-        self,
-        *,
-        epochs: np.ndarray,
-        time_axis_s: np.ndarray,
-        trials: list[ResolvedTrial],
-        fallback_epoch_means: np.ndarray,
-        n_features: int,
-    ) -> np.ndarray:
-        if self.params.trial_activity_summary.kind == "epoch_mean":
-            return np.asarray(fallback_epoch_means, dtype=np.float64)
-
-        if epochs.ndim != 3 or epochs.size == 0:
-            return np.empty((n_features, 0), dtype=np.float64)
-
-        summary = np.full((epochs.shape[0], n_features), np.nan, dtype=np.float64)
-        time_axis = np.asarray(time_axis_s, dtype=np.float64).ravel()
-        summary_window_start_s = 0.0
-        summary_window_end_s = float(self.params.tmax_s)
-        boundary_tol_s = 1e-12
-        missing_response_policy = (
-            str(self.params.trial_activity_summary.missing_response_policy).strip().lower()
-        )
-
-        for trial_idx, trial in enumerate(trials):
-            response_time_s = _to_float_or_nan(
-                trial.metadata.get("trial_activity_summary_response_time_s")
-            )
-            if not np.isfinite(response_time_s):
-                continue
-            if response_time_s <= summary_window_start_s:
-                continue
-            if response_time_s > summary_window_end_s:
-                if missing_response_policy == "clamp_to_epoch":
-                    response_time_s = summary_window_end_s
-                else:
-                    continue
-            time_mask = (
-                (time_axis >= summary_window_start_s - boundary_tol_s)
-                & (time_axis <= response_time_s + boundary_tol_s)
-            )
-            if not np.any(time_mask):
-                continue
-            summary[trial_idx, :] = np.nanmean(
-                epochs[trial_idx][:, time_mask],
-                axis=1,
-                dtype=np.float64,
-            )
-
-        return summary.T.astype(np.float64)
-
-    def _serialize_trial_activity_summary_source(self) -> dict[str, str]:
-        response_source = self.params.trial_activity_summary.response
-        if response_source is None:
-            return {}
-        serialized = response_source.model_dump()
-        return {str(key): str(value) for key, value in serialized.items() if value is not None}
-
-    def _trial_activity_summary_label(self) -> str:
-        if self.params.trial_activity_summary.kind == "anchor_to_response_mean":
-            return "Mean activity (trigger to response)"
-        return "Epoch mean activity"
 
 
 def _to_float_or_nan(value: object) -> float:
@@ -703,19 +503,3 @@ def _apply_affine_transform(
         return float("nan")
     transformed = (float(scale) * float(value)) + float(offset)
     return transformed if np.isfinite(transformed) else float("nan")
-
-
-def _annotation_matches_event_code(description: str, event_code: str) -> bool:
-    full_description = str(description).strip()
-    target = str(event_code).strip()
-    if not full_description or not target:
-        return False
-    event_type, parsed_description, parsed_code = parse_annotation_description(full_description)
-    del event_type
-    candidates = {
-        full_description,
-        parsed_description.strip(),
-    }
-    if parsed_code is not None:
-        candidates.add(str(parsed_code).strip())
-    return target in candidates
