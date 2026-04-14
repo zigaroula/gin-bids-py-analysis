@@ -8,65 +8,9 @@ from gin_bids_py_analysis.bids.helpers import normalize_subject_value
 from gin_bids_py_analysis.processing.base import BaseProcessingParams, BaseWriterParams
 
 
-class TrialStatsGroupParams(BaseProcessingParams):
-    """Parameters for group-level ROI one-sample statistics on trial-stats outputs."""
+class BaseTrialStatsGroupParams(BaseProcessingParams):
+    """Shared parameter surface for group-level trial-statistics pipelines."""
 
-    source_metric: Literal[
-        "mean_difference",
-        "t_values",
-        "condition_a_mean",
-        "condition_b_mean",
-    ] = Field(
-        default="mean_difference",
-        description="Channel-level metric read from each trial_stats file and tested against 0.",
-    )
-    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni", "cluster_permutation"] = Field(
-        default="none",
-        description=(
-            "Multiple-comparisons correction across ROI x time tests. "
-            "'cluster_permutation' builds a null distribution of maximum temporal-cluster "
-            "t-sums by drawing from per-channel permuted t-values stored in each source "
-            "trial_stats file (requires those files to have been produced with "
-            "n_permutations > 0)."
-        ),
-    )
-    n_group_permutations: int = Field(
-        default=10000,
-        ge=1,
-        description=(
-            "Number of group-level null iterations when method='cluster_permutation'. "
-            "Ignored for all other correction methods."
-        ),
-    )
-    cluster_threshold_alpha: float = Field(
-        default=0.05,
-        gt=0.0,
-        lt=1.0,
-        description=(
-            "Significance threshold applied to the group one-sample t-test within each "
-            "null iteration to detect temporal clusters. "
-            "Used only when p_value_correction_method='cluster_permutation'."
-        ),
-    )
-    permutation_seed: int | None = Field(
-        default=None,
-        description=(
-            "Seed for the NumPy random generator used when building the cluster null "
-            "distribution. None selects a non-reproducible seed."
-        ),
-    )
-    cluster_permutation_method: Literal["custom", "mne"] = Field(
-        default="custom",
-        description=(
-            "Strategy for building the group-level cluster null distribution when "
-            "p_value_correction_method='cluster_permutation'. "
-            "'custom' samples from per-channel permuted t-value pools stored in each "
-            "source trial_stats file (requires those files to have been produced with "
-            "n_permutations > 0). "
-            "'mne' runs mne.stats.permutation_cluster_1samp_test directly on the "
-            "per-channel contribution timecourses."
-        ),
-    )
     significance_alpha: float = Field(
         default=0.05,
         gt=0.0,
@@ -148,18 +92,8 @@ class TrialStatsGroupParams(BaseProcessingParams):
                 cleaned[roi] = subject_map
         return cleaned
 
-    @field_validator("cluster_permutation_method", mode="before")
-    @classmethod
-    def _validate_cluster_method_rename(cls, value: object) -> object:
-        if value in {"hierarchical", "sign_flip"}:
-            raise ValueError(
-                "cluster_permutation_method values 'hierarchical' and 'sign_flip' were "
-                "renamed to 'custom' and 'mne'."
-            )
-        return value
-
     @model_validator(mode="after")
-    def _validate_roi_mode(self) -> "TrialStatsGroupParams":
+    def _validate_roi_mode(self) -> "BaseTrialStatsGroupParams":
         if self.atlas_name is not None:
             self.atlas_name = self.atlas_name.strip() or None
 
@@ -182,17 +116,17 @@ class TrialStatsGroupParams(BaseProcessingParams):
         return self
 
 
-class TrialStatsGroupWriterParams(BaseWriterParams):
-    """Writer configuration for group-level trial-stats outputs."""
+class BaseTrialStatsGroupWriterParams(BaseWriterParams):
+    """Shared writer configuration for group-level trial-statistics pipelines."""
 
-    pipeline_label: str = "trial_stats_group"
+    pipeline_label: str
     output_modality: str = "ieeg"
     output_suffix: str = "stats"
-    output_description: str = "trialstatsgroup"
+    output_description: str
     output_format: Literal["hdf5", "matlab"] = Field(
         default="hdf5",
         description=(
-            "Output format for group-level trial-stats results. "
+            "Output format for group-level trial-statistics results. "
             "'hdf5' writes an HDF5 file (.h5); 'matlab' writes a MATLAB file (.mat)."
         ),
     )

@@ -14,9 +14,9 @@ from gin_bids_py_analysis.processing.utils.matlab import make_struct
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.trial_stats_group import (
-    TrialStatsGroupParams,
-    TrialStatsGroupProcessing,
-    build_trial_stats_compatible_groups,
+    ConditionTestGroupParams,
+    ConditionTestGroupProcessing,
+    build_condition_test_compatible_groups,
 )
 
 
@@ -112,7 +112,7 @@ def _write_trial_stats_h5(
         )
 
 
-def test_build_trial_stats_compatible_groups_splits_heterogeneous_inputs() -> None:
+def test_build_condition_test_compatible_groups_splits_heterogeneous_inputs() -> None:
     case_dir = _make_case_dir("group_split")
     try:
         time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
@@ -132,14 +132,14 @@ def test_build_trial_stats_compatible_groups_splits_heterogeneous_inputs() -> No
             _make_bids_file(path_c, {"subject": "03", "task": "other", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
         ]
 
-        groups = build_trial_stats_compatible_groups(files, source_metric="mean_difference")
+        groups = build_condition_test_compatible_groups(files, source_metric="mean_difference")
         assert len(groups) == 2
         assert sorted(len(group.all_files) for group in groups) == [1, 2]
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 
 
-def test_build_trial_stats_compatible_groups_splits_activity_zscore_inputs() -> None:
+def test_build_condition_test_compatible_groups_splits_activity_zscore_inputs() -> None:
     case_dir = _make_case_dir("group_split_activity_zscore")
     try:
         time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
@@ -161,7 +161,7 @@ def test_build_trial_stats_compatible_groups_splits_activity_zscore_inputs() -> 
             _make_bids_file(path_b, {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
         ]
 
-        groups = build_trial_stats_compatible_groups(files, source_metric="mean_difference")
+        groups = build_condition_test_compatible_groups(files, source_metric="mean_difference")
         assert len(groups) == 2
         assert all(len(group.all_files) == 1 for group in groups)
     finally:
@@ -184,8 +184,8 @@ def test_process_group_rejects_non_channel_trial_stats() -> None:
             stats_path,
             {"subject": "01", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
         )
-        processor = TrialStatsGroupProcessing(
-            TrialStatsGroupParams(
+        processor = ConditionTestGroupProcessing(
+            ConditionTestGroupParams(
                 roi_mode="manual",
                 manual_region_channels={"ROI1": {"01": ["ROI1"]}},
             )
@@ -226,8 +226,8 @@ def test_process_group_manual_mode_and_thresholds() -> None:
         file_01 = _make_bids_file(path_01, {"subject": "01", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"})
         file_02 = _make_bids_file(path_02, {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"})
 
-        processor = TrialStatsGroupProcessing(
-            TrialStatsGroupParams(
+        processor = ConditionTestGroupProcessing(
+            ConditionTestGroupParams(
                 roi_mode="manual",
                 manual_region_channels={
                     "ROI_POS": {"01": ["A1", "A2"], "02": ["A1"]},
@@ -289,8 +289,8 @@ def test_process_group_atlas_mode_uses_electrodes_mapping() -> None:
             },
         )
 
-        processor = TrialStatsGroupProcessing(
-            TrialStatsGroupParams(
+        processor = ConditionTestGroupProcessing(
+            ConditionTestGroupParams(
                 roi_mode="atlas",
                 atlas_name="MarsAtlas",
             )
@@ -348,8 +348,8 @@ def test_process_group_atlas_mode_with_nonexistent_ieeg_path() -> None:
 
         assert not ieeg_path.exists(), "precondition: iEEG file must not exist"
 
-        processor = TrialStatsGroupProcessing(
-            TrialStatsGroupParams(
+        processor = ConditionTestGroupProcessing(
+            ConditionTestGroupParams(
                 roi_mode="atlas",
                 atlas_name="MarsAtlas",
             )
@@ -397,8 +397,8 @@ def test_process_group_cluster_permutation_custom_mode() -> None:
             {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
         )
 
-        processor = TrialStatsGroupProcessing(
-            TrialStatsGroupParams(
+        processor = ConditionTestGroupProcessing(
+            ConditionTestGroupParams(
                 roi_mode="manual",
                 manual_region_channels={"ROI_A": {"01": ["A1"], "02": ["A1"]}},
                 p_value_correction_method="cluster_permutation",
@@ -449,8 +449,8 @@ def test_process_group_cluster_permutation_mne_mode() -> None:
             {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"},
         )
 
-        processor = TrialStatsGroupProcessing(
-            TrialStatsGroupParams(
+        processor = ConditionTestGroupProcessing(
+            ConditionTestGroupParams(
                 roi_mode="manual",
                 manual_region_channels={"ROI_A": {"01": ["A1"], "02": ["A1"]}},
                 p_value_correction_method="cluster_permutation",
@@ -585,8 +585,8 @@ def test_process_group_manual_mode_mat_input() -> None:
             {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"},
         )
 
-        processor = TrialStatsGroupProcessing(
-            TrialStatsGroupParams(
+        processor = ConditionTestGroupProcessing(
+            ConditionTestGroupParams(
                 roi_mode="manual",
                 manual_region_channels={
                     "ROI_POS": {"01": ["A1", "A2"], "02": ["A1"]},
@@ -612,7 +612,7 @@ def test_process_group_manual_mode_mat_input() -> None:
 
 
 def test_build_compatible_groups_mat_files() -> None:
-    """build_trial_stats_compatible_groups should split heterogeneous .mat inputs correctly."""
+    """build_condition_test_compatible_groups should split heterogeneous .mat inputs correctly."""
     case_dir = _make_case_dir("group_split_mat")
     try:
         time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
@@ -632,7 +632,7 @@ def test_build_compatible_groups_mat_files() -> None:
             _make_bids_file(path_c, {"subject": "03", "task": "other", "desc": "conditiontest", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"}),
         ]
 
-        groups = build_trial_stats_compatible_groups(files, source_metric="mean_difference")
+        groups = build_condition_test_compatible_groups(files, source_metric="mean_difference")
         assert len(groups) == 2
         assert sorted(len(group.all_files) for group in groups) == [1, 2]
     finally:

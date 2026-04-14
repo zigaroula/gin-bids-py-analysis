@@ -1,7 +1,7 @@
-"""Load a pre-computed ``TrialSlopeStatsGroupProcessingResult`` from disk.
+"""Load a pre-computed ``RegressionGroupProcessingResult`` from disk.
 
 Supports the HDF5 (``.h5`` / ``.hdf5``) and MATLAB (``.mat``) formats written
-by ``TrialSlopeStatsGroupProcessingWriter``.  The returned result can be fed directly
+by ``RegressionGroupProcessingWriter``. The returned result can be fed directly
 to the visualization layer without re-running the group processing pipeline.
 """
 
@@ -22,23 +22,24 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
     str_scalar,
 )
 
-from .result import ROIChannelContribution, TrialSlopeStatsGroupProcessingResult
+from ..result import ROIChannelContribution
+from .result import RegressionGroupProcessingResult
 
 
-def load_trial_slope_stats_group_result(
+def load_regression_group_result(
     path: Path | str,
-) -> TrialSlopeStatsGroupProcessingResult:
-    """Load a pre-computed ``TrialSlopeStatsGroupProcessingResult`` from *path*.
+) -> RegressionGroupProcessingResult:
+    """Load a pre-computed ``RegressionGroupProcessingResult`` from *path*.
 
     Parameters
     ----------
     path:
-        Path to an ``.h5``/``.hdf5`` or ``.mat`` group slope-stats file written by
-        ``TrialSlopeStatsGroupProcessingWriter``.
+        Path to an ``.h5``/``.hdf5`` or ``.mat`` group regression file written by
+        ``RegressionGroupProcessingWriter``.
 
     Returns
     -------
-    TrialSlopeStatsGroupProcessingResult
+    RegressionGroupProcessingResult
         A fully populated result object ready for visualization.
 
     Raises
@@ -62,7 +63,7 @@ def load_trial_slope_stats_group_result(
 # ---------------------------------------------------------------------------
 
 
-def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
+def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
     with h5py.File(path, "r") as fh:
         # --- axes ---
         if "axes" not in fh or "region" not in fh["axes"]:
@@ -332,13 +333,13 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
                     )
 
         # --- provenance ---
-        source_trial_slope_stats_files: list[str] = []
+        source_regression_files: list[str] = []
         source_electrodes_files: list[str] = []
         if "provenance" in fh:
             prov = fh["provenance"]
-            if "source_trial_slope_stats_files" in prov:
-                source_trial_slope_stats_files = decode_str_array(
-                    np.asarray(prov["source_trial_slope_stats_files"][:], dtype=object)
+            if "source_regression_files" in prov:
+                source_regression_files = decode_str_array(
+                    np.asarray(prov["source_regression_files"][:], dtype=object)
                 )
             if "source_electrodes_files" in prov:
                 source_electrodes_files = decode_str_array(
@@ -346,7 +347,7 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
                 )
 
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
-    return TrialSlopeStatsGroupProcessingResult(
+    return RegressionGroupProcessingResult(
         source_group=source_group,
         metadata=metadata,
         slope_t_values=slope_t,
@@ -392,7 +393,7 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         significance_alpha=significance_alpha,
         roi_mode=roi_mode,
         atlas_name=atlas_name,
-        source_trial_slope_stats_files=source_trial_slope_stats_files,
+        source_regression_files=source_regression_files,
         source_electrodes_files=source_electrodes_files,
         excluded_rois=excluded_rois,
         condition_a_scatter_predictor=scatter_pred_a,
@@ -407,7 +408,7 @@ def _load_from_hdf5(path: Path) -> TrialSlopeStatsGroupProcessingResult:
 # ---------------------------------------------------------------------------
 
 
-def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
+def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
     from gin_bids_py_analysis.processing.utils.matlab import (
         mat_float,
         mat_str,
@@ -664,18 +665,18 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
                 scatter_act_b_m.append(np.asarray(cell[i], dtype=np.float64).ravel())
 
     # provenance
-    source_trial_slope_stats_files: list[str] = []
+    source_regression_files: list[str] = []
     source_electrodes_files: list[str] = []
     if prov is not None:
-        src_raw_prov = getattr(prov, "source_trial_slope_stats_files", None)
+        src_raw_prov = getattr(prov, "source_regression_files", None)
         if src_raw_prov is not None:
-            source_trial_slope_stats_files = mat_str_list(src_raw_prov)
+            source_regression_files = mat_str_list(src_raw_prov)
         elec_raw = getattr(prov, "source_electrodes_files", None)
         if elec_raw is not None:
             source_electrodes_files = mat_str_list(elec_raw)
 
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
-    return TrialSlopeStatsGroupProcessingResult(
+    return RegressionGroupProcessingResult(
         source_group=source_group,
         metadata=metadata,
         slope_t_values=slope_t,
@@ -721,7 +722,7 @@ def _load_from_matlab(path: Path) -> TrialSlopeStatsGroupProcessingResult:
         significance_alpha=significance_alpha,
         roi_mode=roi_mode,
         atlas_name=atlas_name,
-        source_trial_slope_stats_files=source_trial_slope_stats_files,
+        source_regression_files=source_regression_files,
         source_electrodes_files=source_electrodes_files,
         excluded_rois=excluded_rois,
         condition_a_scatter_predictor=scatter_pred_a_m,
@@ -735,7 +736,7 @@ def _require_group_activity_zscore_hdf5(*, fh: h5py.File, path: Path) -> str:
     ds = dataset_or_none(fh, "meta/activity_zscore")
     if ds is None:
         raise ValueError(
-            f"{path.name}: unsupported legacy trial_slope_stats_group schema; "
+            f"{path.name}: unsupported legacy regression_group schema; "
             "meta/activity_zscore is required."
         )
     return str_scalar(ds, default="none")
@@ -745,7 +746,7 @@ def _require_group_activity_zscore_mat(meta: object, path: Path) -> str:
     raw = getattr(meta, "activity_zscore", None)
     if raw is None:
         raise ValueError(
-            f"{path.name}: unsupported legacy trial_slope_stats_group schema; "
+            f"{path.name}: unsupported legacy regression_group schema; "
             "meta.activity_zscore is required."
         )
     from gin_bids_py_analysis.processing.utils.matlab import mat_str

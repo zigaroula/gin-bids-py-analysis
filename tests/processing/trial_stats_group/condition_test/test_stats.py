@@ -6,7 +6,7 @@ from gin_bids_py_analysis.processing.utils.group_stats import (
     compute_one_sample_epoch_summary,
     compute_one_sample_timecourse,
 )
-from gin_bids_py_analysis.processing.trial_stats_group.stats import (
+from gin_bids_py_analysis.processing.trial_stats_group.condition_test.stats import (
     compute_cluster_null_distribution,
     compute_cluster_null_distribution_sign_flip,
     compute_mne_cluster_permutation,

@@ -11,10 +11,10 @@ import pytest
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_slope_stats_group import (
-    TrialSlopeStatsGroupParams,
-    TrialSlopeStatsGroupProcessing,
-    build_trial_slope_stats_compatible_groups,
+from gin_bids_py_analysis.processing.trial_stats_group import (
+    RegressionGroupParams,
+    RegressionGroupProcessing,
+    build_regression_compatible_groups,
 )
 
 
@@ -153,7 +153,7 @@ def test_build_compatible_groups_splits_heterogeneous_inputs() -> None:
             _make_bids_file(path_c, {"subject": "03", "task": "other", "desc": "slopestat", "suffix": "stats", "extension": ".h5"}),
         ]
 
-        groups = build_trial_slope_stats_compatible_groups(files)
+        groups = build_regression_compatible_groups(files)
         assert len(groups) == 2
         assert sorted(len(g.all_files) for g in groups) == [1, 2]
     finally:
@@ -183,7 +183,7 @@ def test_build_compatible_groups_splits_activity_zscore_inputs() -> None:
             _make_bids_file(path_b, {"subject": "02", "task": "decid", "desc": "slopestat", "suffix": "stats", "extension": ".h5"}),
         ]
 
-        groups = build_trial_slope_stats_compatible_groups(files)
+        groups = build_regression_compatible_groups(files)
         assert len(groups) == 2
         assert all(len(group.all_files) == 1 for group in groups)
     finally:
@@ -203,8 +203,8 @@ def test_process_group_rejects_non_channel_inputs() -> None:
             condition_b_slope=np.ones((1, 2)),
         )
         file = _make_bids_file(path, {"subject": "01", "task": "decid", "desc": "slopestat", "suffix": "stats", "extension": ".h5"})
-        processor = TrialSlopeStatsGroupProcessing(
-            TrialSlopeStatsGroupParams(
+        processor = RegressionGroupProcessing(
+            RegressionGroupParams(
                 roi_mode="manual",
                 manual_region_channels={"ROI1": {"01": ["ROI1"]}},
             )
@@ -235,8 +235,8 @@ def test_process_group_manual_mode_shapes_and_values() -> None:
         file_01 = _make_bids_file(path_01, {"subject": "01", "task": "decid", "desc": "slopestat", "suffix": "stats", "extension": ".h5"})
         file_02 = _make_bids_file(path_02, {"subject": "02", "task": "decid", "desc": "slopestat", "suffix": "stats", "extension": ".h5"})
 
-        processor = TrialSlopeStatsGroupProcessing(
-            TrialSlopeStatsGroupParams(
+        processor = RegressionGroupProcessing(
+            RegressionGroupParams(
                 roi_mode="manual",
                 manual_region_channels={
                     "ROI_POS": {"01": ["A1", "A2"], "02": ["A1"]},
@@ -274,8 +274,8 @@ def test_process_group_excludes_rois_below_thresholds() -> None:
         _write_slope_stats_h5(path_01, channels=["A1"], time_s=time_s, condition_a_slope=slope, condition_b_slope=slope)
         file_01 = _make_bids_file(path_01, {"subject": "01", "task": "decid", "suffix": "stats", "extension": ".h5"})
 
-        processor = TrialSlopeStatsGroupProcessing(
-            TrialSlopeStatsGroupParams(
+        processor = RegressionGroupProcessing(
+            RegressionGroupParams(
                 roi_mode="manual",
                 manual_region_channels={
                     "ROI_OK": {"01": ["A1"]},
@@ -303,8 +303,8 @@ def test_process_group_output_entities_set_to_group() -> None:
         _write_slope_stats_h5(path_01, channels=["A1"], time_s=time_s, condition_a_slope=slope, condition_b_slope=slope)
         file_01 = _make_bids_file(path_01, {"subject": "01", "task": "decid", "suffix": "stats", "extension": ".h5"})
 
-        processor = TrialSlopeStatsGroupProcessing(
-            TrialSlopeStatsGroupParams(
+        processor = RegressionGroupProcessing(
+            RegressionGroupParams(
                 roi_mode="manual",
                 manual_region_channels={"ROI_A": {"01": ["A1"]}},
             )
@@ -324,8 +324,8 @@ def test_process_group_contribution_samples_shape() -> None:
         _write_slope_stats_h5(path_01, channels=["A1", "A2"], time_s=time_s, condition_a_slope=slope, condition_b_slope=-slope)
         file_01 = _make_bids_file(path_01, {"subject": "01", "task": "decid", "suffix": "stats", "extension": ".h5"})
 
-        processor = TrialSlopeStatsGroupProcessing(
-            TrialSlopeStatsGroupParams(
+        processor = RegressionGroupProcessing(
+            RegressionGroupParams(
                 roi_mode="manual",
                 manual_region_channels={"ROI_A": {"01": ["A1", "A2"]}},
             )

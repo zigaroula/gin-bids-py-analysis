@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from gin_bids_py_analysis.bids import BIDSFileGroup
-    from gin_bids_py_analysis.processing.trial_slope_stats_group import (
-        TrialSlopeStatsGroupParams,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        RegressionGroupParams,
     )
     from gin_bids_py_analysis.processing.trial_stats import (
         RegressionParams,
@@ -17,11 +17,11 @@ if TYPE_CHECKING:
         TrialResolver,
         ConditionTestParams,
     )
-    from gin_bids_py_analysis.processing.trial_stats_group.params import (
-        TrialStatsGroupParams,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupParams,
     )
-    from gin_bids_py_analysis.processing.trial_stats_group.result import (
-        TrialStatsGroupProcessingResult,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupProcessingResult,
     )
 
 
@@ -29,7 +29,7 @@ def launch(
     subject_groups: dict[str, "BIDSFileGroup"],
     params: "ConditionTestParams",
     resolver: "TrialResolver",
-    group_params: "TrialStatsGroupParams | None" = None,
+    group_params: "ConditionTestGroupParams | None" = None,
     bids_root: Path | None = None,
 ) -> None:
     """Launch the trial statistics visualization window.
@@ -43,7 +43,7 @@ def launch(
     resolver:
         The ``TrialResolver`` configured for this dataset.
     group_params:
-        Optional ``TrialStatsGroupParams``.  When provided the Group tab is
+        Optional ``ConditionTestGroupParams``.  When provided the Group tab is
         enabled after all subjects have been computed.
     bids_root:
         Path to the BIDS dataset root.  When provided the *Save results* buttons
@@ -73,7 +73,7 @@ def launch_slope(
     subject_groups: dict[str, "BIDSFileGroup"],
     params: "RegressionParams",
     resolver: "TrialResolver",
-    group_params: "TrialSlopeStatsGroupParams | None" = None,
+    group_params: "RegressionGroupParams | None" = None,
     bids_root: Path | None = None,
 ) -> None:
     """Launch the trial statistics visualization window in slope mode."""
@@ -128,7 +128,7 @@ def launch_slope(
 def launch_precomputed(
     subject_stats_files: dict[str, Path],
     group_stats_file: Path | None = None,
-    group_params: "TrialStatsGroupParams | None" = None,
+    group_params: "ConditionTestGroupParams | None" = None,
 ) -> None:
     """Launch the trial statistics viewer loading pre-computed result files.
 
@@ -144,12 +144,12 @@ def launch_precomputed(
         (``.h5``/``.hdf5`` or ``.mat``).
     group_stats_file:
         Optional path to a pre-computed group stats file written by
-        ``TrialStatsGroupProcessingWriter``.  When provided the group result is
+        ``ConditionTestGroupProcessingWriter``.  When provided the group result is
         loaded from disk and displayed immediately in the Group tab once all
         subject files are ready.  The ``GroupParamsPanel`` is still available
         so the group analysis can be re-run with different parameters.
     group_params:
-        Optional ``TrialStatsGroupParams`` used to pre-populate the
+        Optional ``ConditionTestGroupParams`` used to pre-populate the
         ``GroupParamsPanel``.  When *group_stats_file* is ``None`` and
         *group_params* is set, the user can click *Compute group stats* to run
         the group analysis from the loaded subject results.
@@ -179,11 +179,11 @@ def launch_precomputed(
 
 def launch_group_precomputed(
     group_stats_file: Path,
-    group_params: "TrialStatsGroupParams | None" = None,
+    group_params: "ConditionTestGroupParams | None" = None,
 ) -> None:
     """Launch a group-only viewer loading a pre-computed group stats file.
 
-    Supports both ``trial_stats_group`` and ``trial_slope_stats_group`` outputs.
+    Supports both ``condition_test_group`` and ``regression_group`` outputs.
     Use this entry point when you only have a pre-computed group file and do
     not need to visualize individual subjects. The window shows the
     ``GroupPlotPanel`` immediately after the file is loaded.
@@ -193,7 +193,7 @@ def launch_group_precomputed(
     group_stats_file:
         Path to the group stats file (``.h5``/``.hdf5``).
     group_params:
-        Optional ``TrialStatsGroupParams`` used to pre-populate the
+        Optional ``ConditionTestGroupParams`` used to pre-populate the
         ``GroupParamsPanel`` display.  No computation is performed — the
         params are shown for reference only.
     """

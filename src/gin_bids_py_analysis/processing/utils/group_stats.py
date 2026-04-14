@@ -1,8 +1,8 @@
 """Group-level statistical helpers shared across group-analysis pipelines.
 
 Provides the ROI channel contribution type and the three core one-sample
-statistical functions used by ``trial_stats_group`` and
-``trial_slope_stats_group``.
+statistical functions used by ``trial_stats_group.condition_test`` and
+``trial_stats_group.regression``.
 """
 from __future__ import annotations
 

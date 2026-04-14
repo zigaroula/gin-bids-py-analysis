@@ -1,8 +1,8 @@
-"""Bridge between in-memory RegressionProcessingResult and slope-group processing.
+"""Bridge between in-memory RegressionProcessingResult and regression-group processing.
 
-``TrialSlopeStatsGroupProcessing.process_group()`` expects BIDS-like ``*_stats.h5``
+``RegressionGroupProcessing.process_group()`` expects BIDS-like ``*_stats.h5``
 files. This module builds an in-memory HDF5 file per subject matching the schema
-consumed by ``trial_slope_stats_group.processor._load_raw_from_hdf5``, attaches
+consumed by ``trial_stats_group.regression.processor._load_raw_from_hdf5``, attaches
 it to a synthetic ``BIDSFile``, and returns a compatible ``BIDSFileGroup``.
 """
 
@@ -18,8 +18,8 @@ import h5py
 import numpy as np
 
 from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.processing.trial_slope_stats_group import (
-    build_trial_slope_stats_compatible_groups,
+from gin_bids_py_analysis.processing.trial_stats_group import (
+    build_regression_compatible_groups,
 )
 
 if TYPE_CHECKING:
@@ -243,10 +243,10 @@ def group_file_group_context_slope(
             handles.append(fh)
             bids_files.append(bids_file)
 
-        groups = build_trial_slope_stats_compatible_groups(bids_files)
+        groups = build_regression_compatible_groups(bids_files)
         if not groups:
             raise ValueError(
-                "build_trial_slope_stats_compatible_groups returned no groups for the provided results."
+                "build_regression_compatible_groups returned no groups for the provided results."
             )
         yield max(groups, key=lambda g: len(g.all_files))
     finally:

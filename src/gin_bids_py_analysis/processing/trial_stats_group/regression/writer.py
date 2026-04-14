@@ -1,32 +1,25 @@
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import h5py
 import numpy as np
 from scipy.io import savemat
 
-from gin_bids_py_analysis.processing.base import BaseProcessingResult, BaseProcessingWriter
+from gin_bids_py_analysis.processing.base import BaseProcessingResult
 from gin_bids_py_analysis.processing.utils.matlab import make_struct
 
-from .result import TrialSlopeStatsGroupProcessingResult
+from ..writer import BaseTrialStatsGroupProcessingWriter, package_version
+from .result import RegressionGroupProcessingResult
 
 
-def _package_version() -> str:
-    try:
-        return version("gin-bids-py-analysis")
-    except PackageNotFoundError:
-        return "unknown"
-
-
-class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
-    """Write group-level trial-slope-stats ROI outputs to HDF5 or MATLAB."""
+class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
+    """Write group-level regression ROI outputs to HDF5 or MATLAB."""
 
     def _write_data(self, result: BaseProcessingResult, output_path: Path) -> None:
-        if not isinstance(result, TrialSlopeStatsGroupProcessingResult):
+        if not isinstance(result, RegressionGroupProcessingResult):
             raise TypeError(
-                f"Expected TrialSlopeStatsGroupProcessingResult, got {type(result).__name__!r}"
+                f"Expected RegressionGroupProcessingResult, got {type(result).__name__!r}"
             )
         if self.params.output_format == "matlab":
             self._write_matlab(result, output_path)
@@ -39,10 +32,10 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
 
     def _write_hdf5(
         self,
-        result: TrialSlopeStatsGroupProcessingResult,
+        result: RegressionGroupProcessingResult,
         output_path: Path,
     ) -> None:
-        str_dtype = h5py.string_dtype(encoding="utf-8")
+        str_dtype = self.string_dtype()
 
         with h5py.File(output_path, "w") as fh:
             # --- /regression (condition_a vs condition_b slope t-test) ---
@@ -263,8 +256,8 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
             # --- /provenance ---
             prov = fh.create_group("provenance")
             prov.create_dataset(
-                "source_trial_slope_stats_files",
-                data=np.array(result.source_trial_slope_stats_files, dtype=object),
+                "source_regression_files",
+                data=np.array(result.source_regression_files, dtype=object),
                 dtype=str_dtype,
             )
             prov.create_dataset(
@@ -272,9 +265,9 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
                 data=np.array(result.source_electrodes_files, dtype=object),
                 dtype=str_dtype,
             )
-            prov.create_dataset("pipeline_name", data="trial_slope_stats_group", dtype=str_dtype)
+            prov.create_dataset("pipeline_name", data="regression_group", dtype=str_dtype)
             prov.create_dataset(
-                "pipeline_version", data=_package_version(), dtype=str_dtype
+                "pipeline_version", data=package_version(), dtype=str_dtype
             )
 
     # ------------------------------------------------------------------
@@ -283,7 +276,7 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
 
     def _write_matlab(
         self,
-        result: TrialSlopeStatsGroupProcessingResult,
+        result: RegressionGroupProcessingResult,
         output_path: Path,
     ) -> None:
         epoch_slope_struct = make_struct(
@@ -405,12 +398,12 @@ class TrialSlopeStatsGroupProcessingWriter(BaseProcessingWriter):
         )
 
         prov_struct = make_struct(
-            source_trial_slope_stats_files=np.array(
-                result.source_trial_slope_stats_files, dtype=object
+            source_regression_files=np.array(
+                result.source_regression_files, dtype=object
             ),
             source_electrodes_files=np.array(result.source_electrodes_files, dtype=object),
-            pipeline_name=np.str_("trial_slope_stats_group"),
-            pipeline_version=np.str_(_package_version()),
+            pipeline_name=np.str_("regression_group"),
+            pipeline_version=np.str_(package_version()),
         )
 
         n_rois = len(result.region_names)

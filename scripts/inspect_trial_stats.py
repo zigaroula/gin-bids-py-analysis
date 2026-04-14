@@ -1,7 +1,7 @@
 """
 Inspect trial-stats outputs (.h5 + optional companion _trials.tsv) and generate a
 visual summary. Supports subject-level `condition_test` / `regression` outputs
-and group-level `trial_stats_group` outputs.
+and group-level `condition_test_group` / `regression_group` outputs.
 
 Examples:
   python scripts/inspect_trial_stats.py --input E:\\CBT\\bids\\derivatives\\condition_test\\sub-01\\ieeg\\sub-01_desc-conditiontest_stats.h5

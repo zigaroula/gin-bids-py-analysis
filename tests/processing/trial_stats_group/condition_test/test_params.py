@@ -1,23 +1,23 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import pytest
 
-from gin_bids_py_analysis.processing.trial_stats_group import TrialStatsGroupParams
+from gin_bids_py_analysis.processing.trial_stats_group import ConditionTestGroupParams
 
 
 def test_params_require_atlas_name_in_atlas_mode() -> None:
     with pytest.raises(ValueError, match="atlas_name is required"):
-        TrialStatsGroupParams(roi_mode="atlas")
+        ConditionTestGroupParams(roi_mode="atlas")
 
 
 def test_params_require_manual_mapping_in_manual_mode() -> None:
     with pytest.raises(ValueError, match="manual_region_channels is required"):
-        TrialStatsGroupParams(roi_mode="manual")
+        ConditionTestGroupParams(roi_mode="manual")
 
 
 def test_params_forbid_atlas_name_in_manual_mode() -> None:
     with pytest.raises(ValueError, match="atlas_name cannot be set"):
-        TrialStatsGroupParams(
+        ConditionTestGroupParams(
             roi_mode="manual",
             atlas_name="MarsAtlas",
             manual_region_channels={"ROI": {"01": ["A1"]}},
@@ -25,7 +25,7 @@ def test_params_forbid_atlas_name_in_manual_mode() -> None:
 
 
 def test_params_coerce_manual_mapping_and_subject_labels() -> None:
-    params = TrialStatsGroupParams(
+    params = ConditionTestGroupParams(
         roi_mode="manual",
         manual_region_channels={
             " ROI1 ": {"sub-01": ["A1", "A1", " A2 "]},
@@ -40,7 +40,7 @@ def test_params_coerce_manual_mapping_and_subject_labels() -> None:
 
 
 def test_params_accept_new_cluster_method_names() -> None:
-    params = TrialStatsGroupParams(
+    params = ConditionTestGroupParams(
         roi_mode="manual",
         manual_region_channels={"ROI": {"01": ["A1"]}},
         cluster_permutation_method="mne",
@@ -51,7 +51,7 @@ def test_params_accept_new_cluster_method_names() -> None:
 @pytest.mark.parametrize("legacy_name", ["hierarchical", "sign_flip"])
 def test_params_reject_legacy_cluster_method_names(legacy_name: str) -> None:
     with pytest.raises(ValueError, match="renamed to 'custom' and 'mne'"):
-        TrialStatsGroupParams(
+        ConditionTestGroupParams(
             roi_mode="manual",
             manual_region_channels={"ROI": {"01": ["A1"]}},
             cluster_permutation_method=legacy_name,  # type: ignore[arg-type]

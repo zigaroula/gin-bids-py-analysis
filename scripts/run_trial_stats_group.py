@@ -9,11 +9,11 @@ from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFile, BIDSFileGroup
 from gin_bids_py_analysis.processing.trial_stats_group import (
-    TrialStatsGroupParams,
-    TrialStatsGroupProcessing,
-    TrialStatsGroupProcessingWriter,
-    TrialStatsGroupWriterParams,
-    build_trial_stats_compatible_groups,
+    ConditionTestGroupParams,
+    ConditionTestGroupProcessing,
+    ConditionTestGroupProcessingWriter,
+    ConditionTestGroupWriterParams,
+    build_condition_test_compatible_groups,
 )
 
 # ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ TRIAL_STATS_FILTERS = {
     # "task": "decid",
 }
 
-PARAMS = TrialStatsGroupParams(
+PARAMS = ConditionTestGroupParams(
     source_metric="t_values",
     p_value_correction_method="none",
     cluster_permutation_method="mne",
@@ -65,7 +65,7 @@ PARAMS = TrialStatsGroupParams(
     },
 )
 
-WRITER_PARAMS = TrialStatsGroupWriterParams(
+WRITER_PARAMS = ConditionTestGroupWriterParams(
     bids_root=BIDS_ROOT,
     output_format="hdf5",
     output_description="none"
@@ -79,8 +79,8 @@ def _load_trial_stats_files(dataset: BIDSDataset) -> list[BIDSFile]:
     return sorted(files, key=lambda file: str(file.path))
 
 
-def _build_groups(files: list[BIDSFile], params: TrialStatsGroupParams) -> list[BIDSFileGroup]:
-    return build_trial_stats_compatible_groups(
+def _build_groups(files: list[BIDSFile], params: ConditionTestGroupParams) -> list[BIDSFileGroup]:
+    return build_condition_test_compatible_groups(
         files,
         source_metric=params.source_metric,
     )
@@ -98,8 +98,8 @@ def main() -> list[Path]:
     if not groups:
         return []
 
-    processor = TrialStatsGroupProcessing(PARAMS)
-    writer = TrialStatsGroupProcessingWriter(WRITER_PARAMS)
+    processor = ConditionTestGroupProcessing(PARAMS)
+    writer = ConditionTestGroupProcessingWriter(WRITER_PARAMS)
     out_paths = processor.run(groups, writer, n_jobs=N_JOBS)
     for path in out_paths:
         print(f"Wrote {path}")

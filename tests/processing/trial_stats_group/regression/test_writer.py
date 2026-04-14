@@ -9,12 +9,12 @@ import numpy as np
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_slope_stats_group import (
+from gin_bids_py_analysis.processing.trial_stats_group import (
     ROIChannelContribution,
-    TrialSlopeStatsGroupProcessingResult,
-    TrialSlopeStatsGroupProcessingWriter,
-    TrialSlopeStatsGroupWriterParams,
-    load_trial_slope_stats_group_result,
+    RegressionGroupProcessingResult,
+    RegressionGroupProcessingWriter,
+    RegressionGroupWriterParams,
+    load_regression_group_result,
 )
 
 
@@ -39,9 +39,9 @@ def _make_bids_file(path: Path, entities: dict[str, str]) -> BIDSFile:
     return BIDSFile(_MockPyBIDSFile(str(path), entities))
 
 
-def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> TrialSlopeStatsGroupProcessingResult:
+def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> RegressionGroupProcessingResult:
     shape = (n_rois, n_t)
-    return TrialSlopeStatsGroupProcessingResult(
+    return RegressionGroupProcessingResult(
         source_group=BIDSFileGroup(primary=primary),
         output_entities={"subject": "group", "task": "decid"},
         metadata={
@@ -99,7 +99,7 @@ def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> TrialSlope
         significance_alpha=0.05,
         roi_mode="manual",
         atlas_name=None,
-        source_trial_slope_stats_files=[str(primary.path)],
+        source_regression_files=[str(primary.path)],
         source_electrodes_files=[],
         excluded_rois={"ROI_BAD": "no_channels"},
     )
@@ -113,14 +113,14 @@ def test_writer_hdf5_schema_and_path() -> None:
             {"subject": "01", "task": "decid", "desc": "slopestat", "suffix": "stats", "extension": ".h5"},
         )
         result = _make_result(primary)
-        writer = TrialSlopeStatsGroupProcessingWriter(
-            TrialSlopeStatsGroupWriterParams(bids_root=case_dir)
+        writer = RegressionGroupProcessingWriter(
+            RegressionGroupWriterParams(bids_root=case_dir)
         )
         out_path = writer.write(result)
 
         assert out_path.exists()
         assert "sub-group" in out_path.name
-        assert "trial_slope_stats_group" in str(out_path)
+        assert "regression_group" in str(out_path)
         assert out_path.suffix == ".h5"
 
         with h5py.File(out_path, "r") as fh:
@@ -166,11 +166,11 @@ def test_writer_hdf5_roundtrip_via_loader() -> None:
             {"subject": "01", "task": "decid", "desc": "slopestat", "suffix": "stats", "extension": ".h5"},
         )
         result = _make_result(primary, n_rois=2, n_t=3)
-        writer = TrialSlopeStatsGroupProcessingWriter(
-            TrialSlopeStatsGroupWriterParams(bids_root=case_dir)
+        writer = RegressionGroupProcessingWriter(
+            RegressionGroupWriterParams(bids_root=case_dir)
         )
         out_path = writer.write(result)
-        loaded = load_trial_slope_stats_group_result(out_path)
+        loaded = load_regression_group_result(out_path)
 
         assert loaded.region_names == result.region_names
         assert len(loaded.time_axis_s) == 3

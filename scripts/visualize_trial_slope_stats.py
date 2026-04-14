@@ -14,7 +14,7 @@ from pathlib import Path
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
 from gin_bids_py_analysis.bids.helpers import normalize_subject_value
 from gin_bids_py_analysis.processing.trial_stats.regression import RegressionParams
-from gin_bids_py_analysis.processing.trial_slope_stats_group import TrialSlopeStatsGroupParams
+from gin_bids_py_analysis.processing.trial_stats_group import RegressionGroupParams
 from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
 from gin_bids_py_analysis.visualization.trial_stats import launch_slope
 
@@ -182,9 +182,9 @@ def _load_roi_channels_from_csv(csv_paths_by_roi: dict[str, Path]) -> dict[str, 
     return manual_region_channels
 
 
-def _build_group_params() -> TrialSlopeStatsGroupParams:
+def _build_group_params() -> RegressionGroupParams:
     manual_region_channels = _load_roi_channels_from_csv(ROI_CSV_FILES)
-    return TrialSlopeStatsGroupParams(
+    return RegressionGroupParams(
         manual_region_channels=manual_region_channels,
         **GROUP_PARAM_KWARGS,
     )

@@ -46,20 +46,20 @@ from .worker import (
 )
 
 if TYPE_CHECKING:
-    from gin_bids_py_analysis.processing.trial_stats_group.params import (
-        TrialStatsGroupParams,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupParams,
     )
-    from gin_bids_py_analysis.processing.trial_stats_group.result import (
-        TrialStatsGroupProcessingResult,
-    )
-
-
-def _make_placeholder_group_params() -> "TrialStatsGroupParams":
-    from gin_bids_py_analysis.processing.trial_stats_group.params import (
-        TrialStatsGroupParams,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupProcessingResult,
     )
 
-    return TrialStatsGroupParams(
+
+def _make_placeholder_group_params() -> "ConditionTestGroupParams":
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupParams,
+    )
+
+    return ConditionTestGroupParams(
         roi_mode="manual",
         manual_region_channels={"placeholder": {"01": ["CH1"]}},
     )
@@ -90,7 +90,7 @@ class TrialStatsPrecomputedWindow(QMainWindow):
         after all subjects are ready.  The ``GroupParamsPanel`` is still shown
         so the user can re-compute the group with different parameters.
     group_params:
-        Optional ``TrialStatsGroupParams`` used to pre-populate the
+        Optional ``ConditionTestGroupParams`` used to pre-populate the
         ``GroupParamsPanel``.  When *group_file* is ``None`` and *group_params*
         is set, the user can click *Compute group stats* to run the group
         analysis from the loaded subject results.
@@ -102,7 +102,7 @@ class TrialStatsPrecomputedWindow(QMainWindow):
         self,
         subject_files: dict[str, Path],
         group_file: Path | None = None,
-        group_params: "TrialStatsGroupParams | None" = None,
+        group_params: "ConditionTestGroupParams | None" = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -114,7 +114,7 @@ class TrialStatsPrecomputedWindow(QMainWindow):
         self._group_params = group_params
         self._current_result: ConditionTestProcessingResult | RegressionProcessingResult | None = None
         self._all_results: dict[str, ConditionTestProcessingResult | RegressionProcessingResult] = {}
-        self._group_result: "TrialStatsGroupProcessingResult | None" = None
+        self._group_result: "ConditionTestGroupProcessingResult | None" = None
         self._load_worker: LoadSubjectResultsWorker | None = None
         self._load_group_worker: LoadGroupResultWorker | None = None
         self._group_worker: GroupComputeWorker | None = None
@@ -289,7 +289,7 @@ class TrialStatsPrecomputedWindow(QMainWindow):
         worker.start()
 
     def _on_group_loaded(
-        self, result: "TrialStatsGroupProcessingResult"
+        self, result: "ConditionTestGroupProcessingResult"
     ) -> None:
         self._group_result = result
         n_rois = len(result.region_names)
@@ -322,7 +322,7 @@ class TrialStatsPrecomputedWindow(QMainWindow):
             return
         self._start_group_compute(params)
 
-    def _start_group_compute(self, params: "TrialStatsGroupParams") -> None:
+    def _start_group_compute(self, params: "ConditionTestGroupParams") -> None:
         if self._group_worker is not None:
             try:
                 self._group_worker.result_ready.disconnect()
@@ -344,7 +344,7 @@ class TrialStatsPrecomputedWindow(QMainWindow):
         worker.start()
 
     def _on_group_compute_done(
-        self, result: "TrialStatsGroupProcessingResult"
+        self, result: "ConditionTestGroupProcessingResult"
     ) -> None:
         self._group_result = result
         self._group_params_panel.set_computing(False)

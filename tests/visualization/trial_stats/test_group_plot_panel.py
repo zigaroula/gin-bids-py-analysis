@@ -6,11 +6,11 @@ import numpy as np
 import pytest
 
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_slope_stats_group.result import (
-    TrialSlopeStatsGroupProcessingResult,
+from gin_bids_py_analysis.processing.trial_stats_group import (
+    RegressionGroupProcessingResult,
 )
-from gin_bids_py_analysis.processing.trial_stats_group.result import (
-    TrialStatsGroupProcessingResult,
+from gin_bids_py_analysis.processing.trial_stats_group import (
+    ConditionTestGroupProcessingResult,
 )
 from gin_bids_py_analysis.visualization.trial_stats.panels.group_plot_panel import (
     GroupPlotPanel,
@@ -18,8 +18,8 @@ from gin_bids_py_analysis.visualization.trial_stats.panels.group_plot_panel impo
 
 
 @pytest.fixture()
-def synthetic_group_result(synthetic_result) -> TrialStatsGroupProcessingResult:
-    """Minimal TrialStatsGroupProcessingResult with 3 ROIs and 60 time points."""
+def synthetic_group_result(synthetic_result) -> ConditionTestGroupProcessingResult:
+    """Minimal ConditionTestGroupProcessingResult with 3 ROIs and 60 time points."""
     rng = np.random.default_rng(seed=0)
     n_roi, n_t = 3, 60
 
@@ -37,7 +37,7 @@ def synthetic_group_result(synthetic_result) -> TrialStatsGroupProcessingResult:
     epoch_sem = np.abs(rng.standard_normal(n_roi)) * 0.1
     epoch_df = np.full(n_roi, 10.0)
 
-    return TrialStatsGroupProcessingResult(
+    return ConditionTestGroupProcessingResult(
         source_group=BIDSFileGroup(primary=synthetic_result.source_group.primary),
         metadata={},
         output_entities=None,
@@ -62,7 +62,7 @@ def synthetic_group_result(synthetic_result) -> TrialStatsGroupProcessingResult:
         roi_channel_counts=np.array([2, 3, 1]),
         roi_subject_counts=np.array([2, 2, 1]),
         contributions=[],
-        source_trial_stats_files=[],
+        source_condition_test_files=[],
         source_electrodes_files=[],
         excluded_rois={},
     )
@@ -147,13 +147,13 @@ class TestGroupPlotPanelUpdatePlots:
 
 
 @pytest.fixture()
-def synthetic_slope_group_result(synthetic_result) -> TrialSlopeStatsGroupProcessingResult:
+def synthetic_slope_group_result(synthetic_result) -> RegressionGroupProcessingResult:
     n_roi, n_t = 2, 60
     time_axis = np.linspace(-1.0, 2.0, n_t)
     shape = (n_roi, n_t)
     cond_labels = ("pleasant", "unpleasant")
 
-    return TrialSlopeStatsGroupProcessingResult(
+    return RegressionGroupProcessingResult(
         source_group=BIDSFileGroup(primary=synthetic_result.source_group.primary),
         metadata={},
         output_entities=None,
@@ -213,7 +213,7 @@ def synthetic_slope_group_result(synthetic_result) -> TrialSlopeStatsGroupProces
         significance_alpha=0.05,
         roi_mode="manual",
         atlas_name=None,
-        source_trial_slope_stats_files=[],
+        source_regression_files=[],
         source_electrodes_files=[],
         excluded_rois={},
     )

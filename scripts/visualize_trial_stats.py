@@ -13,7 +13,7 @@ from pathlib import Path
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
 from gin_bids_py_analysis.processing.trial_stats import TableTrialResolver
 from gin_bids_py_analysis.processing.trial_stats.condition_test import ConditionTestParams
-from gin_bids_py_analysis.processing.trial_stats_group import TrialStatsGroupParams
+from gin_bids_py_analysis.processing.trial_stats_group import ConditionTestGroupParams
 from gin_bids_py_analysis.visualization.trial_stats import launch
 
 # ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ RESOLVER = TableTrialResolver(
 # Optional: configure group-level ROI statistics.
 # When set, a "Group" tab appears after all subjects have been computed.
 # Set to None to disable the Group tab.
-GROUP_PARAMS = TrialStatsGroupParams(
+GROUP_PARAMS = ConditionTestGroupParams(
     source_metric="t_values",
     p_value_correction_method="none",
     significance_alpha=0.05,

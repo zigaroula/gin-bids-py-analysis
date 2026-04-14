@@ -241,9 +241,9 @@ def _write_group_stats_h5(path: Path, *, n_regions: int, n_bins: int) -> None:
         contrib_grp.create_dataset("source_stats_file", data=np.array([str(path)] * len(contrib_regions), dtype=object), dtype=h5py.string_dtype(encoding="utf-8"))
 
         prov_grp = fh.create_group("provenance")
-        prov_grp.create_dataset("source_trial_stats_files", data=np.array([str(path)], dtype=object), dtype=h5py.string_dtype(encoding="utf-8"))
+        prov_grp.create_dataset("source_condition_test_files", data=np.array([str(path)], dtype=object), dtype=h5py.string_dtype(encoding="utf-8"))
         prov_grp.create_dataset("source_electrodes_files", data=np.array([], dtype=object), dtype=h5py.string_dtype(encoding="utf-8"))
-        prov_grp.create_dataset("pipeline_name", data="trial_stats_group", dtype=h5py.string_dtype(encoding="utf-8"))
+        prov_grp.create_dataset("pipeline_name", data="condition_test_group", dtype=h5py.string_dtype(encoding="utf-8"))
         prov_grp.create_dataset("pipeline_version", data="test", dtype=h5py.string_dtype(encoding="utf-8"))
 
 
@@ -322,7 +322,7 @@ def test_inspect_trial_stats_handles_missing_optional_fields_and_no_save_figure(
 def test_inspect_trial_stats_supports_group_level_output() -> None:
     case_dir = _make_case_dir("group_level")
     try:
-        stats_path = case_dir / "sub-group_task-decid_desc-trialstatsgroup_stats.h5"
+        stats_path = case_dir / "sub-group_task-decid_desc-conditiontestgroup_stats.h5"
         _write_group_stats_h5(stats_path, n_regions=2, n_bins=4)
 
         result = _run_script("--input", str(stats_path), "--figure-dpi", "90")

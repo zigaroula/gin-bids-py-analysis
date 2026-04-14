@@ -1,6 +1,6 @@
-"""Bridge between in-memory ConditionTestProcessingResult and TrialStatsGroupProcessing.
+"""Bridge between in-memory ConditionTestProcessingResult and ConditionTestGroupProcessing.
 
-``TrialStatsGroupProcessing.process_group()`` reads HDF5 files through the
+``ConditionTestGroupProcessing.process_group()`` reads HDF5 files through the
 ``BIDSFile.ensure_loaded()`` interface.  This module constructs a fully
 in-memory ``h5py.File`` (``driver="core", backing_store=False``) that matches
 the schema read by ``_load_raw_from_hdf5``, attaches it to a synthetic
@@ -20,7 +20,7 @@ import numpy as np
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.processing.trial_stats_group import (
-    build_trial_stats_compatible_groups,
+    build_condition_test_compatible_groups,
 )
 
 if TYPE_CHECKING:
@@ -56,7 +56,7 @@ def _write_hdf5_structure(
     """Populate *fh* with the datasets read by ``_load_raw_from_hdf5``.
 
     The written schema matches exactly what
-    ``TrialStatsGroupProcessing._load_raw_from_hdf5`` reads:
+    ``ConditionTestGroupProcessing._load_raw_from_hdf5`` reads:
 
     * ``axes/channel``              — channel name array
     * ``axes/time_s``               — time axis
@@ -229,7 +229,7 @@ def group_file_group_context(
     results:
         In-memory subject results produced by ``ConditionTestProcessing``.
     source_metric:
-        The metric that ``TrialStatsGroupProcessing`` will read.
+        The metric that ``ConditionTestGroupProcessing`` will read.
 
     Yields
     ------
@@ -252,10 +252,10 @@ def group_file_group_context(
             handles.append(fh)
             bids_files.append(bids_file)
 
-        groups = build_trial_stats_compatible_groups(bids_files, source_metric=source_metric)
+        groups = build_condition_test_compatible_groups(bids_files, source_metric=source_metric)
         if not groups:
             raise ValueError(
-                "build_trial_stats_compatible_groups returned no groups for the provided results."
+                "build_condition_test_compatible_groups returned no groups for the provided results."
             )
         yield max(groups, key=lambda g: len(g.all_files))
     finally:
@@ -284,7 +284,7 @@ def build_group_file_group_from_results(
     results:
         In-memory subject results produced by `ConditionTestProcessing`.
     source_metric:
-        The metric that ``TrialStatsGroupProcessing`` will read (e.g.
+        The metric that ``ConditionTestGroupProcessing`` will read (e.g.
         ``"t_values"``, ``"mean_difference"``).
 
     Returns
@@ -305,9 +305,9 @@ def build_group_file_group_from_results(
         for subject_id, result in sorted(results.items())
     ]
 
-    groups = build_trial_stats_compatible_groups(bids_files, source_metric=source_metric)
+    groups = build_condition_test_compatible_groups(bids_files, source_metric=source_metric)
     if not groups:
         raise ValueError(
-            "build_trial_stats_compatible_groups returned no groups for the provided results."
+            "build_condition_test_compatible_groups returned no groups for the provided results."
         )
     return max(groups, key=lambda g: len(g.all_files))

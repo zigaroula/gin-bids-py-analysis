@@ -19,14 +19,14 @@ if TYPE_CHECKING:
     from gin_bids_py_analysis.processing.trial_stats import (
         RegressionProcessingResult,
     )
-    from gin_bids_py_analysis.processing.trial_slope_stats_group.params import (
-        TrialSlopeStatsGroupParams,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        RegressionGroupParams,
     )
-    from gin_bids_py_analysis.processing.trial_slope_stats_group.result import (
-        TrialSlopeStatsGroupProcessingResult,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        RegressionGroupProcessingResult,
     )
-    from gin_bids_py_analysis.processing.trial_slope_stats_group.writer import (
-        TrialSlopeStatsGroupProcessingWriter,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        RegressionGroupProcessingWriter,
     )
     from gin_bids_py_analysis.processing.trial_stats import (
         ConditionTestProcessingResult,
@@ -34,14 +34,14 @@ if TYPE_CHECKING:
     from gin_bids_py_analysis.processing.trial_stats import (
         ConditionTestProcessingWriter,
     )
-    from gin_bids_py_analysis.processing.trial_stats_group.params import (
-        TrialStatsGroupParams,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupParams,
     )
-    from gin_bids_py_analysis.processing.trial_stats_group.result import (
-        TrialStatsGroupProcessingResult,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupProcessingResult,
     )
-    from gin_bids_py_analysis.processing.trial_stats_group.writer import (
-        TrialStatsGroupProcessingWriter,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupProcessingWriter,
     )
 
 
@@ -186,7 +186,7 @@ class ComputeAllWorker(QThread):
 
 
 class GroupComputeWorker(QThread):
-    """Run TrialStatsGroupProcessing from in-memory subject results in a background thread.
+    """Run ConditionTestGroupProcessing from in-memory subject results in a background thread.
 
     Parameters
     ----------
@@ -197,17 +197,17 @@ class GroupComputeWorker(QThread):
 
     Signals
     -------
-    result_ready : emitted with the ``TrialStatsGroupProcessingResult`` on success.
+    result_ready : emitted with the ``ConditionTestGroupProcessingResult`` on success.
     error        : emitted with the exception message string on failure.
     """
 
-    result_ready = Signal(object)   # TrialStatsGroupProcessingResult
+    result_ready = Signal(object)   # ConditionTestGroupProcessingResult
     error = Signal(str)
 
     def __init__(
         self,
         all_results: dict[str, "ConditionTestProcessingResult | RegressionProcessingResult"],
-        group_params: "TrialStatsGroupParams | TrialSlopeStatsGroupParams",
+        group_params: "ConditionTestGroupParams | RegressionGroupParams",
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -217,23 +217,23 @@ class GroupComputeWorker(QThread):
     def run(self) -> None:
         try:
             if _is_slope_group_params(self._group_params):
-                from gin_bids_py_analysis.processing.trial_slope_stats_group import (
-                    TrialSlopeStatsGroupProcessing,
+                from gin_bids_py_analysis.processing.trial_stats_group import (
+                    RegressionGroupProcessing,
                 )
 
                 from ._bridge_slope import group_file_group_context_slope
 
-                processor = TrialSlopeStatsGroupProcessing(self._group_params)
+                processor = RegressionGroupProcessing(self._group_params)
                 with group_file_group_context_slope(self._all_results) as group:
                     result = processor.process_group(group)
             else:
                 from gin_bids_py_analysis.processing.trial_stats_group import (
-                    TrialStatsGroupProcessing,
+                    ConditionTestGroupProcessing,
                 )
 
                 from ._bridge import group_file_group_context
 
-                processor = TrialStatsGroupProcessing(self._group_params)
+                processor = ConditionTestGroupProcessing(self._group_params)
                 with group_file_group_context(
                     self._all_results,
                     source_metric=self._group_params.source_metric,
@@ -287,14 +287,14 @@ class WriteAllWorker(QThread):
 
 
 class WriteGroupWorker(QThread):
-    """Write a single ``TrialStatsGroupProcessingResult`` in a background thread.
+    """Write a single ``ConditionTestGroupProcessingResult`` in a background thread.
 
     Parameters
     ----------
     result:
         The group-level result to write.
     writer:
-        A fully configured ``TrialStatsGroupProcessingWriter`` instance.
+        A fully configured ``ConditionTestGroupProcessingWriter`` instance.
 
     Signals
     -------
@@ -307,8 +307,8 @@ class WriteGroupWorker(QThread):
 
     def __init__(
         self,
-        result: "TrialStatsGroupProcessingResult",
-        writer: "TrialStatsGroupProcessingWriter",
+        result: "ConditionTestGroupProcessingResult",
+        writer: "ConditionTestGroupProcessingWriter",
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -393,8 +393,8 @@ class LoadGroupResultWorker(QThread):
     ----------
     group_file:
         Path to the ``.h5``/``.hdf5`` or ``.mat`` group stats file written by
-        ``TrialStatsGroupProcessingWriter`` or
-        ``TrialSlopeStatsGroupProcessingWriter``.
+        ``ConditionTestGroupProcessingWriter`` or
+        ``RegressionGroupProcessingWriter``.
 
     Signals
     -------
@@ -402,7 +402,7 @@ class LoadGroupResultWorker(QThread):
     error        : str — emitted with the exception message on failure.
     """
 
-    result_ready = Signal(object)  # TrialStatsGroupProcessingResult
+    result_ready = Signal(object)  # ConditionTestGroupProcessingResult
     error = Signal(str)
 
     def __init__(
@@ -415,17 +415,17 @@ class LoadGroupResultWorker(QThread):
 
     def run(self) -> None:
         try:
-            from gin_bids_py_analysis.processing.trial_slope_stats_group.result_loader import (
-                load_trial_slope_stats_group_result,
+            from gin_bids_py_analysis.processing.trial_stats_group import (
+                load_regression_group_result,
             )
-            from gin_bids_py_analysis.processing.trial_stats_group.result_loader import (
-                load_trial_stats_group_result,
+            from gin_bids_py_analysis.processing.trial_stats_group import (
+                load_condition_test_group_result,
             )
 
             result = _load_group_result_auto(
                 self._group_file,
-                load_trial_stats_group_result=load_trial_stats_group_result,
-                load_trial_slope_stats_group_result=load_trial_slope_stats_group_result,
+                load_condition_test_group_result=load_condition_test_group_result,
+                load_regression_group_result=load_regression_group_result,
             )
             self.result_ready.emit(result)
         except Exception as exc:  # noqa: BLE001
@@ -470,8 +470,8 @@ def _load_subject_result_auto(
 def _load_group_result_auto(
     path: Path,
     *,
-    load_trial_stats_group_result,
-    load_trial_slope_stats_group_result,
+    load_condition_test_group_result,
+    load_regression_group_result,
 ):
     suffix = path.suffix.lower()
     if suffix in {".h5", ".hdf5"}:
@@ -479,17 +479,22 @@ def _load_group_result_auto(
             import h5py
 
             with h5py.File(path, "r") as fh:
-                # Classic trial_stats_group layout.
-                if "stats" in fh and "t_values" in fh["stats"]:
-                    return load_trial_stats_group_result(path)
+                # regression_group layout.
+                # Keep this tolerant because precomputed group files may come
+                # from slightly different schema revisions.
+                if "regression" in fh:
+                    regression_group = fh["regression"]
+                    if (
+                        "t_values" in regression_group
+                        or "condition_a" in regression_group
+                        or "condition_b" in regression_group
+                        or "epoch_summary" in regression_group
+                    ):
+                        return load_regression_group_result(path)
 
-                # slope trial_slope_stats_group layout.
-                if (
-                    "regression" in fh
-                    and "condition_a" in fh["regression"]
-                    and "slope_mean" in fh["regression"]["condition_a"]
-                ):
-                    return load_trial_slope_stats_group_result(path)
+                # condition_test_group layout.
+                if "stats" in fh and "t_values" in fh["stats"]:
+                    return load_condition_test_group_result(path)
 
                 # Provenance fallback.
                 pipeline_name = ""
@@ -500,25 +505,25 @@ def _load_group_result_auto(
                         ).strip()
                     except Exception:
                         pipeline_name = ""
-                if pipeline_name == "trial_stats_group":
-                    return load_trial_stats_group_result(path)
-                if pipeline_name == "trial_slope_stats_group":
-                    return load_trial_slope_stats_group_result(path)
+                if pipeline_name == "condition_test_group":
+                    return load_condition_test_group_result(path)
+                if pipeline_name == "regression_group":
+                    return load_regression_group_result(path)
         except Exception:
             pass
 
-    # Conservative fallback order: trial_stats_group first, then slope group.
-    # The slope-group loader can decode some ttest files with default-filled
+    # Conservative fallback order: condition-test group first, then regression group.
+    # The regression-group loader can decode some ttest files with default-filled
     # arrays, so we only use it as second choice.
     try:
-        return load_trial_stats_group_result(path)
+        return load_condition_test_group_result(path)
     except Exception:
-        return load_trial_slope_stats_group_result(path)
+        return load_regression_group_result(path)
 
 
 def _is_slope_group_params(group_params: object) -> bool:
-    from gin_bids_py_analysis.processing.trial_slope_stats_group.params import (
-        TrialSlopeStatsGroupParams,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        RegressionGroupParams,
     )
 
-    return isinstance(group_params, TrialSlopeStatsGroupParams)
+    return isinstance(group_params, RegressionGroupParams)

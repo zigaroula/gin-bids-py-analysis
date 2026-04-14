@@ -1,23 +1,56 @@
-"""Group-level ROI statistics built from trial_stats channel-level outputs."""
+"""Shared group-level trial-statistics domain package."""
 
-__version__ = "0.1.0"
-
-from .params import TrialStatsGroupParams, TrialStatsGroupWriterParams
+from .params import BaseTrialStatsGroupParams, BaseTrialStatsGroupWriterParams
 from .processor import (
-    TrialStatsGroupProcessing,
-    build_trial_stats_compatible_groups,
+    BaseTrialStatsGroupContributionRecord,
+    BaseTrialStatsGroupProcessing,
+    BaseTrialStatsGroupSnapshot,
+    BaseTrialStatsGroupSnapshotSignature,
+)
+from .result import BaseTrialStatsGroupProcessingResult
+from .writer import BaseTrialStatsGroupProcessingWriter
+from .condition_test import (
+    ConditionTestGroupParams,
+    ConditionTestGroupProcessing,
+    ConditionTestGroupProcessingResult,
+    ConditionTestGroupProcessingWriter,
+    ConditionTestGroupWriterParams,
+    build_condition_test_compatible_groups,
+    load_condition_test_group_result,
+)
+from .regression import (
+    RegressionGroupParams,
+    RegressionGroupProcessing,
+    RegressionGroupProcessingResult,
+    RegressionGroupProcessingWriter,
+    RegressionGroupWriterParams,
+    build_regression_compatible_groups,
+    load_regression_group_result,
 )
 from gin_bids_py_analysis.processing.utils.group_stats import ROIChannelContribution
 
-from .result import TrialStatsGroupProcessingResult
-from .writer import TrialStatsGroupProcessingWriter
-
 __all__ = [
     "ROIChannelContribution",
-    "TrialStatsGroupParams",
-    "TrialStatsGroupProcessing",
-    "TrialStatsGroupProcessingResult",
-    "TrialStatsGroupProcessingWriter",
-    "TrialStatsGroupWriterParams",
-    "build_trial_stats_compatible_groups",
+    "BaseTrialStatsGroupParams",
+    "BaseTrialStatsGroupWriterParams",
+    "BaseTrialStatsGroupSnapshotSignature",
+    "BaseTrialStatsGroupSnapshot",
+    "BaseTrialStatsGroupContributionRecord",
+    "BaseTrialStatsGroupProcessingResult",
+    "BaseTrialStatsGroupProcessing",
+    "BaseTrialStatsGroupProcessingWriter",
+    "ConditionTestGroupParams",
+    "ConditionTestGroupProcessing",
+    "ConditionTestGroupProcessingResult",
+    "ConditionTestGroupProcessingWriter",
+    "ConditionTestGroupWriterParams",
+    "build_condition_test_compatible_groups",
+    "load_condition_test_group_result",
+    "RegressionGroupParams",
+    "RegressionGroupProcessing",
+    "RegressionGroupProcessingResult",
+    "RegressionGroupProcessingWriter",
+    "RegressionGroupWriterParams",
+    "build_regression_compatible_groups",
+    "load_regression_group_result",
 ]

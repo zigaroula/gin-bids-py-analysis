@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from gin_bids_py_analysis.processing.trial_stats_group.params import TrialStatsGroupParams
+from gin_bids_py_analysis.processing.trial_stats_group import ConditionTestGroupParams
 from gin_bids_py_analysis.visualization.trial_stats.panels.group_params_panel import (
     GroupParamsPanel,
 )
 
 
 @pytest.fixture()
-def default_group_params() -> TrialStatsGroupParams:
-    return TrialStatsGroupParams(
+def default_group_params() -> ConditionTestGroupParams:
+    return ConditionTestGroupParams(
         source_metric="t_values",
         p_value_correction_method="fdr_bh",
         cluster_permutation_method="custom",
@@ -46,7 +46,7 @@ class TestGroupParamsPanelRoundTrip:
         panel = GroupParamsPanel(default_group_params)
         qtbot.addWidget(panel)
 
-        new_params = TrialStatsGroupParams(
+        new_params = ConditionTestGroupParams(
             source_metric="mean_difference",
             p_value_correction_method="bonferroni",
             cluster_permutation_method="mne",

@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset
-from gin_bids_py_analysis.processing.trial_stats_group import TrialStatsGroupParams
+from gin_bids_py_analysis.processing.trial_stats_group import ConditionTestGroupParams
 from gin_bids_py_analysis.visualization.trial_stats import launch_group_precomputed
 
 # ---------------------------------------------------------------------------
@@ -23,7 +23,7 @@ BIDS_ROOT = Path(r"E:\CBT\bids")
 
 # Optional: pre-populate the GroupParamsPanel with the parameters that were
 # used to produce the group file.  Set to None to leave the panel at defaults.
-GROUP_PARAMS = TrialStatsGroupParams(
+GROUP_PARAMS = ConditionTestGroupParams(
     source_metric="t_values",
     p_value_correction_method="cluster_permutation",
     cluster_permutation_method="mne",
@@ -61,12 +61,12 @@ GROUP_PARAMS = TrialStatsGroupParams(
 )
 
 # Filters to discover the group stats file written by
-# TrialStatsGroupProcessingWriter.
+# ConditionTestGroupProcessingWriter.
 GROUP_STATS_FILTERS = {
     "suffix": "stats",
     "extension": ".h5",
-    "desc": "flipsign",
-    "scope": "trial_stats_group",
+    "desc": "conditiontestgroup",
+    "scope": "condition_test_group",
 }
 
 if __name__ == "__main__":

@@ -74,10 +74,10 @@ def test_run_trial_stats_group_script_main_smoke(monkeypatch) -> None:
                 return [
                     case_dir
                     / "derivatives"
-                    / "trial_stats_group"
+                    / "condition_test_group"
                     / "sub-group"
                     / "ieeg"
-                    / "sub-group_task-decid_desc-trialstatsgroup_stats.h5"
+                    / "sub-group_task-decid_desc-conditiontestgroup_stats.h5"
                 ]
 
         class _FakeWriter:
@@ -85,16 +85,16 @@ def test_run_trial_stats_group_script_main_smoke(monkeypatch) -> None:
                 pass
 
         monkeypatch.setattr(module, "BIDSDataset", _FakeDataset)
-        monkeypatch.setattr(module, "TrialStatsGroupProcessing", _FakeProcessor)
-        monkeypatch.setattr(module, "TrialStatsGroupProcessingWriter", _FakeWriter)
+        monkeypatch.setattr(module, "ConditionTestGroupProcessing", _FakeProcessor)
+        monkeypatch.setattr(module, "ConditionTestGroupProcessingWriter", _FakeWriter)
         monkeypatch.setattr(
             module,
-            "build_trial_stats_compatible_groups",
+            "build_condition_test_compatible_groups",
             lambda files, source_metric: [group],
         )
 
         out_paths = module.main()
         assert len(out_paths) == 1
-        assert "trial_stats_group" in str(out_paths[0])
+        assert "condition_test_group" in str(out_paths[0])
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)

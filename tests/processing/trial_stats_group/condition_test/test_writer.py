@@ -12,9 +12,9 @@ from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.trial_stats_group import (
     ROIChannelContribution,
-    TrialStatsGroupProcessingResult,
-    TrialStatsGroupProcessingWriter,
-    TrialStatsGroupWriterParams,
+    ConditionTestGroupProcessingResult,
+    ConditionTestGroupProcessingWriter,
+    ConditionTestGroupWriterParams,
 )
 
 
@@ -54,7 +54,7 @@ def test_writer_outputs_expected_hdf5_schema_and_group_path() -> None:
             },
         )
 
-        result = TrialStatsGroupProcessingResult(
+        result = ConditionTestGroupProcessingResult(
             source_group=BIDSFileGroup(primary=primary),
             output_entities={"subject": "group", "task": "decid"},
             t_values=np.array([[2.0, 3.0]], dtype=np.float64),
@@ -90,20 +90,20 @@ def test_writer_outputs_expected_hdf5_schema_and_group_path() -> None:
             condition_a_group_sem=np.array([[0.1, 0.2]], dtype=np.float64),
             condition_b_group_mean=np.array([[1.0, 1.2]], dtype=np.float64),
             condition_b_group_sem=np.array([[0.05, 0.1]], dtype=np.float64),
-            source_trial_stats_files=[str(primary.path)],
+            source_condition_test_files=[str(primary.path)],
             source_electrodes_files=[],
             excluded_rois={"ROI_B": "insufficient_subjects:1<2"},
         )
 
-        writer = TrialStatsGroupProcessingWriter(
-            TrialStatsGroupWriterParams(bids_root=case_dir)
+        writer = ConditionTestGroupProcessingWriter(
+            ConditionTestGroupWriterParams(bids_root=case_dir)
         )
         out_path = writer.write(result)
 
         assert out_path.exists()
         assert "sub-group" in str(out_path)
-        assert "trial_stats_group" in str(out_path)
-        assert out_path.name == "sub-group_task-decid_desc-trialstatsgroup_stats.h5"
+        assert "condition_test_group" in str(out_path)
+        assert out_path.name == "sub-group_task-decid_desc-conditiontestgroup_stats.h5"
 
         with h5py.File(out_path, "r") as fh:
             assert fh["stats"]["t_values"].shape == (1, 2)
@@ -120,7 +120,7 @@ def test_writer_outputs_expected_hdf5_schema_and_group_path() -> None:
             assert fh["meta"]["roi_mode"].asstr()[()] == "manual"
             assert list(fh["meta"]["excluded_rois"]["region"].asstr()[:]) == ["ROI_B"]
             assert list(fh["contributions"]["channel"].asstr()[:]) == ["A1"]
-            assert list(fh["provenance"]["source_trial_stats_files"].asstr()[:]) == [str(primary.path)]
+            assert list(fh["provenance"]["source_condition_test_files"].asstr()[:]) == [str(primary.path)]
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -140,7 +140,7 @@ def test_writer_outputs_matlab_format() -> None:
             },
         )
 
-        result = TrialStatsGroupProcessingResult(
+        result = ConditionTestGroupProcessingResult(
             source_group=BIDSFileGroup(primary=primary),
             output_entities={"subject": "group", "task": "decid"},
             t_values=np.array([[2.0, 3.0]], dtype=np.float64),
@@ -176,13 +176,13 @@ def test_writer_outputs_matlab_format() -> None:
             condition_a_group_sem=np.array([[0.1, 0.2]], dtype=np.float64),
             condition_b_group_mean=np.array([[1.0, 1.2]], dtype=np.float64),
             condition_b_group_sem=np.array([[0.05, 0.1]], dtype=np.float64),
-            source_trial_stats_files=[str(primary.path)],
+            source_condition_test_files=[str(primary.path)],
             source_electrodes_files=[],
             excluded_rois={"ROI_B": "insufficient_subjects:1<2"},
         )
 
-        writer = TrialStatsGroupProcessingWriter(
-            TrialStatsGroupWriterParams(
+        writer = ConditionTestGroupProcessingWriter(
+            ConditionTestGroupWriterParams(
                 bids_root=case_dir,
                 output_format="matlab",
             )
@@ -192,8 +192,8 @@ def test_writer_outputs_matlab_format() -> None:
         assert out_path.suffix == ".mat"
         assert out_path.exists()
         assert "sub-group" in str(out_path)
-        assert "trial_stats_group" in str(out_path)
-        assert out_path.name == "sub-group_task-decid_desc-trialstatsgroup_stats.mat"
+        assert "condition_test_group" in str(out_path)
+        assert out_path.name == "sub-group_task-decid_desc-conditiontestgroup_stats.mat"
 
         mat = scipy.io.loadmat(str(out_path), squeeze_me=True, struct_as_record=False)
         data = mat["data"]
@@ -217,6 +217,6 @@ def test_writer_outputs_matlab_format() -> None:
         assert str(data.meta.roi_mode) == "manual"
         channel_arr = np.atleast_1d(data.contributions.channel)
         assert list(channel_arr) == ["A1"]
-        assert str(data.provenance.pipeline_name) == "trial_stats_group"
+        assert str(data.provenance.pipeline_name) == "condition_test_group"
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)

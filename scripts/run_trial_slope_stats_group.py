@@ -11,12 +11,12 @@ from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset, BIDSFile, BIDSFileGroup
 from gin_bids_py_analysis.bids.helpers import normalize_subject_value
-from gin_bids_py_analysis.processing.trial_slope_stats_group import (
-    TrialSlopeStatsGroupParams,
-    TrialSlopeStatsGroupProcessing,
-    TrialSlopeStatsGroupProcessingWriter,
-    TrialSlopeStatsGroupWriterParams,
-    build_trial_slope_stats_compatible_groups,
+from gin_bids_py_analysis.processing.trial_stats_group import (
+    RegressionGroupParams,
+    RegressionGroupProcessing,
+    RegressionGroupProcessingWriter,
+    RegressionGroupWriterParams,
+    build_regression_compatible_groups,
 )
 
 # ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ GROUP_PARAM_KWARGS = {
     "roi_mode": "manual",
 }
 
-WRITER_PARAMS = TrialSlopeStatsGroupWriterParams(
+WRITER_PARAMS = RegressionGroupWriterParams(
     bids_root=BIDS_ROOT,
     output_format="hdf5",
     output_description="none",
@@ -144,9 +144,9 @@ def _load_roi_channels_from_csv(csv_paths_by_roi: dict[str, Path]) -> dict[str, 
     return manual_region_channels
 
 
-def _build_group_params() -> TrialSlopeStatsGroupParams:
+def _build_group_params() -> RegressionGroupParams:
     manual_region_channels = _load_roi_channels_from_csv(ROI_CSV_FILES)
-    return TrialSlopeStatsGroupParams(
+    return RegressionGroupParams(
         manual_region_channels=manual_region_channels,
         **GROUP_PARAM_KWARGS,
     )
@@ -165,7 +165,7 @@ def _load_trial_slope_stats_files(dataset: BIDSDataset) -> list[BIDSFile]:
 
 
 def _build_groups(files: list[BIDSFile]) -> list[BIDSFileGroup]:
-    return build_trial_slope_stats_compatible_groups(files)
+    return build_regression_compatible_groups(files)
 
 
 def main() -> list[Path]:
@@ -183,8 +183,8 @@ def main() -> list[Path]:
     if not groups:
         return []
 
-    processor = TrialSlopeStatsGroupProcessing(params)
-    writer = TrialSlopeStatsGroupProcessingWriter(WRITER_PARAMS)
+    processor = RegressionGroupProcessing(params)
+    writer = RegressionGroupProcessingWriter(WRITER_PARAMS)
     out_paths = processor.run(groups, writer, n_jobs=N_JOBS)
     for path in out_paths:
         print(f"Wrote {path}")

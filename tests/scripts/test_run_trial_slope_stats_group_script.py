@@ -58,10 +58,10 @@ def test_run_trial_slope_stats_group_script_main_smoke(monkeypatch) -> None:
         expected_out = (
             case_dir
             / "derivatives"
-            / "trial_slope_stats_group"
+            / "regression_group"
             / "sub-group"
             / "ieeg"
-            / "sub-group_task-decid_desc-trialslopestatsgroup_stats.h5"
+            / "sub-group_task-decid_desc-regressiongroup_stats.h5"
         )
 
         class _FakeDataset:
@@ -85,16 +85,16 @@ def test_run_trial_slope_stats_group_script_main_smoke(monkeypatch) -> None:
                 pass
 
         monkeypatch.setattr(module, "BIDSDataset", _FakeDataset)
-        monkeypatch.setattr(module, "TrialSlopeStatsGroupProcessing", _FakeProcessor)
-        monkeypatch.setattr(module, "TrialSlopeStatsGroupProcessingWriter", _FakeWriter)
+        monkeypatch.setattr(module, "RegressionGroupProcessing", _FakeProcessor)
+        monkeypatch.setattr(module, "RegressionGroupProcessingWriter", _FakeWriter)
         monkeypatch.setattr(
             module,
-            "build_trial_slope_stats_compatible_groups",
+            "build_regression_compatible_groups",
             lambda files: [group],
         )
 
         out_paths = module.main()
         assert len(out_paths) == 1
-        assert "trial_slope_stats_group" in str(out_paths[0])
+        assert "regression_group" in str(out_paths[0])
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)

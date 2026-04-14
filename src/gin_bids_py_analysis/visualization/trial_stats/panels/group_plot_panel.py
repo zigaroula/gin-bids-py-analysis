@@ -28,11 +28,11 @@ from .plot_panel import (
 )
 
 if TYPE_CHECKING:
-    from gin_bids_py_analysis.processing.trial_slope_stats_group.result import (
-        TrialSlopeStatsGroupProcessingResult,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        RegressionGroupProcessingResult,
     )
-    from gin_bids_py_analysis.processing.trial_stats_group.result import (
-        TrialStatsGroupProcessingResult,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupProcessingResult,
     )
 
 
@@ -40,8 +40,8 @@ class GroupPlotPanel(QWidget):
     """Panel combining a ROI selector list and tabbed group plots.
 
     The panel supports two result schemas:
-    - ``TrialStatsGroupProcessingResult`` (classic t-test group stats)
-    - ``TrialSlopeStatsGroupProcessingResult`` (slope-regression group stats)
+    - ``ConditionTestGroupProcessingResult`` (classic t-test group stats)
+    - ``RegressionGroupProcessingResult`` (slope-regression group stats)
     """
 
     roi_changed = Signal(int)
@@ -192,7 +192,7 @@ class GroupPlotPanel(QWidget):
 
     def update_plots(
         self,
-        result: "TrialStatsGroupProcessingResult | TrialSlopeStatsGroupProcessingResult",
+        result: "ConditionTestGroupProcessingResult | RegressionGroupProcessingResult",
         roi_idx: int,
     ) -> None:
         """Redraw all plots for *roi_idx*."""
@@ -288,7 +288,7 @@ class GroupPlotPanel(QWidget):
 
     def _draw_roi_ttest(
         self,
-        result: "TrialStatsGroupProcessingResult",
+        result: "ConditionTestGroupProcessingResult",
         roi_idx: int,
     ) -> None:
         roi_label = result.region_names[roi_idx]
@@ -467,7 +467,7 @@ class GroupPlotPanel(QWidget):
 
     def _draw_roi_slope(
         self,
-        result: "TrialSlopeStatsGroupProcessingResult",
+        result: "RegressionGroupProcessingResult",
         roi_idx: int,
     ) -> None:
         roi_label = result.region_names[roi_idx]

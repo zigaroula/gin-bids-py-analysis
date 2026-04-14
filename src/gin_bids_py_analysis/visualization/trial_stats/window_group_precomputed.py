@@ -1,10 +1,10 @@
 """Visualization window for a pre-computed group trial statistics file.
 
-This window loads a single ``TrialStatsGroupProcessingResult`` from disk and
+This window loads a single ``ConditionTestGroupProcessingResult`` from disk and
 displays the group-level ROI plots without requiring per-subject files.  It is
 the entry point for the *group-only precomputed* visualization path — useful
 when group stats have already been written by
-``TrialStatsGroupProcessingWriter`` and you only want to inspect or re-export
+``ConditionTestGroupProcessingWriter`` and you only want to inspect or re-export
 the group results.
 
 Layout
@@ -34,20 +34,20 @@ from .panels.group_plot_panel import GroupPlotPanel
 from .worker import LoadGroupResultWorker
 
 if TYPE_CHECKING:
-    from gin_bids_py_analysis.processing.trial_stats_group.params import (
-        TrialStatsGroupParams,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupParams,
     )
-    from gin_bids_py_analysis.processing.trial_stats_group.result import (
-        TrialStatsGroupProcessingResult,
-    )
-
-
-def _make_placeholder_group_params() -> "TrialStatsGroupParams":
-    from gin_bids_py_analysis.processing.trial_stats_group.params import (
-        TrialStatsGroupParams,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupProcessingResult,
     )
 
-    return TrialStatsGroupParams(
+
+def _make_placeholder_group_params() -> "ConditionTestGroupParams":
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupParams,
+    )
+
+    return ConditionTestGroupParams(
         roi_mode="manual",
         manual_region_channels={"placeholder": {"01": ["CH1"]}},
     )
@@ -60,9 +60,9 @@ class TrialStatsGroupPrecomputedWindow(QMainWindow):
     ----------
     group_file:
         Path to the pre-computed group stats file written by
-        ``TrialStatsGroupProcessingWriter`` (``.h5``/``.hdf5``).
+        ``ConditionTestGroupProcessingWriter`` (``.h5``/``.hdf5``).
     group_params:
-        Optional ``TrialStatsGroupParams`` used only to pre-populate the
+        Optional ``ConditionTestGroupParams`` used only to pre-populate the
         ``GroupParamsPanel`` display.  No computation is performed from this
         window.
     parent:
@@ -72,7 +72,7 @@ class TrialStatsGroupPrecomputedWindow(QMainWindow):
     def __init__(
         self,
         group_file: Path,
-        group_params: "TrialStatsGroupParams | None" = None,
+        group_params: "ConditionTestGroupParams | None" = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -80,7 +80,7 @@ class TrialStatsGroupPrecomputedWindow(QMainWindow):
         self.resize(1280, 760)
 
         self._group_file = group_file
-        self._group_result: "TrialStatsGroupProcessingResult | None" = None
+        self._group_result: "ConditionTestGroupProcessingResult | None" = None
         self._load_worker: LoadGroupResultWorker | None = None
 
         # ------------------------------------------------------------------
@@ -130,7 +130,7 @@ class TrialStatsGroupPrecomputedWindow(QMainWindow):
         worker.start()
 
     def _on_group_loaded(
-        self, result: "TrialStatsGroupProcessingResult"
+        self, result: "ConditionTestGroupProcessingResult"
     ) -> None:
         self._group_result = result
         n_rois = len(result.region_names)

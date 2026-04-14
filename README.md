@@ -5,8 +5,8 @@ BIDS-based iEEG analysis pipelines:
 - `delphos` (HFO/spike detection)
 - `condition_test` (subject-level condition statistics)
 - `regression` (subject-level condition-specific slope regression)
-- `trial_stats_group` (group-level ROI statistics from `condition_test`)
-- `trial_slope_stats_group` (group-level ROI statistics from `regression`)
+- `condition_test_group` (group-level ROI statistics from `condition_test`)
+- `regression_group` (group-level ROI statistics from `regression`)
 
 ## Installation (venv, by OS)
 
@@ -106,8 +106,8 @@ out_paths = processor.run(files, writer, n_jobs=1)
 1. `hilbert` or `delphos` from raw iEEG (`scope="raw"`).
 2. `condition_test` from chosen iEEG derivatives (often Hilbert BrainVision outputs).
 3. `regression` from chosen iEEG derivatives when your analysis is `gamma ~ continuous_value`.
-4. `trial_stats_group` from `condition_test` outputs (`scope="condition_test"`).
-5. `trial_slope_stats_group` from `regression` outputs (`scope="regression"`).
+4. `condition_test_group` from `condition_test` outputs (`scope="condition_test"`).
+5. `regression_group` from `regression` outputs (`scope="regression"`).
 
 ## Pipeline Details and Configuration
 
@@ -263,8 +263,8 @@ Outputs:
 - default derivatives target: `derivatives/condition_test/...`
 - default subject `desc`: `conditiontest`
 
-Note for downstream `trial_stats_group`:
-- `trial_stats_group` requires channel-level `condition_test` inputs.
+Note for downstream `condition_test_group`:
+- `condition_test_group` requires channel-level `condition_test` inputs.
 - If you plan to run group stats later, keep `atlas_name=None` in `condition_test`.
 
 ### 4) Regression (subject level) (`scripts/run_trial_slope_stats.py`)
@@ -313,7 +313,7 @@ Outputs:
 - default derivatives target: `derivatives/regression/...`
 - default subject `desc`: `regression`
 
-### 5) Trial Stats Group (group level ROI) (`scripts/run_trial_stats_group.py`)
+### 5) Condition Test Group (group level ROI) (`scripts/run_trial_stats_group.py`)
 
 Run:
 
@@ -325,9 +325,10 @@ This pipeline consumes many `condition_test` outputs and performs one-sample ROI
 
 Input discovery:
 - `TRIAL_STATS_FILTERS` should point to your `condition_test` derivatives (often `.h5`).
-- `build_trial_stats_compatible_groups(...)` automatically splits files into compatible sets (same task, condition labels, time axis, and binning signature).
+- `build_condition_test_compatible_groups(...)` automatically splits files into compatible sets (same task, condition labels, time axis, and binning signature).
 
-Core configuration in `TrialStatsGroupParams` (`src/gin_bids_py_analysis/processing/trial_stats_group/params.py`):
+Core configuration in `ConditionTestGroupParams`
+(`src/gin_bids_py_analysis/processing/trial_stats_group/condition_test/params.py`):
 - Metric to aggregate from each subject file:
   - `source_metric`: `mean_difference`, `t_values`, `condition_a_mean`, `condition_b_mean`
 - Statistical controls:
@@ -341,8 +342,45 @@ Core configuration in `TrialStatsGroupParams` (`src/gin_bids_py_analysis/process
   - `min_channels_per_roi`
   - `min_subjects_per_roi`
 
-Writer configuration (`TrialStatsGroupWriterParams`):
+Writer configuration (`ConditionTestGroupWriterParams`):
 - `output_format`: `"hdf5"` or `"matlab"`
+- default group derivatives target: `derivatives/condition_test_group/...`
+- default group `desc`: `conditiontestgroup`
+
+### 6) Regression Group (group level ROI) (`scripts/run_trial_slope_stats_group.py`)
+
+Run:
+
+```bash
+python scripts/run_trial_slope_stats_group.py
+```
+
+This pipeline consumes many `regression` outputs and performs ROI-level
+condition contrasts across subjects.
+
+Input discovery:
+- `TRIAL_SLOPE_STATS_FILTERS` should point to your `regression` derivatives.
+- `build_regression_compatible_groups(...)` automatically splits files into compatible sets.
+
+Core configuration in `RegressionGroupParams`
+(`src/gin_bids_py_analysis/processing/trial_stats_group/regression/params.py`):
+- Metric to aggregate from each subject file:
+  - `source_metric`: `slope`, `r_value`
+- Group contrast configuration:
+  - `contrast_mode`: `paired`, `unpaired`
+  - `p_value_correction_method`
+  - `significance_alpha`
+- ROI definition mode:
+  - `roi_mode="atlas"` with `atlas_name`
+  - `roi_mode="manual"` with `manual_region_channels`
+- Inclusion thresholds:
+  - `min_channels_per_roi`
+  - `min_subjects_per_roi`
+
+Writer configuration (`RegressionGroupWriterParams`):
+- `output_format`: `"hdf5"` or `"matlab"`
+- default group derivatives target: `derivatives/regression_group/...`
+- default group `desc`: `regressiongroup`
 
 ## Visualization (brief)
 
@@ -351,7 +389,7 @@ There are two ways to visualize trial-stats results:
 1. Interactive UI:
    - Script: `scripts/visualize_trial_stats.py`
    - Uses `ConditionTestParams` (ttest mode) or `RegressionParams` via `launch_slope(...)`.
-   - Group tab supports both `trial_stats_group` and `trial_slope_stats_group`.
+   - Group tab supports both `condition_test_group` and `regression_group`.
    - Requires viz dependencies (`pip install -e ".[viz]"`).
 
 2. Static inspection:

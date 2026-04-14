@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset
-from gin_bids_py_analysis.processing.trial_stats_group import TrialStatsGroupParams
+from gin_bids_py_analysis.processing.trial_stats_group import ConditionTestGroupParams
 from gin_bids_py_analysis.visualization.trial_stats import launch_precomputed
 
 # ---------------------------------------------------------------------------
@@ -23,7 +23,7 @@ BIDS_ROOT = Path(r"E:\CBT\bids")
 # Optional: configure group-level ROI statistics.
 # When set, a "Group" tab appears after all subjects have been computed.
 # Set to None to disable the Group tab.
-GROUP_PARAMS = TrialStatsGroupParams(
+GROUP_PARAMS = ConditionTestGroupParams(
     source_metric="t_values",
     p_value_correction_method="cluster_permutation",
     cluster_permutation_method="mne",
@@ -71,8 +71,8 @@ STATS_FILTERS = {
 GROUP_STATS_FILTERS = {
     "suffix": "stats",
     "extension": ".h5",
-    "desc": "trialstatsgroup",
-    "scope": "trial_stats_group",
+    "desc": "conditiontestgroup",
+    "scope": "condition_test_group",
 }
 
 if __name__ == "__main__":

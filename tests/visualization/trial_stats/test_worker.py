@@ -139,7 +139,7 @@ class TestGroupComputeWorker:
 
         with patch(
             "gin_bids_py_analysis.visualization.trial_stats._bridge"
-            ".build_trial_stats_compatible_groups",
+            ".build_condition_test_compatible_groups",
             side_effect=RuntimeError("bridge error"),
         ):
             with qtbot.waitSignal(worker.error, timeout=5000) as blocker:
@@ -148,11 +148,11 @@ class TestGroupComputeWorker:
         assert "bridge error" in blocker.args[0]
 
     def test_result_ready_signal_in_slope_mode(self, qtbot, synthetic_slope_result):
-        from gin_bids_py_analysis.processing.trial_slope_stats_group import (
-            TrialSlopeStatsGroupParams,
+        from gin_bids_py_analysis.processing.trial_stats_group import (
+            RegressionGroupParams,
         )
 
-        params = TrialSlopeStatsGroupParams(
+        params = RegressionGroupParams(
             roi_mode="manual",
             manual_region_channels={"roi1": {"01": ["A1", "A2"]}},
             p_value_correction_method="none",
@@ -170,7 +170,7 @@ class TestGroupComputeWorker:
 
 
 class TestLoadGroupResultAuto:
-    def test_detects_trial_stats_group_hdf5_layout(self, tmp_path) -> None:
+    def test_detects_condition_test_group_hdf5_layout(self, tmp_path) -> None:
         file_path = tmp_path / "group_stats.h5"
         with h5py.File(file_path, "w") as fh:
             stats = fh.create_group("stats")
@@ -181,15 +181,15 @@ class TestLoadGroupResultAuto:
 
         result = _load_group_result_auto(
             file_path,
-            load_trial_stats_group_result=load_ttest,
-            load_trial_slope_stats_group_result=load_slope,
+            load_condition_test_group_result=load_ttest,
+            load_regression_group_result=load_slope,
         )
 
         assert result == "ttest_result"
         load_ttest.assert_called_once_with(file_path)
         load_slope.assert_not_called()
 
-    def test_detects_trial_slope_stats_group_hdf5_layout(self, tmp_path) -> None:
+    def test_detects_regression_group_hdf5_layout(self, tmp_path) -> None:
         file_path = tmp_path / "group_slope_stats.h5"
         with h5py.File(file_path, "w") as fh:
             reg = fh.create_group("regression")
@@ -201,8 +201,8 @@ class TestLoadGroupResultAuto:
 
         result = _load_group_result_auto(
             file_path,
-            load_trial_stats_group_result=load_ttest,
-            load_trial_slope_stats_group_result=load_slope,
+            load_condition_test_group_result=load_ttest,
+            load_regression_group_result=load_slope,
         )
 
         assert result == "slope_result"

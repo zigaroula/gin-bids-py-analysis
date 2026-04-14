@@ -28,11 +28,11 @@ from gin_bids_py_analysis.processing.trial_stats import (
     RegressionWriterParams,
     TrialResolver,
 )
-from gin_bids_py_analysis.processing.trial_slope_stats_group import (
-    TrialSlopeStatsGroupParams,
-    TrialSlopeStatsGroupProcessingResult,
-    TrialSlopeStatsGroupProcessingWriter,
-    TrialSlopeStatsGroupWriterParams,
+from gin_bids_py_analysis.processing.trial_stats_group import (
+    RegressionGroupParams,
+    RegressionGroupProcessingResult,
+    RegressionGroupProcessingWriter,
+    RegressionGroupWriterParams,
 )
 
 from .panels.group_params_panel import GroupParamsPanel
@@ -45,11 +45,11 @@ from .panels.subject_panel import SubjectChannelPanel
 from .worker import ComputeAllWorker, GroupComputeWorker, PreloadWorker, WriteAllWorker, WriteGroupWorker
 
 if TYPE_CHECKING:
-    from gin_bids_py_analysis.processing.trial_stats_group.params import (
-        TrialStatsGroupParams,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupParams,
     )
-    from gin_bids_py_analysis.processing.trial_stats_group.result import (
-        TrialStatsGroupProcessingResult,
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupProcessingResult,
     )
 
 
@@ -77,7 +77,7 @@ class TrialStatsWindow(QMainWindow):
     resolver:
         The ``TrialResolver`` configured for this dataset.
     group_params:
-        Optional ``TrialStatsGroupParams``.  When ``None`` the Group tab is
+        Optional ``ConditionTestGroupParams``.  When ``None`` the Group tab is
         visible but permanently disabled.
     bids_root:
         Optional path to the BIDS dataset root.  When provided the *Save results*
@@ -89,8 +89,8 @@ class TrialStatsWindow(QMainWindow):
         subject_groups: dict[str, BIDSFileGroup],
         default_params: ConditionTestParams,
         resolver: TrialResolver,
-        group_params: "TrialStatsGroupParams | None" = None,
-        slope_group_params: TrialSlopeStatsGroupParams | None = None,
+        group_params: "ConditionTestGroupParams | None" = None,
+        slope_group_params: RegressionGroupParams | None = None,
         bids_root: Path | None = None,
         default_slope_params: RegressionParams | None = None,
         default_mode: str = "ttest",
@@ -110,7 +110,7 @@ class TrialStatsWindow(QMainWindow):
         self._preload_worker: PreloadWorker | None = None
         self._group_params = group_params
         self._slope_group_params = slope_group_params
-        self._group_result: TrialStatsGroupProcessingResult | TrialSlopeStatsGroupProcessingResult | None = None
+        self._group_result: ConditionTestGroupProcessingResult | RegressionGroupProcessingResult | None = None
         self._group_worker: GroupComputeWorker | None = None
         self._write_worker: WriteAllWorker | None = None
         self._write_group_worker: WriteGroupWorker | None = None
@@ -150,7 +150,7 @@ class TrialStatsWindow(QMainWindow):
         # ------------------------------------------------------------------
         self._group_plot_panel = GroupPlotPanel()
         if self._analysis_mode == "slope":
-            active_group_params: TrialStatsGroupParams | TrialSlopeStatsGroupParams
+            active_group_params: ConditionTestGroupParams | RegressionGroupParams
             if self._slope_group_params is not None:
                 active_group_params = self._slope_group_params
             elif self._group_params is not None:
@@ -463,19 +463,19 @@ class TrialStatsWindow(QMainWindow):
         except ValueError:
             return
         if self._analysis_mode == "slope":
-            if isinstance(params, TrialSlopeStatsGroupParams):
+            if isinstance(params, RegressionGroupParams):
                 self._slope_group_params = params
             else:
                 self._slope_group_params = _coerce_slope_group_params_from_ttest(params)
                 params = self._slope_group_params
         else:
-            assert isinstance(params, TrialStatsGroupParams)
+            assert isinstance(params, ConditionTestGroupParams)
             self._group_params = params
         self._start_group_compute(params)
 
     def _start_group_compute(
         self,
-        params: TrialStatsGroupParams | TrialSlopeStatsGroupParams,
+        params: ConditionTestGroupParams | RegressionGroupParams,
     ) -> None:
         # Disconnect previous group worker
         if self._group_worker is not None:
@@ -501,7 +501,7 @@ class TrialStatsWindow(QMainWindow):
 
     def _on_group_result_ready(
         self,
-        result: TrialStatsGroupProcessingResult | TrialSlopeStatsGroupProcessingResult,
+        result: ConditionTestGroupProcessingResult | RegressionGroupProcessingResult,
     ) -> None:
         self._group_result = result
         self._group_params_panel.set_computing(False)
@@ -605,11 +605,11 @@ class TrialStatsWindow(QMainWindow):
             return
 
         if self._analysis_mode == "slope":
-            default_pipeline_label = "trial_slope_stats_group"
-            default_output_description = "trialslopestatsgroup"
+            default_pipeline_label = "regression_group"
+            default_output_description = "regressiongroup"
         else:
-            default_pipeline_label = "trial_stats_group"
-            default_output_description = "trialstatsgroup"
+            default_pipeline_label = "condition_test_group"
+            default_output_description = "conditiontestgroup"
 
         dlg = SaveTrialStatsGroupDialog(
             self._bids_root,
@@ -621,14 +621,14 @@ class TrialStatsWindow(QMainWindow):
             return
 
         if self._analysis_mode == "slope":
-            writer_params = TrialSlopeStatsGroupWriterParams(**dlg.get_common_writer_kwargs())
-            writer = TrialSlopeStatsGroupProcessingWriter(writer_params)
+            writer_params = RegressionGroupWriterParams(**dlg.get_common_writer_kwargs())
+            writer = RegressionGroupProcessingWriter(writer_params)
         else:
             writer_params = dlg.get_writer_params()
             from gin_bids_py_analysis.processing.trial_stats_group import (
-                TrialStatsGroupProcessingWriter,
+                ConditionTestGroupProcessingWriter,
             )
-            writer = TrialStatsGroupProcessingWriter(writer_params)
+            writer = ConditionTestGroupProcessingWriter(writer_params)
 
         self._group_params_panel.set_save_enabled(False)
         self._group_params_panel.set_status("Saving group result…")
@@ -661,36 +661,36 @@ class TrialStatsWindow(QMainWindow):
 # ---------------------------------------------------------------------------
 
 
-def _make_placeholder_group_params() -> "TrialStatsGroupParams":
-    """Return a minimal valid TrialStatsGroupParams for the disabled Group tab."""
-    from gin_bids_py_analysis.processing.trial_stats_group.params import (
-        TrialStatsGroupParams,
+def _make_placeholder_group_params() -> "ConditionTestGroupParams":
+    """Return a minimal valid ConditionTestGroupParams for the disabled Group tab."""
+    from gin_bids_py_analysis.processing.trial_stats_group import (
+        ConditionTestGroupParams,
     )
 
-    return TrialStatsGroupParams(
+    return ConditionTestGroupParams(
         roi_mode="manual",
         manual_region_channels={"placeholder": {"01": ["CH1"]}},
     )
 
 
-def _make_placeholder_slope_group_params() -> TrialSlopeStatsGroupParams:
-    return TrialSlopeStatsGroupParams(
+def _make_placeholder_slope_group_params() -> RegressionGroupParams:
+    return RegressionGroupParams(
         roi_mode="manual",
         manual_region_channels={"placeholder": {"01": ["CH1"]}},
     )
 
 
 def _coerce_slope_group_params_from_ttest(
-    params: TrialStatsGroupParams | TrialSlopeStatsGroupParams,
-) -> TrialSlopeStatsGroupParams:
-    if isinstance(params, TrialSlopeStatsGroupParams):
+    params: ConditionTestGroupParams | RegressionGroupParams,
+) -> RegressionGroupParams:
+    if isinstance(params, RegressionGroupParams):
         return params
 
     correction_method = params.p_value_correction_method
     if correction_method == "cluster_permutation":
         correction_method = "none"
 
-    return TrialSlopeStatsGroupParams(
+    return RegressionGroupParams(
         p_value_correction_method=correction_method,
         significance_alpha=params.significance_alpha,
         roi_mode=params.roi_mode,

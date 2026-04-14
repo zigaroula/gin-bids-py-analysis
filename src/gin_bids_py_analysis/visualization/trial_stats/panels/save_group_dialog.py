@@ -1,4 +1,4 @@
-"""Dialog for configuring TrialStatsGroupWriterParams before saving group results."""
+"""Dialog for configuring ConditionTestGroupWriterParams before saving group results."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gin_bids_py_analysis.processing.trial_stats_group import TrialStatsGroupWriterParams
+from gin_bids_py_analysis.processing.trial_stats_group import ConditionTestGroupWriterParams
 
 
 class SaveTrialStatsGroupDialog(QDialog):
@@ -38,8 +38,8 @@ class SaveTrialStatsGroupDialog(QDialog):
         bids_root: Path,
         parent: QWidget | None = None,
         *,
-        default_pipeline_label: str = "trial_stats_group",
-        default_output_description: str = "trialstatsgroup",
+        default_pipeline_label: str = "condition_test_group",
+        default_output_description: str = "conditiontestgroup",
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Save group results")
@@ -117,6 +117,6 @@ class SaveTrialStatsGroupDialog(QDialog):
             "output_format": self._format_combo.currentText(),
         }
 
-    def get_writer_params(self) -> TrialStatsGroupWriterParams:
-        """Build a :class:`TrialStatsGroupWriterParams` from the current dialog values."""
-        return TrialStatsGroupWriterParams(**self.get_common_writer_kwargs())
+    def get_writer_params(self) -> ConditionTestGroupWriterParams:
+        """Build a :class:`ConditionTestGroupWriterParams` from the current dialog values."""
+        return ConditionTestGroupWriterParams(**self.get_common_writer_kwargs())

@@ -1,4 +1,4 @@
-"""Right panel for group-level analysis: TrialStatsGroupParams form + Compute button."""
+"""Right panel for group-level analysis: ConditionTestGroupParams form + Compute button."""
 
 from __future__ import annotations
 
@@ -21,19 +21,19 @@ from PySide6.QtWidgets import (
 )
 from pydantic import ValidationError
 
-from gin_bids_py_analysis.processing.trial_slope_stats_group.params import (
-    TrialSlopeStatsGroupParams,
+from gin_bids_py_analysis.processing.trial_stats_group import (
+    RegressionGroupParams,
 )
-from gin_bids_py_analysis.processing.trial_stats_group.params import (
-    TrialStatsGroupParams,
+from gin_bids_py_analysis.processing.trial_stats_group import (
+    ConditionTestGroupParams,
 )
 from .manual_region_channels_dialog import ManualRegionChannelsDialog
 
 
 def _merge_model_params(
-    model: TrialStatsGroupParams | TrialSlopeStatsGroupParams,
+    model: ConditionTestGroupParams | RegressionGroupParams,
     **updates: object,
-) -> TrialStatsGroupParams | TrialSlopeStatsGroupParams:
+) -> ConditionTestGroupParams | RegressionGroupParams:
     """Return a validated copy of *model* with widget-driven updates applied."""
     payload = model.model_dump()
     payload.update(updates)
@@ -41,7 +41,7 @@ def _merge_model_params(
 
 
 class GroupParamsPanel(QWidget):
-    """Right panel with ``TrialStatsGroupParams`` fields and a Compute button.
+    """Right panel with ``ConditionTestGroupParams`` fields and a Compute button.
 
     The ``manual_region_channels`` field is edited via a dedicated dialog
     opened with the **Edit regions…** button.
@@ -57,7 +57,7 @@ class GroupParamsPanel(QWidget):
 
     def __init__(
         self,
-        params: TrialStatsGroupParams | TrialSlopeStatsGroupParams,
+        params: ConditionTestGroupParams | RegressionGroupParams,
         subject_ids: list[str] | None = None,
         analysis_mode: Literal["ttest", "slope"] | None = None,
         parent: QWidget | None = None,
@@ -67,13 +67,13 @@ class GroupParamsPanel(QWidget):
         self._analysis_mode: Literal["ttest", "slope"] = (
             analysis_mode
             if analysis_mode is not None
-            else ("slope" if isinstance(params, TrialSlopeStatsGroupParams) else "ttest")
+            else ("slope" if isinstance(params, RegressionGroupParams) else "ttest")
         )
-        self._ttest_params: TrialStatsGroupParams | None = (
-            params if isinstance(params, TrialStatsGroupParams) else None
+        self._ttest_params: ConditionTestGroupParams | None = (
+            params if isinstance(params, ConditionTestGroupParams) else None
         )
-        self._slope_params: TrialSlopeStatsGroupParams | None = (
-            params if isinstance(params, TrialSlopeStatsGroupParams) else None
+        self._slope_params: RegressionGroupParams | None = (
+            params if isinstance(params, RegressionGroupParams) else None
         )
         self.setMinimumWidth(280)
         self.setMaximumWidth(400)
@@ -203,7 +203,7 @@ class GroupParamsPanel(QWidget):
     # Public API
     # ------------------------------------------------------------------
 
-    def get_params(self) -> TrialStatsGroupParams | TrialSlopeStatsGroupParams:
+    def get_params(self) -> ConditionTestGroupParams | RegressionGroupParams:
         """Parse current widget values into a group-params model.
 
         Raises
@@ -214,7 +214,7 @@ class GroupParamsPanel(QWidget):
         atlas_name = self._atlas_name.text().strip() or None
         try:
             if self._analysis_mode == "slope":
-                base_params = self._slope_params or TrialSlopeStatsGroupParams(
+                base_params = self._slope_params or RegressionGroupParams(
                     roi_mode="manual",
                     manual_region_channels={"placeholder": {"01": ["CH1"]}},
                 )
@@ -230,10 +230,10 @@ class GroupParamsPanel(QWidget):
                     min_channels_per_roi=self._min_channels.value(),
                     min_subjects_per_roi=self._min_subjects.value(),
                 )
-                assert isinstance(params, TrialSlopeStatsGroupParams)
+                assert isinstance(params, RegressionGroupParams)
                 self._slope_params = params
                 return params
-            base_params = self._ttest_params or TrialStatsGroupParams(
+            base_params = self._ttest_params or ConditionTestGroupParams(
                 roi_mode="manual",
                 manual_region_channels={"placeholder": {"01": ["CH1"]}},
             )
@@ -249,16 +249,16 @@ class GroupParamsPanel(QWidget):
                 min_channels_per_roi=self._min_channels.value(),
                 min_subjects_per_roi=self._min_subjects.value(),
             )
-            assert isinstance(params, TrialStatsGroupParams)
+            assert isinstance(params, ConditionTestGroupParams)
             self._ttest_params = params
             return params
         except (ValidationError, ValueError) as exc:
             QMessageBox.warning(self, "Invalid parameters", str(exc))
             raise ValueError(str(exc)) from exc
 
-    def set_params(self, params: TrialStatsGroupParams | TrialSlopeStatsGroupParams) -> None:
+    def set_params(self, params: ConditionTestGroupParams | RegressionGroupParams) -> None:
         """Populate all widgets from *params*."""
-        if isinstance(params, TrialSlopeStatsGroupParams):
+        if isinstance(params, RegressionGroupParams):
             self._slope_params = params
         else:
             self._ttest_params = params

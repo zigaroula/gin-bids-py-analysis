@@ -1,7 +1,7 @@
-"""Load a pre-computed ``TrialStatsGroupProcessingResult`` from disk.
+"""Load a pre-computed ``ConditionTestGroupProcessingResult`` from disk.
 
 Supports the HDF5 (``.h5`` / ``.hdf5``) and MATLAB (``.mat``) formats written
-by ``TrialStatsGroupProcessingWriter``.  The returned result can be fed directly
+by ``ConditionTestGroupProcessingWriter``. The returned result can be fed directly
 to the visualization layer without re-running the group processing pipeline.
 """
 
@@ -22,23 +22,24 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
     str_scalar,
 )
 
-from .result import ROIChannelContribution, TrialStatsGroupProcessingResult
+from ..result import ROIChannelContribution
+from .result import ConditionTestGroupProcessingResult
 
 
-def load_trial_stats_group_result(
+def load_condition_test_group_result(
     path: Path | str,
-) -> TrialStatsGroupProcessingResult:
-    """Load a pre-computed ``TrialStatsGroupProcessingResult`` from *path*.
+) -> ConditionTestGroupProcessingResult:
+    """Load a pre-computed ``ConditionTestGroupProcessingResult`` from *path*.
 
     Parameters
     ----------
     path:
         Path to an ``.h5``/``.hdf5`` or ``.mat`` group stats file written by
-        ``TrialStatsGroupProcessingWriter``.
+        ``ConditionTestGroupProcessingWriter``.
 
     Returns
     -------
-    TrialStatsGroupProcessingResult
+    ConditionTestGroupProcessingResult
         A fully populated result object ready for visualization.
 
     Raises
@@ -62,7 +63,7 @@ def load_trial_stats_group_result(
 # ---------------------------------------------------------------------------
 
 
-def _load_from_hdf5(path: Path) -> TrialStatsGroupProcessingResult:
+def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
     with h5py.File(path, "r") as fh:
         # --- axes ---
         if "axes" not in fh or "region" not in fh["axes"]:
@@ -154,7 +155,7 @@ def _load_from_hdf5(path: Path) -> TrialStatsGroupProcessingResult:
         activity_zscore_ds = dataset_or_none(fh, "meta/activity_zscore")
         if activity_zscore_ds is None:
             raise ValueError(
-                f"{path.name}: unsupported legacy trial_stats_group schema; "
+                f"{path.name}: unsupported legacy condition_test_group schema; "
                 "meta/activity_zscore is required."
             )
         activity_zscore = str_scalar(activity_zscore_ds, default="none")
@@ -222,9 +223,9 @@ def _load_from_hdf5(path: Path) -> TrialStatsGroupProcessingResult:
         # --- provenance ---
         if "provenance" in fh:
             prov = fh["provenance"]
-            source_trial_stats_files = (
-                decode_str_array(np.asarray(prov["source_trial_stats_files"][:], dtype=object))
-                if "source_trial_stats_files" in prov
+            source_condition_test_files = (
+                decode_str_array(np.asarray(prov["source_condition_test_files"][:], dtype=object))
+                if "source_condition_test_files" in prov
                 else []
             )
             source_electrodes_files = (
@@ -233,7 +234,7 @@ def _load_from_hdf5(path: Path) -> TrialStatsGroupProcessingResult:
                 else []
             )
         else:
-            source_trial_stats_files = []
+            source_condition_test_files = []
             source_electrodes_files = []
 
         # --- cluster permutation results (optional) ---
@@ -260,7 +261,7 @@ def _load_from_hdf5(path: Path) -> TrialStatsGroupProcessingResult:
                     cluster_null_dists = [null_matrix[i] for i in range(null_matrix.shape[0])]
 
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
-    return TrialStatsGroupProcessingResult(
+    return ConditionTestGroupProcessingResult(
         source_group=source_group,
         metadata={
             "source_metric": source_metric,
@@ -300,7 +301,7 @@ def _load_from_hdf5(path: Path) -> TrialStatsGroupProcessingResult:
         condition_a_contributions=cond_a_contribs,
         condition_b_contributions=cond_b_contribs,
         contribution_labels=contrib_labels,
-        source_trial_stats_files=source_trial_stats_files,
+        source_condition_test_files=source_condition_test_files,
         source_electrodes_files=source_electrodes_files,
         excluded_rois=excluded_rois,
         cluster_p_values=cluster_p_values,
@@ -314,7 +315,7 @@ def _load_from_hdf5(path: Path) -> TrialStatsGroupProcessingResult:
 # ---------------------------------------------------------------------------
 
 
-def _load_from_matlab(path: Path) -> TrialStatsGroupProcessingResult:
+def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
     from gin_bids_py_analysis.processing.utils.matlab import (
         mat_float,
         mat_str,
@@ -397,7 +398,7 @@ def _load_from_matlab(path: Path) -> TrialStatsGroupProcessingResult:
     activity_zscore_raw = getattr(meta, "activity_zscore", None)
     if activity_zscore_raw is None:
         raise ValueError(
-            f"{path.name}: unsupported legacy trial_stats_group schema; "
+            f"{path.name}: unsupported legacy condition_test_group schema; "
             "meta.activity_zscore is required."
         )
     activity_zscore = mat_str(activity_zscore_raw, default="none")
@@ -428,15 +429,15 @@ def _load_from_matlab(path: Path) -> TrialStatsGroupProcessingResult:
             for r, s, c, f in zip(reis, subjs, chs, srcs)
         ]
 
-    source_trial_stats_files = (
-        mat_str_list(getattr(prov, "source_trial_stats_files", None)) if prov is not None else []
+    source_condition_test_files = (
+        mat_str_list(getattr(prov, "source_condition_test_files", None)) if prov is not None else []
     )
     source_electrodes_files = (
         mat_str_list(getattr(prov, "source_electrodes_files", None)) if prov is not None else []
     )
 
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
-    return TrialStatsGroupProcessingResult(
+    return ConditionTestGroupProcessingResult(
         source_group=source_group,
         metadata={
             "source_metric": source_metric,
@@ -476,7 +477,7 @@ def _load_from_matlab(path: Path) -> TrialStatsGroupProcessingResult:
         condition_a_contributions=[],
         condition_b_contributions=[],
         contribution_labels=[],
-        source_trial_stats_files=source_trial_stats_files,
+        source_condition_test_files=source_condition_test_files,
         source_electrodes_files=source_electrodes_files,
         excluded_rois=excluded_rois,
         cluster_p_values=None,
