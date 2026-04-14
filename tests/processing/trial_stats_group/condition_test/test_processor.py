@@ -242,7 +242,7 @@ def test_process_group_manual_mode_and_thresholds() -> None:
 
         assert result.region_names == ["ROI_POS", "ROI_NEG"]
         assert result.output_entities == {"subject": "group", "task": "decid"}
-        assert result.t_values.shape == (2, 3)
+        assert result.activity_t_values.shape == (2, 3)
         assert np.all(result.metric_mean[0] > 0.0)
         assert np.all(result.metric_mean[1] < 0.0)
         assert "ROI_DROP" in result.excluded_rois
@@ -414,8 +414,8 @@ def test_process_group_cluster_permutation_custom_mode() -> None:
         assert len(result.cluster_best_cluster_windows_s) == 1
         assert result.cluster_null_distributions is not None
         assert result.cluster_null_distributions[0].shape == (40,)
-        assert result.p_values.shape == (1, len(time_s))
-        assert result.significant_mask.shape == (1, len(time_s))
+        assert result.activity_p_values.shape == (1, len(time_s))
+        assert result.activity_significant_mask.shape == (1, len(time_s))
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -466,8 +466,8 @@ def test_process_group_cluster_permutation_mne_mode() -> None:
         assert len(result.cluster_best_cluster_windows_s) == 1
         assert result.cluster_null_distributions is not None
         assert result.cluster_null_distributions[0].ndim == 1
-        assert result.p_values.shape == (1, len(time_s))
-        assert result.significant_mask.shape == (1, len(time_s))
+        assert result.activity_p_values.shape == (1, len(time_s))
+        assert result.activity_significant_mask.shape == (1, len(time_s))
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -600,7 +600,7 @@ def test_process_group_manual_mode_mat_input() -> None:
 
         assert result.region_names == ["ROI_POS", "ROI_NEG"]
         assert result.output_entities == {"subject": "group", "task": "decid"}
-        assert result.t_values.shape == (2, 3)
+        assert result.activity_t_values.shape == (2, 3)
         assert np.all(result.metric_mean[0] > 0.0)
         assert np.all(result.metric_mean[1] < 0.0)
         assert "ROI_DROP" in result.excluded_rois

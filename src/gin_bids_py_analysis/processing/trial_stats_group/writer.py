@@ -202,6 +202,47 @@ class BaseTrialStatsGroupProcessingWriter(BaseProcessingWriter):
         return kwargs
 
     @staticmethod
+    def write_activity_stats_hdf5(
+        fh: h5py.File,
+        *,
+        result: BaseTrialStatsGroupProcessingResult,
+        group_name: str,
+    ) -> None:
+        grp = fh.create_group(group_name)
+        grp.create_dataset(
+            "t_values",
+            data=result.activity_t_values.astype(np.float64),
+        )
+        grp.create_dataset(
+            "p_values",
+            data=result.activity_p_values.astype(np.float64),
+        )
+        grp.create_dataset(
+            "p_values_uncorrected",
+            data=result.activity_p_values_uncorrected.astype(np.float64),
+        )
+        grp.create_dataset(
+            "significant_mask",
+            data=result.activity_significant_mask.astype(bool),
+        )
+
+    @staticmethod
+    def make_activity_stats_struct(
+        *,
+        result: BaseTrialStatsGroupProcessingResult,
+        epoch_summary: "np.ndarray | None" = None,
+    ) -> "np.ndarray":
+        kwargs: dict[str, object] = dict(
+            t_values=result.activity_t_values.astype(np.float64),
+            p_values=result.activity_p_values.astype(np.float64),
+            p_values_uncorrected=result.activity_p_values_uncorrected.astype(np.float64),
+            significant_mask=result.activity_significant_mask.astype(np.uint8),
+        )
+        if epoch_summary is not None:
+            kwargs["epoch_summary"] = epoch_summary
+        return make_struct(**kwargs)
+
+    @staticmethod
     def write_activity_means_hdf5(
         fh: h5py.File,
         *,

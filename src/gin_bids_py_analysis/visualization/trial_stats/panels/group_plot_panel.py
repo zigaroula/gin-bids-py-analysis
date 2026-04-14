@@ -295,8 +295,8 @@ class GroupPlotPanel(QWidget):
         t = result.time_axis_s
         alpha = result.significance_alpha
         sig = (
-            result.significant_mask[roi_idx].astype(bool)
-            if result.significant_mask.size > 0
+            result.activity_significant_mask[roi_idx].astype(bool)
+            if result.activity_significant_mask.size > 0
             else np.zeros(len(t), dtype=bool)
         )
 
@@ -364,8 +364,8 @@ class GroupPlotPanel(QWidget):
 
         ax = self._ax_t
         ax.clear()
-        if result.t_values.size > 0:
-            t_vals = result.t_values[roi_idx]
+        if result.activity_t_values.size > 0:
+            t_vals = result.activity_t_values[roi_idx]
             ax.plot(t, t_vals, color="darkorange")
             if np.nanmin(t_vals) < 0 < np.nanmax(t_vals):
                 ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
@@ -389,13 +389,13 @@ class GroupPlotPanel(QWidget):
 
         ax = self._ax_p
         ax.clear()
-        if result.p_values.size > 0:
-            p_corr = result.p_values[roi_idx]
+        if result.activity_p_values.size > 0:
+            p_corr = result.activity_p_values[roi_idx]
             method = result.p_value_correction_method
             has_correction = bool(method) and method.lower() not in ("none", "")
             p_unc = (
-                result.p_values_uncorrected[roi_idx]
-                if result.p_values_uncorrected.size > 0 and has_correction
+                result.activity_p_values_uncorrected[roi_idx]
+                if result.activity_p_values_uncorrected.size > 0 and has_correction
                 else None
             )
             if p_unc is not None:

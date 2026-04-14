@@ -81,24 +81,8 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
                 data=result.epoch_source_metric_df.astype(np.float64),
             )
 
-            activity = fh.create_group("activity")
-            activity.create_dataset(
-                "t_values",
-                data=result.activity_t_values.astype(np.float64),
-            )
-            activity.create_dataset(
-                "p_values",
-                data=result.activity_p_values.astype(np.float64),
-            )
-            activity.create_dataset(
-                "p_values_uncorrected",
-                data=result.activity_p_values_uncorrected.astype(np.float64),
-            )
-            activity.create_dataset(
-                "significant_mask",
-                data=result.activity_significant_mask.astype(bool),
-            )
-            ep_act = activity.create_group("epoch_summary")
+            self.write_activity_stats_hdf5(fh, result=result, group_name="activity")
+            ep_act = fh["activity"].create_group("epoch_summary")
             ep_act.create_dataset("t", data=result.epoch_activity_t.astype(np.float64))
             ep_act.create_dataset("p", data=result.epoch_activity_p.astype(np.float64))
             ep_act.create_dataset("df", data=result.epoch_activity_df.astype(np.float64))
@@ -203,11 +187,8 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
             ),
         )
 
-        activity_struct = make_struct(
-            t_values=result.activity_t_values.astype(np.float64),
-            p_values=result.activity_p_values.astype(np.float64),
-            p_values_uncorrected=result.activity_p_values_uncorrected.astype(np.float64),
-            significant_mask=result.activity_significant_mask.astype(np.uint8),
+        activity_struct = self.make_activity_stats_struct(
+            result=result,
             epoch_summary=make_struct(
                 t=result.epoch_activity_t.astype(np.float64),
                 p=result.epoch_activity_p.astype(np.float64),

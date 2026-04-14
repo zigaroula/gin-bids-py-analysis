@@ -32,12 +32,7 @@ class ConditionTestGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
         result: ConditionTestGroupProcessingResult,
         output_path: Path,
     ) -> None:
-        stats_struct = make_struct(
-            t_values=result.t_values.astype(np.float64),
-            p_values=result.p_values.astype(np.float64),
-            p_values_uncorrected=result.p_values_uncorrected.astype(np.float64),
-            significant_mask=result.significant_mask.astype(np.uint8),
-        )
+        stats_struct = self.make_activity_stats_struct(result=result)
 
         means_struct = make_struct(
             metric_mean=result.metric_mean.astype(np.float64),
@@ -52,9 +47,9 @@ class ConditionTestGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
         )
 
         summary_struct = make_struct(
-            t_values=result.epoch_mean_t_values.astype(np.float64),
-            p_values=result.epoch_mean_p_values.astype(np.float64),
-            df=result.epoch_mean_df.astype(np.float64),
+            t_values=result.epoch_activity_t.astype(np.float64),
+            p_values=result.epoch_activity_p.astype(np.float64),
+            df=result.epoch_activity_df.astype(np.float64),
             metric_mean=result.epoch_mean_metric_mean.astype(np.float64),
             metric_sem=result.epoch_mean_metric_sem.astype(np.float64),
         )
@@ -104,17 +99,7 @@ class ConditionTestGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
     def _write_hdf5(self, result: ConditionTestGroupProcessingResult, output_path: Path) -> None:
         str_dtype = self.string_dtype()
         with h5py.File(output_path, "w") as fh:
-            stats_grp = fh.create_group("stats")
-            stats_grp.create_dataset("t_values", data=result.t_values.astype(np.float64))
-            stats_grp.create_dataset("p_values", data=result.p_values.astype(np.float64))
-            stats_grp.create_dataset(
-                "p_values_uncorrected",
-                data=result.p_values_uncorrected.astype(np.float64),
-            )
-            stats_grp.create_dataset(
-                "significant_mask",
-                data=result.significant_mask.astype(bool),
-            )
+            self.write_activity_stats_hdf5(fh, result=result, group_name="stats")
 
             self.write_activity_means_hdf5(fh, result=result)
             fh["means"].create_dataset(
@@ -131,15 +116,15 @@ class ConditionTestGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
             summary_grp = fh.create_group("summary_epoch")
             summary_grp.create_dataset(
                 "t_values",
-                data=result.epoch_mean_t_values.astype(np.float64),
+                data=result.epoch_activity_t.astype(np.float64),
             )
             summary_grp.create_dataset(
                 "p_values",
-                data=result.epoch_mean_p_values.astype(np.float64),
+                data=result.epoch_activity_p.astype(np.float64),
             )
             summary_grp.create_dataset(
                 "df",
-                data=result.epoch_mean_df.astype(np.float64),
+                data=result.epoch_activity_df.astype(np.float64),
             )
             summary_grp.create_dataset(
                 "metric_mean",
