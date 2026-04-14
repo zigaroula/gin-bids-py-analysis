@@ -1,9 +1,4 @@
-"""Load a pre-computed ``ConditionTestGroupProcessingResult`` from disk.
-
-Supports the HDF5 (``.h5`` / ``.hdf5``) and MATLAB (``.mat``) formats written
-by ``ConditionTestGroupProcessingWriter``. The returned result can be fed directly
-to the visualization layer without re-running the group processing pipeline.
-"""
+"""Load a pre-computed ``ConditionTestGroupProcessingResult`` from disk."""
 
 from __future__ import annotations
 
@@ -18,7 +13,6 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
     dataset_or_none,
     decode_str_array,
     float_scalar,
-    int_scalar,
     str_scalar,
 )
 
@@ -29,92 +23,58 @@ from .result import ConditionTestGroupProcessingResult
 def load_condition_test_group_result(
     path: Path | str,
 ) -> ConditionTestGroupProcessingResult:
-    """Load a pre-computed ``ConditionTestGroupProcessingResult`` from *path*.
-
-    Parameters
-    ----------
-    path:
-        Path to an ``.h5``/``.hdf5`` or ``.mat`` group stats file written by
-        ``ConditionTestGroupProcessingWriter``.
-
-    Returns
-    -------
-    ConditionTestGroupProcessingResult
-        A fully populated result object ready for visualization.
-
-    Raises
-    ------
-    FileNotFoundError
-        If *path* does not exist.
-    ValueError
-        If the file cannot be interpreted as a valid group stats output.
-    """
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Group stats file not found: {path}")
-    ext = path.suffix.lower()
-    if ext == ".mat":
+    if path.suffix.lower() == ".mat":
         return _load_from_matlab(path)
     return _load_from_hdf5(path)
 
 
-# ---------------------------------------------------------------------------
-# HDF5 loader
-# ---------------------------------------------------------------------------
-
-
 def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
     with h5py.File(path, "r") as fh:
-        # --- axes ---
-        if "axes" not in fh or "region" not in fh["axes"]:
-            raise ValueError(
-                f"{path.name}: axes/region dataset is required for group stats."
-            )
         region_names = decode_str_array(np.asarray(fh["axes"]["region"][:]))
         time_axis_s = np.asarray(fh["axes"]["time_s"][:], dtype=np.float64)
         n_rois = len(region_names)
         n_t = len(time_axis_s)
-        _zeros = np.zeros((n_rois, n_t), dtype=np.float64)
 
-        # --- stats arrays ---
         def _read_2d(key: str, fill: float = 0.0) -> np.ndarray:
             ds = dataset_or_none(fh, key)
             if ds is None:
                 return np.full((n_rois, n_t), fill, dtype=np.float64)
             return np.asarray(ds[:], dtype=np.float64)
 
-        t_values = _read_2d("stats/t_values")
-        p_values = _read_2d("stats/p_values", fill=1.0)
-        p_values_uncorrected = _read_2d("stats/p_values_uncorrected", fill=1.0)
-        sig_ds = dataset_or_none(fh, "stats/significant_mask")
-        significance_alpha = float_scalar(
-            dataset_or_none(fh, "meta/significance_alpha"), default=0.05
-        )
-        if sig_ds is not None:
-            _loaded_mask = np.asarray(sig_ds[:], dtype=bool)
-            if _loaded_mask.ndim == 2 and _loaded_mask.shape == (n_rois, n_t):
-                significant_mask = _loaded_mask
-            else:
-                significant_mask = np.isfinite(p_values) & (p_values < significance_alpha)
-        else:
-            significant_mask = np.isfinite(p_values) & (p_values < significance_alpha)
-
-        # --- means ---
-        metric_mean = _read_2d("means/metric_mean")
-        condition_a_group_mean = _read_2d("means/condition_a_mean")
-        condition_a_group_sem = _read_2d("means/condition_a_sem")
-        condition_b_group_mean = _read_2d("means/condition_b_mean")
-        condition_b_group_sem = _read_2d("means/condition_b_sem")
-
-        # --- uncertainty ---
-        metric_sem = _read_2d("uncertainty/metric_sem")
-
-        # --- summary epoch ---
         def _read_1d(key: str, fill: float = 0.0) -> np.ndarray:
             ds = dataset_or_none(fh, key)
             if ds is None:
                 return np.full(n_rois, fill, dtype=np.float64)
             return np.asarray(ds[:], dtype=np.float64).ravel()
+
+        def _read_1d_int(key: str) -> np.ndarray:
+            ds = dataset_or_none(fh, key)
+            if ds is None:
+                return np.zeros(n_rois, dtype=np.int64)
+            return np.asarray(ds[:], dtype=np.int64).ravel()
+
+        t_values = _read_2d("stats/t_values")
+        p_values = _read_2d("stats/p_values", fill=1.0)
+        p_values_uncorrected = _read_2d("stats/p_values_uncorrected", fill=1.0)
+        significance_alpha = float_scalar(
+            dataset_or_none(fh, "meta/significance_alpha"),
+            default=0.05,
+        )
+        significant_mask_ds = dataset_or_none(fh, "stats/significant_mask")
+        if significant_mask_ds is not None:
+            significant_mask = np.asarray(significant_mask_ds[:], dtype=bool)
+        else:
+            significant_mask = np.isfinite(p_values) & (p_values < significance_alpha)
+
+        metric_mean = _read_2d("means/metric_mean")
+        metric_sem = _read_2d("uncertainty/metric_sem")
+        condition_a_activity_mean = _read_2d("means/condition_a_mean")
+        condition_a_activity_sem = _read_2d("means/condition_a_sem")
+        condition_b_activity_mean = _read_2d("means/condition_b_mean")
+        condition_b_activity_sem = _read_2d("means/condition_b_sem")
 
         epoch_mean_t_values = _read_1d("summary_epoch/t_values")
         epoch_mean_p_values = _read_1d("summary_epoch/p_values", fill=1.0)
@@ -122,43 +82,28 @@ def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
         epoch_mean_metric_mean = _read_1d("summary_epoch/metric_mean")
         epoch_mean_metric_sem = _read_1d("summary_epoch/metric_sem")
 
-        rc_ds = dataset_or_none(fh, "summary_epoch/roi_channel_counts")
-        roi_channel_counts = (
-            np.asarray(rc_ds[:], dtype=np.int64).ravel()
-            if rc_ds is not None
-            else np.zeros(n_rois, dtype=np.int64)
-        )
-        rs_ds = dataset_or_none(fh, "summary_epoch/roi_subject_counts")
-        roi_subject_counts = (
-            np.asarray(rs_ds[:], dtype=np.int64).ravel()
-            if rs_ds is not None
-            else np.zeros(n_rois, dtype=np.int64)
-        )
+        roi_channel_counts = _read_1d_int("meta/roi_channel_counts")
+        roi_subject_counts = _read_1d_int("meta/roi_subject_counts")
 
-        # --- meta ---
         source_metric = str_scalar(dataset_or_none(fh, "meta/source_metric"), default="mean_difference")
-        labels_ds = dataset_or_none(fh, "meta/condition_labels")
-        if labels_ds is not None:
-            labels = decode_str_array(np.asarray(labels_ds[:], dtype=object))
-            condition_labels: tuple[str, str] = (
-                labels[0] if len(labels) >= 1 else "condition_a",
-                labels[1] if len(labels) >= 2 else "condition_b",
-            )
-        else:
-            condition_labels = ("condition_a", "condition_b")
+        labels = decode_str_array(
+            np.asarray(fh["meta"]["condition_labels"][:], dtype=object)
+        )
+        condition_labels: tuple[str, str] = (
+            labels[0] if len(labels) >= 1 else "condition_a",
+            labels[1] if len(labels) >= 2 else "condition_b",
+        )
         p_value_correction_method = str_scalar(
-            dataset_or_none(fh, "meta/p_value_correction_method"), default="none"
+            dataset_or_none(fh, "meta/p_value_correction_method"),
+            default="none",
         )
         roi_mode = str_scalar(dataset_or_none(fh, "meta/roi_mode"), default="manual")
         atlas_name_raw = str_scalar(dataset_or_none(fh, "meta/atlas_name"), default="")
         atlas_name: str | None = atlas_name_raw.strip() or None
-        activity_zscore_ds = dataset_or_none(fh, "meta/activity_zscore")
-        if activity_zscore_ds is None:
-            raise ValueError(
-                f"{path.name}: unsupported legacy condition_test_group schema; "
-                "meta/activity_zscore is required."
-            )
-        activity_zscore = str_scalar(activity_zscore_ds, default="none")
+        activity_zscore = str_scalar(
+            dataset_or_none(fh, "meta/activity_zscore"),
+            default="none",
+        )
         activity_baseline_tmin_s = float_scalar(
             dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
             default=-0.2,
@@ -168,97 +113,54 @@ def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
             default=0.0,
         )
 
-        # excluded ROIs
-        ex_region_ds = dataset_or_none(fh, "meta/excluded_rois/region")
-        ex_reason_ds = dataset_or_none(fh, "meta/excluded_rois/reason")
-        if ex_region_ds is not None and ex_reason_ds is not None:
-            ex_regions = decode_str_array(np.asarray(ex_region_ds[:], dtype=object))
-            ex_reasons = decode_str_array(np.asarray(ex_reason_ds[:], dtype=object))
-            excluded_rois: dict[str, str] = dict(zip(ex_regions, ex_reasons))
-        else:
-            excluded_rois = {}
+        excluded_rois = _read_excluded_rois_hdf5(fh)
+        contributions = _read_contributions_hdf5(fh)
+        (
+            condition_a_activity_contributions,
+            condition_b_activity_contributions,
+            contribution_labels,
+        ) = _read_activity_contributions_hdf5(
+            fh,
+            region_names=region_names,
+            n_t=n_t,
+        )
 
-        # --- contributions ---
-        contributions: list[ROIChannelContribution] = []
-        if "contributions" in fh:
-            cg = fh["contributions"]
-            if all(k in cg for k in ["region", "subject", "channel", "source_stats_file"]):
-                reis = decode_str_array(np.asarray(cg["region"][:], dtype=object))
-                subjs = decode_str_array(np.asarray(cg["subject"][:], dtype=object))
-                chs = decode_str_array(np.asarray(cg["channel"][:], dtype=object))
-                srcs = decode_str_array(np.asarray(cg["source_stats_file"][:], dtype=object))
-                contributions = [
-                    ROIChannelContribution(roi=r, subject=s, channel=c, source_stats_file=f)
-                    for r, s, c, f in zip(reis, subjs, chs, srcs)
-                ]
-
-        # --- contribution epochs (optional) ---
-        cond_a_contribs: list[np.ndarray] = []
-        cond_b_contribs: list[np.ndarray] = []
-        contrib_labels: list[list[str]] = []
-        if "contribution_epochs" in fh:
-            ce_grp = fh["contribution_epochs"]
-            for roi_name in region_names:
-                if roi_name in ce_grp:
-                    roi_grp = ce_grp[roi_name]
-                    ca = (
-                        np.asarray(roi_grp["condition_a"][:], dtype=np.float64)
-                        if "condition_a" in roi_grp
-                        else np.empty((0, n_t), dtype=np.float64)
-                    )
-                    cb = (
-                        np.asarray(roi_grp["condition_b"][:], dtype=np.float64)
-                        if "condition_b" in roi_grp
-                        else np.empty((0, n_t), dtype=np.float64)
-                    )
-                    lbl = (
-                        decode_str_array(np.asarray(roi_grp["labels"][:], dtype=object))
-                        if "labels" in roi_grp
-                        else []
-                    )
-                    cond_a_contribs.append(ca)
-                    cond_b_contribs.append(cb)
-                    contrib_labels.append(lbl)
-
-        # --- provenance ---
+        source_subject_stats_files: list[str] = []
+        source_electrodes_files: list[str] = []
         if "provenance" in fh:
             prov = fh["provenance"]
-            source_condition_test_files = (
-                decode_str_array(np.asarray(prov["source_condition_test_files"][:], dtype=object))
-                if "source_condition_test_files" in prov
-                else []
-            )
-            source_electrodes_files = (
-                decode_str_array(np.asarray(prov["source_electrodes_files"][:], dtype=object))
-                if "source_electrodes_files" in prov
-                else []
-            )
-        else:
-            source_condition_test_files = []
-            source_electrodes_files = []
+            if "source_subject_stats_files" in prov:
+                source_subject_stats_files = decode_str_array(
+                    np.asarray(prov["source_subject_stats_files"][:], dtype=object)
+                )
+            if "source_electrodes_files" in prov:
+                source_electrodes_files = decode_str_array(
+                    np.asarray(prov["source_electrodes_files"][:], dtype=object)
+                )
 
-        # --- cluster permutation results (optional) ---
         cluster_p_values: np.ndarray | None = None
         cluster_windows: list[tuple[float, float] | None] | None = None
-        cluster_null_dists: list[np.ndarray] | None = None
+        cluster_null_distributions: list[np.ndarray] | None = None
         if "cluster_stats" in fh:
-            cs_grp = fh["cluster_stats"]
-            cp_ds = dataset_or_none(cs_grp, "p_values")
-            if cp_ds is not None:
-                cluster_p_values = np.asarray(cp_ds[:], dtype=np.float64)
-                starts_ds = dataset_or_none(cs_grp, "best_cluster_start_s")
-                ends_ds = dataset_or_none(cs_grp, "best_cluster_end_s")
-                if starts_ds is not None and ends_ds is not None:
-                    starts = np.asarray(starts_ds[:], dtype=np.float64)
-                    ends = np.asarray(ends_ds[:], dtype=np.float64)
-                    cluster_windows = [
-                        (float(s), float(e)) if (np.isfinite(s) and np.isfinite(e)) else None
-                        for s, e in zip(starts, ends)
-                    ]
-                null_ds = dataset_or_none(cs_grp, "null_distributions")
+            cluster_stats = fh["cluster_stats"]
+            cluster_p_ds = dataset_or_none(cluster_stats, "p_values")
+            if cluster_p_ds is not None:
+                cluster_p_values = np.asarray(cluster_p_ds[:], dtype=np.float64)
+                starts = np.asarray(cluster_stats["best_cluster_start_s"][:], dtype=np.float64)
+                ends = np.asarray(cluster_stats["best_cluster_end_s"][:], dtype=np.float64)
+                cluster_windows = [
+                    (float(start), float(end))
+                    if np.isfinite(start) and np.isfinite(end)
+                    else None
+                    for start, end in zip(starts, ends)
+                ]
+                null_ds = dataset_or_none(cluster_stats, "null_distributions")
                 if null_ds is not None:
                     null_matrix = np.asarray(null_ds[:], dtype=np.float32)
-                    cluster_null_dists = [null_matrix[i] for i in range(null_matrix.shape[0])]
+                    cluster_null_distributions = [
+                        row[np.isfinite(row)].astype(np.float64)
+                        for row in null_matrix
+                    ]
 
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
     return ConditionTestGroupProcessingResult(
@@ -278,69 +180,48 @@ def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
         significant_mask=significant_mask,
         metric_mean=metric_mean,
         metric_sem=metric_sem,
-        time_axis_s=time_axis_s,
-        region_names=region_names,
-        source_metric=source_metric,
-        condition_labels=condition_labels,
-        p_value_correction_method=p_value_correction_method,
-        significance_alpha=significance_alpha,
-        roi_mode=roi_mode,
-        atlas_name=atlas_name,
         epoch_mean_t_values=epoch_mean_t_values,
         epoch_mean_p_values=epoch_mean_p_values,
         epoch_mean_df=epoch_mean_df,
         epoch_mean_metric_mean=epoch_mean_metric_mean,
         epoch_mean_metric_sem=epoch_mean_metric_sem,
+        time_axis_s=time_axis_s,
+        region_names=region_names,
+        condition_labels=condition_labels,
         roi_channel_counts=roi_channel_counts,
         roi_subject_counts=roi_subject_counts,
         contributions=contributions,
-        condition_a_group_mean=condition_a_group_mean,
-        condition_a_group_sem=condition_a_group_sem,
-        condition_b_group_mean=condition_b_group_mean,
-        condition_b_group_sem=condition_b_group_sem,
-        condition_a_contributions=cond_a_contribs,
-        condition_b_contributions=cond_b_contribs,
-        contribution_labels=contrib_labels,
-        source_condition_test_files=source_condition_test_files,
+        condition_a_activity_mean=condition_a_activity_mean,
+        condition_a_activity_sem=condition_a_activity_sem,
+        condition_b_activity_mean=condition_b_activity_mean,
+        condition_b_activity_sem=condition_b_activity_sem,
+        condition_a_activity_contributions=condition_a_activity_contributions,
+        condition_b_activity_contributions=condition_b_activity_contributions,
+        contribution_labels=contribution_labels,
+        source_metric=source_metric,
+        p_value_correction_method=p_value_correction_method,
+        significance_alpha=significance_alpha,
+        roi_mode=roi_mode,
+        atlas_name=atlas_name,
+        source_subject_stats_files=source_subject_stats_files,
         source_electrodes_files=source_electrodes_files,
         excluded_rois=excluded_rois,
         cluster_p_values=cluster_p_values,
         cluster_best_cluster_windows_s=cluster_windows,
-        cluster_null_distributions=cluster_null_dists,
+        cluster_null_distributions=cluster_null_distributions,
     )
-
-
-# ---------------------------------------------------------------------------
-# MATLAB loader
-# ---------------------------------------------------------------------------
 
 
 def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
-    from gin_bids_py_analysis.processing.utils.matlab import (
-        mat_float,
-        mat_str,
-        mat_str_list,
-    )
+    from gin_bids_py_analysis.processing.utils.matlab import mat_float, mat_str, mat_str_list
     from scipy.io import loadmat
 
     mat = loadmat(str(path), squeeze_me=False, struct_as_record=False)
     data = mat["data"]
-    axes = data.axes
-    stats = data.stats
-    means = data.means
-    uncertainty = getattr(data, "uncertainty", None)
-    summary = getattr(data, "summary_epoch", None)
-    meta = data.meta
-    contribs_raw = getattr(data, "contributions", None)
-    prov = getattr(data, "provenance", None)
-
-    region_names = mat_str_list(getattr(axes, "region", None))
-    if not region_names:
-        raise ValueError(f"{path.name}: axes.region is required in .mat group stats file.")
-    time_axis_s = np.asarray(axes.time_s, dtype=np.float64).ravel()
+    region_names = mat_str_list(getattr(data.axes, "region", None))
+    time_axis_s = np.asarray(data.axes.time_s, dtype=np.float64).ravel()
     n_rois = len(region_names)
     n_t = len(time_axis_s)
-    _zeros = np.zeros((n_rois, n_t), dtype=np.float64)
 
     def _mat_2d(obj: object, attr: str, fill: float = 0.0) -> np.ndarray:
         raw = getattr(obj, attr, None) if obj is not None else None
@@ -357,6 +238,13 @@ def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
             return np.full(n_rois, fill, dtype=dtype)
         return np.asarray(raw, dtype=dtype).ravel()
 
+    stats = data.stats
+    means = data.means
+    summary = getattr(data, "summary_epoch", None)
+    uncertainty = getattr(data, "uncertainty", None)
+    meta = data.meta
+    provenance = getattr(data, "provenance", None)
+
     t_values = _mat_2d(stats, "t_values")
     p_values = _mat_2d(stats, "p_values", fill=1.0)
     p_values_uncorrected = _mat_2d(stats, "p_values_uncorrected", fill=1.0)
@@ -368,40 +256,32 @@ def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
         significant_mask = np.isfinite(p_values) & (p_values < significance_alpha)
 
     metric_mean = _mat_2d(means, "metric_mean")
-    condition_a_group_mean = _mat_2d(means, "condition_a_mean")
-    condition_a_group_sem = _mat_2d(means, "condition_a_sem")
-    condition_b_group_mean = _mat_2d(means, "condition_b_mean")
-    condition_b_group_sem = _mat_2d(means, "condition_b_sem")
     metric_sem = _mat_2d(uncertainty, "metric_sem")
+    condition_a_activity_mean = _mat_2d(means, "condition_a_mean")
+    condition_a_activity_sem = _mat_2d(means, "condition_a_sem")
+    condition_b_activity_mean = _mat_2d(means, "condition_b_mean")
+    condition_b_activity_sem = _mat_2d(means, "condition_b_sem")
 
     epoch_mean_t_values = _mat_1d(summary, "t_values")
     epoch_mean_p_values = _mat_1d(summary, "p_values", fill=1.0)
     epoch_mean_df = _mat_1d(summary, "df")
     epoch_mean_metric_mean = _mat_1d(summary, "metric_mean")
     epoch_mean_metric_sem = _mat_1d(summary, "metric_sem")
-    roi_channel_counts = _mat_1d(summary, "roi_channel_counts", dtype=np.int64)
-    roi_subject_counts = _mat_1d(summary, "roi_subject_counts", dtype=np.int64)
 
     source_metric = mat_str(getattr(meta, "source_metric", None), default="mean_difference")
-    labels_raw = getattr(meta, "condition_labels", None)
-    labels = mat_str_list(labels_raw)
+    labels = mat_str_list(getattr(meta, "condition_labels", None))
     condition_labels: tuple[str, str] = (
         labels[0] if len(labels) >= 1 else "condition_a",
         labels[1] if len(labels) >= 2 else "condition_b",
     )
     p_value_correction_method = mat_str(
-        getattr(meta, "p_value_correction_method", None), default="none"
+        getattr(meta, "p_value_correction_method", None),
+        default="none",
     )
     roi_mode = mat_str(getattr(meta, "roi_mode", None), default="manual")
     atlas_name_raw = mat_str(getattr(meta, "atlas_name", None), default="")
     atlas_name: str | None = atlas_name_raw.strip() or None
-    activity_zscore_raw = getattr(meta, "activity_zscore", None)
-    if activity_zscore_raw is None:
-        raise ValueError(
-            f"{path.name}: unsupported legacy condition_test_group schema; "
-            "meta.activity_zscore is required."
-        )
-    activity_zscore = mat_str(activity_zscore_raw, default="none")
+    activity_zscore = mat_str(getattr(meta, "activity_zscore", None), default="none")
     activity_baseline_tmin_s = mat_float(
         getattr(meta, "activity_baseline_tmin_s", None),
         default=-0.2,
@@ -411,30 +291,56 @@ def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
         default=0.0,
     )
 
-    excluded_rois: dict[str, str] = {}
-    ex_raw = getattr(meta, "excluded_rois", None)
-    if ex_raw is not None:
-        ex_regions = mat_str_list(getattr(ex_raw, "region", None))
-        ex_reasons = mat_str_list(getattr(ex_raw, "reason", None))
-        excluded_rois = dict(zip(ex_regions, ex_reasons))
+    roi_channel_counts = _mat_1d(meta, "roi_channel_counts", dtype=np.int64)
+    roi_subject_counts = _mat_1d(meta, "roi_subject_counts", dtype=np.int64)
+    excluded_rois = _read_excluded_rois_mat(getattr(data, "excluded_rois", None))
+    contributions = _read_contributions_mat(getattr(data, "contributions", None))
+    (
+        condition_a_activity_contributions,
+        condition_b_activity_contributions,
+        contribution_labels,
+    ) = _read_activity_contributions_mat(getattr(data, "activity_contributions", None))
 
-    contributions: list[ROIChannelContribution] = []
-    if contribs_raw is not None:
-        reis = mat_str_list(getattr(contribs_raw, "region", None))
-        subjs = mat_str_list(getattr(contribs_raw, "subject", None))
-        chs = mat_str_list(getattr(contribs_raw, "channel", None))
-        srcs = mat_str_list(getattr(contribs_raw, "source_stats_file", None))
-        contributions = [
-            ROIChannelContribution(roi=r, subject=s, channel=c, source_stats_file=f)
-            for r, s, c, f in zip(reis, subjs, chs, srcs)
-        ]
-
-    source_condition_test_files = (
-        mat_str_list(getattr(prov, "source_condition_test_files", None)) if prov is not None else []
+    source_subject_stats_files = (
+        mat_str_list(getattr(provenance, "source_subject_stats_files", None))
+        if provenance is not None
+        else []
     )
     source_electrodes_files = (
-        mat_str_list(getattr(prov, "source_electrodes_files", None)) if prov is not None else []
+        mat_str_list(getattr(provenance, "source_electrodes_files", None))
+        if provenance is not None
+        else []
     )
+
+    cluster_p_values: np.ndarray | None = None
+    cluster_windows: list[tuple[float, float] | None] | None = None
+    cluster_null_distributions: list[np.ndarray] | None = None
+    cluster_stats = getattr(data, "cluster_stats", None)
+    if cluster_stats is not None:
+        raw = getattr(cluster_stats, "p_values", None)
+        if raw is not None:
+            cluster_p_values = np.asarray(raw, dtype=np.float64).ravel()
+            starts = np.asarray(
+                getattr(cluster_stats, "best_cluster_start_s", np.array([])),
+                dtype=np.float64,
+            ).ravel()
+            ends = np.asarray(
+                getattr(cluster_stats, "best_cluster_end_s", np.array([])),
+                dtype=np.float64,
+            ).ravel()
+            cluster_windows = [
+                (float(start), float(end))
+                if np.isfinite(start) and np.isfinite(end)
+                else None
+                for start, end in zip(starts, ends)
+            ]
+            raw_null = getattr(cluster_stats, "null_distributions", None)
+            if raw_null is not None:
+                cell = np.asarray(raw_null).ravel()
+                cluster_null_distributions = [
+                    np.asarray(cell_item, dtype=np.float64).ravel()
+                    for cell_item in cell
+                ]
 
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
     return ConditionTestGroupProcessingResult(
@@ -454,33 +360,165 @@ def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
         significant_mask=significant_mask,
         metric_mean=metric_mean,
         metric_sem=metric_sem,
-        time_axis_s=time_axis_s,
-        region_names=region_names,
-        source_metric=source_metric,
-        condition_labels=condition_labels,
-        p_value_correction_method=p_value_correction_method,
-        significance_alpha=significance_alpha,
-        roi_mode=roi_mode,
-        atlas_name=atlas_name,
         epoch_mean_t_values=epoch_mean_t_values,
         epoch_mean_p_values=epoch_mean_p_values,
         epoch_mean_df=epoch_mean_df,
         epoch_mean_metric_mean=epoch_mean_metric_mean,
         epoch_mean_metric_sem=epoch_mean_metric_sem,
+        time_axis_s=time_axis_s,
+        region_names=region_names,
+        condition_labels=condition_labels,
         roi_channel_counts=roi_channel_counts,
         roi_subject_counts=roi_subject_counts,
         contributions=contributions,
-        condition_a_group_mean=condition_a_group_mean,
-        condition_a_group_sem=condition_a_group_sem,
-        condition_b_group_mean=condition_b_group_mean,
-        condition_b_group_sem=condition_b_group_sem,
-        condition_a_contributions=[],
-        condition_b_contributions=[],
-        contribution_labels=[],
-        source_condition_test_files=source_condition_test_files,
+        condition_a_activity_mean=condition_a_activity_mean,
+        condition_a_activity_sem=condition_a_activity_sem,
+        condition_b_activity_mean=condition_b_activity_mean,
+        condition_b_activity_sem=condition_b_activity_sem,
+        condition_a_activity_contributions=condition_a_activity_contributions,
+        condition_b_activity_contributions=condition_b_activity_contributions,
+        contribution_labels=contribution_labels,
+        source_metric=source_metric,
+        p_value_correction_method=p_value_correction_method,
+        significance_alpha=significance_alpha,
+        roi_mode=roi_mode,
+        atlas_name=atlas_name,
+        source_subject_stats_files=source_subject_stats_files,
         source_electrodes_files=source_electrodes_files,
         excluded_rois=excluded_rois,
-        cluster_p_values=None,
-        cluster_best_cluster_windows_s=None,
-        cluster_null_distributions=None,
+        cluster_p_values=cluster_p_values,
+        cluster_best_cluster_windows_s=cluster_windows,
+        cluster_null_distributions=cluster_null_distributions,
     )
+
+
+def _read_excluded_rois_hdf5(fh: h5py.File) -> dict[str, str]:
+    ex_region_ds = dataset_or_none(fh, "excluded_rois/region")
+    ex_reason_ds = dataset_or_none(fh, "excluded_rois/reason")
+    if ex_region_ds is None or ex_reason_ds is None:
+        return {}
+    ex_regions = decode_str_array(np.asarray(ex_region_ds[:], dtype=object))
+    ex_reasons = decode_str_array(np.asarray(ex_reason_ds[:], dtype=object))
+    return dict(zip(ex_regions, ex_reasons))
+
+
+def _read_contributions_hdf5(fh: h5py.File) -> list[ROIChannelContribution]:
+    if "contributions" not in fh:
+        return []
+    group = fh["contributions"]
+    if not all(key in group for key in ("region", "subject", "channel", "source_stats_file")):
+        return []
+    regions = decode_str_array(np.asarray(group["region"][:], dtype=object))
+    subjects = decode_str_array(np.asarray(group["subject"][:], dtype=object))
+    channels = decode_str_array(np.asarray(group["channel"][:], dtype=object))
+    source_stats_files = decode_str_array(
+        np.asarray(group["source_stats_file"][:], dtype=object)
+    )
+    return [
+        ROIChannelContribution(
+            roi=region,
+            subject=subject,
+            channel=channel,
+            source_stats_file=source_stats_file,
+        )
+        for region, subject, channel, source_stats_file in zip(
+            regions,
+            subjects,
+            channels,
+            source_stats_files,
+        )
+    ]
+
+
+def _read_activity_contributions_hdf5(
+    fh: h5py.File,
+    *,
+    region_names: list[str],
+    n_t: int,
+) -> tuple[list[np.ndarray], list[np.ndarray], list[list[str]]]:
+    if "activity_contributions" not in fh:
+        return [], [], []
+    out_a: list[np.ndarray] = []
+    out_b: list[np.ndarray] = []
+    out_labels: list[list[str]] = []
+    group = fh["activity_contributions"]
+    for roi_idx in range(len(region_names)):
+        roi_key = str(roi_idx)
+        if roi_key not in group:
+            out_a.append(np.empty((0, n_t), dtype=np.float64))
+            out_b.append(np.empty((0, n_t), dtype=np.float64))
+            out_labels.append([])
+            continue
+        roi_group = group[roi_key]
+        out_a.append(np.asarray(roi_group["condition_a"][:], dtype=np.float64))
+        out_b.append(np.asarray(roi_group["condition_b"][:], dtype=np.float64))
+        out_labels.append(
+            decode_str_array(np.asarray(roi_group["labels"][:], dtype=object))
+            if "labels" in roi_group
+            else []
+        )
+    return out_a, out_b, out_labels
+
+
+def _read_excluded_rois_mat(raw: object) -> dict[str, str]:
+    from gin_bids_py_analysis.processing.utils.matlab import mat_str_list
+
+    if raw is None:
+        return {}
+    return dict(
+        zip(
+            mat_str_list(getattr(raw, "region", None)),
+            mat_str_list(getattr(raw, "reason", None)),
+        )
+    )
+
+
+def _read_contributions_mat(raw: object) -> list[ROIChannelContribution]:
+    from gin_bids_py_analysis.processing.utils.matlab import mat_str_list
+
+    if raw is None:
+        return []
+    regions = mat_str_list(getattr(raw, "region", None))
+    subjects = mat_str_list(getattr(raw, "subject", None))
+    channels = mat_str_list(getattr(raw, "channel", None))
+    source_stats_files = mat_str_list(getattr(raw, "source_stats_file", None))
+    return [
+        ROIChannelContribution(
+            roi=region,
+            subject=subject,
+            channel=channel,
+            source_stats_file=source_stats_file,
+        )
+        for region, subject, channel, source_stats_file in zip(
+            regions,
+            subjects,
+            channels,
+            source_stats_files,
+        )
+    ]
+
+
+def _read_activity_contributions_mat(
+    raw: object,
+) -> tuple[list[np.ndarray], list[np.ndarray], list[list[str]]]:
+    from gin_bids_py_analysis.processing.utils.matlab import mat_str_list
+
+    if raw is None:
+        return [], [], []
+
+    condition_a: list[np.ndarray] = []
+    condition_b: list[np.ndarray] = []
+    labels: list[list[str]] = []
+    a_raw = getattr(raw, "condition_a", None)
+    b_raw = getattr(raw, "condition_b", None)
+    labels_raw = getattr(raw, "labels", None)
+    if a_raw is not None:
+        for item in np.asarray(a_raw).ravel():
+            condition_a.append(np.asarray(item, dtype=np.float64))
+    if b_raw is not None:
+        for item in np.asarray(b_raw).ravel():
+            condition_b.append(np.asarray(item, dtype=np.float64))
+    if labels_raw is not None:
+        for item in np.asarray(labels_raw).ravel():
+            labels.append(mat_str_list(item))
+    return condition_a, condition_b, labels

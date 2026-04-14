@@ -246,11 +246,10 @@ def test_process_group_manual_mode_and_thresholds() -> None:
         assert np.all(result.metric_mean[0] > 0.0)
         assert np.all(result.metric_mean[1] < 0.0)
         assert "ROI_DROP" in result.excluded_rois
-        # New condition A/B group stats fields
-        assert result.condition_a_group_mean.shape == (2, 3)
-        assert result.condition_b_group_mean.shape == (2, 3)
-        assert result.condition_a_group_sem.shape == (2, 3)
-        assert result.condition_b_group_sem.shape == (2, 3)
+        assert result.condition_a_activity_mean.shape == (2, 3)
+        assert result.condition_b_activity_mean.shape == (2, 3)
+        assert result.condition_a_activity_sem.shape == (2, 3)
+        assert result.condition_b_activity_sem.shape == (2, 3)
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -605,8 +604,8 @@ def test_process_group_manual_mode_mat_input() -> None:
         assert np.all(result.metric_mean[0] > 0.0)
         assert np.all(result.metric_mean[1] < 0.0)
         assert "ROI_DROP" in result.excluded_rois
-        assert result.condition_a_group_mean.shape == (2, 3)
-        assert result.condition_b_group_mean.shape == (2, 3)
+        assert result.condition_a_activity_mean.shape == (2, 3)
+        assert result.condition_b_activity_mean.shape == (2, 3)
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 

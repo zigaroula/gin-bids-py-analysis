@@ -9,7 +9,7 @@ from scipy.io import savemat
 from gin_bids_py_analysis.processing.base import BaseProcessingResult
 from gin_bids_py_analysis.processing.utils.matlab import make_struct
 
-from ..writer import BaseTrialStatsGroupProcessingWriter, package_version
+from ..writer import BaseTrialStatsGroupProcessingWriter
 from .result import RegressionGroupProcessingResult
 
 
@@ -26,10 +26,6 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
         else:
             self._write_hdf5(result, output_path)
 
-    # ------------------------------------------------------------------
-    # HDF5
-    # ------------------------------------------------------------------
-
     def _write_hdf5(
         self,
         result: RegressionGroupProcessingResult,
@@ -38,209 +34,133 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
         str_dtype = self.string_dtype()
 
         with h5py.File(output_path, "w") as fh:
-            # --- /regression (condition_a vs condition_b slope t-test) ---
-            reg = fh.create_group("regression")
-            reg.create_dataset("t_values", data=result.slope_t_values.astype(np.float64))
-            reg.create_dataset("p_values", data=result.slope_p_values.astype(np.float64))
-            reg.create_dataset("p_values_uncorrected", data=result.slope_p_values_uncorrected.astype(np.float64))
-            reg.create_dataset("significant_mask", data=result.slope_significant_mask.astype(bool))
-            reg.create_dataset("slope_mean_a", data=result.condition_a_slope_mean.astype(np.float64))
-            reg.create_dataset("slope_sem_a", data=result.condition_a_slope_sem.astype(np.float64))
-            reg.create_dataset("slope_mean_b", data=result.condition_b_slope_mean.astype(np.float64))
-            reg.create_dataset("slope_sem_b", data=result.condition_b_slope_sem.astype(np.float64))
-            ep_reg = reg.create_group("epoch_summary")
-            ep_reg.create_dataset("t", data=result.epoch_slope_t.astype(np.float64))
-            ep_reg.create_dataset("p", data=result.epoch_slope_p.astype(np.float64))
-            ep_reg.create_dataset("df", data=result.epoch_slope_df.astype(np.float64))
+            source_metric = fh.create_group("source_metric")
+            source_metric.create_dataset(
+                "t_values",
+                data=result.source_metric_t_values.astype(np.float64),
+            )
+            source_metric.create_dataset(
+                "p_values",
+                data=result.source_metric_p_values.astype(np.float64),
+            )
+            source_metric.create_dataset(
+                "p_values_uncorrected",
+                data=result.source_metric_p_values_uncorrected.astype(np.float64),
+            )
+            source_metric.create_dataset(
+                "significant_mask",
+                data=result.source_metric_significant_mask.astype(bool),
+            )
+            source_metric.create_dataset(
+                "condition_a_mean",
+                data=result.condition_a_source_metric_mean.astype(np.float64),
+            )
+            source_metric.create_dataset(
+                "condition_a_sem",
+                data=result.condition_a_source_metric_sem.astype(np.float64),
+            )
+            source_metric.create_dataset(
+                "condition_b_mean",
+                data=result.condition_b_source_metric_mean.astype(np.float64),
+            )
+            source_metric.create_dataset(
+                "condition_b_sem",
+                data=result.condition_b_source_metric_sem.astype(np.float64),
+            )
+            ep_reg = source_metric.create_group("epoch_summary")
+            ep_reg.create_dataset(
+                "t",
+                data=result.epoch_source_metric_t.astype(np.float64),
+            )
+            ep_reg.create_dataset(
+                "p",
+                data=result.epoch_source_metric_p.astype(np.float64),
+            )
+            ep_reg.create_dataset(
+                "df",
+                data=result.epoch_source_metric_df.astype(np.float64),
+            )
 
-            # --- /activity (condition_a vs condition_b activity t-test) ---
-            act = fh.create_group("activity")
-            act.create_dataset("t_values", data=result.activity_t_values.astype(np.float64))
-            act.create_dataset("p_values", data=result.activity_p_values.astype(np.float64))
-            act.create_dataset("p_values_uncorrected", data=result.activity_p_values_uncorrected.astype(np.float64))
-            act.create_dataset("significant_mask", data=result.activity_significant_mask.astype(bool))
-            ep_act = act.create_group("epoch_summary")
+            activity = fh.create_group("activity")
+            activity.create_dataset(
+                "t_values",
+                data=result.activity_t_values.astype(np.float64),
+            )
+            activity.create_dataset(
+                "p_values",
+                data=result.activity_p_values.astype(np.float64),
+            )
+            activity.create_dataset(
+                "p_values_uncorrected",
+                data=result.activity_p_values_uncorrected.astype(np.float64),
+            )
+            activity.create_dataset(
+                "significant_mask",
+                data=result.activity_significant_mask.astype(bool),
+            )
+            ep_act = activity.create_group("epoch_summary")
             ep_act.create_dataset("t", data=result.epoch_activity_t.astype(np.float64))
             ep_act.create_dataset("p", data=result.epoch_activity_p.astype(np.float64))
             ep_act.create_dataset("df", data=result.epoch_activity_df.astype(np.float64))
 
-            # --- /means ---
-            means = fh.create_group("means")
-            means.create_dataset("condition_a_mean", data=result.condition_a_activity_mean.astype(np.float64))
-            means.create_dataset("condition_a_sem", data=result.condition_a_activity_sem.astype(np.float64))
-            means.create_dataset("condition_b_mean", data=result.condition_b_activity_mean.astype(np.float64))
-            means.create_dataset("condition_b_sem", data=result.condition_b_activity_sem.astype(np.float64))
+            self.write_activity_means_hdf5(fh, result=result)
 
-            # --- /r_values ---
             r_vals = fh.create_group("r_values")
-            r_vals.create_dataset("condition_a_mean", data=result.condition_a_r_value_mean.astype(np.float64))
-            r_vals.create_dataset("condition_a_sem", data=result.condition_a_r_value_sem.astype(np.float64))
-            r_vals.create_dataset("condition_b_mean", data=result.condition_b_r_value_mean.astype(np.float64))
-            r_vals.create_dataset("condition_b_sem", data=result.condition_b_r_value_sem.astype(np.float64))
-
-            # --- /axes ---
-            axes = fh.create_group("axes")
-            axes.create_dataset(
-                "region",
-                data=np.array(result.region_names, dtype=object),
-                dtype=str_dtype,
+            r_vals.create_dataset(
+                "condition_a_mean",
+                data=result.condition_a_r_value_mean.astype(np.float64),
             )
-            axes.create_dataset("time_s", data=result.time_axis_s.astype(np.float64))
+            r_vals.create_dataset(
+                "condition_a_sem",
+                data=result.condition_a_r_value_sem.astype(np.float64),
+            )
+            r_vals.create_dataset(
+                "condition_b_mean",
+                data=result.condition_b_r_value_mean.astype(np.float64),
+            )
+            r_vals.create_dataset(
+                "condition_b_sem",
+                data=result.condition_b_r_value_sem.astype(np.float64),
+            )
 
-            # --- /meta ---
+            self.write_axes_hdf5(fh, result=result, str_dtype=str_dtype)
+
             meta = fh.create_group("meta")
-            meta.create_dataset("analysis_level", data="roi_group", dtype=str_dtype)
+            self.write_common_meta_hdf5(meta, result=result, str_dtype=str_dtype)
             meta.create_dataset(
-                "condition_labels",
-                data=np.array(list(result.condition_labels), dtype=object),
+                "contrast_mode",
+                data=str(result.contrast_mode),
                 dtype=str_dtype,
             )
-            meta.create_dataset("source_metric", data=str(result.source_metric), dtype=str_dtype)
-            meta.create_dataset("contrast_mode", data=str(result.contrast_mode), dtype=str_dtype)
-            meta.create_dataset(
-                "p_value_correction_method",
-                data=str(result.p_value_correction_method),
-                dtype=str_dtype,
-            )
-            meta.create_dataset("significance_alpha", data=float(result.significance_alpha))
-            meta.create_dataset("roi_mode", data=str(result.roi_mode), dtype=str_dtype)
-            meta.create_dataset(
-                "atlas_name", data=str(result.atlas_name or ""), dtype=str_dtype
-            )
-            meta.create_dataset(
-                "roi_channel_counts", data=result.roi_channel_counts.astype(np.int64)
-            )
-            meta.create_dataset(
-                "roi_subject_counts", data=result.roi_subject_counts.astype(np.int64)
-            )
-            meta.create_dataset("included_roi_count", data=int(len(result.region_names)))
-            meta.create_dataset("excluded_roi_count", data=int(len(result.excluded_rois)))
-            for key in ("binning_mode", "window_ms", "n_bins", "effective_n_bins"):
-                val = result.metadata.get(key)
-                if val is not None:
-                    if isinstance(val, str):
-                        meta.create_dataset(key, data=val, dtype=str_dtype)
-                    elif isinstance(val, float):
-                        meta.create_dataset(key, data=float(val))
-                    else:
-                        meta.create_dataset(key, data=int(val))
-            if "predictor" in result.metadata:
-                meta.create_dataset(
-                    "predictor",
-                    data=str(result.metadata["predictor"]),
-                    dtype=str_dtype,
-                )
-            if "predictor_zscore" in result.metadata:
-                meta.create_dataset(
-                    "predictor_zscore",
-                    data=str(result.metadata["predictor_zscore"]),
-                    dtype=str_dtype,
-                )
-            if "predictor_transform_by_condition_json" in result.metadata:
-                meta.create_dataset(
-                    "predictor_transform_by_condition_json",
-                    data=str(result.metadata["predictor_transform_by_condition_json"]),
-                    dtype=str_dtype,
-                )
-            if "activity_zscore" in result.metadata:
-                meta.create_dataset(
-                    "activity_zscore",
-                    data=str(result.metadata["activity_zscore"]),
-                    dtype=str_dtype,
-                )
-            if "activity_baseline_tmin_s" in result.metadata:
-                meta.create_dataset(
-                    "activity_baseline_tmin_s",
-                    data=float(result.metadata["activity_baseline_tmin_s"]),
-                )
-            if "activity_baseline_tmax_s" in result.metadata:
-                meta.create_dataset(
-                    "activity_baseline_tmax_s",
-                    data=float(result.metadata["activity_baseline_tmax_s"]),
-                )
-            if "trial_activity_summary_kind" in result.metadata:
-                meta.create_dataset(
-                    "trial_activity_summary_kind",
-                    data=str(result.metadata["trial_activity_summary_kind"]),
-                    dtype=str_dtype,
-                )
-            if "trial_activity_summary_missing_response_policy" in result.metadata:
-                meta.create_dataset(
-                    "trial_activity_summary_missing_response_policy",
-                    data=str(
-                        result.metadata["trial_activity_summary_missing_response_policy"]
-                    ),
-                    dtype=str_dtype,
-                )
-            if "trial_activity_summary_source_json" in result.metadata:
-                meta.create_dataset(
-                    "trial_activity_summary_source_json",
-                    data=str(result.metadata["trial_activity_summary_source_json"]),
-                    dtype=str_dtype,
-                )
-            if "trial_activity_summary_label" in result.metadata:
-                meta.create_dataset(
-                    "trial_activity_summary_label",
-                    data=str(result.metadata["trial_activity_summary_label"]),
-                    dtype=str_dtype,
-                )
-            if "scatter_aggregation" in result.metadata:
-                meta.create_dataset(
-                    "scatter_aggregation",
-                    data=str(result.metadata["scatter_aggregation"]),
-                    dtype=str_dtype,
-                )
+            for key in (
+                "predictor",
+                "predictor_zscore",
+                "predictor_transform_by_condition_json",
+                "trial_activity_summary_kind",
+                "trial_activity_summary_missing_response_policy",
+                "trial_activity_summary_source_json",
+                "trial_activity_summary_label",
+                "scatter_aggregation",
+            ):
+                value = result.metadata.get(key)
+                if value is not None:
+                    meta.create_dataset(key, data=str(value), dtype=str_dtype)
 
-            # --- /excluded_rois ---
-            excl = fh.create_group("excluded_rois")
-            excl.create_dataset(
-                "name",
-                data=np.array(list(result.excluded_rois.keys()), dtype=object),
-                dtype=str_dtype,
+            self.write_excluded_rois_hdf5(fh, result=result, str_dtype=str_dtype)
+            self.write_contributions_hdf5(fh, result=result, str_dtype=str_dtype)
+            self.write_activity_contributions_hdf5(
+                fh,
+                result=result,
+                str_dtype=str_dtype,
             )
-            excl.create_dataset(
-                "reason",
-                data=np.array(list(result.excluded_rois.values()), dtype=object),
-                dtype=str_dtype,
+            _write_metric_contributions_hdf5(
+                fh.create_group("source_metric_contributions"),
+                condition_a_values=result.condition_a_source_metric_contributions,
+                condition_b_values=result.condition_b_source_metric_contributions,
+                labels=result.contribution_labels,
+                region_names=result.region_names,
+                str_dtype=str_dtype,
             )
-
-            # --- /contributions ---
-            contribs = fh.create_group("contributions")
-            contribs.create_dataset(
-                "roi",
-                data=np.array([c.roi for c in result.contributions], dtype=object),
-                dtype=str_dtype,
-            )
-            contribs.create_dataset(
-                "subject",
-                data=np.array([c.subject for c in result.contributions], dtype=object),
-                dtype=str_dtype,
-            )
-            contribs.create_dataset(
-                "channel",
-                data=np.array([c.channel for c in result.contributions], dtype=object),
-                dtype=str_dtype,
-            )
-            contribs.create_dataset(
-                "source_stats_file",
-                data=np.array(
-                    [c.source_stats_file for c in result.contributions], dtype=object
-                ),
-                dtype=str_dtype,
-            )
-
-            # --- /contribution_samples (ragged arrays as variable-length HDF5) ---
-            if result.condition_a_slope_contributions:
-                _write_ragged_hdf5(
-                    fh.create_group("contribution_samples"),
-                    condition_a_slope=result.condition_a_slope_contributions,
-                    condition_b_slope=result.condition_b_slope_contributions,
-                    condition_a_activity=result.condition_a_activity_contributions,
-                    condition_b_activity=result.condition_b_activity_contributions,
-                    labels=result.contribution_labels,
-                    region_names=result.region_names,
-                    str_dtype=str_dtype,
-                )
 
             if result.condition_a_scatter_predictor:
                 _write_scatter_hdf5(
@@ -253,67 +173,46 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
                     str_dtype=str_dtype,
                 )
 
-            # --- /provenance ---
-            prov = fh.create_group("provenance")
-            prov.create_dataset(
-                "source_regression_files",
-                data=np.array(result.source_regression_files, dtype=object),
-                dtype=str_dtype,
+            self.write_provenance_hdf5(
+                fh,
+                result=result,
+                pipeline_name="regression_group",
+                str_dtype=str_dtype,
             )
-            prov.create_dataset(
-                "source_electrodes_files",
-                data=np.array(result.source_electrodes_files, dtype=object),
-                dtype=str_dtype,
-            )
-            prov.create_dataset("pipeline_name", data="regression_group", dtype=str_dtype)
-            prov.create_dataset(
-                "pipeline_version", data=package_version(), dtype=str_dtype
-            )
-
-    # ------------------------------------------------------------------
-    # MATLAB
-    # ------------------------------------------------------------------
 
     def _write_matlab(
         self,
         result: RegressionGroupProcessingResult,
         output_path: Path,
     ) -> None:
-        epoch_slope_struct = make_struct(
-            t=result.epoch_slope_t.astype(np.float64),
-            p=result.epoch_slope_p.astype(np.float64),
-            df=result.epoch_slope_df.astype(np.float64),
-        )
-        regression_struct = make_struct(
-            t_values=result.slope_t_values.astype(np.float64),
-            p_values=result.slope_p_values.astype(np.float64),
-            p_values_uncorrected=result.slope_p_values_uncorrected.astype(np.float64),
-            significant_mask=result.slope_significant_mask.astype(np.uint8),
-            slope_mean_a=result.condition_a_slope_mean.astype(np.float64),
-            slope_sem_a=result.condition_a_slope_sem.astype(np.float64),
-            slope_mean_b=result.condition_b_slope_mean.astype(np.float64),
-            slope_sem_b=result.condition_b_slope_sem.astype(np.float64),
-            epoch_summary=epoch_slope_struct,
+        source_metric_struct = make_struct(
+            t_values=result.source_metric_t_values.astype(np.float64),
+            p_values=result.source_metric_p_values.astype(np.float64),
+            p_values_uncorrected=result.source_metric_p_values_uncorrected.astype(
+                np.float64
+            ),
+            significant_mask=result.source_metric_significant_mask.astype(np.uint8),
+            condition_a_mean=result.condition_a_source_metric_mean.astype(np.float64),
+            condition_a_sem=result.condition_a_source_metric_sem.astype(np.float64),
+            condition_b_mean=result.condition_b_source_metric_mean.astype(np.float64),
+            condition_b_sem=result.condition_b_source_metric_sem.astype(np.float64),
+            epoch_summary=make_struct(
+                t=result.epoch_source_metric_t.astype(np.float64),
+                p=result.epoch_source_metric_p.astype(np.float64),
+                df=result.epoch_source_metric_df.astype(np.float64),
+            ),
         )
 
-        epoch_activity_struct = make_struct(
-            t=result.epoch_activity_t.astype(np.float64),
-            p=result.epoch_activity_p.astype(np.float64),
-            df=result.epoch_activity_df.astype(np.float64),
-        )
         activity_struct = make_struct(
             t_values=result.activity_t_values.astype(np.float64),
             p_values=result.activity_p_values.astype(np.float64),
             p_values_uncorrected=result.activity_p_values_uncorrected.astype(np.float64),
             significant_mask=result.activity_significant_mask.astype(np.uint8),
-            epoch_summary=epoch_activity_struct,
-        )
-
-        means_struct = make_struct(
-            condition_a_mean=result.condition_a_activity_mean.astype(np.float64),
-            condition_a_sem=result.condition_a_activity_sem.astype(np.float64),
-            condition_b_mean=result.condition_b_activity_mean.astype(np.float64),
-            condition_b_sem=result.condition_b_activity_sem.astype(np.float64),
+            epoch_summary=make_struct(
+                t=result.epoch_activity_t.astype(np.float64),
+                p=result.epoch_activity_p.astype(np.float64),
+                df=result.epoch_activity_df.astype(np.float64),
+            ),
         )
 
         r_values_struct = make_struct(
@@ -323,208 +222,145 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
             condition_b_sem=result.condition_b_r_value_sem.astype(np.float64),
         )
 
-        axes_struct = make_struct(
-            region=np.array(result.region_names, dtype=object),
-            time_s=result.time_axis_s.astype(np.float64),
-        )
-
-        excluded_rois_struct = make_struct(
-            name=np.array(list(result.excluded_rois.keys()), dtype=object),
-            reason=np.array(list(result.excluded_rois.values()), dtype=object),
-        )
-
-        meta_kwargs: dict[str, object] = dict(
-            analysis_level=np.str_("roi_group"),
-            condition_labels=np.array(list(result.condition_labels), dtype=object),
-            source_metric=np.str_(result.source_metric),
-            contrast_mode=np.str_(result.contrast_mode),
-            p_value_correction_method=np.str_(result.p_value_correction_method),
-            significance_alpha=float(result.significance_alpha),
-            roi_mode=np.str_(result.roi_mode),
-            atlas_name=np.str_(result.atlas_name or ""),
-            roi_channel_counts=result.roi_channel_counts.astype(np.int64),
-            roi_subject_counts=result.roi_subject_counts.astype(np.int64),
-            included_roi_count=int(len(result.region_names)),
-            excluded_roi_count=int(len(result.excluded_rois)),
-            excluded_rois=excluded_rois_struct,
-        )
-        for key in ("binning_mode", "window_ms", "n_bins", "effective_n_bins"):
-            val = result.metadata.get(key)
-            if val is not None:
-                meta_kwargs[key] = val
-        if "predictor" in result.metadata:
-            meta_kwargs["predictor"] = np.str_(str(result.metadata["predictor"]))
-        if "predictor_zscore" in result.metadata:
-            meta_kwargs["predictor_zscore"] = np.str_(str(result.metadata["predictor_zscore"]))
-        if "predictor_transform_by_condition_json" in result.metadata:
-            meta_kwargs["predictor_transform_by_condition_json"] = np.str_(
-                str(result.metadata["predictor_transform_by_condition_json"])
-            )
-        if "activity_zscore" in result.metadata:
-            meta_kwargs["activity_zscore"] = np.str_(str(result.metadata["activity_zscore"]))
-        if "activity_baseline_tmin_s" in result.metadata:
-            meta_kwargs["activity_baseline_tmin_s"] = float(result.metadata["activity_baseline_tmin_s"])
-        if "activity_baseline_tmax_s" in result.metadata:
-            meta_kwargs["activity_baseline_tmax_s"] = float(result.metadata["activity_baseline_tmax_s"])
-        if "trial_activity_summary_kind" in result.metadata:
-            meta_kwargs["trial_activity_summary_kind"] = np.str_(
-                str(result.metadata["trial_activity_summary_kind"])
-            )
-        if "trial_activity_summary_missing_response_policy" in result.metadata:
-            meta_kwargs["trial_activity_summary_missing_response_policy"] = np.str_(
-                str(result.metadata["trial_activity_summary_missing_response_policy"])
-            )
-        if "trial_activity_summary_source_json" in result.metadata:
-            meta_kwargs["trial_activity_summary_source_json"] = np.str_(
-                str(result.metadata["trial_activity_summary_source_json"])
-            )
-        if "trial_activity_summary_label" in result.metadata:
-            meta_kwargs["trial_activity_summary_label"] = np.str_(
-                str(result.metadata["trial_activity_summary_label"])
-            )
-        if "scatter_aggregation" in result.metadata:
-            meta_kwargs["scatter_aggregation"] = np.str_(
-                str(result.metadata["scatter_aggregation"])
-            )
-        meta_struct = make_struct(**meta_kwargs)
-
-        contributions_struct = make_struct(
-            roi=np.array([c.roi for c in result.contributions], dtype=object),
-            subject=np.array([c.subject for c in result.contributions], dtype=object),
-            channel=np.array([c.channel for c in result.contributions], dtype=object),
-            source_stats_file=np.array(
-                [c.source_stats_file for c in result.contributions], dtype=object
-            ),
-        )
-
-        prov_struct = make_struct(
-            source_regression_files=np.array(
-                result.source_regression_files, dtype=object
-            ),
-            source_electrodes_files=np.array(result.source_electrodes_files, dtype=object),
-            pipeline_name=np.str_("regression_group"),
-            pipeline_version=np.str_(package_version()),
-        )
-
-        n_rois = len(result.region_names)
-        if result.condition_a_slope_contributions:
-            slope_a_cell: np.ndarray = np.empty(n_rois, dtype=object)
-            slope_b_cell: np.ndarray = np.empty(n_rois, dtype=object)
-            activity_a_cell: np.ndarray = np.empty(n_rois, dtype=object)
-            activity_b_cell: np.ndarray = np.empty(n_rois, dtype=object)
-            labels_cell: np.ndarray = np.empty(n_rois, dtype=object)
-            for i in range(n_rois):
-                slope_a_cell[i] = result.condition_a_slope_contributions[i].astype(np.float64)
-                slope_b_cell[i] = result.condition_b_slope_contributions[i].astype(np.float64)
-                activity_a_cell[i] = result.condition_a_activity_contributions[i].astype(np.float64)
-                activity_b_cell[i] = result.condition_b_activity_contributions[i].astype(np.float64)
-                labels_cell[i] = np.array(result.contribution_labels[i], dtype=object)
-            contrib_samples_struct = make_struct(
-                condition_a_slope=slope_a_cell,
-                condition_b_slope=slope_b_cell,
-                condition_a_activity=activity_a_cell,
-                condition_b_activity=activity_b_cell,
-                labels=labels_cell,
-                region=np.array(result.region_names, dtype=object),
-            )
-        else:
-            contrib_samples_struct = make_struct(
-                condition_a_slope=np.array([], dtype=object),
-                condition_b_slope=np.array([], dtype=object),
-                condition_a_activity=np.array([], dtype=object),
-                condition_b_activity=np.array([], dtype=object),
-                labels=np.array([], dtype=object),
-                region=np.array([], dtype=object),
-            )
-
-        if result.condition_a_scatter_predictor:
-            scatter_pred_a_cell: np.ndarray = np.empty(n_rois, dtype=object)
-            scatter_act_a_cell: np.ndarray = np.empty(n_rois, dtype=object)
-            scatter_pred_b_cell: np.ndarray = np.empty(n_rois, dtype=object)
-            scatter_act_b_cell: np.ndarray = np.empty(n_rois, dtype=object)
-            for i in range(n_rois):
-                scatter_pred_a_cell[i] = np.asarray(result.condition_a_scatter_predictor[i], dtype=np.float64)
-                scatter_act_a_cell[i] = np.asarray(result.condition_a_scatter_activity[i], dtype=np.float64)
-                scatter_pred_b_cell[i] = np.asarray(result.condition_b_scatter_predictor[i], dtype=np.float64)
-                scatter_act_b_cell[i] = np.asarray(result.condition_b_scatter_activity[i], dtype=np.float64)
-            scatter_data_struct = make_struct(
-                condition_a_predictor=scatter_pred_a_cell,
-                condition_a_activity=scatter_act_a_cell,
-                condition_b_predictor=scatter_pred_b_cell,
-                condition_b_activity=scatter_act_b_cell,
-                region=np.array(result.region_names, dtype=object),
-            )
-        else:
-            scatter_data_struct = make_struct(
-                condition_a_predictor=np.array([], dtype=object),
-                condition_a_activity=np.array([], dtype=object),
-                condition_b_predictor=np.array([], dtype=object),
-                condition_b_activity=np.array([], dtype=object),
-                region=np.array([], dtype=object),
-            )
-
+        meta_kwargs = self.common_meta_kwargs(result=result)
+        meta_kwargs["contrast_mode"] = np.str_(result.contrast_mode)
+        for key in (
+            "predictor",
+            "predictor_zscore",
+            "predictor_transform_by_condition_json",
+            "trial_activity_summary_kind",
+            "trial_activity_summary_missing_response_policy",
+            "trial_activity_summary_source_json",
+            "trial_activity_summary_label",
+            "scatter_aggregation",
+        ):
+            value = result.metadata.get(key)
+            if value is not None:
+                meta_kwargs[key] = np.str_(str(value))
         data = make_struct(
-            regression=regression_struct,
+            source_metric=source_metric_struct,
             activity=activity_struct,
-            means=means_struct,
+            means=self.make_activity_means_struct(result=result),
             r_values=r_values_struct,
-            axes=axes_struct,
-            meta=meta_struct,
-            contributions=contributions_struct,
-            contribution_samples=contrib_samples_struct,
-            scatter_data=scatter_data_struct,
-            provenance=prov_struct,
+            axes=self.make_axes_struct(result=result),
+            meta=make_struct(**meta_kwargs),
+            contributions=self.make_contributions_struct(result=result),
+            activity_contributions=self.make_activity_contributions_struct(result=result),
+            source_metric_contributions=_make_metric_contributions_struct(result=result),
+            scatter_data=_make_scatter_struct(result=result),
+            excluded_rois=self.make_excluded_rois_struct(result=result),
+            provenance=self.make_provenance_struct(
+                result=result,
+                pipeline_name="regression_group",
+            ),
         )
         savemat(str(output_path), {"data": data}, do_compression=True, long_field_names=True)
 
 
-# ---------------------------------------------------------------------------
-# HDF5 helpers
-# ---------------------------------------------------------------------------
-
-def _write_ragged_hdf5(
+def _write_metric_contributions_hdf5(
     grp: h5py.Group,
     *,
-    condition_a_slope: list,
-    condition_b_slope: list,
-    condition_a_activity: list,
-    condition_b_activity: list,
+    condition_a_values: list,
+    condition_b_values: list,
     labels: list,
     region_names: list[str],
     str_dtype: object,
 ) -> None:
-    """Write per-ROI contribution sample arrays as indexed HDF5 datasets."""
-    n_rois = len(region_names)
+    if not condition_a_values:
+        return
     grp.create_dataset(
         "region_names",
         data=np.array(region_names, dtype=object),
         dtype=str_dtype,
     )
-    for i in range(n_rois):
-        roi_name = region_names[i]
+    for i, roi_name in enumerate(region_names):
         roi_grp = grp.create_group(str(i))
         roi_grp.attrs["roi"] = roi_name
         roi_grp.create_dataset(
-            "condition_a_slope",
-            data=np.asarray(condition_a_slope[i], dtype=np.float64),
+            "condition_a",
+            data=np.asarray(condition_a_values[i], dtype=np.float64),
         )
         roi_grp.create_dataset(
-            "condition_b_slope",
-            data=np.asarray(condition_b_slope[i], dtype=np.float64),
-        )
-        roi_grp.create_dataset(
-            "condition_a_activity",
-            data=np.asarray(condition_a_activity[i], dtype=np.float64),
-        )
-        roi_grp.create_dataset(
-            "condition_b_activity",
-            data=np.asarray(condition_b_activity[i], dtype=np.float64),
+            "condition_b",
+            data=np.asarray(condition_b_values[i], dtype=np.float64),
         )
         roi_grp.create_dataset(
             "labels",
             data=np.array(labels[i], dtype=object),
             dtype=str_dtype,
         )
+
+
+def _make_metric_contributions_struct(
+    result: RegressionGroupProcessingResult,
+) -> np.ndarray:
+    n_rois = len(result.region_names)
+    if not result.condition_a_source_metric_contributions:
+        return make_struct(
+            condition_a=np.array([], dtype=object),
+            condition_b=np.array([], dtype=object),
+            labels=np.array([], dtype=object),
+            region_names=np.array([], dtype=object),
+        )
+    cond_a_cell: np.ndarray = np.empty(n_rois, dtype=object)
+    cond_b_cell: np.ndarray = np.empty(n_rois, dtype=object)
+    labels_cell: np.ndarray = np.empty(n_rois, dtype=object)
+    for i in range(n_rois):
+        cond_a_cell[i] = np.asarray(
+            result.condition_a_source_metric_contributions[i],
+            dtype=np.float64,
+        )
+        cond_b_cell[i] = np.asarray(
+            result.condition_b_source_metric_contributions[i],
+            dtype=np.float64,
+        )
+        labels_cell[i] = np.array(result.contribution_labels[i], dtype=object)
+    return make_struct(
+        condition_a=cond_a_cell,
+        condition_b=cond_b_cell,
+        labels=labels_cell,
+        region_names=np.array(result.region_names, dtype=object),
+    )
+
+
+def _make_scatter_struct(result: RegressionGroupProcessingResult) -> np.ndarray:
+    n_rois = len(result.region_names)
+    if not result.condition_a_scatter_predictor:
+        return make_struct(
+            condition_a_predictor=np.array([], dtype=object),
+            condition_a_activity=np.array([], dtype=object),
+            condition_b_predictor=np.array([], dtype=object),
+            condition_b_activity=np.array([], dtype=object),
+            region_names=np.array([], dtype=object),
+        )
+    scatter_pred_a_cell: np.ndarray = np.empty(n_rois, dtype=object)
+    scatter_act_a_cell: np.ndarray = np.empty(n_rois, dtype=object)
+    scatter_pred_b_cell: np.ndarray = np.empty(n_rois, dtype=object)
+    scatter_act_b_cell: np.ndarray = np.empty(n_rois, dtype=object)
+    for i in range(n_rois):
+        scatter_pred_a_cell[i] = np.asarray(
+            result.condition_a_scatter_predictor[i],
+            dtype=np.float64,
+        )
+        scatter_act_a_cell[i] = np.asarray(
+            result.condition_a_scatter_activity[i],
+            dtype=np.float64,
+        )
+        scatter_pred_b_cell[i] = np.asarray(
+            result.condition_b_scatter_predictor[i],
+            dtype=np.float64,
+        )
+        scatter_act_b_cell[i] = np.asarray(
+            result.condition_b_scatter_activity[i],
+            dtype=np.float64,
+        )
+    return make_struct(
+        condition_a_predictor=scatter_pred_a_cell,
+        condition_a_activity=scatter_act_a_cell,
+        condition_b_predictor=scatter_pred_b_cell,
+        condition_b_activity=scatter_act_b_cell,
+        region_names=np.array(result.region_names, dtype=object),
+    )
 
 
 def _write_scatter_hdf5(
@@ -537,7 +373,6 @@ def _write_scatter_hdf5(
     region_names: list[str],
     str_dtype: object,
 ) -> None:
-    """Write per-ROI scatter arrays (predictor × epoch-mean-activity) as indexed HDF5 datasets."""
     grp.create_dataset(
         "region_names",
         data=np.array(region_names, dtype=object),

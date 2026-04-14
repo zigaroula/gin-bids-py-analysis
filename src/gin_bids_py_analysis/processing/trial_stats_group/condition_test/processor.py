@@ -318,19 +318,19 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
             t_values = self.stack_rows(rows_t, n_times)
             metric_mean = self.stack_rows(rows_mean, n_times)
             metric_sem = self.stack_rows(rows_sem, n_times)
-            condition_a_group_mean = self.stack_rows(rows_cond_a_mean, n_times)
-            condition_a_group_sem = self.stack_rows(rows_cond_a_sem, n_times)
-            condition_b_group_mean = self.stack_rows(rows_cond_b_mean, n_times)
-            condition_b_group_sem = self.stack_rows(rows_cond_b_sem, n_times)
+            condition_a_activity_mean = self.stack_rows(rows_cond_a_mean, n_times)
+            condition_a_activity_sem = self.stack_rows(rows_cond_a_sem, n_times)
+            condition_b_activity_mean = self.stack_rows(rows_cond_b_mean, n_times)
+            condition_b_activity_sem = self.stack_rows(rows_cond_b_sem, n_times)
         else:
             t_values = np.empty((0, n_times), dtype=np.float64)
             p_values_uncorrected = np.empty((0, n_times), dtype=np.float64)
             metric_mean = np.empty((0, n_times), dtype=np.float64)
             metric_sem = np.empty((0, n_times), dtype=np.float64)
-            condition_a_group_mean = np.empty((0, n_times), dtype=np.float64)
-            condition_a_group_sem = np.empty((0, n_times), dtype=np.float64)
-            condition_b_group_mean = np.empty((0, n_times), dtype=np.float64)
-            condition_b_group_sem = np.empty((0, n_times), dtype=np.float64)
+            condition_a_activity_mean = np.empty((0, n_times), dtype=np.float64)
+            condition_a_activity_sem = np.empty((0, n_times), dtype=np.float64)
+            condition_b_activity_mean = np.empty((0, n_times), dtype=np.float64)
+            condition_b_activity_sem = np.empty((0, n_times), dtype=np.float64)
 
         p_values = correct_p_values(
             p_values_uncorrected,
@@ -465,14 +465,14 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
             roi_channel_counts=np.asarray(roi_channel_counts, dtype=np.int64),
             roi_subject_counts=np.asarray(roi_subject_counts, dtype=np.int64),
             contributions=contributions_out,
-            condition_a_group_mean=condition_a_group_mean,
-            condition_a_group_sem=condition_a_group_sem,
-            condition_b_group_mean=condition_b_group_mean,
-            condition_b_group_sem=condition_b_group_sem,
-            condition_a_contributions=cond_a_contribution_samples,
-            condition_b_contributions=cond_b_contribution_samples,
+            condition_a_activity_mean=condition_a_activity_mean,
+            condition_a_activity_sem=condition_a_activity_sem,
+            condition_b_activity_mean=condition_b_activity_mean,
+            condition_b_activity_sem=condition_b_activity_sem,
+            condition_a_activity_contributions=cond_a_contribution_samples,
+            condition_b_activity_contributions=cond_b_contribution_samples,
             contribution_labels=contribution_label_rows,
-            source_condition_test_files=[str(snapshot.stats_file.path) for snapshot in snapshots],
+            source_subject_stats_files=[str(snapshot.stats_file.path) for snapshot in snapshots],
             source_electrodes_files=sorted(used_electrode_paths),
             excluded_rois=excluded_rois,
             cluster_p_values=cluster_p_values_out,

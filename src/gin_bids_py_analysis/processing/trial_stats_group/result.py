@@ -20,9 +20,18 @@ class BaseTrialStatsGroupProcessingResult(BaseProcessingResult):
     roi_channel_counts: np.ndarray = field(default_factory=lambda: np.array([]))
     roi_subject_counts: np.ndarray = field(default_factory=lambda: np.array([]))
     contributions: list[ROIChannelContribution] = field(default_factory=list)
+    condition_a_activity_mean: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_a_activity_sem: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_b_activity_mean: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_b_activity_sem: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_a_activity_contributions: list = field(default_factory=list)
+    condition_b_activity_contributions: list = field(default_factory=list)
+    contribution_labels: list = field(default_factory=list)
     source_metric: str = ""
     p_value_correction_method: str = "none"
     significance_alpha: float = 0.05
     roi_mode: str = "manual"
     atlas_name: str | None = None
+    source_subject_stats_files: list[str] = field(default_factory=list)
+    source_electrodes_files: list[str] = field(default_factory=list)
     excluded_rois: dict[str, str] = field(default_factory=dict)

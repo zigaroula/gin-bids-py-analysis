@@ -198,8 +198,6 @@ def _write_group_stats_h5(path: Path, *, n_regions: int, n_bins: int) -> None:
         summary_grp.create_dataset("df", data=np.full((n_regions,), 12.0, dtype=np.float64))
         summary_grp.create_dataset("metric_mean", data=np.linspace(0.4, 0.9, num=n_regions))
         summary_grp.create_dataset("metric_sem", data=np.full((n_regions,), 0.1, dtype=np.float64))
-        summary_grp.create_dataset("roi_channel_counts", data=np.array([4] * n_regions, dtype=np.int64))
-        summary_grp.create_dataset("roi_subject_counts", data=np.array([3] * n_regions, dtype=np.int64))
 
         axes_grp = fh.create_group("axes")
         region_names = [f"ROI_{idx:02d}" for idx in range(n_regions)]
@@ -218,12 +216,14 @@ def _write_group_stats_h5(path: Path, *, n_regions: int, n_bins: int) -> None:
         meta_grp.create_dataset("significance_alpha", data=0.05)
         meta_grp.create_dataset("roi_mode", data="manual", dtype=h5py.string_dtype(encoding="utf-8"))
         meta_grp.create_dataset("atlas_name", data="", dtype=h5py.string_dtype(encoding="utf-8"))
+        meta_grp.create_dataset("roi_channel_counts", data=np.array([4] * n_regions, dtype=np.int64))
+        meta_grp.create_dataset("roi_subject_counts", data=np.array([3] * n_regions, dtype=np.int64))
         meta_grp.create_dataset("window_ms", data=0.0)
         meta_grp.create_dataset("n_bins", data=n_bins)
         meta_grp.create_dataset("effective_n_bins", data=n_bins)
         meta_grp.create_dataset("binning_mode", data="n_bins", dtype=h5py.string_dtype(encoding="utf-8"))
 
-        excluded_grp = meta_grp.create_group("excluded_rois")
+        excluded_grp = fh.create_group("excluded_rois")
         excluded_grp.create_dataset("region", data=np.array([], dtype=object), dtype=h5py.string_dtype(encoding="utf-8"))
         excluded_grp.create_dataset("reason", data=np.array([], dtype=object), dtype=h5py.string_dtype(encoding="utf-8"))
 
@@ -241,7 +241,7 @@ def _write_group_stats_h5(path: Path, *, n_regions: int, n_bins: int) -> None:
         contrib_grp.create_dataset("source_stats_file", data=np.array([str(path)] * len(contrib_regions), dtype=object), dtype=h5py.string_dtype(encoding="utf-8"))
 
         prov_grp = fh.create_group("provenance")
-        prov_grp.create_dataset("source_condition_test_files", data=np.array([str(path)], dtype=object), dtype=h5py.string_dtype(encoding="utf-8"))
+        prov_grp.create_dataset("source_subject_stats_files", data=np.array([str(path)], dtype=object), dtype=h5py.string_dtype(encoding="utf-8"))
         prov_grp.create_dataset("source_electrodes_files", data=np.array([], dtype=object), dtype=h5py.string_dtype(encoding="utf-8"))
         prov_grp.create_dataset("pipeline_name", data="condition_test_group", dtype=h5py.string_dtype(encoding="utf-8"))
         prov_grp.create_dataset("pipeline_version", data="test", dtype=h5py.string_dtype(encoding="utf-8"))

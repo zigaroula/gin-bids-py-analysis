@@ -192,9 +192,8 @@ class TestLoadGroupResultAuto:
     def test_detects_regression_group_hdf5_layout(self, tmp_path) -> None:
         file_path = tmp_path / "group_slope_stats.h5"
         with h5py.File(file_path, "w") as fh:
-            reg = fh.create_group("regression")
-            cond_a = reg.create_group("condition_a")
-            cond_a.create_dataset("slope_mean", data=[[0.1]])
+            source_metric = fh.create_group("source_metric")
+            source_metric.create_dataset("t_values", data=[[0.1]])
 
         load_ttest = MagicMock(return_value="ttest_result")
         load_slope = MagicMock(return_value="slope_result")

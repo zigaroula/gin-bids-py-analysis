@@ -387,7 +387,7 @@ class LoadSubjectResultsWorker(QThread):
 
 
 class LoadGroupResultWorker(QThread):
-    """Load a pre-computed group result (ttest or slope) from a file.
+    """Load a pre-computed group result (condition-test or regression) from a file.
 
     Parameters
     ----------
@@ -479,42 +479,14 @@ def _load_group_result_auto(
             import h5py
 
             with h5py.File(path, "r") as fh:
-                # regression_group layout.
-                # Keep this tolerant because precomputed group files may come
-                # from slightly different schema revisions.
-                if "regression" in fh:
-                    regression_group = fh["regression"]
-                    if (
-                        "t_values" in regression_group
-                        or "condition_a" in regression_group
-                        or "condition_b" in regression_group
-                        or "epoch_summary" in regression_group
-                    ):
-                        return load_regression_group_result(path)
+                if "source_metric" in fh and "t_values" in fh["source_metric"]:
+                    return load_regression_group_result(path)
 
-                # condition_test_group layout.
                 if "stats" in fh and "t_values" in fh["stats"]:
                     return load_condition_test_group_result(path)
-
-                # Provenance fallback.
-                pipeline_name = ""
-                if "provenance" in fh and "pipeline_name" in fh["provenance"]:
-                    try:
-                        pipeline_name = str(
-                            fh["provenance"]["pipeline_name"].asstr()[()]
-                        ).strip()
-                    except Exception:
-                        pipeline_name = ""
-                if pipeline_name == "condition_test_group":
-                    return load_condition_test_group_result(path)
-                if pipeline_name == "regression_group":
-                    return load_regression_group_result(path)
         except Exception:
             pass
 
-    # Conservative fallback order: condition-test group first, then regression group.
-    # The regression-group loader can decode some ttest files with default-filled
-    # arrays, so we only use it as second choice.
     try:
         return load_condition_test_group_result(path)
     except Exception:

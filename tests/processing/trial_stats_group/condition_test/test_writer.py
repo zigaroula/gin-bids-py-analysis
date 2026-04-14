@@ -86,11 +86,11 @@ def test_writer_outputs_expected_hdf5_schema_and_group_path() -> None:
                     source_stats_file=str(primary.path),
                 )
             ],
-            condition_a_group_mean=np.array([[2.0, 2.5]], dtype=np.float64),
-            condition_a_group_sem=np.array([[0.1, 0.2]], dtype=np.float64),
-            condition_b_group_mean=np.array([[1.0, 1.2]], dtype=np.float64),
-            condition_b_group_sem=np.array([[0.05, 0.1]], dtype=np.float64),
-            source_condition_test_files=[str(primary.path)],
+            condition_a_activity_mean=np.array([[2.0, 2.5]], dtype=np.float64),
+            condition_a_activity_sem=np.array([[0.1, 0.2]], dtype=np.float64),
+            condition_b_activity_mean=np.array([[1.0, 1.2]], dtype=np.float64),
+            condition_b_activity_sem=np.array([[0.05, 0.1]], dtype=np.float64),
+            source_subject_stats_files=[str(primary.path)],
             source_electrodes_files=[],
             excluded_rois={"ROI_B": "insufficient_subjects:1<2"},
         )
@@ -118,9 +118,9 @@ def test_writer_outputs_expected_hdf5_schema_and_group_path() -> None:
             assert fh["meta"]["analysis_level"].asstr()[()] == "roi_group"
             assert fh["meta"]["source_metric"].asstr()[()] == "mean_difference"
             assert fh["meta"]["roi_mode"].asstr()[()] == "manual"
-            assert list(fh["meta"]["excluded_rois"]["region"].asstr()[:]) == ["ROI_B"]
+            assert list(fh["excluded_rois"]["region"].asstr()[:]) == ["ROI_B"]
             assert list(fh["contributions"]["channel"].asstr()[:]) == ["A1"]
-            assert list(fh["provenance"]["source_condition_test_files"].asstr()[:]) == [str(primary.path)]
+            assert list(fh["provenance"]["source_subject_stats_files"].asstr()[:]) == [str(primary.path)]
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -172,11 +172,11 @@ def test_writer_outputs_matlab_format() -> None:
                     source_stats_file=str(primary.path),
                 )
             ],
-            condition_a_group_mean=np.array([[2.0, 2.5]], dtype=np.float64),
-            condition_a_group_sem=np.array([[0.1, 0.2]], dtype=np.float64),
-            condition_b_group_mean=np.array([[1.0, 1.2]], dtype=np.float64),
-            condition_b_group_sem=np.array([[0.05, 0.1]], dtype=np.float64),
-            source_condition_test_files=[str(primary.path)],
+            condition_a_activity_mean=np.array([[2.0, 2.5]], dtype=np.float64),
+            condition_a_activity_sem=np.array([[0.1, 0.2]], dtype=np.float64),
+            condition_b_activity_mean=np.array([[1.0, 1.2]], dtype=np.float64),
+            condition_b_activity_sem=np.array([[0.05, 0.1]], dtype=np.float64),
+            source_subject_stats_files=[str(primary.path)],
             source_electrodes_files=[],
             excluded_rois={"ROI_B": "insufficient_subjects:1<2"},
         )
@@ -208,7 +208,7 @@ def test_writer_outputs_matlab_format() -> None:
         assert np.atleast_1d(data.means.condition_b_sem).shape == (2,)
         assert np.atleast_1d(data.uncertainty.metric_sem).shape == (2,)
         assert np.atleast_1d(data.summary_epoch.t_values).shape == (1,)
-        assert int(np.atleast_1d(data.summary_epoch.roi_channel_counts)[0]) == 5
+        assert int(np.atleast_1d(data.meta.roi_channel_counts)[0]) == 5
         region_arr = np.atleast_1d(data.axes.region)
         assert list(region_arr) == ["ROI_A"]
         np.testing.assert_allclose(np.atleast_1d(data.axes.time_s), [0.0, 0.1])

@@ -303,16 +303,16 @@ class GroupPlotPanel(QWidget):
         ax = self._ax_means
         ax.clear()
         has_cond_data = (
-            result.condition_a_group_mean.size > 0
-            and result.condition_b_group_mean.size > 0
+            result.condition_a_activity_mean.size > 0
+            and result.condition_b_activity_mean.size > 0
         )
         if has_cond_data:
             cond_a_label = result.condition_labels[0]
             cond_b_label = result.condition_labels[1]
-            mean_a = result.condition_a_group_mean[roi_idx]
-            sem_a = result.condition_a_group_sem[roi_idx]
-            mean_b = result.condition_b_group_mean[roi_idx]
-            sem_b = result.condition_b_group_sem[roi_idx]
+            mean_a = result.condition_a_activity_mean[roi_idx]
+            sem_a = result.condition_a_activity_sem[roi_idx]
+            mean_b = result.condition_b_activity_mean[roi_idx]
+            sem_b = result.condition_b_activity_sem[roi_idx]
             ax.plot(t, mean_a, color="steelblue", label=cond_a_label)
             ax.fill_between(t, mean_a - sem_a, mean_a + sem_a, alpha=0.25, color="steelblue")
             ax.plot(t, mean_b, color="tomato", label=cond_b_label)
@@ -435,14 +435,16 @@ class GroupPlotPanel(QWidget):
         _safe_legend(ax)
         self._canvas_p.draw_idle()
 
-        has_contrib = bool(result.condition_a_contributions) and roi_idx < len(result.condition_a_contributions)
+        has_contrib = bool(result.condition_a_activity_contributions) and roi_idx < len(
+            result.condition_a_activity_contributions
+        )
         rows_a = (
-            result.condition_a_contributions[roi_idx]
+            result.condition_a_activity_contributions[roi_idx]
             if has_contrib
             else np.empty((0, len(t)), dtype=np.float64)
         )
         rows_b = (
-            result.condition_b_contributions[roi_idx]
+            result.condition_b_activity_contributions[roi_idx]
             if has_contrib
             else np.empty((0, len(t)), dtype=np.float64)
         )
@@ -477,8 +479,8 @@ class GroupPlotPanel(QWidget):
         cond_b_label = result.condition_labels[1]
 
         sig_slope = (
-            result.slope_significant_mask[roi_idx].astype(bool)
-            if result.slope_significant_mask.size > 0
+            result.source_metric_significant_mask[roi_idx].astype(bool)
+            if result.source_metric_significant_mask.size > 0
             else np.zeros(len(t), dtype=bool)
         )
         sig_activity = (
@@ -612,14 +614,14 @@ class GroupPlotPanel(QWidget):
         ax = self._ax_slope
         ax.clear()
         has_slope_mean = (
-            result.condition_a_slope_mean.size > 0
-            and result.condition_b_slope_mean.size > 0
+            result.condition_a_source_metric_mean.size > 0
+            and result.condition_b_source_metric_mean.size > 0
         )
         if has_slope_mean:
-            slope_mean_a = result.condition_a_slope_mean[roi_idx]
-            slope_sem_a = result.condition_a_slope_sem[roi_idx]
-            slope_mean_b = result.condition_b_slope_mean[roi_idx]
-            slope_sem_b = result.condition_b_slope_sem[roi_idx]
+            slope_mean_a = result.condition_a_source_metric_mean[roi_idx]
+            slope_sem_a = result.condition_a_source_metric_sem[roi_idx]
+            slope_mean_b = result.condition_b_source_metric_mean[roi_idx]
+            slope_sem_b = result.condition_b_source_metric_sem[roi_idx]
             ax.plot(t, slope_mean_a, color="steelblue", label=cond_a_label)
             ax.fill_between(t, slope_mean_a - slope_sem_a, slope_mean_a + slope_sem_a,
                             alpha=0.25, color="steelblue")
@@ -644,8 +646,8 @@ class GroupPlotPanel(QWidget):
         # ---- Slope t-values ----
         ax = self._ax_t
         ax.clear()
-        if result.slope_t_values.size > 0:
-            t_slope = result.slope_t_values[roi_idx]
+        if result.source_metric_t_values.size > 0:
+            t_slope = result.source_metric_t_values[roi_idx]
             ax.plot(t, t_slope, color="darkorange", label=contrast_label)
             if np.nanmin(t_slope) < 0 < np.nanmax(t_slope):
                 ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
@@ -662,13 +664,13 @@ class GroupPlotPanel(QWidget):
         ax = self._ax_p
         ax.clear()
         plotted_p_slope: list[np.ndarray] = []
-        if result.slope_p_values.size > 0:
-            p_slope = result.slope_p_values[roi_idx]
+        if result.source_metric_p_values.size > 0:
+            p_slope = result.source_metric_p_values[roi_idx]
             plotted_p_slope.append(p_slope)
             corr_label = f"p ({method})" if has_correction else "p-value"
             ax.plot(t, p_slope, color="darkorange", label=corr_label)
-            if has_correction and result.slope_p_values_uncorrected.size > 0:
-                p_slope_unc = result.slope_p_values_uncorrected[roi_idx]
+            if has_correction and result.source_metric_p_values_uncorrected.size > 0:
+                p_slope_unc = result.source_metric_p_values_uncorrected[roi_idx]
                 plotted_p_slope.append(p_slope_unc)
                 ax.plot(t, p_slope_unc, color="darkorange", linewidth=0.9, linestyle="--",
                         alpha=0.6, label="p (uncorr)")
@@ -686,16 +688,16 @@ class GroupPlotPanel(QWidget):
         self._canvas_p.draw_idle()
 
         # ---- Slope matrix ----
-        has_slope_contrib = bool(result.condition_a_slope_contributions) and roi_idx < len(
-            result.condition_a_slope_contributions
+        has_slope_contrib = bool(result.condition_a_source_metric_contributions) and roi_idx < len(
+            result.condition_a_source_metric_contributions
         )
         rows_slope_a = (
-            result.condition_a_slope_contributions[roi_idx]
+            result.condition_a_source_metric_contributions[roi_idx]
             if has_slope_contrib
             else np.empty((0, len(t)), dtype=np.float64)
         )
         rows_slope_b = (
-            result.condition_b_slope_contributions[roi_idx]
+            result.condition_b_source_metric_contributions[roi_idx]
             if has_slope_contrib
             else np.empty((0, len(t)), dtype=np.float64)
         )
@@ -1043,7 +1045,7 @@ def _matrix_left_margin(show_row_labels: bool, tick_labels: list) -> float:
 
 
 def _is_slope_group_result(result: object) -> bool:
-    return hasattr(result, "slope_t_values")
+    return hasattr(result, "source_metric_t_values")
 
 
 def _group_activity_axis_label(result: object) -> str:

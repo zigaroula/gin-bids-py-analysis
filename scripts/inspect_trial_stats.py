@@ -509,13 +509,21 @@ def _load_snapshot(stats_path: Path) -> TrialStatsSnapshot:
                     region_channels.setdefault(region, [])
 
         summary_grp = fh["summary_epoch"] if "summary_epoch" in fh else None
-        if summary_grp is not None and "roi_channel_counts" in summary_grp:
+        if "roi_channel_counts" in meta_grp:
+            roi_channel_counts = np.asarray(
+                meta_grp["roi_channel_counts"][:], dtype=np.int64
+            )
+        elif summary_grp is not None and "roi_channel_counts" in summary_grp:
             roi_channel_counts = np.asarray(
                 summary_grp["roi_channel_counts"][:], dtype=np.int64
             )
         else:
             roi_channel_counts = np.asarray([], dtype=np.int64)
-        if summary_grp is not None and "roi_subject_counts" in summary_grp:
+        if "roi_subject_counts" in meta_grp:
+            roi_subject_counts = np.asarray(
+                meta_grp["roi_subject_counts"][:], dtype=np.int64
+            )
+        elif summary_grp is not None and "roi_subject_counts" in summary_grp:
             roi_subject_counts = np.asarray(
                 summary_grp["roi_subject_counts"][:], dtype=np.int64
             )

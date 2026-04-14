@@ -463,17 +463,23 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
         n_rois = len(region_names)
         n_times = int(len(first.time_axis_s))
 
-        t_values_slope = self.stack_rows(rows_slope_t, n_times)
-        p_values_slope_uncorr = self.stack_rows(rows_slope_p_uncorr, n_times)
+        source_metric_t_values = self.stack_rows(rows_slope_t, n_times)
+        source_metric_p_values_uncorr = self.stack_rows(rows_slope_p_uncorr, n_times)
         t_values_activity = self.stack_rows(rows_activity_t, n_times)
         p_values_activity_uncorr = self.stack_rows(rows_activity_p_uncorr, n_times)
 
-        # Apply p-value correction separately for slopes and activity
-        p_values_slope = _apply_correction_2d(p_values_slope_uncorr, method=method)
+        # Apply p-value correction separately for the selected source metric and activity.
+        source_metric_p_values = _apply_correction_2d(
+            source_metric_p_values_uncorr,
+            method=method,
+        )
         p_values_activity = _apply_correction_2d(p_values_activity_uncorr, method=method)
 
         alpha = self.params.significance_alpha
-        sig_mask_slope = np.isfinite(p_values_slope) & (p_values_slope < alpha)
+        source_metric_significant_mask = (
+            np.isfinite(source_metric_p_values)
+            & (source_metric_p_values < alpha)
+        )
         sig_mask_activity = np.isfinite(p_values_activity) & (p_values_activity < alpha)
 
         result = RegressionGroupProcessingResult(
@@ -512,18 +518,18 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                 "scatter_aggregation": "trial_pool",
             },
             output_entities=self.build_output_entities(first.task),
-            slope_t_values=t_values_slope,
-            slope_p_values=p_values_slope,
-            slope_p_values_uncorrected=p_values_slope_uncorr,
-            slope_significant_mask=sig_mask_slope,
+            source_metric_t_values=source_metric_t_values,
+            source_metric_p_values=source_metric_p_values,
+            source_metric_p_values_uncorrected=source_metric_p_values_uncorr,
+            source_metric_significant_mask=source_metric_significant_mask,
             activity_t_values=t_values_activity,
             activity_p_values=p_values_activity,
             activity_p_values_uncorrected=p_values_activity_uncorr,
             activity_significant_mask=sig_mask_activity,
-            condition_a_slope_mean=self.stack_rows(rows_slope_mean_a, n_times),
-            condition_a_slope_sem=self.stack_rows(rows_slope_sem_a, n_times),
-            condition_b_slope_mean=self.stack_rows(rows_slope_mean_b, n_times),
-            condition_b_slope_sem=self.stack_rows(rows_slope_sem_b, n_times),
+            condition_a_source_metric_mean=self.stack_rows(rows_slope_mean_a, n_times),
+            condition_a_source_metric_sem=self.stack_rows(rows_slope_sem_a, n_times),
+            condition_b_source_metric_mean=self.stack_rows(rows_slope_mean_b, n_times),
+            condition_b_source_metric_sem=self.stack_rows(rows_slope_sem_b, n_times),
             condition_a_activity_mean=self.stack_rows(rows_activity_mean_a, n_times),
             condition_a_activity_sem=self.stack_rows(rows_activity_sem_a, n_times),
             condition_b_activity_mean=self.stack_rows(rows_activity_mean_b, n_times),
@@ -532,9 +538,9 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             condition_a_r_value_sem=self.stack_rows(rows_r_value_sem_a, n_times),
             condition_b_r_value_mean=self.stack_rows(rows_r_value_mean_b, n_times),
             condition_b_r_value_sem=self.stack_rows(rows_r_value_sem_b, n_times),
-            epoch_slope_t=self.array_1d(epoch_slope_t),
-            epoch_slope_p=self.array_1d(epoch_slope_p),
-            epoch_slope_df=self.array_1d(epoch_slope_df),
+            epoch_source_metric_t=self.array_1d(epoch_slope_t),
+            epoch_source_metric_p=self.array_1d(epoch_slope_p),
+            epoch_source_metric_df=self.array_1d(epoch_slope_df),
             epoch_activity_t=self.array_1d(epoch_activity_t),
             epoch_activity_p=self.array_1d(epoch_activity_p),
             epoch_activity_df=self.array_1d(epoch_activity_df),
@@ -544,8 +550,8 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             roi_channel_counts=np.array(roi_channel_counts, dtype=np.int64),
             roi_subject_counts=np.array(roi_subject_counts, dtype=np.int64),
             contributions=contributions_out,
-            condition_a_slope_contributions=slope_a_contribution_samples,
-            condition_b_slope_contributions=slope_b_contribution_samples,
+            condition_a_source_metric_contributions=slope_a_contribution_samples,
+            condition_b_source_metric_contributions=slope_b_contribution_samples,
             condition_a_activity_contributions=activity_a_contribution_samples,
             condition_b_activity_contributions=activity_b_contribution_samples,
             contribution_labels=contribution_label_rows,
@@ -559,7 +565,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             significance_alpha=alpha,
             roi_mode=self.params.roi_mode,
             atlas_name=self.params.atlas_name,
-            source_regression_files=[str(s.stats_file.path) for s in snapshots],
+            source_subject_stats_files=[str(s.stats_file.path) for s in snapshots],
             source_electrodes_files=sorted(used_electrode_paths),
             excluded_rois=excluded_rois,
         )

@@ -249,8 +249,8 @@ def test_process_group_manual_mode_shapes_and_values() -> None:
         assert result.region_names == ["ROI_POS", "ROI_MIX"]
         n_rois = 2
         n_t = 3
-        assert result.slope_t_values.shape == (n_rois, n_t)
-        assert result.slope_p_values.shape == (n_rois, n_t)
+        assert result.source_metric_t_values.shape == (n_rois, n_t)
+        assert result.source_metric_p_values.shape == (n_rois, n_t)
         assert result.activity_t_values.shape == (n_rois, n_t)
         assert result.condition_a_activity_mean.shape == (n_rois, n_t)
         assert result.condition_a_r_value_mean.shape == (n_rois, n_t)
@@ -332,9 +332,62 @@ def test_process_group_contribution_samples_shape() -> None:
         )
         result = processor.process_group(BIDSFileGroup(primary=file_01))
 
-        assert len(result.condition_a_slope_contributions) == 1
-        assert result.condition_a_slope_contributions[0].shape == (2, 3)
+        assert len(result.condition_a_source_metric_contributions) == 1
+        assert result.condition_a_source_metric_contributions[0].shape == (2, 3)
         assert len(result.contribution_labels) == 1
         assert len(result.contribution_labels[0]) == 2
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+
+
+def test_process_group_uses_source_metric_contract_for_r_value() -> None:
+    case_dir = _make_case_dir("source_metric_r_value")
+    try:
+        time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
+        slope = np.array([[1.0, 1.0, 1.0]], dtype=np.float64)
+        path_01 = case_dir / "sub-01_task-decid_desc-slopestat_stats.h5"
+        _write_slope_stats_h5(
+            path_01,
+            channels=["A1"],
+            time_s=time_s,
+            condition_a_slope=slope,
+            condition_b_slope=-slope,
+            condition_a_r_value=np.array([[0.8, 0.7, 0.6]], dtype=np.float64),
+            condition_b_r_value=np.array([[0.2, 0.1, 0.0]], dtype=np.float64),
+        )
+        path_02 = case_dir / "sub-02_task-decid_desc-slopestat_stats.h5"
+        _write_slope_stats_h5(
+            path_02,
+            channels=["A1"],
+            time_s=time_s,
+            condition_a_slope=slope,
+            condition_b_slope=-slope,
+            condition_a_r_value=np.array([[0.9, 0.8, 0.7]], dtype=np.float64),
+            condition_b_r_value=np.array([[0.1, 0.0, -0.1]], dtype=np.float64),
+        )
+
+        file_01 = _make_bids_file(path_01, {"subject": "01", "task": "decid", "suffix": "stats", "extension": ".h5"})
+        file_02 = _make_bids_file(path_02, {"subject": "02", "task": "decid", "suffix": "stats", "extension": ".h5"})
+
+        processor = RegressionGroupProcessing(
+            RegressionGroupParams(
+                roi_mode="manual",
+                manual_region_channels={"ROI_A": {"01": ["A1"], "02": ["A1"]}},
+                source_metric="r_value",
+            )
+        )
+        result = processor.process_group(BIDSFileGroup(primary=file_01, secondaries=[file_02]))
+
+        assert result.source_metric == "r_value"
+        assert result.source_metric_t_values.shape == (1, 3)
+        assert result.condition_a_source_metric_mean.shape == (1, 3)
+        np.testing.assert_allclose(
+            result.condition_a_source_metric_mean[0],
+            np.array([0.85, 0.75, 0.65], dtype=np.float64),
+        )
+        np.testing.assert_allclose(
+            result.condition_b_source_metric_mean[0],
+            np.array([0.15, 0.05, -0.05], dtype=np.float64),
+        )
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)

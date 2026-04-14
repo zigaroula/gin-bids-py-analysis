@@ -55,17 +55,17 @@ def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> Regression
             "effective_n_bins": n_t,
             "activity_zscore": "none",
         },
-        slope_t_values=np.full(shape, 2.0, dtype=np.float64),
-        slope_p_values=np.full(shape, 0.02, dtype=np.float64),
-        slope_p_values_uncorrected=np.full(shape, 0.02, dtype=np.float64),
-        slope_significant_mask=np.ones(shape, dtype=bool),
-        condition_a_slope_mean=np.full(shape, 1.5, dtype=np.float64),
-        condition_a_slope_sem=np.full(shape, 0.3, dtype=np.float64),
-        condition_b_slope_mean=np.full(shape, -1.5, dtype=np.float64),
-        condition_b_slope_sem=np.full(shape, 0.3, dtype=np.float64),
-        epoch_slope_t=np.full(n_rois, 3.0, dtype=np.float64),
-        epoch_slope_p=np.full(n_rois, 0.01, dtype=np.float64),
-        epoch_slope_df=np.full(n_rois, 4.0, dtype=np.float64),
+        source_metric_t_values=np.full(shape, 2.0, dtype=np.float64),
+        source_metric_p_values=np.full(shape, 0.02, dtype=np.float64),
+        source_metric_p_values_uncorrected=np.full(shape, 0.02, dtype=np.float64),
+        source_metric_significant_mask=np.ones(shape, dtype=bool),
+        condition_a_source_metric_mean=np.full(shape, 1.5, dtype=np.float64),
+        condition_a_source_metric_sem=np.full(shape, 0.3, dtype=np.float64),
+        condition_b_source_metric_mean=np.full(shape, -1.5, dtype=np.float64),
+        condition_b_source_metric_sem=np.full(shape, 0.3, dtype=np.float64),
+        epoch_source_metric_t=np.full(n_rois, 3.0, dtype=np.float64),
+        epoch_source_metric_p=np.full(n_rois, 0.01, dtype=np.float64),
+        epoch_source_metric_df=np.full(n_rois, 4.0, dtype=np.float64),
         activity_t_values=np.full(shape, 1.5, dtype=np.float64),
         activity_p_values=np.full(shape, 0.05, dtype=np.float64),
         activity_p_values_uncorrected=np.full(shape, 0.05, dtype=np.float64),
@@ -90,16 +90,18 @@ def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> Regression
             ROIChannelContribution(roi="ROI_0", subject="01", channel="A1", source_stats_file=str(primary.path)),
             ROIChannelContribution(roi="ROI_0", subject="02", channel="A1", source_stats_file=str(primary.path)),
         ],
-        condition_a_slope_contributions=[np.ones((2, n_t), dtype=np.float64) * 1.5 for _ in range(n_rois)],
-        condition_b_slope_contributions=[np.ones((2, n_t), dtype=np.float64) * -1.5 for _ in range(n_rois)],
+        condition_a_source_metric_contributions=[np.ones((2, n_t), dtype=np.float64) * 1.5 for _ in range(n_rois)],
+        condition_b_source_metric_contributions=[np.ones((2, n_t), dtype=np.float64) * -1.5 for _ in range(n_rois)],
         condition_a_activity_contributions=[np.ones((2, n_t), dtype=np.float64) * 2.0 for _ in range(n_rois)],
         condition_b_activity_contributions=[np.ones((2, n_t), dtype=np.float64) for _ in range(n_rois)],
         contribution_labels=[["01/A1", "02/A1"] for _ in range(n_rois)],
+        source_metric="slope",
+        contrast_mode="paired",
         p_value_correction_method="none",
         significance_alpha=0.05,
         roi_mode="manual",
         atlas_name=None,
-        source_regression_files=[str(primary.path)],
+        source_subject_stats_files=[str(primary.path)],
         source_electrodes_files=[],
         excluded_rois={"ROI_BAD": "no_channels"},
     )
@@ -124,12 +126,12 @@ def test_writer_hdf5_schema_and_path() -> None:
         assert out_path.suffix == ".h5"
 
         with h5py.File(out_path, "r") as fh:
-            assert "regression" in fh
-            assert "t_values" in fh["regression"]
-            assert "p_values" in fh["regression"]
-            assert "significant_mask" in fh["regression"]
-            assert "slope_mean_a" in fh["regression"]
-            assert "epoch_summary" in fh["regression"]
+            assert "source_metric" in fh
+            assert "t_values" in fh["source_metric"]
+            assert "p_values" in fh["source_metric"]
+            assert "significant_mask" in fh["source_metric"]
+            assert "condition_a_mean" in fh["source_metric"]
+            assert "epoch_summary" in fh["source_metric"]
             assert "activity" in fh
             assert "t_values" in fh["activity"]
             assert "p_values" in fh["activity"]
@@ -144,15 +146,16 @@ def test_writer_hdf5_schema_and_path() -> None:
             assert "time_s" in fh["axes"]
             assert "meta" in fh
             assert "contributions" in fh
-            assert "roi" in fh["contributions"]
-            assert "contribution_samples" in fh
+            assert "region" in fh["contributions"]
+            assert "activity_contributions" in fh
+            assert "source_metric_contributions" in fh
             assert "provenance" in fh
 
-            assert fh["regression"]["t_values"].shape == (1, 2)
-            assert fh["regression"]["epoch_summary"]["t"].shape == (1,)
+            assert fh["source_metric"]["t_values"].shape == (1, 2)
+            assert fh["source_metric"]["epoch_summary"]["t"].shape == (1,)
             assert list(fh["axes"]["region"].asstr()[:]) == ["ROI_0"]
             assert fh["meta"]["roi_mode"].asstr()[()] == "manual"
-            assert list(fh["excluded_rois"]["name"].asstr()[:]) == ["ROI_BAD"]
+            assert list(fh["excluded_rois"]["region"].asstr()[:]) == ["ROI_BAD"]
             assert list(fh["contributions"]["channel"].asstr()[:]) == ["A1", "A1"]
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
@@ -174,7 +177,7 @@ def test_writer_hdf5_roundtrip_via_loader() -> None:
 
         assert loaded.region_names == result.region_names
         assert len(loaded.time_axis_s) == 3
-        np.testing.assert_allclose(loaded.slope_t_values, result.slope_t_values)
+        np.testing.assert_allclose(loaded.source_metric_t_values, result.source_metric_t_values)
         np.testing.assert_allclose(loaded.activity_t_values, result.activity_t_values)
         np.testing.assert_allclose(loaded.condition_a_activity_mean, result.condition_a_activity_mean)
         np.testing.assert_allclose(loaded.condition_b_r_value_mean, result.condition_b_r_value_mean)
@@ -182,7 +185,7 @@ def test_writer_hdf5_roundtrip_via_loader() -> None:
         assert loaded.roi_mode == "manual"
         assert loaded.excluded_rois == {"ROI_BAD": "no_channels"}
         assert len(loaded.contributions) == 2
-        assert len(loaded.condition_a_slope_contributions) == 2
-        assert loaded.condition_a_slope_contributions[0].shape == (2, 3)
+        assert len(loaded.condition_a_source_metric_contributions) == 2
+        assert loaded.condition_a_source_metric_contributions[0].shape == (2, 3)
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)

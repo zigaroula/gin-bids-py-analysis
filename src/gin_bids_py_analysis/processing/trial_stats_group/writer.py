@@ -58,7 +58,7 @@ class BaseTrialStatsGroupProcessingWriter(BaseProcessingWriter):
         result: BaseTrialStatsGroupProcessingResult,
         str_dtype: h5py.Datatype,
         group_name: str = "excluded_rois",
-        region_key: str = "name",
+        region_key: str = "region",
     ) -> None:
         excl = fh.create_group(group_name)
         excl.create_dataset(
@@ -85,7 +85,7 @@ class BaseTrialStatsGroupProcessingWriter(BaseProcessingWriter):
         *,
         result: BaseTrialStatsGroupProcessingResult,
         str_dtype: h5py.Datatype,
-        roi_key: str,
+        roi_key: str = "region",
     ) -> None:
         contribs = fh.create_group("contributions")
         contribs.create_dataset(
@@ -142,6 +142,14 @@ class BaseTrialStatsGroupProcessingWriter(BaseProcessingWriter):
         meta.create_dataset("significance_alpha", data=float(result.significance_alpha))
         meta.create_dataset("roi_mode", data=str(result.roi_mode), dtype=str_dtype)
         meta.create_dataset("atlas_name", data=str(result.atlas_name or ""), dtype=str_dtype)
+        meta.create_dataset(
+            "roi_channel_counts",
+            data=result.roi_channel_counts.astype(np.int64),
+        )
+        meta.create_dataset(
+            "roi_subject_counts",
+            data=result.roi_subject_counts.astype(np.int64),
+        )
         meta.create_dataset("included_roi_count", data=int(len(result.region_names)))
         meta.create_dataset("excluded_roi_count", data=int(len(result.excluded_rois)))
         for key in (
@@ -173,6 +181,8 @@ class BaseTrialStatsGroupProcessingWriter(BaseProcessingWriter):
             "significance_alpha": float(result.significance_alpha),
             "roi_mode": np.str_(result.roi_mode),
             "atlas_name": np.str_(result.atlas_name or ""),
+            "roi_channel_counts": result.roi_channel_counts.astype(np.int64),
+            "roi_subject_counts": result.roi_subject_counts.astype(np.int64),
             "included_roi_count": int(len(result.region_names)),
             "excluded_roi_count": int(len(result.excluded_rois)),
         }
@@ -192,24 +202,130 @@ class BaseTrialStatsGroupProcessingWriter(BaseProcessingWriter):
         return kwargs
 
     @staticmethod
+    def write_activity_means_hdf5(
+        fh: h5py.File,
+        *,
+        result: BaseTrialStatsGroupProcessingResult,
+    ) -> None:
+        means = fh.create_group("means")
+        means.create_dataset(
+            "condition_a_mean",
+            data=result.condition_a_activity_mean.astype(np.float64),
+        )
+        means.create_dataset(
+            "condition_a_sem",
+            data=result.condition_a_activity_sem.astype(np.float64),
+        )
+        means.create_dataset(
+            "condition_b_mean",
+            data=result.condition_b_activity_mean.astype(np.float64),
+        )
+        means.create_dataset(
+            "condition_b_sem",
+            data=result.condition_b_activity_sem.astype(np.float64),
+        )
+
+    @staticmethod
+    def make_activity_means_struct(
+        *,
+        result: BaseTrialStatsGroupProcessingResult,
+    ) -> np.ndarray:
+        return make_struct(
+            condition_a_mean=result.condition_a_activity_mean.astype(np.float64),
+            condition_a_sem=result.condition_a_activity_sem.astype(np.float64),
+            condition_b_mean=result.condition_b_activity_mean.astype(np.float64),
+            condition_b_sem=result.condition_b_activity_sem.astype(np.float64),
+        )
+
+    @staticmethod
+    def write_activity_contributions_hdf5(
+        fh: h5py.File,
+        *,
+        result: BaseTrialStatsGroupProcessingResult,
+        str_dtype: h5py.Datatype,
+        group_name: str = "activity_contributions",
+    ) -> None:
+        if not result.condition_a_activity_contributions:
+            return
+        contribs = fh.create_group(group_name)
+        contribs.create_dataset(
+            "region_names",
+            data=np.array(result.region_names, dtype=object),
+            dtype=str_dtype,
+        )
+        for roi_idx, roi_name in enumerate(result.region_names):
+            roi_grp = contribs.create_group(str(roi_idx))
+            roi_grp.attrs["roi"] = roi_name
+            roi_grp.create_dataset(
+                "condition_a",
+                data=np.asarray(
+                    result.condition_a_activity_contributions[roi_idx],
+                    dtype=np.float64,
+                ),
+            )
+            roi_grp.create_dataset(
+                "condition_b",
+                data=np.asarray(
+                    result.condition_b_activity_contributions[roi_idx],
+                    dtype=np.float64,
+                ),
+            )
+            roi_grp.create_dataset(
+                "labels",
+                data=np.array(result.contribution_labels[roi_idx], dtype=object),
+                dtype=str_dtype,
+            )
+
+    @staticmethod
+    def make_activity_contributions_struct(
+        *,
+        result: BaseTrialStatsGroupProcessingResult,
+    ) -> np.ndarray:
+        n_rois = len(result.region_names)
+        if not result.condition_a_activity_contributions:
+            return make_struct(
+                condition_a=np.array([], dtype=object),
+                condition_b=np.array([], dtype=object),
+                labels=np.array([], dtype=object),
+                region_names=np.array([], dtype=object),
+            )
+        cond_a_cell: np.ndarray = np.empty(n_rois, dtype=object)
+        cond_b_cell: np.ndarray = np.empty(n_rois, dtype=object)
+        labels_cell: np.ndarray = np.empty(n_rois, dtype=object)
+        for i in range(n_rois):
+            cond_a_cell[i] = np.asarray(
+                result.condition_a_activity_contributions[i],
+                dtype=np.float64,
+            )
+            cond_b_cell[i] = np.asarray(
+                result.condition_b_activity_contributions[i],
+                dtype=np.float64,
+            )
+            labels_cell[i] = np.array(result.contribution_labels[i], dtype=object)
+        return make_struct(
+            condition_a=cond_a_cell,
+            condition_b=cond_b_cell,
+            labels=labels_cell,
+            region_names=np.array(result.region_names, dtype=object),
+        )
+
+    @staticmethod
     def write_provenance_hdf5(
         fh: h5py.File,
         *,
-        source_stats_key: str,
-        source_stats_files: list[str],
-        source_electrodes_files: list[str],
+        result: BaseTrialStatsGroupProcessingResult,
         pipeline_name: str,
         str_dtype: h5py.Datatype,
     ) -> None:
         prov = fh.create_group("provenance")
         prov.create_dataset(
-            source_stats_key,
-            data=np.array(source_stats_files, dtype=object),
+            "source_subject_stats_files",
+            data=np.array(result.source_subject_stats_files, dtype=object),
             dtype=str_dtype,
         )
         prov.create_dataset(
             "source_electrodes_files",
-            data=np.array(source_electrodes_files, dtype=object),
+            data=np.array(result.source_electrodes_files, dtype=object),
             dtype=str_dtype,
         )
         prov.create_dataset("pipeline_name", data=pipeline_name, dtype=str_dtype)
@@ -218,15 +334,19 @@ class BaseTrialStatsGroupProcessingWriter(BaseProcessingWriter):
     @staticmethod
     def make_provenance_struct(
         *,
-        source_stats_key: str,
-        source_stats_files: list[str],
-        source_electrodes_files: list[str],
+        result: BaseTrialStatsGroupProcessingResult,
         pipeline_name: str,
     ) -> np.ndarray:
         return make_struct(
             **{
-                source_stats_key: np.array(source_stats_files, dtype=object),
-                "source_electrodes_files": np.array(source_electrodes_files, dtype=object),
+                "source_subject_stats_files": np.array(
+                    result.source_subject_stats_files,
+                    dtype=object,
+                ),
+                "source_electrodes_files": np.array(
+                    result.source_electrodes_files,
+                    dtype=object,
+                ),
                 "pipeline_name": np.str_(pipeline_name),
                 "pipeline_version": np.str_(package_version()),
             }
