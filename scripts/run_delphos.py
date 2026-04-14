@@ -3,9 +3,14 @@ Delphos analysis — run script.
 Edit the parameters below and run: python scripts/run_delphos.py
 """
 
+from __future__ import annotations
+
+import csv
+import re
 from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset
+from gin_bids_py_analysis.bids.helpers import normalize_subject_value
 from gin_bids_py_analysis.processing.delphos import (
     DelphosParams,
     DelphosProcessing,
@@ -22,7 +27,7 @@ from gin_bids_py_analysis.processing.utils.channels import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\CBT\bids")
+BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
 
 # BIDS entity filters: only files matching ALL of these will be processed.
 # Remove any key you don't want to filter on.
@@ -33,9 +38,22 @@ FILE_FILTERS = {
     #"run": "01",
 }
 
+# Optional: CSV files with two columns (subject, channel) that define
+# per-subject channel selection for the montage.  Channels from all files
+# are merged into a single subject → channel-list mapping.
+# Set to an empty dict (or remove entries) to disable and use all channels.
+CHANNELS_CSV_FILES = {
+    "vmPFC": Path(r"D:\data_clarissa\valuation\csv\PFCvm_elecs_tbl.csv"),
+    "daINS": Path(r"D:\data_clarissa\valuation\csv\aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"D:\data_clarissa\valuation\csv\aINS_vent_elecs_tbl.csv"),
+}
+
 # Algorithm parameters for detection
 PARAMS = DelphosParams(
-    channels_for_montage=r'[A-Z]p?([0-1][0-9])'
+    detection_type=["Osc", "Spk"],
+    montage_mode=MontageMode.BIPOLAR,
+    bipolar_direction=BipolarDirection.NEXT_MINUS_PREVIOUS,
+    bipolar_storage=BipolarStorage.NEXT
 )
 
 # Writer configuration for output files
@@ -47,10 +65,170 @@ WRITER_PARAMS = DelphosWriterParams(
 N_JOBS = 1  # parallelism across files; set to -1 to use all available CPUs
 
 # ---------------------------------------------------------------------------
+# CSV helpers for per-subject channel selection
+# ---------------------------------------------------------------------------
+
+_NA_LIKE_TOKENS = frozenset({"nan", "na", "n/a", "none", "null"})
+_FIRST_CONTACT_PATTERN = re.compile(r"^([A-Za-z]+[0-9]+)")
+
+
+def _is_nan_like(value: object) -> bool:
+    return str(value).strip().casefold() in _NA_LIKE_TOKENS
+
+
+def _normalize_subject_from_csv(raw_subject: object) -> str:
+    subject = str(raw_subject).strip().replace("_", "")
+    return normalize_subject_value(subject)
+
+
+def _extract_first_bipolar_contact(raw_channel: object) -> str:
+    """Return the first contact from a channel name or bipolar pair label."""
+    channel = str(raw_channel).strip()
+    if not channel:
+        return ""
+    match = _FIRST_CONTACT_PATTERN.match(channel)
+    if match is not None:
+        return match.group(1)
+    for separator in ("-", "_", " "):
+        if separator in channel:
+            return channel.split(separator, 1)[0].strip()
+    return channel
+
+
+def _extract_second_bipolar_contact(raw_channel: object) -> str:
+    """Return the second contact from a bipolar pair label (e.g. 'Xp01-Xp02' → 'Xp02').
+
+    Returns an empty string when no separator is found (i.e. the input is
+    already a single contact name).
+    """
+    channel = str(raw_channel).strip()
+    if not channel:
+        return ""
+    for separator in ("-", "_", " "):
+        if separator in channel:
+            return channel.split(separator, 1)[1].strip()
+    return ""
+
+
+def _row_contains_nan(row: dict[str, object]) -> bool:
+    return any(_is_nan_like(value) for value in row.values())
+
+
+def _load_subject_channels_from_csv(csv_path: Path) -> dict[str, list[str]]:
+    """Load a subject → channel-list mapping from a two-column CSV.
+
+    For each row the first column is treated as the subject ID and the second
+    as a channel name or bipolar pair label (e.g. ``Xp01-Xp02``).  Both
+    contacts of a bipolar pair are added so that the bipolar montage can be
+    built correctly.  Rows that contain NaN-like values are skipped.
+    Duplicate channels within the same subject are removed while preserving
+    insertion order.
+
+    Args:
+        csv_path: Path to the CSV file.
+
+    Returns:
+        Mapping of normalised subject IDs to deduplicated channel lists.
+
+    Raises:
+        FileNotFoundError: If *csv_path* does not exist.
+        ValueError: If the file has fewer than two columns.
+    """
+    if not csv_path.exists():
+        raise FileNotFoundError(f"Channel CSV not found: {csv_path}")
+
+    subject_channels: dict[str, list[str]] = {}
+    seen_channels: dict[str, set[str]] = {}
+
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as csv_file:
+        reader = csv.DictReader(csv_file)
+        if not reader.fieldnames or len(reader.fieldnames) < 2:
+            raise ValueError(
+                f"{csv_path}: expected at least 2 columns (subject, channel)."
+            )
+        subject_col = reader.fieldnames[0]
+        channel_col = reader.fieldnames[1]
+
+        for row in reader:
+            if _row_contains_nan(row):
+                continue
+
+            subject = _normalize_subject_from_csv(row.get(subject_col, ""))
+            raw_channel = str(row.get(channel_col, "")).strip()
+            if not subject or not raw_channel:
+                continue
+
+            # Collect both contacts of a bipolar pair so the montage can be built.
+            contacts_to_add = [
+                _extract_first_bipolar_contact(raw_channel),
+                _extract_second_bipolar_contact(raw_channel),
+            ]
+
+            subject_seen = seen_channels.setdefault(subject, set())
+            for contact in contacts_to_add:
+                if not contact:
+                    continue
+                key = contact.casefold()
+                if key in subject_seen:
+                    continue
+                subject_seen.add(key)
+                subject_channels.setdefault(subject, []).append(contact)
+
+    return subject_channels
+
+
+def _merge_subject_channels(
+    csv_paths_by_roi: dict[str, Path],
+) -> dict[str, list[str]]:
+    """Load and merge subject → channel-list mappings from multiple CSV files.
+
+    Channels from all CSVs are concatenated per subject.  Duplicates across
+    files are removed while preserving insertion order.
+
+    Args:
+        csv_paths_by_roi: Mapping of label → CSV path (label is ignored, only
+            used for error reporting).
+
+    Returns:
+        Merged mapping of normalised subject IDs to deduplicated channel lists.
+
+    Raises:
+        FileNotFoundError: If any CSV path does not exist.
+        ValueError: If no channels were loaded from any CSV after NaN filtering.
+    """
+    merged: dict[str, list[str]] = {}
+    seen: dict[str, set[str]] = {}
+
+    for label, csv_path in csv_paths_by_roi.items():
+        per_file = _load_subject_channels_from_csv(csv_path)
+        for subject, channels in per_file.items():
+            subject_seen = seen.setdefault(subject, set())
+            for channel in channels:
+                key = channel.casefold()
+                if key in subject_seen:
+                    continue
+                subject_seen.add(key)
+                merged.setdefault(subject, []).append(channel)
+        print(f"CSV {label!r}: loaded {sum(len(v) for v in per_file.values())} contact(s) across {len(per_file)} subject(s).")
+
+    if not merged:
+        raise ValueError(
+            "No channels were loaded from any CSV file after filtering NaN rows."
+        )
+
+    return merged
+
+
+# ---------------------------------------------------------------------------
 # Processing
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    if CHANNELS_CSV_FILES:
+        channels_for_montage = _merge_subject_channels(CHANNELS_CSV_FILES)
+        print(f"Total: {sum(len(v) for v in channels_for_montage.values())} unique contact(s) across {len(channels_for_montage)} subject(s).")
+        PARAMS = PARAMS.model_copy(update={"channels_for_montage": channels_for_montage})
+
     ds = BIDSDataset(BIDS_ROOT)
     files = ds.get_files(scope="raw", **FILE_FILTERS)
     print(f"Found {len(files)} file(s). Running with n_jobs={N_JOBS}.")

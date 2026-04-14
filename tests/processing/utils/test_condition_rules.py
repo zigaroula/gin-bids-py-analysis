@@ -3,6 +3,7 @@ from __future__ import annotations
 from gin_bids_py_analysis.processing.utils.condition_rules import (
     ConditionDefinition,
     ConditionExpr,
+    matches_condition_expr,
     resolve_conditions,
 )
 
@@ -83,3 +84,18 @@ def test_resolve_conditions_reports_ambiguous_matches() -> None:
     resolution = resolve_conditions(conditions, {"rating": "0"})
     assert resolution.label is None
     assert resolution.reason == "ambiguous_condition_match"
+
+
+def test_matches_condition_expr_returns_true_on_match() -> None:
+    expr = ConditionExpr(column="event_type", op="==", value="Spk")
+    assert matches_condition_expr(expr, {"event_type": "Spk"}) is True
+
+
+def test_matches_condition_expr_returns_false_on_no_match() -> None:
+    expr = ConditionExpr(column="event_type", op="==", value="Spk")
+    assert matches_condition_expr(expr, {"event_type": "Osc"}) is False
+
+
+def test_matches_condition_expr_returns_false_on_missing_column() -> None:
+    expr = ConditionExpr(column="event_type", op="==", value="Spk")
+    assert matches_condition_expr(expr, {}) is False

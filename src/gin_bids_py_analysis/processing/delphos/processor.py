@@ -102,11 +102,17 @@ class DelphosProcessing(BaseProcessing):
         if _PYFFTW_AVAILABLE:
             pyfftw.config.NUM_THREADS = get_threads_for_worker()
 
+        # Resolve per-subject channel dict to a flat list if needed
+        channels_for_montage: list[str] | str | None = self.params.channels_for_montage
+        if isinstance(channels_for_montage, dict):
+            subject = group.primary.get("subject")
+            channels_for_montage = channels_for_montage.get(subject) if subject else None
+
         # Optional channel include/exclude selection before montage
         data, channel_names = select_channels_for_montage(
             data,
             channel_names,
-            self.params.channels_for_montage,
+            channels_for_montage,
             self.params.channels_to_exclude_for_montage,
         )
 

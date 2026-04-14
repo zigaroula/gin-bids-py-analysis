@@ -32,6 +32,7 @@ from gin_bids_py_analysis.processing.utils.events import (
     parse_annotation_description,
 )
 from gin_bids_py_analysis.processing.utils.statistics import zscore_activity_by_baseline
+from gin_bids_py_analysis.processing.utils.trial_annotator import TrialWindowAnnotator
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from .params import BaseTrialStatsParams
@@ -74,9 +75,11 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
         self,
         params: BaseTrialStatsParams,
         resolver: TrialResolver,
+        annotators: Sequence[TrialWindowAnnotator] = (),
     ) -> None:
         self.params = params
         self.resolver = resolver
+        self.annotators = list(annotators)
         self._validate_resolver_labels()
 
     def process_group(
@@ -180,6 +183,16 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
                     raise ValueError(
                         f"Resolver returned {len(resolved_trials)} trial rows for "
                         f"{len(anchor_events)} anchor events in {ieeg_file.path.name}."
+                    )
+
+                for annotator in self.annotators:
+                    annotator.annotate_trials(
+                        group,
+                        ieeg_file,
+                        resolved_trials,
+                        self.params.tmin_s,
+                        self.params.tmax_s,
+                        ieeg_channel_names=channel_names,
                     )
 
                 normalized_trials = self._normalize_trials(

@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.bids.matching import entities_compatible
+from gin_bids_py_analysis.bids.matching import entities_compatible, files_matching_entities
 from gin_bids_py_analysis.processing.utils.condition_rules import (
     ConditionDefinition,
     ConditionResolution,
@@ -125,6 +125,16 @@ class TableTrialResolver(BaseModel):
         ge=0.0,
         description="Maximum onset mismatch (seconds) accepted for onset-based row matching.",
     )
+    filter: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Optional BIDS entity filter applied to ``group.secondaries`` before loading table "
+            "rows.  When set, only secondary files whose entities match all key-value pairs are "
+            "read by this resolver.  Use this to prevent event TSV files (e.g. Delphos "
+            "``_events.tsv``) from being accidentally treated as trial tables. "
+            "Example: ``{'suffix': 'beh'}`` restricts the resolver to ``*_beh.tsv`` files."
+        ),
+    )
 
     @field_validator(
         "trial_id_column",
@@ -189,7 +199,12 @@ class TableTrialResolver(BaseModel):
         anchor_events: Sequence[AnnotationEvent],
     ) -> list[ResolvedTrial]:
         """Load matching table rows from the group, build trial rows, then match to anchor events."""
-        table_rows = load_table_rows(group.secondaries)
+        source_files = (
+            files_matching_entities(group.secondaries, **self.filter)
+            if self.filter is not None
+            else group.secondaries
+        )
+        table_rows = load_table_rows(source_files)
         matching_rows = [
             row
             for row in table_rows

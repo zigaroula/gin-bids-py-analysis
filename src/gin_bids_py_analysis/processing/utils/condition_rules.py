@@ -417,4 +417,14 @@ def _dominant_no_match_reason(issues: set[str]) -> str:
     return "no_matching_condition"
 
 
+def matches_condition_expr(expr: ConditionExpr, values: Mapping[str, Any]) -> bool:
+    """Return True if *values* satisfies *expr*.
+
+    Evaluates the expression directly without label resolution overhead.
+    Issues (missing columns, cast errors) are treated as non-matches.
+    """
+    outcome = expr.evaluate(values)
+    return outcome.matched and not outcome.issues
+
+
 ConditionExpr.model_rebuild()
