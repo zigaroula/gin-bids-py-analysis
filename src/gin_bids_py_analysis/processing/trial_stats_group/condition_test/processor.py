@@ -48,13 +48,13 @@ from ..processor import (
 from ..result import ROIChannelContribution
 from .params import ConditionTestGroupParams
 from .result import ConditionTestGroupProcessingResult
-from .stats import (
+from gin_bids_py_analysis.processing.utils.cluster_permutation import (
     compute_cluster_null_distribution,
     compute_mne_cluster_permutation,
     compute_cluster_permutation_pvalue,
-    correct_p_values,
     find_temporal_clusters,
 )
+from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
 
 
 @dataclass(frozen=True)

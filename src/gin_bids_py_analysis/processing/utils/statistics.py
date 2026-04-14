@@ -14,7 +14,7 @@ import numpy as np
 def correct_p_values(
     p_values: np.ndarray,
     *,
-    method: Literal["none", "fdr_bh", "bonferroni", "permutation"] = "fdr_bh",
+    method: Literal["none", "fdr_bh", "bonferroni", "permutation", "cluster_permutation"] = "fdr_bh",
 ) -> np.ndarray:
     """Apply multiple-comparisons correction to p-values.
 
@@ -24,9 +24,10 @@ def correct_p_values(
         Array of p-values of any shape. NaN values are ignored.
     method:
         Correction method. ``"none"`` returns a copy unchanged.
-        ``"permutation"`` is treated as ``"none"`` here because permutation
-        p-values are computed externally; the caller is responsible for
-        passing the already-corrected values or handling this case separately.
+        ``"permutation"`` and ``"cluster_permutation"`` are treated as ``"none"``
+        here because permutation p-values are computed externally; the caller
+        is responsible for passing the already-corrected values or handling
+        this case separately.
 
     Returns
     -------
@@ -34,7 +35,7 @@ def correct_p_values(
     """
     corrected = np.asarray(p_values, dtype=np.float64).copy()
     finite_mask = np.isfinite(corrected)
-    if not finite_mask.any() or method in ("none", "permutation"):
+    if not finite_mask.any() or method in ("none", "permutation", "cluster_permutation"):
         return corrected
 
     flat = corrected[finite_mask]
@@ -50,7 +51,7 @@ def correct_p_values(
 
     raise ValueError(
         f"Unsupported p-value correction method: {method!r}. "
-        "Valid methods are 'none', 'fdr_bh', 'bonferroni', 'permutation'."
+        "Valid methods are 'none', 'fdr_bh', 'bonferroni', 'permutation', 'cluster_permutation'."
     )
 
 

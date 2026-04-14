@@ -213,6 +213,21 @@ class BaseTrialStatsParams(BaseProcessingParams):
             "in the subject-level result."
         ),
     )
+    n_permutations: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Number of condition-label permutations to compute and store in the output. "
+            "0 disables permutation tests entirely."
+        ),
+    )
+    permutation_seed: int | None = Field(
+        default=None,
+        description=(
+            "Seed for the NumPy random generator used during permutation testing. "
+            "None selects a non-reproducible random seed."
+        ),
+    )
 
     @field_validator("experiment_start_event_code", "experiment_end_event_code", mode="before")
     @classmethod

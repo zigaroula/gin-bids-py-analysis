@@ -4,6 +4,7 @@ import numpy as np
 
 from gin_bids_py_analysis.processing.trial_stats.regression.stats import (
     compute_linear_regression_maps,
+    compute_permuted_regression_maps,
 )
 from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
 
@@ -129,4 +130,77 @@ def test_compute_linear_regression_maps_nan_aware_returns_false_when_all_channel
 
     assert valid is False
     assert np.all(np.isnan(slope))
+
+
+# ---------------------------------------------------------------------------
+# compute_permuted_regression_maps
+# ---------------------------------------------------------------------------
+
+def test_compute_permuted_regression_maps_shape_and_dtype() -> None:
+    rng = np.random.default_rng(0)
+    n_trials = 8
+    n_features = 3
+    n_times = 5
+    n_perm = 10
+    predictor = rng.standard_normal(n_trials)
+    epochs = rng.standard_normal((n_trials, n_features, n_times)).astype(np.float32)
+
+    result = compute_permuted_regression_maps(
+        predictor, epochs,
+        n_perm=n_perm, rng=rng, n_features=n_features, n_times=n_times,
+    )
+
+    assert result.shape == (n_perm, n_features, n_times)
+    assert result.dtype == np.float32
+
+
+def test_compute_permuted_regression_maps_zero_perm_returns_empty() -> None:
+    rng = np.random.default_rng(1)
+    predictor = rng.standard_normal(7)
+    epochs = rng.standard_normal((7, 2, 4)).astype(np.float32)
+
+    result = compute_permuted_regression_maps(
+        predictor, epochs,
+        n_perm=0, rng=rng, n_features=2, n_times=4,
+    )
+
+    assert result.shape == (0, 2, 4)
+    assert result.dtype == np.float32
+
+
+def test_compute_permuted_regression_maps_reproducible() -> None:
+    n_trials = 12
+    n_features = 2
+    n_times = 6
+    n_perm = 20
+    predictor = np.random.default_rng(7).standard_normal(n_trials)
+    epochs = np.random.default_rng(8).standard_normal((n_trials, n_features, n_times)).astype(np.float32)
+
+    result_a = compute_permuted_regression_maps(
+        predictor, epochs,
+        n_perm=n_perm, rng=np.random.default_rng(42), n_features=n_features, n_times=n_times,
+    )
+    result_b = compute_permuted_regression_maps(
+        predictor, epochs,
+        n_perm=n_perm, rng=np.random.default_rng(42), n_features=n_features, n_times=n_times,
+    )
+
+    np.testing.assert_array_equal(result_a, result_b)
+
+
+def test_compute_permuted_regression_maps_nan_for_too_few_trials() -> None:
+    rng = np.random.default_rng(3)
+    predictor = rng.standard_normal(3)
+    epochs = rng.standard_normal((3, 2, 4)).astype(np.float32)
+    # Set all but 2 trials to NaN so valid count < 3 for all channels.
+    epochs[2:, :, :] = np.nan
+
+    result = compute_permuted_regression_maps(
+        predictor, epochs,
+        n_perm=5, rng=rng, n_features=2, n_times=4,
+    )
+
+    assert result.shape == (5, 2, 4)
+    assert np.all(np.isnan(result))
+
 

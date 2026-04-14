@@ -21,21 +21,6 @@ class ConditionTestParams(BaseTrialStatsParams):
         default=False,
         description="Forwarded to scipy.stats.ttest_ind; False selects Welch's t-test.",
     )
-    n_permutations: int = Field(
-        default=0,
-        ge=0,
-        description=(
-            "Number of condition-label permutations to compute and store in the output. "
-            "0 disables permutation tests entirely."
-        ),
-    )
-    permutation_seed: int | None = Field(
-        default=None,
-        description=(
-            "Seed for the NumPy random generator used during permutation testing. "
-            "None selects a non-reproducible random seed."
-        ),
-    )
     channel_significance_mode: Literal["none", "single_bin", "duration"] = Field(
         default="none",
         description=(

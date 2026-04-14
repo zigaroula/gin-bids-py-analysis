@@ -157,6 +157,41 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
                     str_dtype=str_dtype,
                 )
 
+            if result.cluster_p_values is not None:
+                cs = fh.create_group("cluster_stats")
+                cs.create_dataset(
+                    "p_values",
+                    data=result.cluster_p_values.astype(np.float64),
+                )
+                windows = result.cluster_best_cluster_windows_s or []
+                cs.create_dataset(
+                    "best_cluster_start_s",
+                    data=np.array(
+                        [w[0] if w is not None else np.nan for w in windows],
+                        dtype=np.float64,
+                    ),
+                )
+                cs.create_dataset(
+                    "best_cluster_end_s",
+                    data=np.array(
+                        [w[1] if w is not None else np.nan for w in windows],
+                        dtype=np.float64,
+                    ),
+                )
+                null_dists = result.cluster_null_distributions or []
+                max_len = max((len(nd) for nd in null_dists), default=0)
+                null_matrix = np.full(
+                    (len(null_dists), max_len), np.nan, dtype=np.float64
+                )
+                for i, nd in enumerate(null_dists):
+                    null_matrix[i, : len(nd)] = nd
+                cs.create_dataset(
+                    "null_distributions",
+                    data=null_matrix,
+                    compression="gzip",
+                    compression_opts=4,
+                )
+
             self.write_provenance_hdf5(
                 fh,
                 result=result,
@@ -233,6 +268,13 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
             provenance=self.make_provenance_struct(
                 result=result,
                 pipeline_name="regression_group",
+            ),
+            **(
+                {
+                    "cluster_stats": _make_cluster_stats_struct(result),
+                }
+                if result.cluster_p_values is not None
+                else {}
             ),
         )
         savemat(str(output_path), {"data": data}, do_compression=True, long_field_names=True)
@@ -378,3 +420,28 @@ def _write_scatter_hdf5(
             "condition_b_activity",
             data=np.asarray(condition_b_activity[i], dtype=np.float64),
         )
+
+
+def _make_cluster_stats_struct(result: RegressionGroupProcessingResult) -> object:
+    """Build a MATLAB struct for cluster-permutation outputs."""
+    from gin_bids_py_analysis.processing.utils.matlab import make_struct
+
+    p_values = result.cluster_p_values
+    windows = result.cluster_best_cluster_windows_s or []
+    null_dists = result.cluster_null_distributions or []
+
+    max_len = max((len(nd) for nd in null_dists), default=0)
+    null_matrix = np.full((len(null_dists), max_len), np.nan, dtype=np.float64)
+    for i, nd in enumerate(null_dists):
+        null_matrix[i, : len(nd)] = nd
+
+    return make_struct(
+        p_values=np.asarray(p_values, dtype=np.float64),
+        best_cluster_start_s=np.array(
+            [w[0] if w is not None else np.nan for w in windows], dtype=np.float64
+        ),
+        best_cluster_end_s=np.array(
+            [w[1] if w is not None else np.nan for w in windows], dtype=np.float64
+        ),
+        null_distributions=null_matrix,
+    )

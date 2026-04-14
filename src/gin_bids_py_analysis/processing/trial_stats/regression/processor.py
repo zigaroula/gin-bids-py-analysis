@@ -27,6 +27,7 @@ from .params import RegressionParams
 from .result import RegressionProcessingResult
 from .stats import (
     compute_linear_regression_maps,
+    compute_permuted_regression_maps,
     zscore_epochs_across_trials,
     zscore_predictor_values_by_scope,
 )
@@ -412,6 +413,30 @@ class RegressionProcessing(BaseTrialStatsProcessing):
         condition_a_epoch_means = self._compute_epoch_means(context.epochs_a, n_features)
         condition_b_epoch_means = self._compute_epoch_means(context.epochs_b, n_features)
 
+        n_perms = self.params.n_permutations
+        condition_a_permuted_slopes: np.ndarray | None = None
+        condition_b_permuted_slopes: np.ndarray | None = None
+        if n_perms > 0:
+            rng = np.random.default_rng(self.params.permutation_seed)
+            if condition_a_stats_valid:
+                condition_a_permuted_slopes = compute_permuted_regression_maps(
+                    predictor_a_effective_array,
+                    context.epochs_a,
+                    n_perm=n_perms,
+                    rng=rng,
+                    n_features=n_features,
+                    n_times=n_times,
+                )
+            if condition_b_stats_valid:
+                condition_b_permuted_slopes = compute_permuted_regression_maps(
+                    predictor_b_effective_array,
+                    context.epochs_b,
+                    n_perm=n_perms,
+                    rng=rng,
+                    n_features=n_features,
+                    n_times=n_times,
+                )
+
         return RegressionProcessingResult(
             **self._build_common_result_kwargs(context),
             condition_a_slope=condition_a_slope,
@@ -455,6 +480,8 @@ class RegressionProcessing(BaseTrialStatsProcessing):
             stats_valid=bool(condition_a_stats_valid or condition_b_stats_valid),
             condition_a_epoch_means=condition_a_epoch_means,
             condition_b_epoch_means=condition_b_epoch_means,
+            condition_a_permuted_slopes=condition_a_permuted_slopes,
+            condition_b_permuted_slopes=condition_b_permuted_slopes,
         )
 
     def _scale_predictor_values_pair(

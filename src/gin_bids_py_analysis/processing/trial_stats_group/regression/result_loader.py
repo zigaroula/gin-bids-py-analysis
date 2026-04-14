@@ -242,6 +242,24 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
                     np.asarray(prov["source_electrodes_files"][:], dtype=object)
                 )
 
+        hdf5_cluster_p_values: np.ndarray | None = None
+        hdf5_cluster_windows: list[tuple[float, float] | None] | None = None
+        hdf5_cluster_null_dists: list[np.ndarray] | None = None
+        if "cluster_stats" in fh:
+            cs = fh["cluster_stats"]
+            hdf5_cluster_p_values = np.asarray(cs["p_values"][:], dtype=np.float64)
+            starts = np.asarray(cs["best_cluster_start_s"][:], dtype=np.float64)
+            ends = np.asarray(cs["best_cluster_end_s"][:], dtype=np.float64)
+            hdf5_cluster_windows = [
+                (float(s), float(e)) if np.isfinite(s) and np.isfinite(e) else None
+                for s, e in zip(starts, ends)
+            ]
+            null_matrix = np.asarray(cs["null_distributions"][:], dtype=np.float64)
+            hdf5_cluster_null_dists = [
+                null_matrix[i, np.isfinite(null_matrix[i])]
+                for i in range(null_matrix.shape[0])
+            ]
+
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
     return RegressionGroupProcessingResult(
         source_group=source_group,
@@ -296,6 +314,9 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
         condition_a_scatter_activity=condition_a_scatter_activity,
         condition_b_scatter_predictor=condition_b_scatter_predictor,
         condition_b_scatter_activity=condition_b_scatter_activity,
+        cluster_p_values=hdf5_cluster_p_values,
+        cluster_best_cluster_windows_s=hdf5_cluster_windows,
+        cluster_null_distributions=hdf5_cluster_null_dists,
     )
 
 
@@ -495,6 +516,39 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
         else []
     )
 
+    mat_cluster_p_values: np.ndarray | None = None
+    mat_cluster_windows: list[tuple[float, float] | None] | None = None
+    mat_cluster_null_dists: list[np.ndarray] | None = None
+    cs_raw = getattr(data, "cluster_stats", None)
+    if cs_raw is not None:
+        _p = getattr(cs_raw, "p_values", None)
+        if _p is not None:
+            mat_cluster_p_values = np.asarray(_p, dtype=np.float64).ravel()
+            _starts = np.asarray(
+                getattr(cs_raw, "best_cluster_start_s", np.full(len(mat_cluster_p_values), np.nan)),
+                dtype=np.float64,
+            ).ravel()
+            _ends = np.asarray(
+                getattr(cs_raw, "best_cluster_end_s", np.full(len(mat_cluster_p_values), np.nan)),
+                dtype=np.float64,
+            ).ravel()
+            mat_cluster_windows = [
+                (float(s), float(e)) if np.isfinite(s) and np.isfinite(e) else None
+                for s, e in zip(_starts, _ends)
+            ]
+            _null_mat_raw = getattr(cs_raw, "null_distributions", None)
+            if _null_mat_raw is not None:
+                _null_mat = np.asarray(_null_mat_raw, dtype=np.float64)
+                if _null_mat.ndim == 2:
+                    mat_cluster_null_dists = [
+                        _null_mat[i, np.isfinite(_null_mat[i])]
+                        for i in range(_null_mat.shape[0])
+                    ]
+                else:
+                    mat_cluster_null_dists = [np.zeros(0, dtype=np.float64)] * len(mat_cluster_p_values)
+            else:
+                mat_cluster_null_dists = [np.zeros(0, dtype=np.float64)] * len(mat_cluster_p_values)
+
     source_group = BIDSFileGroup(primary=BIDSFile.from_path(path))
     return RegressionGroupProcessingResult(
         source_group=source_group,
@@ -549,6 +603,9 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
         condition_a_scatter_activity=condition_a_scatter_activity,
         condition_b_scatter_predictor=condition_b_scatter_predictor,
         condition_b_scatter_activity=condition_b_scatter_activity,
+        cluster_p_values=mat_cluster_p_values,
+        cluster_best_cluster_windows_s=mat_cluster_windows,
+        cluster_null_distributions=mat_cluster_null_dists,
     )
 
 

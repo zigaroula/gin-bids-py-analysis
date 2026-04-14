@@ -139,6 +139,107 @@ def compute_linear_regression_maps(
     )
 
 
+def compute_permuted_regression_maps(
+    predictor_values: np.ndarray,
+    epochs: np.ndarray,
+    *,
+    n_perm: int,
+    rng: np.random.Generator,
+    n_features: int,
+    n_times: int,
+) -> np.ndarray:
+    """Compute permuted slope maps by randomly shuffling the predictor across trials.
+
+    Each iteration shuffles the predictor order (leaving the epoch data fixed),
+    re-fits OLS, and records the resulting slope.  The dense (no-NaN) path reduces
+    each permutation to a single matrix-vector product; the NaN-aware path falls
+    back to per-channel loops.
+
+    Parameters
+    ----------
+    predictor_values:
+        Array of shape ``(n_trials,)``.
+    epochs:
+        Array of shape ``(n_trials, n_features, n_times)``.
+    n_perm:
+        Number of permutation iterations.
+    rng:
+        NumPy random Generator used for reproducible predictor shuffling.
+    n_features, n_times:
+        Expected output dimensions.
+
+    Returns
+    -------
+    permuted_slopes : float32 array, shape ``(n_perm, n_features, n_times)``
+        NaN-filled for conditions with fewer than 3 valid trials or zero predictor
+        variance.  Returns an all-NaN array without raising.
+    """
+    empty = np.full((n_perm, n_features, n_times), np.nan, dtype=np.float32)
+
+    if n_perm == 0:
+        return empty
+
+    x = np.asarray(predictor_values, dtype=np.float64).reshape(-1)
+    y = np.asarray(epochs, dtype=np.float64)
+    if y.ndim != 3:
+        return empty
+
+    finite_x = np.isfinite(x)
+    if not np.all(finite_x):
+        x = x[finite_x]
+        y = y[finite_x]
+
+    n_trials = int(x.shape[0])
+    if n_trials < 3:
+        return empty
+
+    var_x = float(np.nanvar(x, ddof=1))
+    if not np.isfinite(var_x) or var_x <= 0.0:
+        return empty
+
+    out = np.empty((n_perm, n_features, n_times), dtype=np.float32)
+
+    # NaN-aware path: channels have heterogeneous valid-trial masks.
+    if not np.all(np.isfinite(y)):
+        for i in range(n_perm):
+            perm_x = x[rng.permutation(n_trials)]
+            x_mean_p = float(np.mean(perm_x))
+            x_c_p = perm_x - x_mean_p
+            for ch in range(n_features):
+                valid = np.isfinite(y[:, ch, 0])
+                x_ch = perm_x[valid]
+                y_ch = y[valid, ch, :]
+                n_ch = int(x_ch.shape[0])
+                if n_ch < 3:
+                    out[i, ch, :] = np.nan
+                    continue
+                var_x_ch = float(np.nanvar(x_ch, ddof=1))
+                if not (np.isfinite(var_x_ch) and var_x_ch > 0.0):
+                    out[i, ch, :] = np.nan
+                    continue
+                x_c_ch = x_ch - float(np.mean(x_ch))
+                y_c_ch = y_ch - np.mean(y_ch, axis=0)
+                cov_ch = np.dot(x_c_ch, y_c_ch) / float(n_ch - 1)
+                out[i, ch, :] = (cov_ch / var_x_ch).astype(np.float32)
+        return out
+
+    # Dense path: vectorized over all features and times.
+    x_mean = float(np.mean(x))
+    y_flat = y.reshape(n_trials, -1)           # (n_trials, n_features * n_times)
+    y_mean = np.mean(y_flat, axis=0)
+    y_centered = y_flat - y_mean[np.newaxis, :]  # precomputed invariant
+
+    for i in range(n_perm):
+        perm_x = x[rng.permutation(n_trials)]
+        x_c = perm_x - float(np.mean(perm_x))
+        # cov = (x_c^T @ y_centered) / (n - 1)
+        cov = np.dot(x_c, y_centered) / float(n_trials - 1)
+        slope = (cov / var_x).reshape(n_features, n_times)
+        out[i] = slope.astype(np.float32)
+
+    return out
+
+
 def zscore_predictor_values(
     predictor_values: np.ndarray,
 ) -> tuple[np.ndarray, bool]:

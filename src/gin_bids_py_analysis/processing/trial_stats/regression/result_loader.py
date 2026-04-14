@@ -118,6 +118,15 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
         condition_a_stats_valid = bool(dataset_or_none(fh, "regression/condition_a/stats_valid")[()]) if dataset_or_none(fh, "regression/condition_a/stats_valid") is not None else False
         condition_b_stats_valid = bool(dataset_or_none(fh, "regression/condition_b/stats_valid")[()]) if dataset_or_none(fh, "regression/condition_b/stats_valid") is not None else False
 
+        perm_a_ds = dataset_or_none(fh, "regression/condition_a/permuted_slopes")
+        condition_a_permuted_slopes = (
+            np.asarray(perm_a_ds[:], dtype=np.float32) if perm_a_ds is not None else None
+        )
+        perm_b_ds = dataset_or_none(fh, "regression/condition_b/permuted_slopes")
+        condition_b_permuted_slopes = (
+            np.asarray(perm_b_ds[:], dtype=np.float32) if perm_b_ds is not None else None
+        )
+
         condition_a_mean = _read_2d(f"means/{condition_a}")
         condition_b_mean = _read_2d(f"means/{condition_b}")
         condition_a_sem = _read_2d(f"uncertainty/{condition_a}_sem")
@@ -420,6 +429,8 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
         condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
         condition_a_epoch_means=condition_a_epoch_means,
         condition_b_epoch_means=condition_b_epoch_means,
+        condition_a_permuted_slopes=condition_a_permuted_slopes,
+        condition_b_permuted_slopes=condition_b_permuted_slopes,
     )
 
 
@@ -513,6 +524,15 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
     condition_b_trials_used = mat_int(getattr(reg_b, "n_trials_used", None), default=0)
     condition_a_stats_valid = bool(mat_int(getattr(reg_a, "stats_valid", None), default=0))
     condition_b_stats_valid = bool(mat_int(getattr(reg_b, "stats_valid", None), default=0))
+
+    _perm_a_raw = getattr(reg_a, "permuted_slopes", None)
+    condition_a_permuted_slopes: np.ndarray | None = (
+        np.asarray(_perm_a_raw, dtype=np.float32) if _perm_a_raw is not None and np.asarray(_perm_a_raw).size > 0 else None
+    )
+    _perm_b_raw = getattr(reg_b, "permuted_slopes", None)
+    condition_b_permuted_slopes: np.ndarray | None = (
+        np.asarray(_perm_b_raw, dtype=np.float32) if _perm_b_raw is not None and np.asarray(_perm_b_raw).size > 0 else None
+    )
 
     condition_a_mean = _mat_2d(means, safe_a)
     condition_b_mean = _mat_2d(means, safe_b)
@@ -766,6 +786,8 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
         condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
         condition_a_epoch_means=condition_a_epoch_means,
         condition_b_epoch_means=condition_b_epoch_means,
+        condition_a_permuted_slopes=condition_a_permuted_slopes,
+        condition_b_permuted_slopes=condition_b_permuted_slopes,
     )
 
 

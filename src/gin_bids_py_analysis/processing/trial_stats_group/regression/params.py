@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from ..params import BaseTrialStatsGroupParams, BaseTrialStatsGroupWriterParams
 
@@ -23,13 +23,27 @@ class RegressionGroupParams(BaseTrialStatsGroupParams):
             "Contrast mode used to compare condition_a and condition_b at group level."
         ),
     )
-    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni"] = Field(
+    p_value_correction_method: Literal["none", "fdr_bh", "bonferroni", "cluster_permutation"] = Field(
         default="none",
         description=(
             "Multiple-comparisons correction applied across ROI x time tests, "
-            "independently for each condition's slope and activity contrast."
+            "independently for each condition's slope and activity contrast. "
+            "Use 'cluster_permutation' for cluster-based permutation testing "
+            "(requires contrast_mode='paired' and subject files computed with n_permutations > 0)."
         ),
     )
+
+    @model_validator(mode="after")
+    def _validate_cluster_permutation_compat(self) -> "RegressionGroupParams":
+        if (
+            self.p_value_correction_method == "cluster_permutation"
+            and self.contrast_mode == "unpaired"
+        ):
+            raise ValueError(
+                "cluster_permutation is only supported with contrast_mode='paired'. "
+                "Unpaired cluster permutation is not currently implemented."
+            )
+        return self
 
 
 class RegressionGroupWriterParams(BaseTrialStatsGroupWriterParams):

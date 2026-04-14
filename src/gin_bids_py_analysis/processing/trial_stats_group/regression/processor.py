@@ -36,6 +36,13 @@ from gin_bids_py_analysis.processing.utils.group_stats import (
 )
 from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
 
+from gin_bids_py_analysis.processing.utils.cluster_permutation import (
+    compute_cluster_null_distribution_paired,
+    compute_cluster_permutation_pvalue,
+    compute_mne_cluster_permutation,
+    find_temporal_clusters,
+)
+
 from ..processor import (
     BaseRawTrialStatsData,
     BaseTrialStatsGroupContributionRecord,
@@ -78,6 +85,8 @@ class _RawRegressionStatsData(BaseRawTrialStatsData):
     condition_b_epoch_means: np.ndarray       # (n_channels, n_trials_b)  or empty
     condition_a_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_a) or empty
     condition_b_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_b) or empty
+    condition_a_permuted_slopes: np.ndarray | None  # (n_perm, n_channels, n_times) float32 or None
+    condition_b_permuted_slopes: np.ndarray | None  # (n_perm, n_channels, n_times) float32 or None
     predictor: str
     predictor_zscore: str
     predictor_transform_by_condition: dict[str, dict[str, float]]
@@ -152,6 +161,8 @@ class _ContributionRecord(BaseTrialStatsGroupContributionRecord):
     predictor_b_values: np.ndarray  # (n_trials_b,)
     scatter_activity_a: np.ndarray  # (n_trials_a,) trial activity summary per trial for this channel
     scatter_activity_b: np.ndarray  # (n_trials_b,) trial activity summary per trial for this channel
+    perm_slope_a_values: np.ndarray | None  # (n_perm, n_times) float32 or None
+    perm_slope_b_values: np.ndarray | None  # (n_perm, n_times) float32 or None
 
 
 # ---------------------------------------------------------------------------
@@ -211,11 +222,21 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             )
 
         method = self.params.p_value_correction_method
+        rng = (
+            np.random.default_rng(self.params.permutation_seed)
+            if method == "cluster_permutation"
+            else None
+        )
 
         region_names: list[str] = []
         # Two-sample slope comparison timecourse statistics
         rows_slope_t: list[np.ndarray] = []
         rows_slope_p_uncorr: list[np.ndarray] = []
+        # Per-ROI permuted slope lists for cluster permutation (custom method)
+        perm_slope_a_collection: list[list[np.ndarray] | None] = []
+        perm_slope_b_collection: list[list[np.ndarray] | None] = []
+        # Per-ROI observed samples for cluster permutation (mne method)
+        cluster_observed_collection: list[np.ndarray | None] = []
         rows_slope_mean_a: list[np.ndarray] = []
         rows_slope_sem_a: list[np.ndarray] = []
         rows_slope_mean_b: list[np.ndarray] = []
@@ -328,6 +349,31 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                     samples_mean_a,
                     samples_mean_b,
                 )
+
+            if method == "cluster_permutation":
+                if self.params.cluster_permutation_method == "custom":
+                    perm_a_list: list[np.ndarray] | None = [
+                        np.asarray(r.perm_slope_a_values, dtype=np.float64)
+                        for r in records
+                        if r.perm_slope_a_values is not None
+                    ] or None
+                    perm_b_list: list[np.ndarray] | None = [
+                        np.asarray(r.perm_slope_b_values, dtype=np.float64)
+                        for r in records
+                        if r.perm_slope_b_values is not None
+                    ] or None
+                    observed_s: np.ndarray | None = None
+                else:
+                    perm_a_list = None
+                    perm_b_list = None
+                    observed_s = samples_metric_a - samples_metric_b
+            else:
+                perm_a_list = None
+                perm_b_list = None
+                observed_s = None
+            perm_slope_a_collection.append(perm_a_list)
+            perm_slope_b_collection.append(perm_b_list)
+            cluster_observed_collection.append(observed_s)
             slope_mean_a, slope_sem_a = compute_condition_group_stats(samples_metric_a)
             slope_mean_b, slope_sem_b = compute_condition_group_stats(samples_metric_b)
             act_mean_a, act_sem_a = compute_condition_group_stats(samples_mean_a)
@@ -422,10 +468,92 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
         p_values_activity = _apply_correction_2d(p_values_activity_uncorr, method=method)
 
         alpha = self.params.significance_alpha
-        source_metric_significant_mask = (
-            np.isfinite(source_metric_p_values)
-            & (source_metric_p_values < alpha)
-        )
+
+        # --- Cluster permutation pass ---
+        cluster_p_values_out: np.ndarray | None = None
+        cluster_windows_out: list[tuple[float, float] | None] | None = None
+        cluster_null_dists_out: list[np.ndarray] | None = None
+        if method == "cluster_permutation" and rows_slope_p_uncorr and rng is not None:
+            cluster_p_values_list: list[float] = []
+            cluster_windows_list: list[tuple[float, float] | None] = []
+            cluster_null_dists_list: list[np.ndarray] = []
+            for roi_idx in range(len(region_names)):
+                roi_t = rows_slope_t[roi_idx]
+                roi_p_raw = rows_slope_p_uncorr[roi_idx]
+                h_mask = roi_p_raw < self.params.cluster_threshold_alpha
+                observed_clusters = find_temporal_clusters(h_mask, roi_t)
+                if self.params.cluster_permutation_method == "mne":
+                    obs_samples = cluster_observed_collection[roi_idx]
+                    if obs_samples is None:
+                        cluster_p_values_list.append(1.0)
+                        cluster_windows_list.append(None)
+                        cluster_null_dists_list.append(np.zeros(0, dtype=np.float64))
+                        continue
+                    seed = int(rng.integers(0, np.iinfo(np.int32).max))
+                    p_clust, window_idx, null = compute_mne_cluster_permutation(
+                        obs_samples,
+                        cluster_threshold_alpha=self.params.cluster_threshold_alpha,
+                        n_group_perm=self.params.n_group_permutations,
+                        seed=seed,
+                    )
+                    if window_idx is None:
+                        cluster_p_values_list.append(1.0)
+                        cluster_windows_list.append(None)
+                    else:
+                        t_start = float(first.time_axis_s[window_idx[0]])
+                        t_end = float(first.time_axis_s[window_idx[1]])
+                        cluster_p_values_list.append(p_clust)
+                        cluster_windows_list.append((t_start, t_end))
+                    cluster_null_dists_list.append(null)
+                else:
+                    perm_a_roi = perm_slope_a_collection[roi_idx]
+                    perm_b_roi = perm_slope_b_collection[roi_idx]
+                    if not perm_a_roi or not perm_b_roi:
+                        cluster_p_values_list.append(1.0)
+                        cluster_windows_list.append(None)
+                        cluster_null_dists_list.append(np.zeros(0, dtype=np.float64))
+                        continue
+                    null = compute_cluster_null_distribution_paired(
+                        perm_a_roi,
+                        perm_b_roi,
+                        cluster_threshold_alpha=self.params.cluster_threshold_alpha,
+                        n_group_perm=self.params.n_group_permutations,
+                        rng=rng,
+                    )
+                    if observed_clusters:
+                        best_start, best_end, best_tsum = observed_clusters[0]
+                        p_clust = compute_cluster_permutation_pvalue(best_tsum, null)
+                        t_start = float(first.time_axis_s[best_start])
+                        t_end = float(first.time_axis_s[best_end])
+                        cluster_p_values_list.append(p_clust)
+                        cluster_windows_list.append((t_start, t_end))
+                    else:
+                        cluster_p_values_list.append(1.0)
+                        cluster_windows_list.append(None)
+                    cluster_null_dists_list.append(null)
+            cluster_p_values_out = np.asarray(cluster_p_values_list, dtype=np.float64)
+            cluster_windows_out = cluster_windows_list
+            cluster_null_dists_out = cluster_null_dists_list
+
+        if method == "cluster_permutation" and cluster_p_values_out is not None:
+            source_metric_significant_mask = np.zeros(
+                (len(region_names), n_times), dtype=bool
+            )
+            for roi_idx, (p_clust, window) in enumerate(
+                zip(cluster_p_values_out, cluster_windows_out or [])
+            ):
+                if p_clust < alpha and window is not None:
+                    t_start_s, t_end_s = window
+                    in_window = (
+                        (first.time_axis_s >= t_start_s)
+                        & (first.time_axis_s <= t_end_s)
+                    )
+                    source_metric_significant_mask[roi_idx, in_window] = True
+        else:
+            source_metric_significant_mask = (
+                np.isfinite(source_metric_p_values)
+                & (source_metric_p_values < alpha)
+            )
         sig_mask_activity = np.isfinite(p_values_activity) & (p_values_activity < alpha)
 
         result = RegressionGroupProcessingResult(
@@ -514,6 +642,9 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             source_subject_stats_files=[str(s.stats_file.path) for s in snapshots],
             source_electrodes_files=sorted(used_electrode_paths),
             excluded_rois=excluded_rois,
+            cluster_p_values=cluster_p_values_out,
+            cluster_best_cluster_windows_s=cluster_windows_out,
+            cluster_null_distributions=cluster_null_dists_out,
         )
         return result
 
@@ -626,6 +757,16 @@ def _create_contribution_record(
             if snapshot.raw.condition_b_trial_activity_summary_values.ndim == 2
             and snapshot.raw.condition_b_trial_activity_summary_values.shape[0] > idx
             else np.empty(0, dtype=np.float64)
+        ),
+        perm_slope_a_values=(
+            np.asarray(snapshot.raw.condition_a_permuted_slopes[:, idx, :], dtype=np.float32)
+            if snapshot.raw.condition_a_permuted_slopes is not None
+            else None
+        ),
+        perm_slope_b_values=(
+            np.asarray(snapshot.raw.condition_b_permuted_slopes[:, idx, :], dtype=np.float32)
+            if snapshot.raw.condition_b_permuted_slopes is not None
+            else None
         ),
     )
 
@@ -933,6 +1074,15 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
                     np.asarray(prov["source_electrodes_files"][:], dtype=object)
                 )
 
+        perm_a_ds = dataset_or_none(fh, "regression/condition_a/permuted_slopes")
+        raw_condition_a_permuted_slopes: np.ndarray | None = (
+            np.asarray(perm_a_ds[:], dtype=np.float32) if perm_a_ds is not None else None
+        )
+        perm_b_ds = dataset_or_none(fh, "regression/condition_b/permuted_slopes")
+        raw_condition_b_permuted_slopes: np.ndarray | None = (
+            np.asarray(perm_b_ds[:], dtype=np.float32) if perm_b_ds is not None else None
+        )
+
     return _RawRegressionStatsData(
         analysis_level=analysis_level,
         available_metrics=frozenset(
@@ -974,6 +1124,8 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
         condition_b_epoch_means=condition_b_epoch_means,
         condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
         condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
+        condition_a_permuted_slopes=raw_condition_a_permuted_slopes,
+        condition_b_permuted_slopes=raw_condition_b_permuted_slopes,
         binning_mode=binning_mode,
         window_ms=window_ms,
         n_bins=n_bins,
@@ -1205,6 +1357,19 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
             condition_a_trial_activity_summary_values = condition_a_epoch_means
             condition_b_trial_activity_summary_values = condition_b_epoch_means
 
+        _mat_perm_a = getattr(cond_a_reg, "permuted_slopes", None) if cond_a_reg is not None else None
+        mat_condition_a_permuted_slopes: np.ndarray | None = (
+            np.asarray(_mat_perm_a, dtype=np.float32)
+            if _mat_perm_a is not None and np.asarray(_mat_perm_a).size > 0
+            else None
+        )
+        _mat_perm_b = getattr(cond_b_reg, "permuted_slopes", None) if cond_b_reg is not None else None
+        mat_condition_b_permuted_slopes: np.ndarray | None = (
+            np.asarray(_mat_perm_b, dtype=np.float32)
+            if _mat_perm_b is not None and np.asarray(_mat_perm_b).size > 0
+            else None
+        )
+
     return _RawRegressionStatsData(
         analysis_level=analysis_level,
         available_metrics=frozenset(
@@ -1234,6 +1399,8 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
         condition_b_epoch_means=condition_b_epoch_means,
         condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
         condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
+        condition_a_permuted_slopes=mat_condition_a_permuted_slopes,
+        condition_b_permuted_slopes=mat_condition_b_permuted_slopes,
         binning_mode=binning_mode,
         window_ms=window_ms,
         n_bins=n_bins,

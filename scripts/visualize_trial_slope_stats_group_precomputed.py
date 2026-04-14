@@ -1,6 +1,11 @@
 """
-Group-level ROI statistics on regression outputs - run script.
-Edit the parameters below and run: python scripts/run_trial_slope_stats_group.py
+Example script to launch the interactive group visualization for a pre-computed
+trial slope statistics group result (regression outputs).
+
+Edit BIDS_ROOT, ROI_CSV_FILES, GROUP_STATS_FILTERS, and GROUP_PARAM_KWARGS
+below, then run:
+
+    python scripts/visualize_trial_slope_stats_group_precomputed.py
 """
 
 from __future__ import annotations
@@ -9,44 +14,16 @@ import csv
 import re
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset, BIDSFile, BIDSFileGroup
+from gin_bids_py_analysis.bids import BIDSDataset
 from gin_bids_py_analysis.bids.helpers import normalize_subject_value
-from gin_bids_py_analysis.processing.trial_stats_group import (
-    RegressionGroupParams,
-    RegressionGroupProcessing,
-    RegressionGroupProcessingWriter,
-    RegressionGroupWriterParams,
-    build_regression_compatible_groups,
-)
+from gin_bids_py_analysis.processing.trial_stats_group import RegressionGroupParams
+from gin_bids_py_analysis.visualization.trial_stats import launch_group_precomputed
 
 # ---------------------------------------------------------------------------
-# Parameters
+# Parameters  (edit these)
 # ---------------------------------------------------------------------------
 
 BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
-
-# Kept aligned with scripts/run_trial_slope_stats.py inputs.
-IEEG_FILTERS = {
-    "suffix": "ieeg",
-    "extension": ".vhdr",
-    "desc": "gammasm250",
-}
-
-# Kept aligned with scripts/run_trial_slope_stats.py inputs.
-SECONDARY_FILTERS = [
-    {"scope": "raw", "datatype": "beh", "suffix": "beh", "extension": ".tsv"},
-    {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
-]
-
-# Query regression channel-level outputs from derivatives/regression.
-# desc must match RegressionWriterParams(output_description=...) used upstream.
-TRIAL_SLOPE_STATS_FILTERS = {
-    "scope": "regression",
-    "suffix": "stats",
-    "extension": ".h5",
-    "desc": "correlation",
-    # "task": "decid",
-}
 
 ROI_CSV_FILES = {
     "vmPFC": Path(r"D:\data_clarissa\valuation\csv\PFCvm_elecs_tbl.csv"),
@@ -55,18 +32,28 @@ ROI_CSV_FILES = {
 }
 
 GROUP_PARAM_KWARGS = {
-    "p_value_correction_method": "cluster_permutation",
+    "source_metric": "slope",
+    "p_value_correction_method": "none",
     "significance_alpha": 0.05,
     "roi_mode": "manual",
 }
 
-WRITER_PARAMS = RegressionGroupWriterParams(
-    bids_root=BIDS_ROOT,
-    output_format="hdf5",
-    output_description="none",
-)
+# Filters to discover the group stats file written by
+# RegressionGroupProcessingWriter.
+# scope matches RegressionGroupWriterParams.pipeline_label = "regression_group"
+# desc matches RegressionGroupWriterParams.output_description — overridden to
+# "none" in run_trial_slope_stats_group.py.
+GROUP_STATS_FILTERS = {
+    "suffix": "stats",
+    "extension": ".h5",
+    "desc": "none",
+    "scope": "regression_group",
+}
 
-N_JOBS = 1
+# ---------------------------------------------------------------------------
+# CSV helpers  (kept aligned with run_trial_slope_stats_group.py)
+# ---------------------------------------------------------------------------
+
 _NA_LIKE_TOKENS = frozenset({"nan", "na", "n/a", "none", "null"})
 _FIRST_CONTACT_PATTERN = re.compile(r"^([A-Za-z]+[0-9]+)")
 
@@ -97,7 +84,9 @@ def _row_contains_nan(row: dict[str, object]) -> bool:
     return any(_is_nan_like(value) for value in row.values())
 
 
-def _load_roi_channels_from_csv(csv_paths_by_roi: dict[str, Path]) -> dict[str, dict[str, list[str]]]:
+def _load_roi_channels_from_csv(
+    csv_paths_by_roi: dict[str, Path],
+) -> dict[str, dict[str, list[str]]]:
     manual_region_channels: dict[str, dict[str, list[str]]] = {}
 
     for roi_name, csv_path in csv_paths_by_roi.items():
@@ -152,44 +141,30 @@ def _build_group_params() -> RegressionGroupParams:
     )
 
 
-def _print_roi_summary(manual_region_channels: dict[str, dict[str, list[str]]]) -> None:
+def _print_roi_summary(
+    manual_region_channels: dict[str, dict[str, list[str]]],
+) -> None:
     for roi_name, subject_map in manual_region_channels.items():
         n_subjects = len(subject_map)
         n_channels = sum(len(channels) for channels in subject_map.values())
         print(f"ROI {roi_name}: {n_channels} channel(s) across {n_subjects} subject(s).")
 
 
-def _load_trial_slope_stats_files(dataset: BIDSDataset) -> list[BIDSFile]:
-    files = dataset.get_files(**TRIAL_SLOPE_STATS_FILTERS)
-    return sorted(files, key=lambda file: str(file.path))
-
-
-def _build_groups(files: list[BIDSFile]) -> list[BIDSFileGroup]:
-    return build_regression_compatible_groups(files)
-
-
-def main() -> list[Path]:
-    params = _build_group_params()
-    _print_roi_summary(params.manual_region_channels)
+if __name__ == "__main__":
+    group_params = _build_group_params()
+    _print_roi_summary(group_params.manual_region_channels)
 
     ds = BIDSDataset(BIDS_ROOT)
-    files = _load_trial_slope_stats_files(ds)
-    groups = _build_groups(files)
-    print(
-        f"Found {len(files)} regression file(s) grouped into {len(groups)} "
-        f"compatible run(s). Running with n_jobs={N_JOBS}."
+
+    group_stats_files = ds.get_files(**GROUP_STATS_FILTERS)
+    if not group_stats_files:
+        raise FileNotFoundError(
+            f"No group stats file found in {BIDS_ROOT} matching {GROUP_STATS_FILTERS}"
+        )
+
+    group_stats_file = group_stats_files[0].path
+
+    launch_group_precomputed(
+        group_stats_file,
+        group_params=group_params,
     )
-
-    if not groups:
-        return []
-
-    processor = RegressionGroupProcessing(params)
-    writer = RegressionGroupProcessingWriter(WRITER_PARAMS)
-    out_paths = processor.run(groups, writer, n_jobs=N_JOBS)
-    for path in out_paths:
-        print(f"Wrote {path}")
-    return out_paths
-
-
-if __name__ == "__main__":
-    main()

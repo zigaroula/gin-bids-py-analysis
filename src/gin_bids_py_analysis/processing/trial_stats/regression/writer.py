@@ -148,6 +148,7 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
             significant_mask=result.condition_a_significant_mask,
             n_trials_used=result.condition_a_trials_used,
             stats_valid=result.condition_a_stats_valid,
+            permuted_slopes=result.condition_a_permuted_slopes,
         )
         _write_condition_regression_hdf5(
             regression_grp.create_group("condition_b"),
@@ -159,6 +160,7 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
             significant_mask=result.condition_b_significant_mask,
             n_trials_used=result.condition_b_trials_used,
             stats_valid=result.condition_b_stats_valid,
+            permuted_slopes=result.condition_b_permuted_slopes,
         )
 
         predictor_grp = fh.create_group("predictor")
@@ -285,6 +287,11 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
                     significant_mask=result.condition_a_significant_mask.astype(np.uint8),
                     n_trials_used=int(result.condition_a_trials_used),
                     stats_valid=bool(result.condition_a_stats_valid),
+                    **(
+                        {"permuted_slopes": result.condition_a_permuted_slopes.astype(np.float32)}
+                        if result.condition_a_permuted_slopes is not None
+                        else {}
+                    ),
                 ),
                 condition_b=make_struct(
                     slope=result.condition_b_slope.astype(np.float64),
@@ -295,6 +302,11 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
                     significant_mask=result.condition_b_significant_mask.astype(np.uint8),
                     n_trials_used=int(result.condition_b_trials_used),
                     stats_valid=bool(result.condition_b_stats_valid),
+                    **(
+                        {"permuted_slopes": result.condition_b_permuted_slopes.astype(np.float32)}
+                        if result.condition_b_permuted_slopes is not None
+                        else {}
+                    ),
                 ),
             ),
             "predictor": make_struct(
@@ -326,6 +338,7 @@ def _write_condition_regression_hdf5(
     significant_mask: np.ndarray,
     n_trials_used: int,
     stats_valid: bool,
+    permuted_slopes: np.ndarray | None = None,
 ) -> None:
     group.create_dataset("slope", data=np.asarray(slope, dtype=np.float64))
     group.create_dataset("intercept", data=np.asarray(intercept, dtype=np.float64))
@@ -335,6 +348,13 @@ def _write_condition_regression_hdf5(
     group.create_dataset("significant_mask", data=np.asarray(significant_mask, dtype=bool))
     group.create_dataset("n_trials_used", data=int(n_trials_used))
     group.create_dataset("stats_valid", data=bool(stats_valid))
+    if permuted_slopes is not None:
+        group.create_dataset(
+            "permuted_slopes",
+            data=np.asarray(permuted_slopes, dtype=np.float32),
+            compression="gzip",
+            compression_opts=4,
+        )
 
 
 def _validate_shape_consistency(result: RegressionProcessingResult) -> None:

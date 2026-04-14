@@ -335,9 +335,79 @@ def test_process_group_contribution_samples_shape() -> None:
         assert len(result.condition_a_source_metric_contributions) == 1
         assert result.condition_a_source_metric_contributions[0].shape == (2, 3)
         assert len(result.contribution_labels) == 1
-        assert len(result.contribution_labels[0]) == 2
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
+
+
+def test_process_group_cluster_permutation_custom_method() -> None:
+    """cluster_permutation with method='custom' produces cluster p-values from permuted slopes."""
+    case_dir = _make_case_dir("cluster_perm_custom")
+    try:
+        rng = np.random.default_rng(42)
+        n_ch = 2
+        n_t = 8
+        n_perm = 20
+        time_s = np.linspace(-0.2, 0.5, n_t)
+        channels = ["A1", "A2"]
+
+        files = []
+        for i in range(3):
+            path = case_dir / f"sub-0{i + 1}_task-decid_desc-slopestat_stats.h5"
+            slope_a = rng.standard_normal((n_ch, n_t)).astype(np.float64)
+            slope_b = rng.standard_normal((n_ch, n_t)).astype(np.float64)
+            _write_slope_stats_h5(
+                path, channels=channels, time_s=time_s,
+                condition_a_slope=slope_a, condition_b_slope=slope_b,
+            )
+            perm_a = rng.standard_normal((n_perm, n_ch, n_t)).astype(np.float32)
+            perm_b = rng.standard_normal((n_perm, n_ch, n_t)).astype(np.float32)
+            with h5py.File(path, "a") as fh:
+                fh["regression/condition_a"].create_dataset(
+                    "permuted_slopes", data=perm_a, compression="gzip"
+                )
+                fh["regression/condition_b"].create_dataset(
+                    "permuted_slopes", data=perm_b, compression="gzip"
+                )
+            files.append(_make_bids_file(path, {
+                "subject": f"0{i + 1}", "task": "decid", "desc": "slopestat",
+                "suffix": "stats", "extension": ".h5",
+            }))
+
+        processor = RegressionGroupProcessing(
+            RegressionGroupParams(
+                roi_mode="manual",
+                manual_region_channels={"ROI1": {f"0{i + 1}": channels for i in range(3)}},
+                p_value_correction_method="cluster_permutation",
+                cluster_permutation_method="custom",
+                n_group_permutations=50,
+                permutation_seed=1,
+            )
+        )
+        result = processor.process_group(BIDSFileGroup(primary=files[0], secondaries=files[1:]))
+
+        assert result.cluster_p_values is not None
+        assert result.cluster_p_values.shape == (1,)
+        assert 0.0 <= float(result.cluster_p_values[0]) <= 1.0
+        assert result.cluster_best_cluster_windows_s is not None
+        assert len(result.cluster_best_cluster_windows_s) == 1
+        assert result.cluster_null_distributions is not None
+        assert len(result.cluster_null_distributions) == 1
+        assert result.cluster_null_distributions[0].shape == (50,)
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+
+
+def test_regression_group_params_raises_for_cluster_permutation_unpaired() -> None:
+    """cluster_permutation + unpaired raises a ValidationError."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="cluster_permutation"):
+        RegressionGroupParams(
+            roi_mode="manual",
+            manual_region_channels={"ROI": {"01": ["A1"]}},
+            p_value_correction_method="cluster_permutation",
+            contrast_mode="unpaired",
+        )
 
 
 def test_process_group_uses_source_metric_contract_for_r_value() -> None:

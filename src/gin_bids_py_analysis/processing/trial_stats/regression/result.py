@@ -41,3 +41,9 @@ class RegressionProcessingResult(BaseTrialStatsProcessingResult):
     condition_b_stats_valid: bool = False
     condition_a_epoch_means: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_epoch_means: np.ndarray = field(default_factory=lambda: np.array([]))
+    condition_a_permuted_slopes: np.ndarray | None = None
+    """Permuted slope maps for condition A, shape ``(n_perm, n_channels, n_times)``, float32.
+    None when ``n_permutations == 0`` or ``condition_a_stats_valid`` is False."""
+    condition_b_permuted_slopes: np.ndarray | None = None
+    """Permuted slope maps for condition B, shape ``(n_perm, n_channels, n_times)``, float32.
+    None when ``n_permutations == 0`` or ``condition_b_stats_valid`` is False."""

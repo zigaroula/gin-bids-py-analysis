@@ -815,3 +815,119 @@ def test_process_group_trial_activity_summary_anchor_to_response_from_annotation
         equal_nan=True,
     )
     assert result.trial_activity_summary_source["event_code"] == "20"
+
+
+def test_process_group_permuted_slopes_populated_when_n_permutations_nonzero(
+    tmp_path: Path,
+) -> None:
+    """condition_a/b_permuted_slopes are set when n_permutations > 0."""
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 100), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
+    predictors = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
+
+    for onset, label, predictor in zip(onsets, labels, predictors):
+        start = int(onset * sfreq)
+        stop = start + 3
+        data[0, start:stop] = float(predictor)
+
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * len(onsets),
+        description=["Stimulus/S  10"] * len(onsets),
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    n_perm = 5
+    processor = RegressionProcessing(
+        RegressionParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            predictor="predictor_value",
+            min_trials_per_condition=3,
+            p_value_correction_method="none",
+            n_permutations=n_perm,
+            permutation_seed=0,
+        ),
+        resolver=_SlopeResolver(labels, predictors),
+    )
+
+    result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
+
+    assert result.condition_a_permuted_slopes is not None
+    assert result.condition_b_permuted_slopes is not None
+    assert result.condition_a_permuted_slopes.shape == (n_perm, 1, 3)
+    assert result.condition_b_permuted_slopes.shape == (n_perm, 1, 3)
+    assert result.condition_a_permuted_slopes.dtype == np.float32
+    assert result.condition_b_permuted_slopes.dtype == np.float32
+
+
+def test_process_group_permuted_slopes_none_when_n_permutations_zero(
+    tmp_path: Path,
+) -> None:
+    """condition_a/b_permuted_slopes are None when n_permutations=0 (default)."""
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 100), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
+    predictors = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
+
+    for onset, label, predictor in zip(onsets, labels, predictors):
+        start = int(onset * sfreq)
+        stop = start + 3
+        data[0, start:stop] = float(predictor)
+
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * len(onsets),
+        description=["Stimulus/S  10"] * len(onsets),
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    result = RegressionProcessing(
+        RegressionParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            predictor="predictor_value",
+            min_trials_per_condition=3,
+            p_value_correction_method="none",
+            # n_permutations defaults to 0
+        ),
+        resolver=_SlopeResolver(labels, predictors),
+    ).process_group(BIDSFileGroup(primary=ieeg_file))
+
+    assert result.condition_a_permuted_slopes is None
+    assert result.condition_b_permuted_slopes is None

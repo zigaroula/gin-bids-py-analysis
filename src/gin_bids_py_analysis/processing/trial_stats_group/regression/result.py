@@ -72,3 +72,11 @@ class RegressionGroupProcessingResult(BaseTrialStatsGroupProcessingResult):
     # --- Regression-specific configuration ---
     contrast_mode: str = "paired"
     """How conditions are contrasted: 'paired' (within-subject) or 'independent' (between-subject)."""
+
+    # --- Cluster permutation stats (only populated when p_value_correction_method='cluster_permutation') ---
+    cluster_p_values: np.ndarray | None = None
+    """Cluster-based permutation p-values, one per ROI, shape (n_rois,). None when not computed."""
+    cluster_best_cluster_windows_s: list[tuple[float, float] | None] | None = None
+    """Best cluster window [t_start_s, t_end_s] per ROI. None entries mean no cluster was found."""
+    cluster_null_distributions: list[np.ndarray] | None = None
+    """Per-ROI null distributions of max-cluster t-sum statistics. Each array has shape (n_permutations,)."""

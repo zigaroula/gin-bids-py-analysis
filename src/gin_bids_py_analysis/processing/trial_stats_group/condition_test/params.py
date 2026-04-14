@@ -36,40 +36,6 @@ class ConditionTestGroupParams(BaseTrialStatsGroupParams):
             "condition_test file."
         ),
     )
-    n_group_permutations: int = Field(
-        default=10000,
-        ge=1,
-        description=(
-            "Number of group-level null iterations when method='cluster_permutation'. "
-            "Ignored for all other correction methods."
-        ),
-    )
-    cluster_threshold_alpha: float = Field(
-        default=0.05,
-        gt=0.0,
-        lt=1.0,
-        description=(
-            "Significance threshold applied to the group one-sample t-test within each "
-            "null iteration to detect temporal clusters. Used only when "
-            "p_value_correction_method='cluster_permutation'."
-        ),
-    )
-    permutation_seed: int | None = Field(
-        default=None,
-        description=(
-            "Seed for the NumPy random generator used when building the cluster null "
-            "distribution. None selects a non-reproducible seed."
-        ),
-    )
-    cluster_permutation_method: Literal["custom", "mne"] = Field(
-        default="custom",
-        description=(
-            "Strategy for building the group-level cluster null distribution when "
-            "p_value_correction_method='cluster_permutation'. 'custom' samples from "
-            "stored per-channel permuted t-value pools. 'mne' runs "
-            "mne.stats.permutation_cluster_1samp_test directly on contribution timecourses."
-        ),
-    )
 
     @field_validator("cluster_permutation_method", mode="before")
     @classmethod

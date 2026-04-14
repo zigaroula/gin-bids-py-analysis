@@ -1,55 +1,14 @@
+"""Cluster-based permutation testing utilities shared across group-level pipelines.
+
+Provides temporal-cluster detection and null-distribution building functions used
+by any group-level analysis that supports ``p_value_correction_method='cluster_permutation'``.
+"""
 from __future__ import annotations
 
-from typing import Literal
-
-from mne.stats import (
-    bonferroni_correction,
-    fdr_correction,
-    permutation_cluster_1samp_test,
-)
 import numpy as np
+from mne.stats import permutation_cluster_1samp_test
 from scipy.ndimage import label as _ndimage_label
 from scipy.stats import t as t_dist
-
-__all__ = [
-    "compute_cluster_null_distribution",
-    "compute_cluster_null_distribution_sign_flip",
-    "compute_cluster_permutation_pvalue",
-    "compute_mne_cluster_permutation",
-    "correct_p_values",
-    "find_temporal_clusters",
-]
-
-
-def correct_p_values(
-    p_values: np.ndarray,
-    *,
-    method: Literal["none", "fdr_bh", "bonferroni", "cluster_permutation"] = "none",
-) -> np.ndarray:
-    """Apply a multiple-comparisons correction to p-values.
-
-    The ``"cluster_permutation"`` method is handled in the processor; passing
-    it here acts like ``"none"`` (the corrected p-values live in
-    ``cluster_p_values``, not in ``p_values``).
-    """
-    corrected = np.asarray(p_values, dtype=np.float64).copy()
-    finite_mask = np.isfinite(corrected)
-    if not finite_mask.any() or method in ("none", "cluster_permutation"):
-        return corrected
-
-    flat = corrected[finite_mask]
-    if method == "bonferroni":
-        _, corrected_flat = bonferroni_correction(flat, alpha=0.05)
-        corrected[finite_mask] = np.asarray(corrected_flat, dtype=np.float64)
-        return corrected
-
-    if method == "fdr_bh":
-        _, corrected_flat = fdr_correction(flat, alpha=0.05, method="indep")
-        corrected[finite_mask] = np.asarray(corrected_flat, dtype=np.float64)
-        return corrected
-
-    raise ValueError(f"Unsupported p-value correction method: {method!r}. "
-                     "Valid methods are 'none', 'fdr_bh', 'bonferroni', 'cluster_permutation'.")
 
 
 def find_temporal_clusters(
@@ -91,7 +50,8 @@ def find_temporal_clusters(
 
 
 def compute_cluster_null_distribution(
-    contributions_perm_t: list[np.ndarray],    *,
+    contributions_perm: list[np.ndarray],
+    *,
     cluster_threshold_alpha: float,
     n_group_perm: int,
     rng: np.random.Generator,
@@ -99,7 +59,8 @@ def compute_cluster_null_distribution(
     """Build the null distribution of maximum cluster t-sums via random permutations.
 
     For each of ``n_group_perm`` iterations:
-    1. For every contribution, draw one permuted t-map at random from its stored pool.
+
+    1. For every contribution, draw one permuted map at random from its stored pool.
     2. Stack the sampled maps into ``(n_contributions, n_times)`` and run a
        one-sample t-test (vs 0) across contributions at each time point.
     3. Apply ``cluster_threshold_alpha`` to obtain a significance mask, detect
@@ -107,8 +68,9 @@ def compute_cluster_null_distribution(
 
     Parameters
     ----------
-    contributions_perm_t : list of arrays, each shape ``(n_perm_subj, n_times)``
-        Per-contribution permuted t-value pools (one per channel contributing to the ROI).
+    contributions_perm : list of arrays, each shape ``(n_perm_subj, n_times)``
+        Per-contribution permuted value pools (one array per channel contributing
+        to the ROI).
     cluster_threshold_alpha : float
         Threshold for calling a time-point significant within each null iteration.
     n_group_perm : int
@@ -120,12 +82,12 @@ def compute_cluster_null_distribution(
     null_distribution : float64 array, shape ``(n_group_perm,)``
         Maximum absolute cluster t-sum from each null iteration (0 when no cluster found).
     """
-    if not contributions_perm_t:
+    if not contributions_perm:
         return np.zeros(n_group_perm, dtype=np.float64)
 
-    n_contribs = len(contributions_perm_t)
-    n_times = contributions_perm_t[0].shape[1]
-    perm_arrays = [np.asarray(c, dtype=np.float64) for c in contributions_perm_t]
+    n_contribs = len(contributions_perm)
+    n_times = contributions_perm[0].shape[1]
+    perm_arrays = [np.asarray(c, dtype=np.float64) for c in contributions_perm]
     n_perms_each = [int(a.shape[0]) for a in perm_arrays]
     null = np.zeros(n_group_perm, dtype=np.float64)
     sampled = np.empty((n_contribs, n_times), dtype=np.float64)
@@ -144,6 +106,71 @@ def compute_cluster_null_distribution(
     return null
 
 
+def compute_cluster_null_distribution_paired(
+    contributions_perm_a: list[np.ndarray],
+    contributions_perm_b: list[np.ndarray],
+    *,
+    cluster_threshold_alpha: float,
+    n_group_perm: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Build the null distribution for a paired two-condition contrast via random permutations.
+
+    Equivalent to :func:`compute_cluster_null_distribution` but for paired designs where
+    each contribution provides two permuted pools (one per condition).  For each null
+    iteration, an independent random permutation index is drawn for condition A and
+    condition B, the difference ``perm_a[k_a] - perm_b[k_b]`` is computed per
+    contribution, and a one-sample t-test is run on the differences.
+
+    Parameters
+    ----------
+    contributions_perm_a : list of arrays, each shape ``(n_perm_subj, n_times)``
+        Per-contribution permuted slope pools for condition A.
+    contributions_perm_b : list of arrays, each shape ``(n_perm_subj, n_times)``
+        Per-contribution permuted slope pools for condition B.  Must have the same
+        length as *contributions_perm_a*.
+    cluster_threshold_alpha : float
+        Threshold for calling a time-point significant within each null iteration.
+    n_group_perm : int
+        Number of group-level permutation iterations.
+    rng : numpy Generator
+
+    Returns
+    -------
+    null_distribution : float64 array, shape ``(n_group_perm,)``
+        Maximum absolute cluster t-sum from each null iteration (0 when no cluster found).
+    """
+    if not contributions_perm_a or not contributions_perm_b:
+        return np.zeros(n_group_perm, dtype=np.float64)
+    if len(contributions_perm_a) != len(contributions_perm_b):
+        raise ValueError(
+            "contributions_perm_a and contributions_perm_b must have the same length."
+        )
+
+    n_contribs = len(contributions_perm_a)
+    n_times = contributions_perm_a[0].shape[1]
+    perm_a = [np.asarray(c, dtype=np.float64) for c in contributions_perm_a]
+    perm_b = [np.asarray(c, dtype=np.float64) for c in contributions_perm_b]
+    n_perms_a = [int(a.shape[0]) for a in perm_a]
+    n_perms_b = [int(b.shape[0]) for b in perm_b]
+    null = np.zeros(n_group_perm, dtype=np.float64)
+    sampled_diff = np.empty((n_contribs, n_times), dtype=np.float64)
+
+    for i in range(n_group_perm):
+        for j in range(n_contribs):
+            k_a = int(rng.integers(0, n_perms_a[j]))
+            k_b = int(rng.integers(0, n_perms_b[j]))
+            sampled_diff[j] = perm_a[j][k_a] - perm_b[j][k_b]
+
+        group_t, group_p = _one_sample_ttest(sampled_diff)
+        h_mask = np.isfinite(group_p) & (group_p < cluster_threshold_alpha)
+        clusters = find_temporal_clusters(h_mask, group_t)
+        if clusters:
+            null[i] = abs(clusters[0][2])
+
+    return null
+
+
 def compute_cluster_null_distribution_sign_flip(
     contributions_observed: list[np.ndarray],
     *,
@@ -154,6 +181,7 @@ def compute_cluster_null_distribution_sign_flip(
     """Build the null distribution via group-level sign-flipping (Maris & Oostenveld, 2007).
 
     For each of ``n_group_perm`` iterations:
+
     1. Randomly flip the sign of each contribution's observed timecourse.
     2. Stack into ``(n_contributions, n_times)`` and run a one-sample t-test vs 0.
     3. Apply ``cluster_threshold_alpha``, detect temporal clusters, and record the
@@ -227,7 +255,28 @@ def compute_mne_cluster_permutation(
     n_group_perm: int,
     seed: int | None = None,
 ) -> tuple[float, tuple[int, int] | None, np.ndarray]:
-    """Run MNE one-sample temporal cluster permutation and return best-cluster stats."""
+    """Run MNE one-sample temporal cluster permutation and return best-cluster stats.
+
+    Parameters
+    ----------
+    samples_observed : float64 array, shape ``(n_samples, n_times)``
+        Per-contribution observed timecourses to test against zero.
+    cluster_threshold_alpha : float
+        Two-tailed alpha used to derive the t-threshold for cluster detection.
+    n_group_perm : int
+        Number of permutation iterations passed to MNE.
+    seed : int or None
+        Random seed forwarded to MNE.
+
+    Returns
+    -------
+    p_value : float
+        P-value of the best (strongest) observed cluster.
+    best_window : tuple ``(start_idx, end_idx)`` or None
+        Sample indices of the best cluster window, or None when no cluster is found.
+    null_distribution : float64 array, shape ``(n_group_perm,)``
+        Maximum cluster statistic from MNE's permutation distribution (``h0``).
+    """
     samples = np.asarray(samples_observed, dtype=np.float64)
     if samples.ndim != 2:
         raise ValueError(
@@ -294,5 +343,3 @@ def _one_sample_ttest(samples: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         t = np.where(std > 0, mean / (std / np.sqrt(n)), np.nan)
     p = np.where(np.isfinite(t), 2.0 * t_dist.sf(np.abs(t), df=n - 1), np.nan)
     return t, p
-
-
