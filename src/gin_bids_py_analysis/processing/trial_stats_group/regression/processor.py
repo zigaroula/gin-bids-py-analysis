@@ -37,6 +37,7 @@ from gin_bids_py_analysis.processing.utils.group_stats import (
 from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
 
 from ..processor import (
+    BaseRawTrialStatsData,
     BaseTrialStatsGroupContributionRecord,
     BaseTrialStatsGroupProcessing,
     BaseTrialStatsGroupSnapshot,
@@ -57,14 +58,10 @@ from .result import RegressionGroupProcessingResult
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class _RawSlopeStatsData:
+class _RawRegressionStatsData(BaseRawTrialStatsData):
     """Format-agnostic in-memory representation of one subject regression file."""
 
-    analysis_level: str
     available_metrics: frozenset[str]
-    channels: list[str]
-    time_axis_s: np.ndarray
-    condition_labels: tuple[str, str]
     condition_a_slope: np.ndarray       # (n_channels, n_times)
     condition_b_slope: np.ndarray       # (n_channels, n_times)
     condition_a_mean: np.ndarray        # (n_channels, n_times)
@@ -81,22 +78,13 @@ class _RawSlopeStatsData:
     condition_b_epoch_means: np.ndarray       # (n_channels, n_trials_b)  or empty
     condition_a_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_a) or empty
     condition_b_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_b) or empty
-    binning_mode: str
-    window_ms: float
-    n_bins: int
-    effective_n_bins: int
     predictor: str
     predictor_zscore: str
     predictor_transform_by_condition: dict[str, dict[str, float]]
-    activity_zscore: str
-    activity_baseline_tmin_s: float
-    activity_baseline_tmax_s: float
     trial_activity_summary_kind: str
     trial_activity_summary_missing_response_policy: str
     trial_activity_summary_source: dict[str, str]
     trial_activity_summary_label: str
-    source_ieeg_files: list[str]
-    source_electrodes_files: list[str]
 
 
 @dataclass(frozen=True)
@@ -140,50 +128,8 @@ class _SnapshotSignature(BaseTrialStatsGroupSnapshotSignature):
 
 
 @dataclass(frozen=True)
-class _SlopeStatsSnapshot(BaseTrialStatsGroupSnapshot):
-    stats_file: BIDSFile
-    subject: str
-    task: str
-    source_desc: str
-    condition_labels: tuple[str, str]
-    available_metrics: frozenset[str]
-    channel_names: list[str]
-    channel_index_by_norm: dict[str, int]
-    time_axis_s: np.ndarray
-    condition_a_slope: np.ndarray
-    condition_b_slope: np.ndarray
-    condition_a_mean: np.ndarray
-    condition_b_mean: np.ndarray
-    condition_a_r_value: np.ndarray
-    condition_b_r_value: np.ndarray
-    condition_a_predictor_raw_values: np.ndarray
-    condition_b_predictor_raw_values: np.ndarray
-    condition_a_predictor_transformed_values: np.ndarray
-    condition_b_predictor_transformed_values: np.ndarray
-    condition_a_predictor_values: np.ndarray   # (n_trials_a,)
-    condition_b_predictor_values: np.ndarray   # (n_trials_b,)
-    condition_a_epoch_means: np.ndarray        # (n_channels, n_trials_a) or empty
-    condition_b_epoch_means: np.ndarray        # (n_channels, n_trials_b) or empty
-    condition_a_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_a) or empty
-    condition_b_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_b) or empty
-    analysis_level: str
-    binning_mode: str
-    window_ms: float
-    n_bins: int
-    effective_n_bins: int
-    predictor: str
-    predictor_zscore: str
-    predictor_transform_by_condition: dict[str, dict[str, float]]
-    activity_zscore: str
-    activity_baseline_tmin_s: float
-    activity_baseline_tmax_s: float
-    trial_activity_summary_kind: str
-    trial_activity_summary_missing_response_policy: str
-    trial_activity_summary_source: dict[str, str]
-    trial_activity_summary_label: str
-    source_ieeg_files: list[str]
-    source_electrodes_files: list[str]
-    signature: _SnapshotSignature
+class _RegressionStatsSnapshot(BaseTrialStatsGroupSnapshot):
+    raw: _RawRegressionStatsData
 
 
 @dataclass(frozen=True)
@@ -495,26 +441,26 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                 "window_ms": first.window_ms,
                 "n_bins": first.n_bins,
                 "effective_n_bins": first.effective_n_bins,
-                "predictor": first.predictor,
-                "predictor_zscore": first.predictor_zscore,
+                "predictor": first.raw.predictor,
+                "predictor_zscore": first.raw.predictor_zscore,
                 "predictor_transform_by_condition_json": json.dumps(
-                    first.predictor_transform_by_condition,
+                    first.raw.predictor_transform_by_condition,
                     sort_keys=True,
                     separators=(",", ":"),
                 ),
-                "activity_zscore": first.activity_zscore,
-                "activity_baseline_tmin_s": first.activity_baseline_tmin_s,
-                "activity_baseline_tmax_s": first.activity_baseline_tmax_s,
-                "trial_activity_summary_kind": first.trial_activity_summary_kind,
+                "activity_zscore": first.raw.activity_zscore,
+                "activity_baseline_tmin_s": first.raw.activity_baseline_tmin_s,
+                "activity_baseline_tmax_s": first.raw.activity_baseline_tmax_s,
+                "trial_activity_summary_kind": first.raw.trial_activity_summary_kind,
                 "trial_activity_summary_missing_response_policy": (
-                    first.trial_activity_summary_missing_response_policy
+                    first.raw.trial_activity_summary_missing_response_policy
                 ),
                 "trial_activity_summary_source_json": json.dumps(
-                    first.trial_activity_summary_source,
+                    first.raw.trial_activity_summary_source,
                     sort_keys=True,
                     separators=(",", ":"),
                 ),
-                "trial_activity_summary_label": first.trial_activity_summary_label,
+                "trial_activity_summary_label": first.raw.trial_activity_summary_label,
                 "scatter_aggregation": "trial_pool",
             },
             output_entities=self.build_output_entities(first.task),
@@ -612,7 +558,7 @@ def _metric_values_for_record(
 
 def _collect_manual_roi_records(
     *,
-    snapshots: Sequence[_SlopeStatsSnapshot],
+    snapshots: Sequence[_RegressionStatsSnapshot],
     manual_region_channels: dict[str, dict[str, list[str]]],
 ) -> dict[str, list[_ContributionRecord]]:
     return collect_manual_roi_records(
@@ -624,7 +570,7 @@ def _collect_manual_roi_records(
 
 def _collect_atlas_roi_records(
     *,
-    snapshots: Sequence[_SlopeStatsSnapshot],
+    snapshots: Sequence[_RegressionStatsSnapshot],
     atlas_name: str,
 ) -> tuple[dict[str, list[_ContributionRecord]], set[str]]:
     return collect_atlas_roi_records(
@@ -637,7 +583,7 @@ def _collect_atlas_roi_records(
 def _create_contribution_record(
     roi: str,
     subject: str,
-    snapshot: _SlopeStatsSnapshot,
+    snapshot: _RegressionStatsSnapshot,
     idx: int,
 ) -> _ContributionRecord:
     return _ContributionRecord(
@@ -645,40 +591,40 @@ def _create_contribution_record(
         subject=subject,
         channel=snapshot.channel_names[idx],
         source_stats_file=str(snapshot.stats_file.path),
-        slope_a_values=np.asarray(snapshot.condition_a_slope[idx, :], dtype=np.float64),
-        slope_b_values=np.asarray(snapshot.condition_b_slope[idx, :], dtype=np.float64),
-        mean_a_values=np.asarray(snapshot.condition_a_mean[idx, :], dtype=np.float64),
-        mean_b_values=np.asarray(snapshot.condition_b_mean[idx, :], dtype=np.float64),
-        r_value_a_values=np.asarray(snapshot.condition_a_r_value[idx, :], dtype=np.float64),
-        r_value_b_values=np.asarray(snapshot.condition_b_r_value[idx, :], dtype=np.float64),
-        predictor_a_raw_values=np.asarray(snapshot.condition_a_predictor_raw_values, dtype=np.float64),
-        predictor_b_raw_values=np.asarray(snapshot.condition_b_predictor_raw_values, dtype=np.float64),
+        slope_a_values=np.asarray(snapshot.raw.condition_a_slope[idx, :], dtype=np.float64),
+        slope_b_values=np.asarray(snapshot.raw.condition_b_slope[idx, :], dtype=np.float64),
+        mean_a_values=np.asarray(snapshot.raw.condition_a_mean[idx, :], dtype=np.float64),
+        mean_b_values=np.asarray(snapshot.raw.condition_b_mean[idx, :], dtype=np.float64),
+        r_value_a_values=np.asarray(snapshot.raw.condition_a_r_value[idx, :], dtype=np.float64),
+        r_value_b_values=np.asarray(snapshot.raw.condition_b_r_value[idx, :], dtype=np.float64),
+        predictor_a_raw_values=np.asarray(snapshot.raw.condition_a_predictor_raw_values, dtype=np.float64),
+        predictor_b_raw_values=np.asarray(snapshot.raw.condition_b_predictor_raw_values, dtype=np.float64),
         predictor_a_transformed_values=np.asarray(
-            snapshot.condition_a_predictor_transformed_values,
+            snapshot.raw.condition_a_predictor_transformed_values,
             dtype=np.float64,
         ),
         predictor_b_transformed_values=np.asarray(
-            snapshot.condition_b_predictor_transformed_values,
+            snapshot.raw.condition_b_predictor_transformed_values,
             dtype=np.float64,
         ),
-        predictor_a_values=np.asarray(snapshot.condition_a_predictor_values, dtype=np.float64),
-        predictor_b_values=np.asarray(snapshot.condition_b_predictor_values, dtype=np.float64),
+        predictor_a_values=np.asarray(snapshot.raw.condition_a_predictor_values, dtype=np.float64),
+        predictor_b_values=np.asarray(snapshot.raw.condition_b_predictor_values, dtype=np.float64),
         scatter_activity_a=(
             np.asarray(
-                snapshot.condition_a_trial_activity_summary_values[idx, :],
+                snapshot.raw.condition_a_trial_activity_summary_values[idx, :],
                 dtype=np.float64,
             )
-            if snapshot.condition_a_trial_activity_summary_values.ndim == 2
-            and snapshot.condition_a_trial_activity_summary_values.shape[0] > idx
+            if snapshot.raw.condition_a_trial_activity_summary_values.ndim == 2
+            and snapshot.raw.condition_a_trial_activity_summary_values.shape[0] > idx
             else np.empty(0, dtype=np.float64)
         ),
         scatter_activity_b=(
             np.asarray(
-                snapshot.condition_b_trial_activity_summary_values[idx, :],
+                snapshot.raw.condition_b_trial_activity_summary_values[idx, :],
                 dtype=np.float64,
             )
-            if snapshot.condition_b_trial_activity_summary_values.ndim == 2
-            and snapshot.condition_b_trial_activity_summary_values.shape[0] > idx
+            if snapshot.raw.condition_b_trial_activity_summary_values.ndim == 2
+            and snapshot.raw.condition_b_trial_activity_summary_values.shape[0] > idx
             else np.empty(0, dtype=np.float64)
         ),
     )
@@ -688,7 +634,7 @@ def _create_contribution_record(
 # Compatibility validation
 # ---------------------------------------------------------------------------
 
-def _validate_group_compatibility(snapshots: Sequence[_SlopeStatsSnapshot]) -> None:
+def _validate_group_compatibility(snapshots: Sequence[_RegressionStatsSnapshot]) -> None:
     validate_group_compatibility(
         snapshots,
         empty_message="At least one regression snapshot is required.",
@@ -701,14 +647,14 @@ def _validate_group_compatibility(snapshots: Sequence[_SlopeStatsSnapshot]) -> N
 
 
 def _validate_source_metric_availability(
-    snapshots: Sequence[_SlopeStatsSnapshot],
+    snapshots: Sequence[_RegressionStatsSnapshot],
     *,
     source_metric: str,
 ) -> None:
     missing = [
         snapshot.stats_file.path.name
         for snapshot in snapshots
-        if source_metric not in snapshot.available_metrics
+        if source_metric not in snapshot.raw.available_metrics
     ]
     if missing:
         joined = ", ".join(missing)
@@ -727,7 +673,7 @@ def _read_snapshot_signature(stats_file: BIDSFile) -> _SnapshotSignature:
     return _build_signature(stats_file=stats_file, raw=raw)
 
 
-def _load_slope_stats_snapshot(stats_file: BIDSFile) -> _SlopeStatsSnapshot:
+def _load_slope_stats_snapshot(stats_file: BIDSFile) -> _RegressionStatsSnapshot:
     raw = _load_raw_slope_stats(stats_file)
     raw_subject = str(stats_file.get("subject") or stats_file.get("sub") or "").strip()
     subject = normalize_subject_value(raw_subject)
@@ -738,59 +684,31 @@ def _load_slope_stats_snapshot(stats_file: BIDSFile) -> _SlopeStatsSnapshot:
         channel_index_by_norm.setdefault(key, idx)
 
     signature = _build_signature(stats_file=stats_file, raw=raw)
-    return _SlopeStatsSnapshot(
+    return _RegressionStatsSnapshot(
         stats_file=stats_file,
         subject=subject,
         task=str(stats_file.get("task") or ""),
         source_desc=str(stats_file.get("desc") or ""),
         condition_labels=raw.condition_labels,
-        available_metrics=raw.available_metrics,
         channel_names=raw.channels,
         channel_index_by_norm=channel_index_by_norm,
         time_axis_s=raw.time_axis_s,
-        condition_a_slope=raw.condition_a_slope,
-        condition_b_slope=raw.condition_b_slope,
-        condition_a_mean=raw.condition_a_mean,
-        condition_b_mean=raw.condition_b_mean,
-        condition_a_r_value=raw.condition_a_r_value,
-        condition_b_r_value=raw.condition_b_r_value,
-        condition_a_predictor_raw_values=raw.condition_a_predictor_raw_values,
-        condition_b_predictor_raw_values=raw.condition_b_predictor_raw_values,
-        condition_a_predictor_transformed_values=raw.condition_a_predictor_transformed_values,
-        condition_b_predictor_transformed_values=raw.condition_b_predictor_transformed_values,
-        condition_a_predictor_values=raw.condition_a_predictor_values,
-        condition_b_predictor_values=raw.condition_b_predictor_values,
-        condition_a_epoch_means=raw.condition_a_epoch_means,
-        condition_b_epoch_means=raw.condition_b_epoch_means,
-        condition_a_trial_activity_summary_values=raw.condition_a_trial_activity_summary_values,
-        condition_b_trial_activity_summary_values=raw.condition_b_trial_activity_summary_values,
         analysis_level=raw.analysis_level,
         binning_mode=raw.binning_mode,
         window_ms=raw.window_ms,
         n_bins=raw.n_bins,
         effective_n_bins=raw.effective_n_bins,
-        predictor=raw.predictor,
-        predictor_zscore=raw.predictor_zscore,
-        predictor_transform_by_condition=raw.predictor_transform_by_condition,
-        activity_zscore=raw.activity_zscore,
-        activity_baseline_tmin_s=raw.activity_baseline_tmin_s,
-        activity_baseline_tmax_s=raw.activity_baseline_tmax_s,
-        trial_activity_summary_kind=raw.trial_activity_summary_kind,
-        trial_activity_summary_missing_response_policy=(
-            raw.trial_activity_summary_missing_response_policy
-        ),
-        trial_activity_summary_source=raw.trial_activity_summary_source,
-        trial_activity_summary_label=raw.trial_activity_summary_label,
         source_ieeg_files=raw.source_ieeg_files,
         source_electrodes_files=raw.source_electrodes_files,
         signature=signature,
+        raw=raw,
     )
 
 
 def _build_signature(
     *,
     stats_file: BIDSFile,
-    raw: _RawSlopeStatsData,
+    raw: _RawRegressionStatsData,
 ) -> _SnapshotSignature:
     return _SnapshotSignature(
         task=str(stats_file.get("task") or ""),
@@ -828,14 +746,14 @@ def _build_signature(
     )
 
 
-def _load_raw_slope_stats(stats_file: BIDSFile) -> _RawSlopeStatsData:
+def _load_raw_slope_stats(stats_file: BIDSFile) -> _RawRegressionStatsData:
     extension = (stats_file.extension or "").lower()
     if extension == ".mat":
         return _load_raw_from_matlab(stats_file)
     return _load_raw_from_hdf5(stats_file)
 
 
-def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
+def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
     with stats_file.ensure_loaded() as fh:
         analysis_type = str_scalar(dataset_or_none(fh, "meta/analysis_type"), default="")
         if analysis_type and analysis_type != "slope_regression":
@@ -1015,7 +933,7 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
                     np.asarray(prov["source_electrodes_files"][:], dtype=object)
                 )
 
-    return _RawSlopeStatsData(
+    return _RawRegressionStatsData(
         analysis_level=analysis_level,
         available_metrics=frozenset(
             metric
@@ -1077,7 +995,7 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawSlopeStatsData:
     )
 
 
-def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
+def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
     with stats_file.ensure_loaded() as mat:
         data = mat["data"]
         meta = data.meta
@@ -1287,7 +1205,7 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawSlopeStatsData:
             condition_a_trial_activity_summary_values = condition_a_epoch_means
             condition_b_trial_activity_summary_values = condition_b_epoch_means
 
-    return _RawSlopeStatsData(
+    return _RawRegressionStatsData(
         analysis_level=analysis_level,
         available_metrics=frozenset(
             metric

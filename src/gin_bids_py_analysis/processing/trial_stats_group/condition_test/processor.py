@@ -34,6 +34,7 @@ from gin_bids_py_analysis.processing.utils.group_stats import (
 )
 
 from ..processor import (
+    BaseRawTrialStatsData,
     BaseTrialStatsGroupContributionRecord,
     BaseTrialStatsGroupProcessing,
     BaseTrialStatsGroupSnapshot,
@@ -57,25 +58,12 @@ from .stats import (
 
 
 @dataclass(frozen=True)
-class _RawTrialStatsData:
+class _RawConditionTestStatsData(BaseRawTrialStatsData):
     """Format-agnostic in-memory representation of one subject condition_test file."""
 
-    analysis_level: str
-    channels: list[str]
-    time_axis_s: np.ndarray
     metric_values: np.ndarray  # shape (n_channels, n_times)
     condition_a_mean_values: np.ndarray  # shape (n_channels, n_times)
     condition_b_mean_values: np.ndarray  # shape (n_channels, n_times)
-    condition_labels: tuple[str, str]
-    binning_mode: str
-    window_ms: float
-    n_bins: int
-    effective_n_bins: int
-    activity_zscore: str
-    activity_baseline_tmin_s: float
-    activity_baseline_tmax_s: float
-    source_ieeg_files: list[str]
-    source_electrodes_files: list[str]
     permuted_t_values: np.ndarray | None  # shape (n_perm, n_channels, n_times) or None
 
 
@@ -105,30 +93,8 @@ class _SnapshotSignature(BaseTrialStatsGroupSnapshotSignature):
 
 
 @dataclass(frozen=True)
-class _TrialStatsSnapshot(BaseTrialStatsGroupSnapshot):
-    stats_file: BIDSFile
-    subject: str
-    task: str
-    source_desc: str
-    condition_labels: tuple[str, str]
-    channel_names: list[str]
-    channel_index_by_norm: dict[str, int]
-    time_axis_s: np.ndarray
-    metric_values: np.ndarray
-    condition_a_mean_values: np.ndarray  # shape (n_channels, n_times)
-    condition_b_mean_values: np.ndarray  # shape (n_channels, n_times)
-    analysis_level: str
-    binning_mode: str
-    window_ms: float
-    n_bins: int
-    effective_n_bins: int
-    activity_zscore: str
-    activity_baseline_tmin_s: float
-    activity_baseline_tmax_s: float
-    source_ieeg_files: list[str]
-    source_electrodes_files: list[str]
-    signature: _SnapshotSignature
-    permuted_t_values: np.ndarray | None  # shape (n_perm, n_channels, n_times) or None
+class _ConditionTestStatsSnapshot(BaseTrialStatsGroupSnapshot):
+    raw: _RawConditionTestStatsData
 
 
 @dataclass(frozen=True)
@@ -187,7 +153,7 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
         if method == "cluster_permutation":
             if self.params.cluster_permutation_method == "custom":
                 for snap in snapshots:
-                    if snap.permuted_t_values is None:
+                    if snap.raw.permuted_t_values is None:
                         raise ValueError(
                             f"cluster_permutation with cluster_permutation_method='custom' "
                             f"requires permuted_t_values in all source files, "
@@ -438,9 +404,9 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
                 "window_ms": first.window_ms,
                 "n_bins": first.n_bins,
                 "effective_n_bins": first.effective_n_bins,
-                "activity_zscore": first.activity_zscore,
-                "activity_baseline_tmin_s": first.activity_baseline_tmin_s,
-                "activity_baseline_tmax_s": first.activity_baseline_tmax_s,
+                "activity_zscore": first.raw.activity_zscore,
+                "activity_baseline_tmin_s": first.raw.activity_baseline_tmin_s,
+                "activity_baseline_tmax_s": first.raw.activity_baseline_tmax_s,
                 "excluded_rois": dict(excluded_rois),
             },
             activity_t_values=t_values,
@@ -483,7 +449,7 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
 
 def _collect_manual_roi_records(
     *,
-    snapshots: Sequence[_TrialStatsSnapshot],
+    snapshots: Sequence[_ConditionTestStatsSnapshot],
     manual_region_channels: dict[str, dict[str, list[str]]],
 ) -> dict[str, list[_ContributionRecord]]:
     return collect_manual_roi_records(
@@ -495,7 +461,7 @@ def _collect_manual_roi_records(
 
 def _collect_atlas_roi_records(
     *,
-    snapshots: Sequence[_TrialStatsSnapshot],
+    snapshots: Sequence[_ConditionTestStatsSnapshot],
     atlas_name: str,
 ) -> tuple[dict[str, list[_ContributionRecord]], set[str]]:
     return collect_atlas_roi_records(
@@ -508,7 +474,7 @@ def _collect_atlas_roi_records(
 def _create_contribution_record(
     roi: str,
     subject: str,
-    snapshot: _TrialStatsSnapshot,
+    snapshot: _ConditionTestStatsSnapshot,
     idx: int,
 ) -> _ContributionRecord:
     return _ContributionRecord(
@@ -516,18 +482,18 @@ def _create_contribution_record(
         subject=subject,
         channel=snapshot.channel_names[idx],
         source_stats_file=str(snapshot.stats_file.path),
-        values=np.asarray(snapshot.metric_values[idx, :], dtype=np.float64),
-        condition_a_values=np.asarray(snapshot.condition_a_mean_values[idx, :], dtype=np.float64),
-        condition_b_values=np.asarray(snapshot.condition_b_mean_values[idx, :], dtype=np.float64),
+        values=np.asarray(snapshot.raw.metric_values[idx, :], dtype=np.float64),
+        condition_a_values=np.asarray(snapshot.raw.condition_a_mean_values[idx, :], dtype=np.float64),
+        condition_b_values=np.asarray(snapshot.raw.condition_b_mean_values[idx, :], dtype=np.float64),
         permuted_t_values=(
-            np.asarray(snapshot.permuted_t_values[:, idx, :], dtype=np.float32)
-            if snapshot.permuted_t_values is not None
+            np.asarray(snapshot.raw.permuted_t_values[:, idx, :], dtype=np.float32)
+            if snapshot.raw.permuted_t_values is not None
             else None
         ),
     )
 
 
-def _validate_group_compatibility(snapshots: Sequence[_TrialStatsSnapshot]) -> None:
+def _validate_group_compatibility(snapshots: Sequence[_ConditionTestStatsSnapshot]) -> None:
     validate_group_compatibility(
         snapshots,
         empty_message="At least one condition_test snapshot is required.",
@@ -597,7 +563,7 @@ def _load_trial_stats_snapshot(
     stats_file: BIDSFile,
     *,
     source_metric: str,
-) -> _TrialStatsSnapshot:
+) -> _ConditionTestStatsSnapshot:
     raw = _load_raw_trial_stats(stats_file, source_metric=source_metric)
     raw_subject = str(stats_file.get("subject") or stats_file.get("sub") or "").strip()
     subject = normalize_subject_value(raw_subject)
@@ -620,7 +586,7 @@ def _load_trial_stats_snapshot(
         activity_baseline_tmin_s=raw.activity_baseline_tmin_s,
         activity_baseline_tmax_s=raw.activity_baseline_tmax_s,
     )
-    return _TrialStatsSnapshot(
+    return _ConditionTestStatsSnapshot(
         stats_file=stats_file,
         subject=subject,
         task=str(stats_file.get("task") or ""),
@@ -629,21 +595,15 @@ def _load_trial_stats_snapshot(
         channel_names=raw.channels,
         channel_index_by_norm=channel_index_by_norm,
         time_axis_s=raw.time_axis_s,
-        metric_values=raw.metric_values,
-        condition_a_mean_values=raw.condition_a_mean_values,
-        condition_b_mean_values=raw.condition_b_mean_values,
         analysis_level=raw.analysis_level,
         binning_mode=raw.binning_mode,
         window_ms=raw.window_ms,
         n_bins=raw.n_bins,
         effective_n_bins=raw.effective_n_bins,
-        activity_zscore=raw.activity_zscore,
-        activity_baseline_tmin_s=raw.activity_baseline_tmin_s,
-        activity_baseline_tmax_s=raw.activity_baseline_tmax_s,
         source_ieeg_files=raw.source_ieeg_files,
         source_electrodes_files=raw.source_electrodes_files,
         signature=signature,
-        permuted_t_values=raw.permuted_t_values,
+        raw=raw,
     )
 
 
@@ -651,7 +611,7 @@ def _load_raw_trial_stats(
     stats_file: BIDSFile,
     *,
     source_metric: str,
-) -> _RawTrialStatsData:
+) -> _RawConditionTestStatsData:
     """Dispatch to the appropriate format-specific loader based on file extension."""
     extension = (stats_file.extension or "").lower()
     if extension == ".mat":
@@ -663,7 +623,7 @@ def _load_raw_from_hdf5(
     stats_file: BIDSFile,
     *,
     source_metric: str,
-) -> _RawTrialStatsData:
+) -> _RawConditionTestStatsData:
     with stats_file.ensure_loaded() as fh:
         analysis_level = str_scalar(dataset_or_none(fh, "meta/analysis_level"), default="channel")
         axis_name = "channel" if analysis_level == "channel" else "region"
@@ -727,7 +687,7 @@ def _load_raw_from_hdf5(
             np.asarray(perm_ds[:], dtype=np.float32) if perm_ds is not None else None
         )
 
-    return _RawTrialStatsData(
+    return _RawConditionTestStatsData(
         analysis_level=analysis_level,
         channels=channels,
         time_axis_s=time_axis_s,
@@ -799,7 +759,7 @@ def _load_raw_from_matlab(
     stats_file: BIDSFile,
     *,
     source_metric: str,
-) -> _RawTrialStatsData:
+) -> _RawConditionTestStatsData:
     with stats_file.ensure_loaded() as mat:
         data = mat["data"]
         meta = data.meta
@@ -871,7 +831,7 @@ def _load_raw_from_matlab(
             source_ieeg_files = mat_str_list(getattr(prov, "source_ieeg_files", None))
             source_electrodes_files = mat_str_list(getattr(prov, "source_electrodes_files", None))
 
-    return _RawTrialStatsData(
+    return _RawConditionTestStatsData(
         analysis_level=analysis_level,
         channels=channels,
         time_axis_s=time_axis_s,

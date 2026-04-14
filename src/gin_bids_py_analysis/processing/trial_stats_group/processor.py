@@ -81,6 +81,25 @@ class BaseTrialStatsGroupSnapshot:
 
 
 @dataclass(frozen=True)
+class BaseRawTrialStatsData:
+    """Common fields shared by all format-agnostic subject-level raw stats containers."""
+
+    analysis_level: str
+    channels: list[str]
+    time_axis_s: np.ndarray
+    condition_labels: tuple[str, str]
+    binning_mode: str
+    window_ms: float
+    n_bins: int
+    effective_n_bins: int
+    activity_zscore: str
+    activity_baseline_tmin_s: float
+    activity_baseline_tmax_s: float
+    source_ieeg_files: list[str]
+    source_electrodes_files: list[str]
+
+
+@dataclass(frozen=True)
 class BaseTrialStatsGroupContributionRecord:
     """Common ROI contribution metadata shared by group pipelines."""
 
