@@ -133,6 +133,43 @@ def test_run_n_jobs_parallel(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
     assert len(paths) == 2
 
 
+def test_execute_n_jobs_one_avoids_parallel_manager(
+    mock_bids_file: BIDSFile,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _unexpected_manager() -> None:
+        raise AssertionError("mp.Manager() should not be used when n_jobs=1")
+
+    class _UnexpectedParallel:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            raise AssertionError("Parallel() should not be used when n_jobs=1")
+
+    monkeypatch.setattr("gin_bids_py_analysis.processing.base.mp.Manager", _unexpected_manager)
+    monkeypatch.setattr("gin_bids_py_analysis.processing.base.Parallel", _UnexpectedParallel)
+
+    results = _DummyProcessor().execute([mock_bids_file], n_jobs=1)
+    assert len(results) == 1
+
+
+def test_run_n_jobs_one_avoids_parallel_manager(
+    mock_bids_file: BIDSFile,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _unexpected_manager() -> None:
+        raise AssertionError("mp.Manager() should not be used when n_jobs=1")
+
+    class _UnexpectedParallel:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            raise AssertionError("Parallel() should not be used when n_jobs=1")
+
+    monkeypatch.setattr("gin_bids_py_analysis.processing.base.mp.Manager", _unexpected_manager)
+    monkeypatch.setattr("gin_bids_py_analysis.processing.base.Parallel", _UnexpectedParallel)
+
+    paths = _DummyProcessor().run([mock_bids_file], _dummy_writer(tmp_path), n_jobs=1)
+    assert len(paths) == 1
+
+
 def test_cannot_instantiate_abstract_processor() -> None:
     with pytest.raises(TypeError):
         BaseProcessing()  # type: ignore[abstract]

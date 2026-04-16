@@ -13,7 +13,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 _LOGGER_FALLBACK_SETUP_LOCK = Lock()
 
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, effective_n_jobs
 from pydantic import BaseModel, computed_field
 import multiprocessing as mp
 
@@ -327,11 +327,32 @@ class BaseProcessing(ABC):
         """
         _ensure_logger_output()
         coerced = _coerce_to_groups(groups)
-        
-        # Set up a multiprocessing-safe queue to assign worker positions for progress tracking
+        resolved_n_jobs = max(1, effective_n_jobs(n_jobs))
+
+        # Avoid multiprocessing.Manager() entirely for effectively sequential
+        # runs. On Windows, creating a Manager can stall while spawning helper
+        # processes even when n_jobs=1, which makes simple one-file scripts
+        # appear hung before any real processing begins.
+        if resolved_n_jobs == 1:
+            results: list[BaseProcessingResult] = []
+            for g in coerced:
+                try:
+                    result = self.process_group(g, progress_tracking_position=0)
+                except Exception:
+                    logger.error(
+                        "Error processing group %s â€” skipping.\n%s",
+                        g.primary.path,
+                        traceback.format_exc(),
+                    )
+                    continue
+                results.append(result)
+            return results
+
+        # Set up a multiprocessing-safe queue to assign worker positions for
+        # progress tracking in true parallel runs only.
         manager = mp.Manager()
         position_queue = manager.Queue()
-        for pos in range(n_jobs):
+        for pos in range(resolved_n_jobs):
             position_queue.put(pos)
 
         def _process(g: BIDSFileGroup) -> BaseProcessingResult | None:
@@ -379,11 +400,31 @@ class BaseProcessing(ABC):
         _ensure_logger_output()
         writer.write_dataset_description(getattr(self, "params", None))
         coerced = _coerce_to_groups(groups)
+        resolved_n_jobs = max(1, effective_n_jobs(n_jobs))
 
-        # Set up a multiprocessing-safe queue to assign worker positions for progress tracking
+        # Keep n_jobs=1 truly sequential so Windows callers do not pay the
+        # cost of spinning up a multiprocessing.Manager() server process.
+        if resolved_n_jobs == 1:
+            paths: list[Path] = []
+            for g in coerced:
+                try:
+                    result = self.process_group(g, progress_tracking_position=0)
+                    out_path = writer.write(result)
+                except Exception:
+                    logger.error(
+                        "Error processing group %s â€” skipping.\n%s",
+                        g.primary.path,
+                        traceback.format_exc(),
+                    )
+                    continue
+                paths.append(out_path)
+            return paths
+
+        # Set up a multiprocessing-safe queue to assign worker positions for
+        # progress tracking in true parallel runs only.
         manager = mp.Manager()
         position_queue = manager.Queue()
-        for pos in range(n_jobs):
+        for pos in range(resolved_n_jobs):
             position_queue.put(pos)
 
         def _process_and_write(g: BIDSFileGroup) -> Path | None:

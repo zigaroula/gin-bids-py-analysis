@@ -27,14 +27,13 @@ from gin_bids_py_analysis.processing.utils.channels import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
+BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
 
 # BIDS entity filters: only files matching ALL of these will be processed.
 # Remove any key you don't want to filter on.
 FILE_FILTERS = {
     "suffix": "ieeg",
-    "extension": ".vhdr",
-    #"subject": "epi01",
+    "extension": ".vhdr"
     #"run": "01",
 }
 
@@ -43,9 +42,9 @@ FILE_FILTERS = {
 # are merged into a single subject → channel-list mapping.
 # Set to an empty dict (or remove entries) to disable and use all channels.
 CHANNELS_CSV_FILES = {
-    "vmPFC": Path(r"D:\data_clarissa\valuation\csv\PFCvm_elecs_tbl.csv"),
-    "daINS": Path(r"D:\data_clarissa\valuation\csv\aINS_dors_elecs_tbl.csv"),
-    "vaINS": Path(r"D:\data_clarissa\valuation\csv\aINS_vent_elecs_tbl.csv"),
+    "vmPFC": Path(r"E:\data_clarissa\valuation\csv\PFCvm_elecs_tbl.csv"),
+    "daINS": Path(r"E:\data_clarissa\valuation\csv\aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"E:\data_clarissa\valuation\csv\aINS_vent_elecs_tbl.csv"),
 }
 
 # Algorithm parameters for detection
@@ -70,6 +69,7 @@ N_JOBS = 1  # parallelism across files; set to -1 to use all available CPUs
 
 _NA_LIKE_TOKENS = frozenset({"nan", "na", "n/a", "none", "null"})
 _FIRST_CONTACT_PATTERN = re.compile(r"^([A-Za-z]+[0-9]+)")
+_CONTACT_TOKEN_PATTERN = re.compile(r"[A-Za-z']+[0-9]+")
 
 
 def _is_nan_like(value: object) -> bool:
@@ -86,6 +86,9 @@ def _extract_first_bipolar_contact(raw_channel: object) -> str:
     channel = str(raw_channel).strip()
     if not channel:
         return ""
+    token_matches = _CONTACT_TOKEN_PATTERN.findall(channel)
+    if token_matches:
+        return token_matches[0]
     match = _FIRST_CONTACT_PATTERN.match(channel)
     if match is not None:
         return match.group(1)
@@ -104,14 +107,13 @@ def _extract_second_bipolar_contact(raw_channel: object) -> str:
     channel = str(raw_channel).strip()
     if not channel:
         return ""
+    token_matches = _CONTACT_TOKEN_PATTERN.findall(channel)
+    if len(token_matches) >= 2:
+        return token_matches[1]
     for separator in ("-", "_", " "):
         if separator in channel:
             return channel.split(separator, 1)[1].strip()
     return ""
-
-
-def _row_contains_nan(row: dict[str, object]) -> bool:
-    return any(_is_nan_like(value) for value in row.values())
 
 
 def _load_subject_channels_from_csv(csv_path: Path) -> dict[str, list[str]]:
@@ -150,11 +152,13 @@ def _load_subject_channels_from_csv(csv_path: Path) -> dict[str, list[str]]:
         channel_col = reader.fieldnames[1]
 
         for row in reader:
-            if _row_contains_nan(row):
+            raw_subject = row.get(subject_col, "")
+            raw_channel_value = row.get(channel_col, "")
+            if _is_nan_like(raw_subject) or _is_nan_like(raw_channel_value):
                 continue
 
-            subject = _normalize_subject_from_csv(row.get(subject_col, ""))
-            raw_channel = str(row.get(channel_col, "")).strip()
+            subject = _normalize_subject_from_csv(raw_subject)
+            raw_channel = str(raw_channel_value).strip()
             if not subject or not raw_channel:
                 continue
 
@@ -194,7 +198,7 @@ def _merge_subject_channels(
 
     Raises:
         FileNotFoundError: If any CSV path does not exist.
-        ValueError: If no channels were loaded from any CSV after NaN filtering.
+        ValueError: If no channels were loaded from any CSV after filtering.
     """
     merged: dict[str, list[str]] = {}
     seen: dict[str, set[str]] = {}
@@ -213,7 +217,7 @@ def _merge_subject_channels(
 
     if not merged:
         raise ValueError(
-            "No channels were loaded from any CSV file after filtering NaN rows."
+            "No channels were loaded from any CSV file after filtering invalid subject/channel rows."
         )
 
     return merged

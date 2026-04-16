@@ -14,8 +14,6 @@ This module replicates the complete algorithm including:
 import numpy as np
 from typing import Tuple, List, Dict, Optional, Union, Any
 from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import os
 from ..utils.matlab import matlab_tukeywin
 
 # Use pyfftw if available (faster), otherwise fall back to numpy.fft
@@ -533,38 +531,6 @@ def _set_spike_and_oscillation_thresholds(
     return hfo_time_thr, hfo_freq_thr, spike_time_thr, spike_freq_thr
 
 
-def _compute_wavelet_scale(args):
-    """
-    Compute wavelet transform for a single scale - designed for parallel execution.
-    
-    Args:
-        args: Tuple containing (j, scale, van_mom, cst, n_exp, fff, fsig, scaling, scale_factors)
-        
-    Returns:
-        Tuple of (scale_index, wavelet_coefficients)
-    """
-    j, scale, van_mom, cst, n_exp, fff, fsig, scaling, scale_factors = args
-    
-    # Compute wavelet in frequency domain
-    tmp = scale * fff
-    # Use in-place operations where possible
-    psi = tmp**van_mom
-    psi *= np.exp(-cst * tmp**n_exp / 2)
-    
-    # Element-wise multiplication (broadcasting)
-    f_trans = fsig * psi
-    
-    # IFFT and scaling
-    ifft_result = _fftmod.ifft(f_trans)
-        
-    if scaling:
-        result = ifft_result
-    else:
-        result = scale_factors[j] * ifft_result
-    
-    return j, result
-
-
 def _dog_wavelet_transform(
     sig: np.ndarray,
     oct: List[int],
@@ -577,14 +543,12 @@ def _dog_wavelet_transform(
     max_workers: Optional[int] = None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Continuous wavelet transform using Derivative of Gaussian wavelets with multithreading.
-    
-    Optimizations:
-    - Pre-compute frequency grid and constants
-    - Vectorize scale calculations
-    - Use in-place operations where possible
-    - Optimize memory allocation
-    - Parallel IFFT computation using ThreadPoolExecutor (always enabled)
+    Continuous wavelet transform using Derivative of Gaussian wavelets.
+
+    The transform is computed sequentially over scales while delegating FFT
+    parallelism to the backend FFT implementation (pyFFTW when available).
+    The ``use_multithread`` and ``max_workers`` arguments are retained for
+    backward compatibility but are ignored.
     
     Args:
         sig: Input signal
@@ -594,8 +558,8 @@ def _dog_wavelet_transform(
         n_exp: Exponential parameter
         fs: Sampling frequency
         scaling: Scaling flag
-        use_multithread: Enable multithreading (always True in practice)
-        max_workers: Maximum number of worker threads (auto-detect if None)
+        use_multithread: Ignored; retained for backward compatibility.
+        max_workers: Ignored; retained for backward compatibility.
         
     Returns:
         wt: Wavelet transform coefficients
@@ -631,52 +595,25 @@ def _dog_wavelet_transform(
     else:
         scale_factors = None
     
-    # Determine if multithreading should be used
-    if use_multithread and total_scales > 1:
-        # Auto-detect number of workers if not specified
-        if max_workers is None:
-            max_workers = min(os.cpu_count() or 1, total_scales)
-        
-        # Prepare arguments for parallel computation
-        args_list = [
-            (j, scales[j], van_mom, cst, n_exp, fff, fsig, scaling, scale_factors)
-            for j in range(total_scales)
-        ]
-        
-        # Execute in parallel using ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
-            future_to_scale = {
-                executor.submit(_compute_wavelet_scale, args): args[0] 
-                for args in args_list
-            }
-            
-            # Collect results as they complete
-            for future in as_completed(future_to_scale):
-                j, result = future.result()
-                wt[j, :] = result
-                
-    else:
-        # Sequential computation (fallback or when multithreading is disabled)
-        for j in range(total_scales):
-            scale = scales[j]
-            
-            # Compute wavelet in frequency domain
-            tmp = scale * fff
-            # Use in-place operations where possible
-            psi = tmp**van_mom
-            psi *= np.exp(-cst * tmp**n_exp / 2)
-            
-            # Element-wise multiplication (broadcasting)
-            f_trans = fsig * psi
-            
-            # IFFT and scaling
-            ifft_result = _fftmod.ifft(f_trans)
-                
-            if scaling:
-                wt[j, :] = ifft_result
-            else:
-                wt[j, :] = scale_factors[j] * ifft_result
+    for j in range(total_scales):
+        scale = scales[j]
+
+        # Compute wavelet in frequency domain.
+        tmp = scale * fff
+        psi = tmp**van_mom
+        psi *= np.exp(-cst * tmp**n_exp / 2)
+
+        # Element-wise multiplication (broadcasting).
+        f_trans = fsig * psi
+
+        # IFFT and scaling. When pyFFTW is available, its own threading model
+        # handles the heavy lifting for this step.
+        ifft_result = _fftmod.ifft(f_trans)
+
+        if scaling:
+            wt[j, :] = ifft_result
+        else:
+            wt[j, :] = scale_factors[j] * ifft_result
     
     # Flip to match MATLAB convention (in-place)
     wt = np.flipud(wt).T
