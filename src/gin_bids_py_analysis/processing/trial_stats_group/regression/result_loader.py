@@ -15,6 +15,9 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
     float_scalar,
     str_scalar,
 )
+from gin_bids_py_analysis.processing.trial_stats.params import (
+    normalize_trial_activity_summary_missing_response_policy,
+)
 
 from ..result import ROIChannelContribution
 from .result import RegressionGroupProcessingResult
@@ -168,12 +171,16 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
                 dataset_or_none(fh, "meta/trial_activity_summary_kind"),
                 default="epoch_mean",
             ),
-            "trial_activity_summary_missing_response_policy": str_scalar(
-                dataset_or_none(
-                    fh,
-                    "meta/trial_activity_summary_missing_response_policy",
-                ),
-                default="drop_trial",
+            "trial_activity_summary_missing_response_policy": (
+                normalize_trial_activity_summary_missing_response_policy(
+                    str_scalar(
+                        dataset_or_none(
+                            fh,
+                            "meta/trial_activity_summary_missing_response_policy",
+                        ),
+                        default="nan_if_missing",
+                    )
+                )
             ),
             "trial_activity_summary_source_json": str_scalar(
                 dataset_or_none(fh, "meta/trial_activity_summary_source_json"),
@@ -461,9 +468,13 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
             getattr(meta, "trial_activity_summary_kind", None),
             default="epoch_mean",
         ),
-        "trial_activity_summary_missing_response_policy": mat_str(
-            getattr(meta, "trial_activity_summary_missing_response_policy", None),
-            default="drop_trial",
+        "trial_activity_summary_missing_response_policy": (
+            normalize_trial_activity_summary_missing_response_policy(
+                mat_str(
+                    getattr(meta, "trial_activity_summary_missing_response_policy", None),
+                    default="nan_if_missing",
+                )
+            )
         ),
         "trial_activity_summary_source_json": mat_str(
             getattr(meta, "trial_activity_summary_source_json", None),

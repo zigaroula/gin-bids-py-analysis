@@ -299,6 +299,65 @@ def test_process_group_supports_anchor_to_response_trial_activity_summary_for_co
     assert result.trial_activity_summary_source["column"] == "rt_ms"
 
 
+def test_process_group_epoch_cleaning_nan_masks_partial_trial_feature_only(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1", "A2"]
+    data = np.zeros((2, 80), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0]
+    channel_1_values = [1.0, 1.0, 1.0, 1.0]
+    channel_2_values = [1.0, 1.0, 30.0, 1.0]
+    for onset, value_1, value_2 in zip(onsets, channel_1_values, channel_2_values):
+        start = int(onset * sfreq)
+        data[0, start : start + 3] = value_1
+        data[1, start : start + 3] = value_2
+
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * len(onsets),
+        description=["Stimulus/S  10"] * len(onsets),
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    result = ConditionTestProcessing(
+        ConditionTestParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            p_value_correction_method="none",
+            epoch_cleaning={
+                "reject_trials_by_epoch_mean": True,
+                "epoch_mean_threshold_factor": 0.5,
+            },
+        ),
+        resolver=_AlternatingResolver(),
+    ).process_group(BIDSFileGroup(primary=ieeg_file))
+
+    assert result.condition_a_trial_count == 2
+    assert result.condition_b_trial_count == 2
+    assert result.epoch_cleaning_audit["nan_masked_trial_feature_pairs"] == {"A2": [1]}
+    assert result.epoch_cleaning_audit["fully_masked_trials_a"] == []
+    assert result.epoch_cleaning_audit["fully_masked_trials_b"] == []
+    assert all(trial.keep for trial in result.resolved_trials)
+    assert np.all(np.isfinite(result.condition_a_epochs[1, 0, :]))
+    assert np.all(np.isnan(result.condition_a_epochs[1, 1, :]))
+
+
 def test_process_group_aggregates_channels_by_atlas_region(
     tmp_path: Path,
 ) -> None:

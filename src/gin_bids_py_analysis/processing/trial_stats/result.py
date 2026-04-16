@@ -44,6 +44,7 @@ class BaseTrialStatsProcessingResult(BaseProcessingResult):
     trial_activity_summary_missing_response_policy: str = "clamp_to_epoch"
     trial_activity_summary_source: dict[str, str] = field(default_factory=dict)
     trial_activity_summary_label: str = "Epoch mean activity"
+    epoch_cleaning_audit: dict[str, object] = field(default_factory=dict)
     stats_valid: bool = False
     condition_a_epochs: np.ndarray = field(default_factory=lambda: np.array([]))
     condition_b_epochs: np.ndarray = field(default_factory=lambda: np.array([]))

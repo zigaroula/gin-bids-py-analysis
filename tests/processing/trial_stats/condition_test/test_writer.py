@@ -428,6 +428,13 @@ def test_writer_round_trips_trial_activity_summary_for_condition_test(
         dtype=np.float64,
     )
     result.resolved_trials[0].metadata["trial_activity_summary_response_time_s"] = 0.2
+    result.metadata["epoch_cleaning"] = {"reject_trials_by_epoch_mean": True}
+    result.epoch_cleaning_audit = {
+        "excluded_features": {},
+        "nan_masked_trial_feature_pairs": {"A2": [1]},
+        "fully_masked_trials_a": [],
+        "fully_masked_trials_b": [],
+    }
 
     writer = ConditionTestProcessingWriter(
         ConditionTestWriterParams(bids_root=tmp_path)
@@ -437,6 +444,7 @@ def test_writer_round_trips_trial_activity_summary_for_condition_test(
     with h5py.File(output_path, "r") as fh:
         assert fh["meta"]["trial_activity_summary_kind"].asstr()[()] == "anchor_to_response_mean"
         assert fh["trial_activity_summary"]["label"].asstr()[()] == "Mean activity (trigger to response)"
+        assert fh["meta"]["epoch_cleaning_audit_json"].asstr()[()] != ""
         np.testing.assert_allclose(
             fh["trial_activity_summary"]["condition_a_values"][:],
             result.condition_a_trial_activity_summary_values,
@@ -450,6 +458,7 @@ def test_writer_round_trips_trial_activity_summary_for_condition_test(
     loaded = load_condition_test_result(output_path)
     assert loaded.trial_activity_summary_kind == "anchor_to_response_mean"
     assert loaded.trial_activity_summary_source["column"] == "rt_ms"
+    assert loaded.epoch_cleaning_audit == result.epoch_cleaning_audit
     np.testing.assert_allclose(
         loaded.condition_a_trial_activity_summary_values,
         result.condition_a_trial_activity_summary_values,

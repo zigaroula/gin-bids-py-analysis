@@ -36,8 +36,8 @@ def test_run_trial_slope_stats_script_main_smoke(monkeypatch) -> None:
                 pass
 
         class _FakeProcessor:
-            def __init__(self, _params, resolver=None) -> None:
-                del resolver
+            def __init__(self, _params, resolver=None, annotators=None) -> None:
+                del resolver, annotators
 
             def run(self, groups, writer, n_jobs=1):
                 del groups, writer, n_jobs
@@ -55,7 +55,10 @@ def test_run_trial_slope_stats_script_main_smoke(monkeypatch) -> None:
                 pass
 
         monkeypatch.setattr(module, "BIDSDataset", _FakeDataset)
-        monkeypatch.setattr(module, "build_subject_groups", lambda *_args, **_kwargs: ["dummy"])
+        monkeypatch.setattr(module, "load_roi_channels_from_csv", lambda *_args, **_kwargs: {})
+        monkeypatch.setattr(module, "print_roi_summary", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(module, "build_trial_annotators", lambda *_args, **_kwargs: [])
+        monkeypatch.setattr(module, "build_trial_slope_groups", lambda *_args, **_kwargs: ["dummy"])
         monkeypatch.setattr(module, "RegressionProcessing", _FakeProcessor)
         monkeypatch.setattr(module, "RegressionProcessingWriter", _FakeWriter)
 

@@ -60,6 +60,82 @@ TrialActivitySummaryResponseSource = Annotated[
 ]
 
 
+def normalize_trial_activity_summary_missing_response_policy(
+    value: object,
+    *,
+    default: str = "clamp_to_epoch",
+) -> str:
+    cleaned = str(value).strip().lower() or default
+    if cleaned not in {"clamp_to_epoch", "nan_if_missing"}:
+        raise ValueError(
+            "trial_activity_summary.missing_response_policy must be one of "
+            "'clamp_to_epoch' or 'nan_if_missing'."
+        )
+    return cleaned
+
+
+class EpochCleaningConfig(BaseModel):
+    """Configuration for epoch-level and feature-level quality control."""
+
+    reject_trials_by_epoch_mean: bool = Field(
+        default=False,
+        description=(
+            "NaN-mask (trial, feature) pairs whose epoch mean deviates more than "
+            "epoch_mean_threshold_factor x std from the feature's across-trial mean."
+        ),
+    )
+    epoch_mean_threshold_factor: float = Field(
+        default=3.0,
+        gt=0.0,
+        description="Outlier threshold (in std) for mean-based trial-feature masking.",
+    )
+    reject_trials_by_epoch_max: bool = Field(
+        default=False,
+        description=(
+            "NaN-mask (trial, feature) pairs whose epoch maximum deviates more than "
+            "epoch_max_threshold_factor x std from the feature's across-trial mean of maxima."
+        ),
+    )
+    epoch_max_threshold_factor: float = Field(
+        default=3.0,
+        gt=0.0,
+        description="Outlier threshold (in std) for max-based trial-feature masking.",
+    )
+    reject_by_trial_mean_spread: bool = Field(
+        default=False,
+        description=(
+            "Exclude features whose across-trial spread of per-trial epoch means "
+            "is an outlier in the feature population."
+        ),
+    )
+    trial_mean_spread_threshold: float = Field(
+        default=1.0,
+        gt=0.0,
+        description="Outlier threshold (in std) for mean-spread feature exclusion.",
+    )
+    reject_by_trial_max_spread: bool = Field(
+        default=False,
+        description=(
+            "Exclude features whose across-trial spread of per-trial epoch maxima "
+            "is an outlier in the feature population."
+        ),
+    )
+    trial_max_spread_threshold: float = Field(
+        default=1.0,
+        gt=0.0,
+        description="Outlier threshold (in std) for max-spread feature exclusion.",
+    )
+    max_nan_trial_ratio: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Exclude features where the fraction of NaN-masked trials meets or "
+            "exceeds this threshold. None disables the check."
+        ),
+    )
+
+
 class TrialActivitySummaryConfig(BaseModel):
     """Configuration for the per-trial activity summary saved with results."""
 
@@ -72,7 +148,7 @@ class TrialActivitySummaryConfig(BaseModel):
             "annotation event code."
         ),
     )
-    missing_response_policy: Literal["clamp_to_epoch", "drop_trial"] = Field(
+    missing_response_policy: Literal["clamp_to_epoch", "nan_if_missing"] = Field(
         default="clamp_to_epoch",
         description=(
             "Policy applied when the resolved response boundary falls outside the "
@@ -85,6 +161,11 @@ class TrialActivitySummaryConfig(BaseModel):
             "Response-boundary source used when kind='anchor_to_response_mean'."
         ),
     )
+
+    @field_validator("missing_response_policy", mode="before")
+    @classmethod
+    def _normalize_missing_response_policy(cls, value: object) -> str:
+        return normalize_trial_activity_summary_missing_response_policy(value)
 
     @model_validator(mode="after")
     def _validate_response(self) -> "TrialActivitySummaryConfig":
@@ -213,6 +294,14 @@ class BaseTrialStatsParams(BaseProcessingParams):
             "in the subject-level result."
         ),
     )
+    epoch_cleaning: EpochCleaningConfig = Field(
+        default_factory=EpochCleaningConfig,
+        description=(
+            "Post-epoch quality control shared across trial-statistics pipelines. "
+            "Complete trial invalidations are promoted to keep=False when all features "
+            "become NaN after cleaning."
+        ),
+    )
     n_permutations: int = Field(
         default=0,
         ge=0,
@@ -270,6 +359,23 @@ class BaseTrialStatsParams(BaseProcessingParams):
             raise ValueError(
                 "trial_activity_summary must be a mapping shaped like "
                 "{'kind': 'epoch_mean' | 'anchor_to_response_mean', ...}."
+            )
+        return value
+
+    @field_validator("epoch_cleaning", mode="before")
+    @classmethod
+    def _coerce_epoch_cleaning(
+        cls,
+        value: object,
+    ) -> EpochCleaningConfig | dict[str, object]:
+        if value in (None, ""):
+            return {}
+        if isinstance(value, EpochCleaningConfig):
+            return value
+        if not isinstance(value, dict):
+            raise ValueError(
+                "epoch_cleaning must be a mapping shaped like "
+                "{'reject_trials_by_epoch_mean': bool, ...}."
             )
         return value
 

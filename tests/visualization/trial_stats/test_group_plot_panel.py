@@ -351,3 +351,24 @@ class TestGroupPlotPanelSlopeUpdate:
             "unpleasant: sub-01 / A2",
             "unpleasant: sub-02 / A1",
         ]
+
+    def test_slope_matrix_hides_rows_that_are_all_nan(
+        self,
+        qtbot,
+        synthetic_slope_group_result,
+    ):
+        synthetic_slope_group_result.condition_a_source_metric_contributions[0][1, :] = np.nan
+        synthetic_slope_group_result.condition_b_source_metric_contributions[0][0, :] = np.nan
+        panel = GroupPlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_group_result, 0)
+        panel._matrix_row_labels_checkbox.setChecked(True)
+
+        assert panel._ax_matrix.images[0].get_array().shape[0] == 4
+        assert [tick.get_text() for tick in panel._ax_matrix.get_yticklabels()] == [
+            "pleasant: sub-01 / A1",
+            "pleasant: sub-02 / A1",
+            "unpleasant: sub-01 / A2",
+            "unpleasant: sub-02 / A1",
+        ]

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from ..params import (
     BaseTrialStatsParams,
     BaseTrialStatsWriterParams,
+    EpochCleaningConfig,
     TrialActivitySummaryAnnotationEventSource,
     TrialActivitySummaryConfig,
     TrialActivitySummaryTableColumnSource,
@@ -32,70 +33,6 @@ class PredictorAffineTransform(BaseModel):
         if not float("-inf") < float(value) < float("inf"):
             raise ValueError("Predictor transform values must be finite.")
         return float(value)
-
-
-class EpochCleaningConfig(BaseModel):
-    """Configuration for epoch-level and channel-level quality control."""
-
-    reject_trials_by_epoch_mean: bool = Field(
-        default=False,
-        description=(
-            "Level A: NaN-mask (trial, channel) pairs where the trial epoch mean "
-            "deviates more than epoch_mean_threshold_factor × std from the "
-            "channel's across-trial mean."
-        ),
-    )
-    epoch_mean_threshold_factor: float = Field(
-        default=3.0,
-        gt=0.0,
-        description="Outlier threshold (in std) for Level A mean-based trial rejection.",
-    )
-    reject_trials_by_epoch_max: bool = Field(
-        default=False,
-        description=(
-            "Level A: NaN-mask (trial, channel) pairs where the trial epoch maximum "
-            "deviates more than epoch_max_threshold_factor × std from the "
-            "channel's across-trial mean of maxima."
-        ),
-    )
-    epoch_max_threshold_factor: float = Field(
-        default=3.0,
-        gt=0.0,
-        description="Outlier threshold (in std) for Level A max-based trial rejection.",
-    )
-    reject_by_trial_mean_spread: bool = Field(
-        default=False,
-        description=(
-            "Level B: exclude channels whose across-trial standard deviation of "
-            "per-trial epoch means is an outlier in the channel population."
-        ),
-    )
-    trial_mean_spread_threshold: float = Field(
-        default=1.0,
-        gt=0.0,
-        description="Outlier threshold (in std) for Level B mean-spread channel rejection.",
-    )
-    reject_by_trial_max_spread: bool = Field(
-        default=False,
-        description=(
-            "Level B: exclude channels whose across-trial standard deviation of "
-            "per-trial epoch maxima is an outlier in the channel population."
-        ),
-    )
-    trial_max_spread_threshold: float = Field(
-        default=1.0,
-        gt=0.0,
-        description="Outlier threshold (in std) for Level B max-spread channel rejection.",
-    )
-    max_nan_trial_ratio: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=1.0,
-        description=(
-            "Level B: exclude channels where the fraction of NaN trials meets or "
-            "exceeds this threshold. None disables the check."
-        ),
-    )
 
 
 class RegressionParams(BaseTrialStatsParams):
@@ -132,7 +69,7 @@ class RegressionParams(BaseTrialStatsParams):
     epoch_cleaning: EpochCleaningConfig = Field(
         default_factory=EpochCleaningConfig,
         description=(
-            "Epoch-level and channel-level quality control applied after epoch stacking "
+            "Epoch-level and feature-level quality control applied after epoch stacking "
             "and before activity z-scoring."
         ),
     )

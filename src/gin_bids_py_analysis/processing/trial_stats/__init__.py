@@ -3,6 +3,7 @@
 from .params import (
     BaseTrialStatsParams,
     BaseTrialStatsWriterParams,
+    EpochCleaningConfig,
     TrialActivitySummaryAnnotationEventSource,
     TrialActivitySummaryConfig,
     TrialActivitySummaryTableColumnSource,
@@ -19,7 +20,6 @@ from .condition_test import (
     load_condition_test_result,
 )
 from .regression import (
-    EpochCleaningConfig,
     PredictorAffineTransform,
     RegressionParams,
     RegressionProcessing,

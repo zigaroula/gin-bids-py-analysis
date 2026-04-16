@@ -21,6 +21,8 @@ the NaN-ratio check include Level A rejects.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 
 
@@ -192,7 +194,9 @@ def reject_channels_by_trial_mean_spread(
         Bool array of shape ``(n_channels,)``.  ``True`` = exclude.
     """
     epochs_arr = np.asarray(epochs, dtype=np.float64)
-    trial_means = np.nanmean(epochs_arr, axis=2)  # [n_trials, n_channels]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        trial_means = np.nanmean(epochs_arr, axis=2)  # [n_trials, n_channels]
     chan_spread = np.nanstd(trial_means, axis=0, ddof=1)  # [n_channels]
     return _mean_outlier_mask_1d(chan_spread, threshold_factor)
 
@@ -219,7 +223,9 @@ def reject_channels_by_trial_max_spread(
         Bool array of shape ``(n_channels,)``.  ``True`` = exclude.
     """
     epochs_arr = np.asarray(epochs, dtype=np.float64)
-    trial_maxes = np.nanmax(epochs_arr, axis=2)  # [n_trials, n_channels]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        trial_maxes = np.nanmax(epochs_arr, axis=2)  # [n_trials, n_channels]
     chan_spread = np.nanstd(trial_maxes, axis=0, ddof=1)  # [n_channels]
     return _mean_outlier_mask_1d(chan_spread, threshold_factor)
 

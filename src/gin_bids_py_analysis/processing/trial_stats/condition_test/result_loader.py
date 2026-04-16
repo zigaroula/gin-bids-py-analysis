@@ -25,12 +25,13 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
     str_scalar,
 )
 
+from ..params import normalize_trial_activity_summary_missing_response_policy
 from .result import ConditionTestProcessingResult
 
 _VALID_BASELINE_SCOPES = frozenset({"trial", "condition", "global"})
 _VALID_TRIAL_ACTIVITY_SUMMARY_KINDS = frozenset({"epoch_mean", "anchor_to_response_mean"})
 _VALID_TRIAL_ACTIVITY_SUMMARY_MISSING_RESPONSE_POLICIES = frozenset(
-    {"clamp_to_epoch", "drop_trial"}
+    {"clamp_to_epoch", "nan_if_missing"}
 )
 
 
@@ -239,6 +240,12 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
             )
         except json.JSONDecodeError:
             trial_activity_summary_source = {}
+        epoch_cleaning = _load_json_mapping(
+            str_scalar(dataset_or_none(fh, "meta/epoch_cleaning_json"), default="{}")
+        )
+        epoch_cleaning_audit = _load_json_mapping(
+            str_scalar(dataset_or_none(fh, "meta/epoch_cleaning_audit_json"), default="{}")
+        )
         trial_activity_summary_label = str_scalar(
             dataset_or_none(fh, "meta/trial_activity_summary_label"),
             default="Epoch mean activity",
@@ -352,6 +359,8 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
             "trial_activity_summary_missing_response_policy": trial_activity_summary_missing_response_policy,
             "trial_activity_summary_source": trial_activity_summary_source,
             "trial_activity_summary_label": trial_activity_summary_label,
+            "epoch_cleaning": epoch_cleaning,
+            "epoch_cleaning_audit": epoch_cleaning_audit,
             "n_permutations": (
                 permuted_t_values.shape[0]
                 if permuted_t_values is not None
@@ -392,6 +401,7 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
         trial_activity_summary_missing_response_policy=trial_activity_summary_missing_response_policy,
         trial_activity_summary_source=trial_activity_summary_source,
         trial_activity_summary_label=trial_activity_summary_label,
+        epoch_cleaning_audit=epoch_cleaning_audit,
         stats_valid=stats_valid,
         condition_a_epochs=condition_a_epochs,
         condition_b_epochs=condition_b_epochs,
@@ -562,6 +572,12 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
         )
     except json.JSONDecodeError:
         trial_activity_summary_source = {}
+    epoch_cleaning = _load_json_mapping(
+        mat_str(getattr(meta, "epoch_cleaning_json", None), default="{}")
+    )
+    epoch_cleaning_audit = _load_json_mapping(
+        mat_str(getattr(meta, "epoch_cleaning_audit_json", None), default="{}")
+    )
     trial_activity_summary_label = mat_str(
         getattr(meta, "trial_activity_summary_label", None),
         default="Epoch mean activity",
@@ -653,6 +669,8 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
             "trial_activity_summary_missing_response_policy": trial_activity_summary_missing_response_policy,
             "trial_activity_summary_source": trial_activity_summary_source,
             "trial_activity_summary_label": trial_activity_summary_label,
+            "epoch_cleaning": epoch_cleaning,
+            "epoch_cleaning_audit": epoch_cleaning_audit,
         },
         t_values=t_values,
         p_values=p_values,
@@ -688,6 +706,7 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
         trial_activity_summary_missing_response_policy=trial_activity_summary_missing_response_policy,
         trial_activity_summary_source=trial_activity_summary_source,
         trial_activity_summary_label=trial_activity_summary_label,
+        epoch_cleaning_audit=epoch_cleaning_audit,
         stats_valid=stats_valid,
         condition_a_epochs=np.array([]),
         condition_b_epochs=np.array([]),
@@ -727,6 +746,19 @@ def _validated_trial_activity_summary_missing_response_policy(
     if cleaned not in _VALID_TRIAL_ACTIVITY_SUMMARY_MISSING_RESPONSE_POLICIES:
         raise ValueError(
             f"{path_name}: unsupported trial_activity_summary_missing_response_policy="
-            f"{value!r}. Valid values are 'clamp_to_epoch' and 'drop_trial'."
+            f"{value!r}. Valid values are 'clamp_to_epoch' and 'nan_if_missing'."
         )
-    return cleaned
+    try:
+        return normalize_trial_activity_summary_missing_response_policy(cleaned)
+    except ValueError as exc:
+        raise ValueError(f"{path_name}: {exc}") from exc
+
+
+def _load_json_mapping(raw_value: str) -> dict[str, object]:
+    try:
+        loaded = json.loads(raw_value) if raw_value else {}
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(loaded, dict):
+        return {}
+    return {str(key): value for key, value in loaded.items()}

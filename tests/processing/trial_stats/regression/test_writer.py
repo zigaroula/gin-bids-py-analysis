@@ -43,6 +43,12 @@ def _make_result(tmp_path: Path) -> RegressionProcessingResult:
     return RegressionProcessingResult(
         source_group=BIDSFileGroup(primary=primary),
         output_entities={"subject": "01", "task": "decid"},
+        metadata={
+            "epoch_cleaning": {
+                "reject_trials_by_epoch_mean": True,
+                "epoch_mean_threshold_factor": 0.5,
+            }
+        },
         condition_a_slope=np.full(shape, 1.0, dtype=np.float64),
         condition_a_intercept=np.full(shape, 2.0, dtype=np.float64),
         condition_a_r_value=np.full(shape, 0.8, dtype=np.float64),
@@ -118,6 +124,12 @@ def _make_result(tmp_path: Path) -> RegressionProcessingResult:
             "units": "s",
         },
         trial_activity_summary_label="Mean activity (trigger to response)",
+        epoch_cleaning_audit={
+            "excluded_features": {"A2": "trial_mean_spread"},
+            "nan_masked_trial_feature_pairs": {"A1": [1]},
+            "fully_masked_trials_a": [1],
+            "fully_masked_trials_b": [],
+        },
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
         condition_a_stats_valid=True,
@@ -159,6 +171,7 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
             result.condition_b_trial_activity_summary_values,
         )
         assert fh["trial_activity_summary"]["kind"].asstr()[()] == "anchor_to_response_mean"
+        assert fh["meta"]["epoch_cleaning_audit_json"].asstr()[()] != ""
         np.testing.assert_allclose(
             fh["scatter"]["condition_a_epoch_means"][:],
             result.condition_a_epoch_means,
@@ -189,6 +202,7 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
     assert loaded.activity_baseline_scope == "global"
     assert loaded.activity_baseline_remove_outlier_trial_means is True
     assert loaded.trial_activity_summary_missing_response_policy == "clamp_to_epoch"
+    assert loaded.epoch_cleaning_audit == result.epoch_cleaning_audit
 
 
 def test_writer_outputs_matlab(tmp_path: Path) -> None:
@@ -218,6 +232,7 @@ def test_writer_outputs_matlab(tmp_path: Path) -> None:
     )
     np.testing.assert_allclose(loaded.condition_a_epoch_means, result.condition_a_epoch_means)
     np.testing.assert_allclose(loaded.condition_b_epoch_means, result.condition_b_epoch_means)
+    assert loaded.epoch_cleaning_audit == result.epoch_cleaning_audit
 
 
 def test_loader_falls_back_to_legacy_epoch_means_for_trial_activity_summary(tmp_path: Path) -> None:

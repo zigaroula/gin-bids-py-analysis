@@ -100,6 +100,27 @@ class _SlopeResolverWithMetadata:
         return out
 
 
+class _LabelOnlyResolver:
+    def __init__(self, labels: list[str]) -> None:
+        self._labels = labels
+
+    def resolve_trials(self, group, ieeg_file, anchor_events):
+        del group
+        out = []
+        for index, event in enumerate(anchor_events):
+            out.append(
+                ResolvedTrial(
+                    source_file=ieeg_file,
+                    anchor_event_index=index,
+                    anchor_event_code=event.code,
+                    anchor_onset_s=event.onset_s,
+                    anchor_duration_s=event.duration_s,
+                    label=self._labels[index],
+                )
+            )
+        return out
+
+
 def test_process_group_computes_condition_slopes(tmp_path: Path) -> None:
     ieeg_file = _make_bids_file(
         tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
@@ -748,7 +769,7 @@ def test_process_group_trial_activity_summary_anchor_to_response_from_table_colu
     assert result.condition_b_trial_count == 3
 
 
-def test_process_group_trial_activity_summary_anchor_to_response_drop_trial_policy(
+def test_process_group_trial_activity_summary_anchor_to_response_nan_if_missing_policy(
     tmp_path: Path,
 ) -> None:
     ieeg_file = _make_bids_file(
@@ -801,7 +822,7 @@ def test_process_group_trial_activity_summary_anchor_to_response_drop_trial_poli
             p_value_correction_method="none",
             trial_activity_summary={
                 "kind": "anchor_to_response_mean",
-                "missing_response_policy": "drop_trial",
+                "missing_response_policy": "nan_if_missing",
                 "response": {
                     "source": "table_column",
                     "column": "rt_ms",
@@ -822,7 +843,84 @@ def test_process_group_trial_activity_summary_anchor_to_response_drop_trial_poli
         np.array([[3.0, 2.0, np.nan]], dtype=np.float64),
         equal_nan=True,
     )
-    assert result.trial_activity_summary_missing_response_policy == "drop_trial"
+    assert result.trial_activity_summary_missing_response_policy == "nan_if_missing"
+
+
+def test_process_group_epoch_cleaning_promotes_fully_masked_trial_to_exclusion(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 100), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
+    predictors = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
+    values = [1.0, 1.0, 30.0, 2.0, 3.0, 3.0]
+
+    for onset, value in zip(onsets, values):
+        start = int(onset * sfreq)
+        data[0, start : start + 3] = value
+
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * len(onsets),
+        description=["Stimulus/S  10"] * len(onsets),
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    result = RegressionProcessing(
+        RegressionParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+                tmax_s=0.2,
+                condition_a="accepted",
+                condition_b="rejected",
+                predictor="predictor_value",
+                min_trials_per_condition=3,
+                p_value_correction_method="none",
+                epoch_cleaning={
+                    "reject_trials_by_epoch_mean": True,
+                    "epoch_mean_threshold_factor": 0.5,
+                },
+        ),
+        resolver=_SlopeResolver(labels, predictors),
+    ).process_group(BIDSFileGroup(primary=ieeg_file))
+
+    assert result.condition_a_trial_count == 2
+    assert result.condition_b_trial_count == 3
+    assert result.epoch_cleaning_audit["nan_masked_trial_feature_pairs"] == {"A1": [1]}
+    assert result.epoch_cleaning_audit["fully_masked_trials_a"] == [1]
+    assert result.epoch_cleaning_audit["fully_masked_trials_b"] == []
+    assert result.excluded_channels == {}
+    assert result.excluded_trial_channel_pairs == {"A1": [1]}
+    np.testing.assert_allclose(
+        result.condition_a_predictor_raw_values,
+        np.array([1.0, 3.0], dtype=np.float64),
+    )
+    np.testing.assert_allclose(
+        result.condition_a_predictor_transformed_values,
+        np.array([1.0, 3.0], dtype=np.float64),
+    )
+    np.testing.assert_allclose(
+        result.condition_a_predictor_values,
+        np.array([1.0, 3.0], dtype=np.float64),
+    )
+    assert any(
+        (not trial.keep) and trial.exclusion_reason == "epoch_cleaning_all_features_nan"
+        for trial in result.resolved_trials
+    )
 
 
 def test_process_group_trial_activity_summary_anchor_to_response_from_annotations(

@@ -415,40 +415,72 @@ class PlotPanel(QWidget):
         epochs_b = result.condition_b_epochs
         n_a = epochs_a.shape[0] if epochs_a.ndim == 3 else 0
         n_b = epochs_b.shape[0] if epochs_b.ndim == 3 else 0
+        shown_a = 0
+        shown_b = 0
+        masked_a = 0
+        masked_b = 0
         if n_a == 0 and n_b == 0:
             ax.text(0.5, 0.5, "No epoch data", transform=ax.transAxes, ha="center", va="center", color="gray", fontsize=10)
         else:
             rows_a = epochs_a[:, channel_idx, :] if n_a > 0 else np.empty((0, len(t)))
             rows_b = epochs_b[:, channel_idx, :] if n_b > 0 else np.empty((0, len(t)))
-            matrix = np.concatenate([rows_a, rows_b], axis=0)
-            vcenter = float(np.nanmean(matrix))
-            vrange = float(np.nanpercentile(np.abs(matrix - vcenter), 99)) or 1.0
-            im = ax.imshow(
-                matrix,
-                aspect="auto",
-                origin="upper",
-                cmap="jet",
-                vmin=vcenter - vrange,
-                vmax=vcenter + vrange,
-                extent=[t[0], t[-1], n_a + n_b - 0.5, -0.5],
-                interpolation="nearest",
-            )
-            self._fig_matrix.colorbar(im, ax=ax, location="right", shrink=0.8)
-            if n_a > 0:
-                ax.axhline(n_a - 0.5, color="white", linewidth=1.5, linestyle="-")
+            rows_a, _ = _filter_matrix_rows(rows_a)
+            rows_b, _ = _filter_matrix_rows(rows_b)
+            shown_a = int(rows_a.shape[0])
+            shown_b = int(rows_b.shape[0])
+            masked_a = int(n_a - shown_a)
+            masked_b = int(n_b - shown_b)
+            if shown_a == 0 and shown_b == 0:
+                ax.text(
+                    0.5,
+                    0.5,
+                    "No finite trial data for selected feature",
+                    transform=ax.transAxes,
+                    ha="center",
+                    va="center",
+                    color="gray",
+                    fontsize=10,
+                )
+            else:
+                matrix = np.concatenate([rows_a, rows_b], axis=0)
+                vcenter = float(np.nanmean(matrix))
+                vrange = float(np.nanpercentile(np.abs(matrix - vcenter), 99)) or 1.0
+                im = ax.imshow(
+                    matrix,
+                    aspect="auto",
+                    origin="upper",
+                    cmap="jet",
+                    vmin=vcenter - vrange,
+                    vmax=vcenter + vrange,
+                    extent=[t[0], t[-1], shown_a + shown_b - 0.5, -0.5],
+                    interpolation="nearest",
+                )
+                self._fig_matrix.colorbar(im, ax=ax, location="right", shrink=0.8)
+                if shown_a > 0 and shown_b > 0:
+                    ax.axhline(shown_a - 0.5, color="white", linewidth=1.5, linestyle="-")
             ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
             y_ticks = []
             y_labels = []
-            if n_a > 0:
-                y_ticks.append(n_a / 2 - 0.5)
+            if shown_a > 0:
+                y_ticks.append(shown_a / 2 - 0.5)
                 y_labels.append(result.condition_a)
-            if n_b > 0:
-                y_ticks.append(n_a + n_b / 2 - 0.5)
+            if shown_b > 0:
+                y_ticks.append(shown_a + shown_b / 2 - 0.5)
                 y_labels.append(result.condition_b)
             ax.set_yticks(y_ticks)
             ax.set_yticklabels(y_labels, fontsize=8)
         ax.set_xlabel("Time (s)")
         ax.set_title(f"{ch_label}  —  trials ({n_a} / {n_b})", fontsize=9)
+        ax.set_title(
+            _trial_matrix_title(
+                ch_label=ch_label,
+                shown_a=shown_a,
+                shown_b=shown_b,
+                masked_a=masked_a,
+                masked_b=masked_b,
+            ),
+            fontsize=9,
+        )
         self._canvas_matrix.draw_idle()
 
     def _draw_scatter_plot(
@@ -777,6 +809,32 @@ def _predictor_axis_label(predictor: str, predictor_zscore: str) -> str:
 
 def _is_activity_zscore_enabled(activity_zscore: str) -> bool:
     return str(activity_zscore).strip().lower() in {"baseline", "across_trials"}
+
+
+def _filter_matrix_rows(rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    arr = np.asarray(rows, dtype=np.float64)
+    if arr.ndim != 2:
+        raise ValueError("rows must be 2-D (n_rows, n_times).")
+    if arr.shape[0] == 0:
+        return arr, np.zeros((0,), dtype=bool)
+    keep = np.any(np.isfinite(arr), axis=1)
+    return arr[keep], keep
+
+
+def _trial_matrix_title(
+    *,
+    ch_label: str,
+    shown_a: int,
+    shown_b: int,
+    masked_a: int,
+    masked_b: int,
+) -> str:
+    if masked_a > 0 or masked_b > 0:
+        return (
+            f"{ch_label} - trials shown ({shown_a} / {shown_b}), "
+            f"masked ({masked_a} / {masked_b})"
+        )
+    return f"{ch_label} - trials ({shown_a} / {shown_b})"
 
 
 class _ScatterRegressionResult:

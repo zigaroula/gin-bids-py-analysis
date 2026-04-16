@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import json
 from typing import Any, Sequence
+import warnings
 
 import numpy as np
 from mne import Annotations
@@ -27,11 +28,23 @@ from gin_bids_py_analysis.processing.utils.epoching import (
     temporal_bin_epochs_by_n_bins,
     window_samples as compute_window_samples,
 )
+from gin_bids_py_analysis.processing.utils.epoch_quality import (
+    apply_channel_exclusions,
+    apply_trial_nan_mask,
+    detect_outlier_trial_channel_pairs_by_max,
+    detect_outlier_trial_channel_pairs_by_mean,
+    reject_channels_by_nan_trial_ratio,
+    reject_channels_by_trial_max_spread,
+    reject_channels_by_trial_mean_spread,
+)
 from gin_bids_py_analysis.processing.utils.events import (
     AnnotationEvent,
     parse_annotation_description,
 )
-from gin_bids_py_analysis.processing.utils.statistics import zscore_activity_by_baseline
+from gin_bids_py_analysis.processing.utils.statistics import (
+    compute_baseline_outlier_mask,
+    zscore_activity_by_baseline,
+)
 from gin_bids_py_analysis.processing.utils.trial_annotator import TrialWindowAnnotator
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
@@ -279,6 +292,8 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
         ) = self._prepare_epochs_before_activity_zscore(
             epochs_a=epochs_a_array,
             epochs_b=epochs_b_array,
+            kept_trials_a=kept_trials_a,
+            kept_trials_b=kept_trials_b,
             feature_names=feature_names,
             feature_indices=feature_indices,
             time_axis_s=time_axis_ref,
@@ -291,6 +306,17 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             epochs_b=epochs_b_array,
             time_axis_s=time_axis_ref,
             state=state,
+        )
+
+        self._annotate_baseline_outlier_metadata(
+            kept_trials_a=kept_trials_a,
+            kept_trials_b=kept_trials_b,
+            feature_names=feature_names,
+            state=state,
+        )
+        self._annotate_activity_summary_skip_reasons(
+            kept_trials_a=kept_trials_a,
+            kept_trials_b=kept_trials_b,
         )
 
         time_axis_eval = time_axis_ref
@@ -377,7 +403,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
         return self._compute_and_build_result(context)
 
     def _initialize_pipeline_state(self) -> dict[str, Any]:
-        return {}
+        return {"epoch_cleaning_audit": _empty_epoch_cleaning_audit()}
 
     @abstractmethod
     def _normalize_trials(
@@ -406,13 +432,151 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
         *,
         epochs_a: np.ndarray,
         epochs_b: np.ndarray,
+        kept_trials_a: list[ResolvedTrial],
+        kept_trials_b: list[ResolvedTrial],
         feature_names: list[str],
         feature_indices: list[np.ndarray] | None,
         time_axis_s: np.ndarray,
         state: dict[str, Any],
         atlas_mode: bool,
     ) -> tuple[np.ndarray, np.ndarray, list[str], list[np.ndarray] | None]:
-        del time_axis_s, state, atlas_mode
+        del time_axis_s, atlas_mode
+        cfg = self.params.epoch_cleaning
+        audit = _empty_epoch_cleaning_audit()
+
+        any_level_a = cfg.reject_trials_by_epoch_mean or cfg.reject_trials_by_epoch_max
+        any_level_b = (
+            cfg.reject_by_trial_mean_spread
+            or cfg.reject_by_trial_max_spread
+            or cfg.max_nan_trial_ratio is not None
+        )
+        if not (any_level_a or any_level_b):
+            state["epoch_cleaning_audit"] = audit
+            return epochs_a, epochs_b, feature_names, feature_indices
+
+        total_trials = int(epochs_a.shape[0] + epochs_b.shape[0])
+        if total_trials <= 0:
+            state["epoch_cleaning_audit"] = audit
+            return epochs_a, epochs_b, feature_names, feature_indices
+
+        n_a = int(epochs_a.shape[0])
+        epochs_pooled = np.concatenate([epochs_a, epochs_b], axis=0)
+
+        if any_level_a:
+            nan_tf_mask = np.zeros((epochs_pooled.shape[0], len(feature_names)), dtype=bool)
+            if cfg.reject_trials_by_epoch_mean:
+                nan_tf_mask |= detect_outlier_trial_channel_pairs_by_mean(
+                    epochs_pooled,
+                    threshold_factor=cfg.epoch_mean_threshold_factor,
+                )
+            if cfg.reject_trials_by_epoch_max:
+                nan_tf_mask |= detect_outlier_trial_channel_pairs_by_max(
+                    epochs_pooled,
+                    threshold_factor=cfg.epoch_max_threshold_factor,
+                )
+            if np.any(nan_tf_mask):
+                epochs_pooled = apply_trial_nan_mask(epochs_pooled, nan_tf_mask)
+                for feature_idx, feature_name in enumerate(feature_names):
+                    masked_trials = [int(idx) for idx in np.flatnonzero(nan_tf_mask[:, feature_idx])]
+                    if masked_trials:
+                        audit["nan_masked_trial_feature_pairs"][str(feature_name)] = masked_trials
+                for pooled_idx in range(n_a):
+                    flagged = [
+                        feature_names[fi] for fi in np.flatnonzero(nan_tf_mask[pooled_idx])
+                    ]
+                    if flagged:
+                        kept_trials_a[pooled_idx].metadata["nan_masked_features"] = flagged
+                for j in range(len(kept_trials_b)):
+                    pooled_idx = n_a + j
+                    flagged = [
+                        feature_names[fi] for fi in np.flatnonzero(nan_tf_mask[pooled_idx])
+                    ]
+                    if flagged:
+                        kept_trials_b[j].metadata["nan_masked_features"] = flagged
+
+        if any_level_b and feature_names:
+            reason_masks: dict[str, np.ndarray] = {}
+            feature_exclusion_mask = np.zeros(len(feature_names), dtype=bool)
+            if cfg.reject_by_trial_mean_spread:
+                mask = reject_channels_by_trial_mean_spread(
+                    epochs_pooled,
+                    threshold_factor=cfg.trial_mean_spread_threshold,
+                )
+                feature_exclusion_mask |= mask
+                reason_masks["trial_mean_spread"] = mask
+            if cfg.reject_by_trial_max_spread:
+                mask = reject_channels_by_trial_max_spread(
+                    epochs_pooled,
+                    threshold_factor=cfg.trial_max_spread_threshold,
+                )
+                feature_exclusion_mask |= mask
+                reason_masks["trial_max_spread"] = mask
+            if cfg.max_nan_trial_ratio is not None:
+                mask = reject_channels_by_nan_trial_ratio(
+                    epochs_pooled,
+                    max_ratio=cfg.max_nan_trial_ratio,
+                )
+                feature_exclusion_mask |= mask
+                reason_masks["nan_trial_ratio"] = mask
+            if np.any(feature_exclusion_mask):
+                for feature_idx, feature_name in enumerate(feature_names):
+                    if not feature_exclusion_mask[feature_idx]:
+                        continue
+                    reasons = [
+                        reason
+                        for reason, mask in reason_masks.items()
+                        if bool(mask[feature_idx])
+                    ]
+                    audit["excluded_features"][str(feature_name)] = ",".join(reasons)
+                epochs_pooled, feature_names, _ = apply_channel_exclusions(
+                    epochs_pooled,
+                    list(feature_names),
+                    feature_exclusion_mask,
+                )
+                if feature_indices is not None:
+                    feature_indices = [
+                        indices
+                        for indices, excluded in zip(feature_indices, feature_exclusion_mask)
+                        if not excluded
+                    ]
+
+        if epochs_pooled.ndim == 3 and epochs_pooled.shape[1] > 0:
+            fully_masked_trials = np.all(~np.isfinite(epochs_pooled), axis=(1, 2))
+            audit["fully_masked_trials_a"] = [
+                int(idx) for idx in np.flatnonzero(fully_masked_trials[:n_a])
+            ]
+            audit["fully_masked_trials_b"] = [
+                int(idx) for idx in np.flatnonzero(fully_masked_trials[n_a:])
+            ]
+            if np.any(fully_masked_trials[:n_a]):
+                for idx in audit["fully_masked_trials_a"]:
+                    kept_trials_a[idx].keep = False
+                    kept_trials_a[idx].exclusion_reason = "epoch_cleaning_all_features_nan"
+            if np.any(fully_masked_trials[n_a:]):
+                for idx in audit["fully_masked_trials_b"]:
+                    kept_trials_b[idx].keep = False
+                    kept_trials_b[idx].exclusion_reason = "epoch_cleaning_all_features_nan"
+            if np.any(fully_masked_trials[:n_a]):
+                keep_mask_a = ~fully_masked_trials[:n_a]
+                epochs_a = epochs_pooled[:n_a][keep_mask_a]
+                kept_trials_a[:] = [
+                    trial for trial, keep in zip(kept_trials_a, keep_mask_a) if bool(keep)
+                ]
+            else:
+                epochs_a = epochs_pooled[:n_a]
+            if np.any(fully_masked_trials[n_a:]):
+                keep_mask_b = ~fully_masked_trials[n_a:]
+                epochs_b = epochs_pooled[n_a:][keep_mask_b]
+                kept_trials_b[:] = [
+                    trial for trial, keep in zip(kept_trials_b, keep_mask_b) if bool(keep)
+                ]
+            else:
+                epochs_b = epochs_pooled[n_a:]
+        else:
+            epochs_a = epochs_pooled[:n_a]
+            epochs_b = epochs_pooled[n_a:]
+
+        state["epoch_cleaning_audit"] = audit
         return epochs_a, epochs_b, feature_names, feature_indices
 
     def _apply_activity_zscore(
@@ -423,9 +587,19 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
         time_axis_s: np.ndarray,
         state: dict[str, Any],
     ) -> tuple[np.ndarray, np.ndarray]:
-        del state
         if self.params.activity_zscore != "baseline":
             return epochs_a, epochs_b
+        if self.params.activity_baseline_remove_outlier_trial_means:
+            mask_a, mask_b = compute_baseline_outlier_mask(
+                epochs_a,
+                epochs_b,
+                time_axis_s,
+                baseline_tmin_s=self.params.activity_baseline_tmin_s,
+                baseline_tmax_s=self.params.activity_baseline_tmax_s,
+                baseline_scope=self.params.activity_baseline_scope,
+                remove_outlier_trial_means=True,
+            )
+            state["baseline_outlier_audit"] = {"mask_a": mask_a, "mask_b": mask_b}
         return zscore_activity_by_baseline(
             epochs_a,
             epochs_b,
@@ -435,6 +609,60 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             baseline_scope=self.params.activity_baseline_scope,
             remove_outlier_trial_means=self.params.activity_baseline_remove_outlier_trial_means,
         )
+
+    def _annotate_baseline_outlier_metadata(
+        self,
+        *,
+        kept_trials_a: list[ResolvedTrial],
+        kept_trials_b: list[ResolvedTrial],
+        feature_names: list[str],
+        state: dict[str, Any],
+    ) -> None:
+        """Annotate trial metadata with the features whose baseline mean was outlier-removed."""
+        audit = state.get("baseline_outlier_audit", {})
+        if not audit:
+            return
+        for trials, mask in (
+            (kept_trials_a, audit.get("mask_a")),
+            (kept_trials_b, audit.get("mask_b")),
+        ):
+            if mask is None or not isinstance(mask, np.ndarray):
+                continue
+            for trial_idx, trial in enumerate(trials):
+                if trial_idx >= mask.shape[0]:
+                    break
+                flagged = [
+                    feature_names[fi]
+                    for fi in np.flatnonzero(mask[trial_idx])
+                    if fi < len(feature_names)
+                ]
+                if flagged:
+                    trial.metadata["baseline_outlier_masked_features"] = flagged
+
+    def _annotate_activity_summary_skip_reasons(
+        self,
+        *,
+        kept_trials_a: list[ResolvedTrial],
+        kept_trials_b: list[ResolvedTrial],
+    ) -> None:
+        """Annotate trial metadata with the reason their activity summary value is NaN."""
+        if self.params.trial_activity_summary.kind != "anchor_to_response_mean":
+            return
+        summary_window_end_s = float(self.params.tmax_s)
+        policy = (
+            str(self.params.trial_activity_summary.missing_response_policy).strip().lower()
+        )
+        for trials in (kept_trials_a, kept_trials_b):
+            for trial in trials:
+                rt_s = _to_float_or_nan(
+                    trial.metadata.get("trial_activity_summary_response_time_s")
+                )
+                if not np.isfinite(rt_s):
+                    trial.metadata["activity_summary_skip_reason"] = "missing_response_time"
+                elif rt_s <= 0.0:
+                    trial.metadata["activity_summary_skip_reason"] = "response_before_anchor"
+                elif rt_s > summary_window_end_s and policy != "clamp_to_epoch":
+                    trial.metadata["activity_summary_skip_reason"] = "response_out_of_window"
 
     def _attach_trial_activity_summary_metadata(
         self,
@@ -550,7 +778,9 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
         n_features: int,
     ) -> np.ndarray:
         if epochs.ndim == 3 and epochs.size > 0:
-            return np.nanmean(epochs, axis=2, dtype=np.float64).T.astype(np.float64)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                return np.nanmean(epochs, axis=2, dtype=np.float64).T.astype(np.float64)
         return np.empty((n_features, 0), dtype=np.float64)
 
     def _compute_trial_activity_summary_values(
@@ -595,11 +825,13 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             )
             if not np.any(time_mask):
                 continue
-            summary[trial_idx, :] = np.nanmean(
-                epochs[trial_idx][:, time_mask],
-                axis=1,
-                dtype=np.float64,
-            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                summary[trial_idx, :] = np.nanmean(
+                    epochs[trial_idx][:, time_mask],
+                    axis=1,
+                    dtype=np.float64,
+                )
 
         return summary.T.astype(np.float64)
 
@@ -661,6 +893,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             ),
             "trial_activity_summary_source": self._serialize_trial_activity_summary_source(),
             "trial_activity_summary_label": self._trial_activity_summary_label(),
+            "epoch_cleaning": json.loads(self.params.epoch_cleaning.model_dump_json()),
         }
 
     def _build_pipeline_metadata(self, *, state: dict[str, Any]) -> dict[str, Any]:
@@ -711,6 +944,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             ),
             "trial_activity_summary_source": self._serialize_trial_activity_summary_source(),
             "trial_activity_summary_label": self._trial_activity_summary_label(),
+            "epoch_cleaning_audit": dict(context.state.get("epoch_cleaning_audit", {})),
             "condition_a_epochs": context.epochs_a,
             "condition_b_epochs": context.epochs_b,
             "condition_a_trial_activity_summary_values": self._compute_trial_activity_summary_values(
@@ -779,3 +1013,12 @@ def _annotation_matches_event_code(description: str, event_code: str) -> bool:
     if parsed_code is not None:
         candidates.add(str(parsed_code).strip())
     return target in candidates
+
+
+def _empty_epoch_cleaning_audit() -> dict[str, object]:
+    return {
+        "excluded_features": {},
+        "nan_masked_trial_feature_pairs": {},
+        "fully_masked_trials_a": [],
+        "fully_masked_trials_b": [],
+    }

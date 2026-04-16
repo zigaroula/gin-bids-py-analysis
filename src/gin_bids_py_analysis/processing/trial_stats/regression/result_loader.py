@@ -25,13 +25,14 @@ from gin_bids_py_analysis.processing.utils.matlab import (
     matlab_safe_name,
 )
 
+from ..params import normalize_trial_activity_summary_missing_response_policy
 from .result import RegressionProcessingResult
 
 _VALID_PREDICTOR_ZSCORE_MODES = frozenset({"none", "condition", "global"})
 _VALID_BASELINE_SCOPES = frozenset({"trial", "condition", "global"})
 _VALID_TRIAL_ACTIVITY_SUMMARY_KINDS = frozenset({"epoch_mean", "anchor_to_response_mean"})
 _VALID_TRIAL_ACTIVITY_SUMMARY_MISSING_RESPONSE_POLICIES = frozenset(
-    {"clamp_to_epoch", "drop_trial"}
+    {"clamp_to_epoch", "nan_if_missing"}
 )
 
 
@@ -191,9 +192,9 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
         trial_activity_summary_missing_response_policy = _validated_trial_activity_summary_missing_response_policy(
             str_scalar(
             dataset_or_none(fh, "meta/trial_activity_summary_missing_response_policy"),
-            default="drop_trial",
+            default="nan_if_missing",
             )
-            or "drop_trial",
+            or "nan_if_missing",
             path.name,
         )
         trial_activity_summary_source_raw = str_scalar(
@@ -208,6 +209,12 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
             )
         except json.JSONDecodeError:
             trial_activity_summary_source = {}
+        epoch_cleaning = _load_json_mapping(
+            str_scalar(dataset_or_none(fh, "meta/epoch_cleaning_json"), default="{}")
+        )
+        epoch_cleaning_audit = _load_json_mapping(
+            str_scalar(dataset_or_none(fh, "meta/epoch_cleaning_audit_json"), default="{}")
+        )
         trial_activity_summary_label = str_scalar(
             dataset_or_none(fh, "meta/trial_activity_summary_label"),
             default="Epoch mean activity",
@@ -335,7 +342,7 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
                 else np.empty((n_features, 0), dtype=np.float64)
             )
             trial_activity_summary_kind = "epoch_mean"
-            trial_activity_summary_missing_response_policy = "drop_trial"
+            trial_activity_summary_missing_response_policy = "nan_if_missing"
             trial_activity_summary_source = {}
             trial_activity_summary_label = "Epoch mean activity"
 
@@ -364,6 +371,8 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
             "trial_activity_summary_missing_response_policy": trial_activity_summary_missing_response_policy,
             "trial_activity_summary_source": trial_activity_summary_source,
             "trial_activity_summary_label": trial_activity_summary_label,
+            "epoch_cleaning": epoch_cleaning,
+            "epoch_cleaning_audit": epoch_cleaning_audit,
         },
         condition_a_slope=condition_a_slope,
         condition_a_intercept=condition_a_intercept,
@@ -418,6 +427,7 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
         trial_activity_summary_missing_response_policy=trial_activity_summary_missing_response_policy,
         trial_activity_summary_source=trial_activity_summary_source,
         trial_activity_summary_label=trial_activity_summary_label,
+        epoch_cleaning_audit=epoch_cleaning_audit,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,
         condition_a_stats_valid=condition_a_stats_valid,
@@ -566,7 +576,7 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
     condition_a_epoch_means = _mat_feature_trial_2d(scatter, "condition_a_epoch_means")
     condition_b_epoch_means = _mat_feature_trial_2d(scatter, "condition_b_epoch_means")
     trial_activity_summary_kind = "epoch_mean"
-    trial_activity_summary_missing_response_policy = "drop_trial"
+    trial_activity_summary_missing_response_policy = "nan_if_missing"
     trial_activity_summary_source = {}
     trial_activity_summary_label = "Epoch mean activity"
     trial_activity_summary = getattr(data, "trial_activity_summary", None)
@@ -616,7 +626,7 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
         condition_a_trial_activity_summary_values = condition_a_epoch_means
         condition_b_trial_activity_summary_values = condition_b_epoch_means
         trial_activity_summary_kind = "epoch_mean"
-        trial_activity_summary_missing_response_policy = "drop_trial"
+        trial_activity_summary_missing_response_policy = "nan_if_missing"
         trial_activity_summary_source = {}
         trial_activity_summary_label = "Epoch mean activity"
 
@@ -649,9 +659,9 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
         _validated_trial_activity_summary_missing_response_policy(
             mat_str(
                 getattr(meta, "trial_activity_summary_missing_response_policy", None),
-                default="drop_trial",
+                default="nan_if_missing",
             )
-            or "drop_trial",
+            or "nan_if_missing",
             path.name,
         )
     )
@@ -667,6 +677,12 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
         )
     except json.JSONDecodeError:
         trial_activity_summary_source = {}
+    epoch_cleaning = _load_json_mapping(
+        mat_str(getattr(meta, "epoch_cleaning_json", None), default="{}")
+    )
+    epoch_cleaning_audit = _load_json_mapping(
+        mat_str(getattr(meta, "epoch_cleaning_audit_json", None), default="{}")
+    )
     trial_activity_summary_label = mat_str(
         getattr(meta, "trial_activity_summary_label", None),
         default="Epoch mean activity",
@@ -721,6 +737,8 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
             "trial_activity_summary_missing_response_policy": trial_activity_summary_missing_response_policy,
             "trial_activity_summary_source": trial_activity_summary_source,
             "trial_activity_summary_label": trial_activity_summary_label,
+            "epoch_cleaning": epoch_cleaning,
+            "epoch_cleaning_audit": epoch_cleaning_audit,
         },
         condition_a_slope=condition_a_slope,
         condition_a_intercept=condition_a_intercept,
@@ -775,6 +793,7 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
         trial_activity_summary_missing_response_policy=trial_activity_summary_missing_response_policy,
         trial_activity_summary_source=trial_activity_summary_source,
         trial_activity_summary_label=trial_activity_summary_label,
+        epoch_cleaning_audit=epoch_cleaning_audit,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,
         condition_a_stats_valid=condition_a_stats_valid,
@@ -830,10 +849,23 @@ def _validated_trial_activity_summary_missing_response_policy(
     value: str,
     path_name: str,
 ) -> str:
-    cleaned = str(value).strip().lower() or "drop_trial"
+    cleaned = str(value).strip().lower() or "nan_if_missing"
     if cleaned not in _VALID_TRIAL_ACTIVITY_SUMMARY_MISSING_RESPONSE_POLICIES:
         raise ValueError(
             f"{path_name}: unsupported trial_activity_summary_missing_response_policy="
-            f"{value!r}. Valid values are 'clamp_to_epoch' and 'drop_trial'."
+            f"{value!r}. Valid values are 'clamp_to_epoch' and 'nan_if_missing'."
         )
-    return cleaned
+    try:
+        return normalize_trial_activity_summary_missing_response_policy(cleaned)
+    except ValueError as exc:
+        raise ValueError(f"{path_name}: {exc}") from exc
+
+
+def _load_json_mapping(raw_value: str) -> dict[str, object]:
+    try:
+        loaded = json.loads(raw_value) if raw_value else {}
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(loaded, dict):
+        return {}
+    return {str(key): value for key, value in loaded.items()}

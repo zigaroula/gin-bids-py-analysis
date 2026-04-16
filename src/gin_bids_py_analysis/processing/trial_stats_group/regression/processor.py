@@ -42,6 +42,9 @@ from gin_bids_py_analysis.processing.utils.cluster_permutation import (
     compute_mne_cluster_permutation,
     find_temporal_clusters,
 )
+from gin_bids_py_analysis.processing.trial_stats.params import (
+    normalize_trial_activity_summary_missing_response_policy,
+)
 
 from ..processor import (
     BaseRawTrialStatsData,
@@ -885,8 +888,10 @@ def _build_signature(
         activity_baseline_tmin_s=float(raw.activity_baseline_tmin_s),
         activity_baseline_tmax_s=float(raw.activity_baseline_tmax_s),
         trial_activity_summary_kind=str(raw.trial_activity_summary_kind or "epoch_mean"),
-        trial_activity_summary_missing_response_policy=str(
-            raw.trial_activity_summary_missing_response_policy or "drop_trial"
+        trial_activity_summary_missing_response_policy=(
+            normalize_trial_activity_summary_missing_response_policy(
+                raw.trial_activity_summary_missing_response_policy or "nan_if_missing"
+            )
         ),
         trial_activity_summary_source_json=json.dumps(
             raw.trial_activity_summary_source,
@@ -1015,7 +1020,7 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
         )
 
         trial_activity_summary_kind = "epoch_mean"
-        trial_activity_summary_missing_response_policy = "drop_trial"
+        trial_activity_summary_missing_response_policy = "nan_if_missing"
         trial_activity_summary_source: dict[str, str] = {}
         trial_activity_summary_label = "Epoch mean activity"
         if "trial_activity_summary" in fh:
@@ -1034,9 +1039,13 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
                 dataset_or_none(tg, "kind"),
                 default=trial_activity_summary_kind,
             )
-            trial_activity_summary_missing_response_policy = str_scalar(
-                dataset_or_none(tg, "missing_response_policy"),
-                default=trial_activity_summary_missing_response_policy,
+            trial_activity_summary_missing_response_policy = (
+                normalize_trial_activity_summary_missing_response_policy(
+                    str_scalar(
+                        dataset_or_none(tg, "missing_response_policy"),
+                        default=trial_activity_summary_missing_response_policy,
+                    )
+                )
             )
             trial_activity_summary_source_raw = str_scalar(
                 dataset_or_none(tg, "source_json"),
@@ -1321,7 +1330,7 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
             condition_b_epoch_means = np.empty((n_ch, 0), dtype=np.float64)
 
         trial_activity_summary_kind = "epoch_mean"
-        trial_activity_summary_missing_response_policy = "drop_trial"
+        trial_activity_summary_missing_response_policy = "nan_if_missing"
         trial_activity_summary_source: dict[str, str] = {}
         trial_activity_summary_label = "Epoch mean activity"
         trial_activity_summary = getattr(data, "trial_activity_summary", None)
@@ -1338,9 +1347,13 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
                 getattr(trial_activity_summary, "kind", None),
                 default=trial_activity_summary_kind,
             )
-            trial_activity_summary_missing_response_policy = mat_str(
-                getattr(trial_activity_summary, "missing_response_policy", None),
-                default=trial_activity_summary_missing_response_policy,
+            trial_activity_summary_missing_response_policy = (
+                normalize_trial_activity_summary_missing_response_policy(
+                    mat_str(
+                        getattr(trial_activity_summary, "missing_response_policy", None),
+                        default=trial_activity_summary_missing_response_policy,
+                    )
+                )
             )
             trial_activity_summary_source_raw = mat_str(
                 getattr(trial_activity_summary, "source_json", None),

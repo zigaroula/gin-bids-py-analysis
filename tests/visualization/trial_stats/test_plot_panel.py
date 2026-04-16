@@ -139,6 +139,48 @@ class TestPlotPanel:
 
         assert panel._ax_scatter.get_ylabel() == "Epoch mean activity (z)"
 
+    def test_trial_matrix_hides_rows_that_are_all_nan_for_selected_feature(
+        self,
+        qtbot,
+        synthetic_slope_result,
+    ):
+        n_t = synthetic_slope_result.time_axis_s.size
+        epochs_a = np.ones((3, 4, n_t), dtype=np.float64)
+        epochs_b = np.ones((2, 4, n_t), dtype=np.float64)
+        epochs_a[1, 0, :] = np.nan
+        epochs_b[0, 0, :] = np.nan
+        synthetic_slope_result.condition_a_epochs = epochs_a
+        synthetic_slope_result.condition_b_epochs = epochs_b
+
+        panel = PlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_result, channel_idx=0)
+
+        assert panel._ax_matrix.images[0].get_array().shape == (3, n_t)
+        assert panel._ax_matrix.get_title() == "A1 - trials shown (2 / 1), masked (1 / 1)"
+
+    def test_trial_matrix_shows_placeholder_when_selected_feature_has_no_finite_rows(
+        self,
+        qtbot,
+        synthetic_slope_result,
+    ):
+        n_t = synthetic_slope_result.time_axis_s.size
+        epochs_a = np.ones((2, 4, n_t), dtype=np.float64)
+        epochs_b = np.ones((1, 4, n_t), dtype=np.float64)
+        epochs_a[:, 0, :] = np.nan
+        epochs_b[:, 0, :] = np.nan
+        synthetic_slope_result.condition_a_epochs = epochs_a
+        synthetic_slope_result.condition_b_epochs = epochs_b
+
+        panel = PlotPanel()
+        qtbot.addWidget(panel)
+
+        panel.update_plots(synthetic_slope_result, channel_idx=0)
+
+        assert len(panel._ax_matrix.images) == 0
+        assert panel._ax_matrix.texts[0].get_text() == "No finite trial data for selected feature"
+
     def test_predictor_axis_label_marks_condition_and_global_zscore(self):
         assert _predictor_axis_label("rating", "condition") == "rating (z)"
         assert _predictor_axis_label("rating", "global") == "rating (z)"

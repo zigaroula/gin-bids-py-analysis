@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from .plot_panel import (
     _SCATTER_SUMMARY_TARGET_BINS,
     _compute_scatter_summary_points,
+    _filter_matrix_rows,
     _fit_scatter_regression,
     _scatter_activity_axis_label,
 )
@@ -788,8 +789,33 @@ class GroupPlotPanel(QWidget):
         n_t = len(time_axis)
         rows_a = np.asarray(rows_a, dtype=np.float64).reshape(-1, n_t)
         rows_b = np.asarray(rows_b, dtype=np.float64).reshape(-1, n_t)
+        labels_a, labels_b = _split_matrix_labels(
+            labels,
+            n_a=rows_a.shape[0],
+            n_b=rows_b.shape[0],
+        )
+        rows_a, keep_a = _filter_matrix_rows(rows_a)
+        rows_b, keep_b = _filter_matrix_rows(rows_b)
+        labels = [label for label, keep in zip(labels_a, keep_a) if bool(keep)] + [
+            label for label, keep in zip(labels_b, keep_b) if bool(keep)
+        ]
         n_a = rows_a.shape[0]
         n_b = rows_b.shape[0]
+        if n_a == 0 and n_b == 0:
+            ax.text(
+                0.5,
+                0.5,
+                "No finite contribution data",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+                color="gray",
+                fontsize=10,
+            )
+            ax.set_title(f"{roi_label}{title_suffix}", fontsize=9)
+            ax.set_xlabel("Time (s)")
+            canvas.draw_idle()
+            return ax
         matrix = np.concatenate([rows_a, rows_b], axis=0)
 
         vcenter = float(np.nanmean(matrix))
@@ -982,19 +1008,25 @@ def _build_matrix_row_labels(
     cond_a_label: str,
     cond_b_label: str,
 ) -> list[str]:
-    raw_labels = list(labels)
-    if len(raw_labels) == n_a + n_b:
-        labels_a = raw_labels[:n_a]
-        labels_b = raw_labels[n_a:]
-    else:
-        labels_a = raw_labels[:n_a]
-        labels_b = raw_labels[:n_b]
+    labels_a, labels_b = _split_matrix_labels(labels, n_a=n_a, n_b=n_b)
 
     return _build_matrix_block_row_labels(labels_a, n_a, cond_a_label) + _build_matrix_block_row_labels(
         labels_b,
         n_b,
         cond_b_label,
     )
+
+
+def _split_matrix_labels(
+    labels: list[str],
+    *,
+    n_a: int,
+    n_b: int,
+) -> tuple[list[str], list[str]]:
+    raw_labels = list(labels)
+    if len(raw_labels) == n_a + n_b:
+        return raw_labels[:n_a], raw_labels[n_a:]
+    return raw_labels[:n_a], raw_labels[:n_b]
 
 
 def _build_matrix_block_row_labels(

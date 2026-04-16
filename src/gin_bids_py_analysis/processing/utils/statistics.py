@@ -5,6 +5,7 @@ used by trial_stats and trial_slope_stats processors.
 """
 from __future__ import annotations
 
+import warnings
 from typing import Literal
 
 from mne.stats import bonferroni_correction, fdr_correction
@@ -218,7 +219,9 @@ def _trial_baseline_means(
     arr = np.asarray(epochs, dtype=np.float64)
     if arr.shape[0] == 0:
         return np.empty((0, arr.shape[1]), dtype=np.float64)
-    return np.nanmean(arr[:, :, baseline_mask], axis=2, dtype=np.float64)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        return np.nanmean(arr[:, :, baseline_mask], axis=2, dtype=np.float64)
 
 
 def _baseline_reference_from_trial_means(
@@ -264,6 +267,37 @@ def _apply_feature_reference(
     return out
 
 
+def _outlier_trial_means_mask(trial_means: np.ndarray) -> np.ndarray:
+    """Return a bool mask ``(n_trials, n_features)`` flagging outlier baseline means.
+
+    Uses the same median/MAD criterion as ``_remove_outlier_trial_means`` but
+    returns the mask without modifying any array, so it can be used independently
+    for audit purposes.
+    """
+    arr = np.asarray(trial_means, dtype=np.float64)
+    if arr.ndim != 2 or arr.shape[0] == 0:
+        return np.zeros(arr.shape, dtype=bool)
+
+    mask = np.zeros(arr.shape, dtype=bool)
+    for feature_idx in range(arr.shape[1]):
+        values = arr[:, feature_idx]
+        finite_positions = np.isfinite(values)
+        finite_values = values[finite_positions]
+        if finite_values.size < 3:
+            continue
+        median = float(np.nanmedian(finite_values))
+        mad = float(np.nanmedian(np.abs(finite_values - median)))
+        if not np.isfinite(mad) or mad <= 0.0:
+            continue
+        scaled_mad = 1.4826 * mad
+        threshold = 3.0 * scaled_mad
+        outlier_positions = np.abs(finite_values - median) > threshold
+        if np.any(outlier_positions):
+            finite_indices = np.flatnonzero(finite_positions)
+            mask[finite_indices[outlier_positions], feature_idx] = True
+    return mask
+
+
 def _remove_outlier_trial_means(trial_means: np.ndarray) -> np.ndarray:
     """Approximate MATLAB ``rmoutliers`` on per-feature trial means.
 
@@ -273,21 +307,88 @@ def _remove_outlier_trial_means(trial_means: np.ndarray) -> np.ndarray:
     arr = np.asarray(trial_means, dtype=np.float64).copy()
     if arr.ndim != 2 or arr.shape[0] == 0:
         return arr
-
-    for feature_idx in range(arr.shape[1]):
-        values = arr[:, feature_idx]
-        finite_mask = np.isfinite(values)
-        finite_values = values[finite_mask]
-        if finite_values.size < 3:
-            continue
-        median = float(np.nanmedian(finite_values))
-        mad = float(np.nanmedian(np.abs(finite_values - median)))
-        if not np.isfinite(mad) or mad <= 0.0:
-            continue
-        scaled_mad = 1.4826 * mad
-        threshold = 3.0 * scaled_mad
-        outlier_mask = np.abs(finite_values - median) > threshold
-        if np.any(outlier_mask):
-            finite_indices = np.flatnonzero(finite_mask)
-            arr[finite_indices[outlier_mask], feature_idx] = np.nan
+    arr[_outlier_trial_means_mask(arr)] = np.nan
     return arr
+
+
+def compute_baseline_outlier_mask(
+    epochs_a: np.ndarray,
+    epochs_b: np.ndarray,
+    time_axis_s: np.ndarray,
+    *,
+    baseline_tmin_s: float,
+    baseline_tmax_s: float,
+    baseline_scope: Literal["trial", "condition", "global"] = "global",
+    remove_outlier_trial_means: bool = False,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return per-trial outlier masks matching the detection in ``zscore_activity_by_baseline``.
+
+    Parameters
+    ----------
+    epochs_a, epochs_b:
+        3-D epoch arrays ``(n_trials, n_features, n_times)``.
+    time_axis_s:
+        1-D time axis aligned with the last dimension of the epoch arrays.
+    baseline_tmin_s, baseline_tmax_s:
+        Baseline window boundaries (same values as passed to
+        ``zscore_activity_by_baseline``).
+    baseline_scope:
+        Must match the value passed to ``zscore_activity_by_baseline``.
+    remove_outlier_trial_means:
+        Must match the value passed to ``zscore_activity_by_baseline``.
+
+    Returns
+    -------
+    mask_a, mask_b : ndarray[bool]
+        Shape ``(n_trials_a, n_features)`` and ``(n_trials_b, n_features)``.
+        ``True`` = that trial's baseline mean was flagged as an outlier for
+        that feature and was NaN'd before computing the zscore reference.
+        All-False arrays are returned when ``remove_outlier_trial_means`` is
+        ``False`` or ``baseline_scope`` is ``"trial"`` (which has no outlier
+        removal step).
+    """
+    arr_a = np.asarray(epochs_a, dtype=np.float64)
+    arr_b = np.asarray(epochs_b, dtype=np.float64)
+    n_features = arr_a.shape[1] if arr_a.ndim == 3 else 0
+    n_a = arr_a.shape[0] if arr_a.ndim == 3 else 0
+    n_b = arr_b.shape[0] if arr_b.ndim == 3 else 0
+    empty_a = np.zeros((n_a, n_features), dtype=bool)
+    empty_b = np.zeros((n_b, n_features), dtype=bool)
+
+    scope = str(baseline_scope).strip().lower()
+    if not remove_outlier_trial_means or scope == "trial":
+        return empty_a, empty_b
+    if arr_a.ndim != 3 or arr_b.ndim != 3:
+        return empty_a, empty_b
+
+    time_axis = np.asarray(time_axis_s, dtype=np.float64).ravel()
+    baseline_mask = (time_axis >= baseline_tmin_s) & (time_axis <= baseline_tmax_s)
+    if not np.any(baseline_mask):
+        return empty_a, empty_b
+
+    if scope == "condition":
+        mask_a = (
+            _outlier_trial_means_mask(_trial_baseline_means(arr_a, baseline_mask))
+            if n_a > 0
+            else empty_a
+        )
+        mask_b = (
+            _outlier_trial_means_mask(_trial_baseline_means(arr_b, baseline_mask))
+            if n_b > 0
+            else empty_b
+        )
+        return mask_a, mask_b
+
+    if scope == "global":
+        if n_a == 0 and n_b == 0:
+            return empty_a, empty_b
+        parts = [
+            _trial_baseline_means(arr, baseline_mask)
+            for arr, n in ((arr_a, n_a), (arr_b, n_b))
+            if n > 0
+        ]
+        pooled = np.concatenate(parts, axis=0)
+        pooled_mask = _outlier_trial_means_mask(pooled)
+        return pooled_mask[:n_a], pooled_mask[n_a:]
+
+    return empty_a, empty_b

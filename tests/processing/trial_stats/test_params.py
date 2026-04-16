@@ -33,7 +33,7 @@ def test_base_params_accepts_trial_activity_summary_payload() -> None:
         tmax_s=2.0,
         trial_activity_summary={
             "kind": "anchor_to_response_mean",
-            "missing_response_policy": "drop_trial",
+            "missing_response_policy": "nan_if_missing",
             "response": {
                 "source": "table_column",
                 "column": "rt_ms",
@@ -43,7 +43,7 @@ def test_base_params_accepts_trial_activity_summary_payload() -> None:
     )
 
     assert params.trial_activity_summary.kind == "anchor_to_response_mean"
-    assert params.trial_activity_summary.missing_response_policy == "drop_trial"
+    assert params.trial_activity_summary.missing_response_policy == "nan_if_missing"
     assert params.trial_activity_summary.response is not None
     assert params.trial_activity_summary.response.source == "table_column"
 

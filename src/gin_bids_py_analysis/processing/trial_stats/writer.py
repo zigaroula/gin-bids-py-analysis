@@ -113,13 +113,26 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
         return []
 
     def _trial_table_shared_extra_header(self) -> list[str]:
-        return ["trial_activity_summary_response_time_s"]
+        return [
+            "trial_activity_summary_response_time_s",
+            "nan_masked_features",
+            "baseline_outlier_masked_features",
+            "activity_summary_skip_reason",
+        ]
 
     def _trial_table_shared_extra_row(self, trial: object) -> list[object]:
         metadata = getattr(trial, "metadata", {})
         if not isinstance(metadata, dict):
-            return [float("nan")]
-        return [_to_float_or_nan(metadata.get("trial_activity_summary_response_time_s"))]
+            return [float("nan"), "[]", "[]", ""]
+        rt = _to_float_or_nan(metadata.get("trial_activity_summary_response_time_s"))
+        nan_features = metadata.get("nan_masked_features", [])
+        nan_features_str = json.dumps(sorted(nan_features)) if nan_features else "[]"
+        baseline_features = metadata.get("baseline_outlier_masked_features", [])
+        baseline_features_str = (
+            json.dumps(sorted(baseline_features)) if baseline_features else "[]"
+        )
+        skip_reason = str(metadata.get("activity_summary_skip_reason", ""))
+        return [rt, nan_features_str, baseline_features_str, skip_reason]
 
     def _trial_table_suffix_header(self) -> list[str]:
         return [
@@ -264,6 +277,24 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
             dtype=str_dtype,
         )
         meta_grp.create_dataset(
+            "epoch_cleaning_json",
+            data=json.dumps(
+                result.metadata.get("epoch_cleaning", {}),
+                sort_keys=True,
+                ensure_ascii=True,
+            ),
+            dtype=str_dtype,
+        )
+        meta_grp.create_dataset(
+            "epoch_cleaning_audit_json",
+            data=json.dumps(
+                result.epoch_cleaning_audit,
+                sort_keys=True,
+                ensure_ascii=True,
+            ),
+            dtype=str_dtype,
+        )
+        meta_grp.create_dataset(
             "window_samples",
             data=int(result.metadata.get("window_samples", 0)),
         )
@@ -366,6 +397,39 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
                 ],
                 dtype=np.float64,
             ),
+        )
+        trial_grp.create_dataset(
+            "nan_masked_features",
+            data=np.array(
+                [
+                    json.dumps(sorted(trial.metadata.get("nan_masked_features", [])))
+                    for trial in result.resolved_trials
+                ],
+                dtype=object,
+            ),
+            dtype=str_dtype,
+        )
+        trial_grp.create_dataset(
+            "baseline_outlier_masked_features",
+            data=np.array(
+                [
+                    json.dumps(sorted(trial.metadata.get("baseline_outlier_masked_features", [])))
+                    for trial in result.resolved_trials
+                ],
+                dtype=object,
+            ),
+            dtype=str_dtype,
+        )
+        trial_grp.create_dataset(
+            "activity_summary_skip_reason",
+            data=np.array(
+                [
+                    str(trial.metadata.get("activity_summary_skip_reason", ""))
+                    for trial in result.resolved_trials
+                ],
+                dtype=object,
+            ),
+            dtype=str_dtype,
         )
         self._write_hdf5_trial_extra(trial_grp, result, str_dtype)
 
@@ -498,6 +562,20 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
                 )
             ),
             "trial_activity_summary_label": np.str_(result.trial_activity_summary_label),
+            "epoch_cleaning_json": np.str_(
+                json.dumps(
+                    result.metadata.get("epoch_cleaning", {}),
+                    sort_keys=True,
+                    ensure_ascii=True,
+                )
+            ),
+            "epoch_cleaning_audit_json": np.str_(
+                json.dumps(
+                    result.epoch_cleaning_audit,
+                    sort_keys=True,
+                    ensure_ascii=True,
+                )
+            ),
             "window_samples": int(result.metadata.get("window_samples", 0)),
             "effective_n_bins": int(result.metadata.get("effective_n_bins", len(result.time_axis_s))),
             "binning_mode": str(
@@ -553,6 +631,27 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
                     for trial in result.resolved_trials
                 ],
                 dtype=np.float64,
+            ),
+            "nan_masked_features": np.array(
+                [
+                    json.dumps(sorted(trial.metadata.get("nan_masked_features", [])))
+                    for trial in result.resolved_trials
+                ],
+                dtype=object,
+            ),
+            "baseline_outlier_masked_features": np.array(
+                [
+                    json.dumps(sorted(trial.metadata.get("baseline_outlier_masked_features", [])))
+                    for trial in result.resolved_trials
+                ],
+                dtype=object,
+            ),
+            "activity_summary_skip_reason": np.array(
+                [
+                    str(trial.metadata.get("activity_summary_skip_reason", ""))
+                    for trial in result.resolved_trials
+                ],
+                dtype=object,
             ),
         }
         trials_fields.update(self._build_matlab_trial_extra(result))
