@@ -26,7 +26,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.bids.matching import files_matching_entities
+from gin_bids_py_analysis.bids.matching import (
+    entities_compatible,
+    files_matching_entities,
+)
 from gin_bids_py_analysis.processing.utils.condition_rules import (
     ConditionExpr,
     matches_condition_expr,
@@ -68,13 +71,22 @@ class EventFileWindowAnnotator(BaseModel):
     list of row value dicts whose ``onset_column`` falls inside the trial's
     epoch window ``[anchor_onset_s + tmin, anchor_onset_s + tmax]``.
 
+    Only rows whose source file (or row-level entities when present) is
+    compatible with the currently processed ``ieeg_file`` are considered. This
+    mirrors :class:`~gin_bids_py_analysis.processing.utils.trial_resolver.TableTrialResolver`
+    behavior and prevents cross-run / cross-session event leakage when subject
+    groups aggregate multiple recordings.
+
     The list is *always* written (as ``[]`` when no events match) so that
     downstream :class:`EventAnnotationInvalidationRule` instances can rely on
     the key being present.
 
     No filtering is applied here.  The annotator collects all events in the
     window regardless of their content.  Filtering and invalidation is the
-    responsibility of :class:`EventAnnotationInvalidationRule`.
+    responsibility of :class:`EventAnnotationInvalidationRule`. Stored event
+    dicts are enriched with the source event-file BIDS entities (for example
+    ``subject``, ``session``, ``task``, ``run``) when those keys are not
+    already present in the row itself.
     """
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
@@ -147,16 +159,24 @@ class EventFileWindowAnnotator(BaseModel):
         ieeg_channel_names: list[str],
     ) -> None:
         """Write in-window event lists into each trial's metadata dict."""
-        del ieeg_file, ieeg_channel_names  # not used by this annotator
+        del ieeg_channel_names  # not used by this annotator
 
         effective_tmin = self.window_tmin_s if self.window_tmin_s is not None else tmin_s
         effective_tmax = self.window_tmax_s if self.window_tmax_s is not None else tmax_s
 
         matched_files = files_matching_entities(group.secondaries, **self.filter)
-        rows = load_table_rows(matched_files)
+        rows = [
+            row
+            for row in load_table_rows(matched_files)
+            if entities_compatible(
+                ieeg_file.entities,
+                row.file.entities,
+                preferred_entities=row.values,
+            )
+        ]
 
         # Pre-parse onsets once for all rows; skip rows with missing / invalid onset.
-        parsed: list[tuple[float, dict[str, str]]] = []
+        parsed: list[tuple[float, dict[str, Any]]] = []
         for row in rows:
             raw_onset = row.values.get(self.onset_column)
             if raw_onset is None or raw_onset == "":
@@ -165,7 +185,15 @@ class EventFileWindowAnnotator(BaseModel):
                 onset = float(raw_onset)
             except (ValueError, TypeError):
                 continue
-            parsed.append((onset, dict(row.values)))
+            event_values: dict[str, Any] = {
+                str(key): value
+                for key, value in row.file.entities.items()
+                if value is not None
+            }
+            event_values.update(dict(row.values))
+            event_values["source_path"] = str(row.file.path)
+            event_values["source_row_index"] = int(row.row_index)
+            parsed.append((onset, event_values))
 
         for trial in trials:
             win_start = trial.anchor_onset_s + effective_tmin

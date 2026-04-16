@@ -12,6 +12,8 @@ from gin_bids_py_analysis.processing.trial_stats_group.processor import (
     BaseTrialStatsGroupSnapshotSignature,
     build_compatible_groups,
     collect_manual_roi_records,
+    find_missing_manual_roi_channels,
+    format_manual_roi_missing_channels_message,
     hash_time_axis,
     validate_group_compatibility,
 )
@@ -133,6 +135,40 @@ def test_collect_manual_roi_records_normalizes_subject_and_channel_matching() ->
 
     assert [record.channel for record in records["Insula"]] == ["A1", "A2"]
     assert all(record.subject == "01" for record in records["Insula"])
+
+
+def test_find_missing_manual_roi_channels_reports_subject_and_channel_misses() -> None:
+    snapshot = _make_snapshot(path="sub-01_stats.h5", subject="sub-01")
+
+    missing = find_missing_manual_roi_channels(
+        snapshots=[snapshot],
+        manual_region_channels={
+            "Insula": {"01": ["A1", "A3"], "02": ["B1"]},
+        },
+    )
+
+    assert missing == {
+        "Insula": {
+            "01": ["A3"],
+            "02": ["B1"],
+        }
+    }
+
+
+def test_format_manual_roi_missing_channels_message_is_compact() -> None:
+    message = format_manual_roi_missing_channels_message(
+        {
+            "Insula": {
+                "01": ["A3"],
+                "02": ["B1", "B2"],
+            }
+        }
+    )
+
+    assert message == (
+        "Missing manual channels: "
+        "Insula/01: A3; Insula/02: B1, B2"
+    )
 
 
 def test_hash_time_axis_is_stable_for_identical_values() -> None:

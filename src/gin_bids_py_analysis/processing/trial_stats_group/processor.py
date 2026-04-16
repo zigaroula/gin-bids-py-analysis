@@ -190,6 +190,57 @@ def collect_manual_roi_records(
     return roi_records
 
 
+def find_missing_manual_roi_channels(
+    *,
+    snapshots: Sequence[SnapshotT],
+    manual_region_channels: dict[str, dict[str, list[str]]],
+) -> dict[str, dict[str, list[str]]]:
+    """Return manual ROI channels that are absent from the available snapshots."""
+
+    available_channels_by_subject: dict[str, set[str]] = {}
+    for snapshot in snapshots:
+        subject_key = normalize_subject_value(str(snapshot.subject).strip())
+        subject_channels = available_channels_by_subject.setdefault(subject_key, set())
+        subject_channels.update(snapshot.channel_index_by_norm.keys())
+
+    missing: dict[str, dict[str, list[str]]] = {}
+    for roi, subject_map in manual_region_channels.items():
+        roi_missing: dict[str, list[str]] = {}
+        for raw_subject, channels in subject_map.items():
+            subject_key = normalize_subject_value(str(raw_subject).strip())
+            available_channels = available_channels_by_subject.get(subject_key, set())
+            missing_channels: list[str] = []
+            seen_channels: set[str] = set()
+            for channel in channels:
+                normalized_channel = normalize_channel_name(channel)
+                if normalized_channel in seen_channels:
+                    continue
+                seen_channels.add(normalized_channel)
+                if normalized_channel not in available_channels:
+                    missing_channels.append(channel)
+            if missing_channels:
+                roi_missing[subject_key] = missing_channels
+        if roi_missing:
+            missing[roi] = roi_missing
+    return missing
+
+
+def format_manual_roi_missing_channels_message(
+    missing_manual_roi_channels: dict[str, dict[str, list[str]]],
+) -> str:
+    """Format a compact human-readable warning for missing manual ROI channels."""
+
+    if not missing_manual_roi_channels:
+        return ""
+
+    parts: list[str] = []
+    for roi, subject_map in missing_manual_roi_channels.items():
+        for subject, channels in subject_map.items():
+            joined_channels = ", ".join(channels)
+            parts.append(f"{roi}/{subject}: {joined_channels}")
+    return "Missing manual channels: " + "; ".join(parts)
+
+
 def collect_atlas_roi_records(
     *,
     snapshots: Sequence[SnapshotT],

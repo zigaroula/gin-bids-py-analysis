@@ -24,14 +24,14 @@ from gin_bids_py_analysis.processing.utils.channels import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
+BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
 
 # BIDS entity filters: only files matching ALL of these will be processed.
 # Remove any key you don't want to filter on.
 FILE_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    "subject": "TOU2021DUBl",
+    "subject": "TOU2021DUBl"
     #"run": "01",
 }
 

@@ -80,3 +80,5 @@ class RegressionGroupProcessingResult(BaseTrialStatsGroupProcessingResult):
     """Best cluster window [t_start_s, t_end_s] per ROI. None entries mean no cluster was found."""
     cluster_null_distributions: list[np.ndarray] | None = None
     """Per-ROI null distributions of max-cluster t-sum statistics. Each array has shape (n_permutations,)."""
+    manual_roi_missing_channels: dict[str, dict[str, list[str]]] = field(default_factory=dict)
+    """Manual ROI channel assignments absent from the available subject result files."""

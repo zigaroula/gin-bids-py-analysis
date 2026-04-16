@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -34,6 +35,9 @@ from gin_bids_py_analysis.processing.trial_stats_group import (
     RegressionGroupProcessingWriter,
     RegressionGroupWriterParams,
 )
+from gin_bids_py_analysis.processing.trial_stats_group.processor import (
+    format_manual_roi_missing_channels_message,
+)
 
 from .panels.group_params_panel import GroupParamsPanel
 from .panels.group_plot_panel import GroupPlotPanel
@@ -50,6 +54,12 @@ if TYPE_CHECKING:
     )
     from gin_bids_py_analysis.processing.trial_stats_group import (
         ConditionTestGroupProcessingResult,
+    )
+    from gin_bids_py_analysis.processing.trial_stats.result import (
+        BaseTrialStatsProcessingResult,
+    )
+    from gin_bids_py_analysis.processing.utils.trial_annotator import (
+        TrialWindowAnnotator,
     )
 
 
@@ -94,6 +104,8 @@ class TrialStatsWindow(QMainWindow):
         bids_root: Path | None = None,
         default_slope_params: RegressionParams | None = None,
         default_mode: str = "ttest",
+        annotators: Sequence["TrialWindowAnnotator"] = (),
+        subject_result_callback: Callable[[str, "BaseTrialStatsProcessingResult"], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -102,6 +114,8 @@ class TrialStatsWindow(QMainWindow):
 
         self._subject_groups = subject_groups
         self._resolver = resolver
+        self._annotators = list(annotators)
+        self._subject_result_callback = subject_result_callback
         self._bids_root = bids_root
         self._current_result: ConditionTestProcessingResult | RegressionProcessingResult | None = None
         self._current_worker: ComputeAllWorker | None = None
@@ -340,6 +354,7 @@ class TrialStatsWindow(QMainWindow):
                 lambda p: RegressionProcessing(
                     p,  # type: ignore[arg-type]
                     resolver=resolver,
+                    annotators=self._annotators,
                 )
             )
         else:
@@ -347,6 +362,7 @@ class TrialStatsWindow(QMainWindow):
                 lambda p: ConditionTestProcessing(
                     p,  # type: ignore[arg-type]
                     resolver=resolver,
+                    annotators=self._annotators,
                 )
             )
         worker = ComputeAllWorker(
@@ -379,6 +395,8 @@ class TrialStatsWindow(QMainWindow):
             return  # stale
 
         self._all_results[subject_id] = result
+        if self._subject_result_callback is not None:
+            self._subject_result_callback(subject_id, result)
 
         # If this is the currently shown subject, update the Subject tab immediately
         if subject_id == self._subject_panel.current_subject:
@@ -489,6 +507,7 @@ class TrialStatsWindow(QMainWindow):
         self._group_plot_panel.show_placeholder()
         self._group_params_panel.set_save_enabled(False)
         self._group_params_panel.set_computing(True)
+        self._group_params_panel.set_log_message("")
         self._group_params_panel.set_status(
             f"Computing group stats for {len(self._all_results)} subject(s)…"
         )
@@ -511,12 +530,16 @@ class TrialStatsWindow(QMainWindow):
         if excluded:
             status += f" ({excluded} excluded)"
         self._group_params_panel.set_status(status)
+        self._group_params_panel.set_log_message(
+            _group_result_log_message(result)
+        )
         if self._bids_root is not None:
             self._group_params_panel.set_save_enabled(True)
         self._group_plot_panel.update_plots(result, 0)
 
     def _on_group_error(self, message: str) -> None:
         self._group_params_panel.set_computing(False)
+        self._group_params_panel.set_log_message("")
         self._group_params_panel.set_status(f"Error: {message}")
 
     # ------------------------------------------------------------------
@@ -699,3 +722,12 @@ def _coerce_slope_group_params_from_ttest(
         min_channels_per_roi=params.min_channels_per_roi,
         min_subjects_per_roi=params.min_subjects_per_roi,
     )
+
+
+def _group_result_log_message(
+    result: ConditionTestGroupProcessingResult | RegressionGroupProcessingResult,
+) -> str:
+    missing_manual_channels = getattr(result, "manual_roi_missing_channels", {})
+    if not missing_manual_channels:
+        return ""
+    return format_manual_roi_missing_channels_message(missing_manual_channels)

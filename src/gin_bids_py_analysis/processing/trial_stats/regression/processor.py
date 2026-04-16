@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 import json
 
@@ -20,6 +21,7 @@ from gin_bids_py_analysis.processing.utils.epoch_quality import (
     reject_channels_by_trial_mean_spread,
 )
 from gin_bids_py_analysis.processing.utils.statistics import compute_condition_mean, compute_condition_sem
+from gin_bids_py_analysis.processing.utils.trial_annotator import TrialWindowAnnotator
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from ..processor import BaseTrialStatsProcessing, TrialStatsProcessingContext
@@ -40,8 +42,9 @@ class RegressionProcessing(BaseTrialStatsProcessing):
         self,
         params: RegressionParams,
         resolver: TrialResolver,
+        annotators: Sequence[TrialWindowAnnotator] = (),
     ) -> None:
-        super().__init__(params=params, resolver=resolver)
+        super().__init__(params=params, resolver=resolver, annotators=annotators)
 
     @property
     def params(self) -> RegressionParams:  # type: ignore[override]

@@ -52,6 +52,8 @@ from ..processor import (
     build_compatible_groups,
     collect_atlas_roi_records,
     collect_manual_roi_records,
+    find_missing_manual_roi_channels,
+    format_manual_roi_missing_channels_message,
     hash_time_axis,
     validate_group_compatibility,
 )
@@ -207,8 +209,18 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
 
         first = snapshots[0]
         excluded_rois: dict[str, str] = {}
+        missing_manual_channels: dict[str, dict[str, list[str]]] = {}
 
         if self.params.roi_mode == "manual":
+            missing_manual_channels = find_missing_manual_roi_channels(
+                snapshots=snapshots,
+                manual_region_channels=self.params.manual_region_channels,
+            )
+            missing_message = format_manual_roi_missing_channels_message(
+                missing_manual_channels
+            )
+            if missing_message:
+                print(missing_message)
             roi_records = _collect_manual_roi_records(
                 snapshots=snapshots,
                 manual_region_channels=self.params.manual_region_channels,
@@ -645,6 +657,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             cluster_p_values=cluster_p_values_out,
             cluster_best_cluster_windows_s=cluster_windows_out,
             cluster_null_distributions=cluster_null_dists_out,
+            manual_roi_missing_channels=missing_manual_channels,
         )
         return result
 

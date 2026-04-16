@@ -13,6 +13,11 @@ from gin_bids_py_analysis.processing.trial_stats import (
     RegressionParams,
     RegressionProcessing,
 )
+from gin_bids_py_analysis.processing.utils.condition_rules import ConditionExpr
+from gin_bids_py_analysis.processing.utils.trial_annotator import (
+    EventAnnotationInvalidationRule,
+    EventFileWindowAnnotator,
+)
 from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 
@@ -210,6 +215,103 @@ def test_process_group_excludes_invalid_predictor_trials(tmp_path: Path) -> None
     assert result.condition_a_trial_count == 2
     assert result.condition_a_stats_valid is False
     assert any(trial.exclusion_reason == "invalid_predictor_value" for trial in result.resolved_trials)
+
+
+def test_process_group_applies_trial_annotators_before_regression(tmp_path: Path) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    delphos_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_desc-delphos_events.tsv",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "events",
+            "extension": ".tsv",
+            "datatype": "ieeg",
+            "desc": "delphos",
+        },
+    )
+    delphos_file.attach_data(
+        [
+            {"onset": "1.1", "duration": "0.0", "channel": "A1", "event_type": "Spk"},
+        ]
+    )
+
+    sfreq = 10.0
+    ch_names = ["A1"]
+    data = np.zeros((1, 100), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
+    predictors = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
+
+    for onset, label, predictor in zip(onsets, labels, predictors):
+        start = int(onset * sfreq)
+        stop = start + 3
+        if label == "accepted":
+            value = (2.0 * predictor) + 1.0
+        else:
+            value = (-1.0 * predictor) + 5.0
+        data[0, start:stop] = value
+
+    annotations = Annotations(
+        onset=onsets,
+        duration=[0.0] * len(onsets),
+        description=["Stimulus/S  10"] * len(onsets),
+    )
+    ieeg_file.attach_data(_make_raw(data, ch_names, sfreq, annotations))
+
+    annotators = [
+        EventFileWindowAnnotator(
+            filter={"suffix": "events", "desc": "delphos"},
+            metadata_events_key="delphos_events",
+            window_tmin_s=0.0,
+            window_tmax_s=0.2,
+        ),
+        EventAnnotationInvalidationRule(
+            metadata_events_key="delphos_events",
+            event_filter=ConditionExpr(
+                all=[
+                    ConditionExpr(column="subject", op="==", value="01"),
+                    ConditionExpr(column="event_type", op="==", value="Spk"),
+                    ConditionExpr(column="channel", op="in", values=["A1"]),
+                ]
+            ),
+            exclusion_reason="vmPFC_spike_0_3s",
+        ),
+    ]
+
+    processor = RegressionProcessing(
+        RegressionParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            predictor="predictor_value",
+            min_trials_per_condition=3,
+            p_value_correction_method="none",
+        ),
+        resolver=_SlopeResolver(labels, predictors),
+        annotators=annotators,
+    )
+
+    result = processor.process_group(
+        BIDSFileGroup(primary=ieeg_file, secondaries=[delphos_file])
+    )
+
+    assert result.condition_a_trial_count == 2
+    assert result.condition_a_stats_valid is False
+    assert any(trial.exclusion_reason == "vmPFC_spike_0_3s" for trial in result.resolved_trials)
 
 
 def test_process_group_experiment_start_code_filters_early_anchors(tmp_path: Path) -> None:

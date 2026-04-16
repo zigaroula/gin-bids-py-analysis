@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 
 from gin_bids_py_analysis.processing.utils.statistics import (
     compute_condition_sem,
     correct_p_values,
 )
+from gin_bids_py_analysis.processing.utils.trial_annotator import TrialWindowAnnotator
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from ..processor import BaseTrialStatsProcessing, TrialStatsProcessingContext
@@ -29,8 +32,9 @@ class ConditionTestProcessing(BaseTrialStatsProcessing):
         self,
         params: ConditionTestParams,
         resolver: TrialResolver,
+        annotators: Sequence[TrialWindowAnnotator] = (),
     ) -> None:
-        super().__init__(params=params, resolver=resolver)
+        super().__init__(params=params, resolver=resolver, annotators=annotators)
 
     @property
     def params(self) -> ConditionTestParams:  # type: ignore[override]

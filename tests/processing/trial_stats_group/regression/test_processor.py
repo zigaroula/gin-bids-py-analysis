@@ -294,6 +294,50 @@ def test_process_group_excludes_rois_below_thresholds() -> None:
         shutil.rmtree(case_dir, ignore_errors=True)
 
 
+def test_process_group_reports_missing_manual_channels(capsys: pytest.CaptureFixture[str]) -> None:
+    case_dir = _make_case_dir("missing_manual_channels")
+    try:
+        time_s = np.array([0.0, 0.1], dtype=np.float64)
+        slope = np.ones((1, 2), dtype=np.float64)
+
+        path_01 = case_dir / "sub-01_task-decid_desc-slopestat_stats.h5"
+        _write_slope_stats_h5(
+            path_01,
+            channels=["A1"],
+            time_s=time_s,
+            condition_a_slope=slope,
+            condition_b_slope=slope,
+        )
+        file_01 = _make_bids_file(
+            path_01,
+            {"subject": "01", "task": "decid", "suffix": "stats", "extension": ".h5"},
+        )
+
+        processor = RegressionGroupProcessing(
+            RegressionGroupParams(
+                roi_mode="manual",
+                manual_region_channels={
+                    "ROI_WARN": {"01": ["A1", "Z99"], "02": ["B1"]},
+                },
+            )
+        )
+        result = processor.process_group(BIDSFileGroup(primary=file_01))
+        captured = capsys.readouterr()
+
+        assert result.manual_roi_missing_channels == {
+            "ROI_WARN": {
+                "01": ["Z99"],
+                "02": ["B1"],
+            }
+        }
+        assert (
+            "Missing manual channels: ROI_WARN/01: Z99; ROI_WARN/02: B1"
+            in captured.out
+        )
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+
+
 def test_process_group_output_entities_set_to_group() -> None:
     case_dir = _make_case_dir("output_entities")
     try:

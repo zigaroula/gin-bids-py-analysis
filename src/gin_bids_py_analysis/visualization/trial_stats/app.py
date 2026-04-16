@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +24,12 @@ if TYPE_CHECKING:
     from gin_bids_py_analysis.processing.trial_stats_group import (
         ConditionTestGroupProcessingResult,
     )
+    from gin_bids_py_analysis.processing.trial_stats.result import (
+        BaseTrialStatsProcessingResult,
+    )
+    from gin_bids_py_analysis.processing.utils.trial_annotator import (
+        TrialWindowAnnotator,
+    )
 
 
 def launch(
@@ -31,6 +38,8 @@ def launch(
     resolver: "TrialResolver",
     group_params: "ConditionTestGroupParams | None" = None,
     bids_root: Path | None = None,
+    annotators: Sequence["TrialWindowAnnotator"] = (),
+    subject_result_callback: Callable[[str, "BaseTrialStatsProcessingResult"], None] | None = None,
 ) -> None:
     """Launch the trial statistics visualization window.
 
@@ -64,7 +73,15 @@ def launch(
 
     from .window import TrialStatsWindow
 
-    window = TrialStatsWindow(subject_groups, params, resolver, group_params=group_params, bids_root=bids_root)
+    window = TrialStatsWindow(
+        subject_groups,
+        params,
+        resolver,
+        group_params=group_params,
+        bids_root=bids_root,
+        annotators=annotators,
+        subject_result_callback=subject_result_callback,
+    )
     window.show()
     app.exec()
 
@@ -75,6 +92,8 @@ def launch_slope(
     resolver: "TrialResolver",
     group_params: "RegressionGroupParams | None" = None,
     bids_root: Path | None = None,
+    annotators: Sequence["TrialWindowAnnotator"] = (),
+    subject_result_callback: Callable[[str, "BaseTrialStatsProcessingResult"], None] | None = None,
 ) -> None:
     """Launch the trial statistics visualization window in slope mode."""
     try:
@@ -120,6 +139,8 @@ def launch_slope(
         bids_root=bids_root,
         default_slope_params=params,
         default_mode="slope",
+        annotators=annotators,
+        subject_result_callback=subject_result_callback,
     )
     window.show()
     app.exec()

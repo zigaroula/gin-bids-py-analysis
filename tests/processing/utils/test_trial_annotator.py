@@ -200,6 +200,45 @@ def test_rows_with_invalid_onset_are_skipped(tmp_path: Path) -> None:
     assert events[0]["channel"] == "A2"
 
 
+def test_only_events_compatible_with_current_ieeg_file_are_collected(tmp_path: Path) -> None:
+    run1_file = _make_event_file(
+        tmp_path,
+        [{"onset": "10.1", "event_type": "Spk", "channel": "A1"}],
+        {"subject": "01", "task": "decid", "run": "1", "suffix": "events", "desc": "delphos"},
+    )
+    run2_file = _make_event_file(
+        tmp_path,
+        [{"onset": "10.2", "event_type": "Spk", "channel": "A2"}],
+        {"subject": "01", "task": "decid", "run": "2", "suffix": "events", "desc": "delphos"},
+    )
+    primary = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    group = BIDSFileGroup(primary=primary, secondaries=[run1_file, run2_file])
+    trial = _make_trial(anchor_onset_s=10.0)
+
+    annotator = EventFileWindowAnnotator(
+        filter={"suffix": "events", "desc": "delphos"},
+        metadata_events_key="delphos_events",
+    )
+    annotator.annotate_trials(group, primary, [trial], tmin_s=-1.0, tmax_s=1.0, ieeg_channel_names=[])
+
+    events = trial.metadata["delphos_events"]
+    assert len(events) == 1
+    assert events[0]["channel"] == "A1"
+    assert events[0]["subject"] == "01"
+    assert events[0]["run"] == "1"
+    assert str(events[0]["source_path"]).endswith("desc-delphos.tsv")
+
+
 # ---------------------------------------------------------------------------
 # EventAnnotationInvalidationRule tests
 # ---------------------------------------------------------------------------

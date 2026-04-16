@@ -86,6 +86,18 @@ class TestGroupParamsPanelRoundTrip:
         panel.set_status("Test status message")
         assert panel._status_label.text() == "Test status message"
 
+    def test_set_log_message_updates_optional_label(self, qtbot, default_group_params):
+        panel = GroupParamsPanel(default_group_params)
+        qtbot.addWidget(panel)
+
+        panel.set_log_message("Missing manual channels: ROI/01: Z99")
+        assert panel._log_label.text() == "Missing manual channels: ROI/01: Z99"
+        assert not panel._log_label.isHidden()
+
+        panel.set_log_message("")
+        assert panel._log_label.text() == ""
+        assert panel._log_label.isHidden()
+
     def test_round_trip_preserves_script_only_ttest_fields(self, qtbot, default_group_params):
         params = default_group_params.model_copy(
             update={

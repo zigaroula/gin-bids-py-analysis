@@ -188,6 +188,12 @@ class GroupParamsPanel(QWidget):
         self._status_label.setWordWrap(True)
         bottom_layout.addWidget(self._status_label)
 
+        self._log_label = QLabel("")
+        self._log_label.setWordWrap(True)
+        self._log_label.setStyleSheet("color: #8a5a00; font-size: 11px;")
+        self._log_label.setVisible(False)
+        bottom_layout.addWidget(self._log_label)
+
         outer.addWidget(bottom)
 
         self._compute_btn.clicked.connect(self.compute_requested)
@@ -297,6 +303,12 @@ class GroupParamsPanel(QWidget):
     def set_status(self, message: str) -> None:
         """Update the status label below the Compute button."""
         self._status_label.setText(message)
+
+    def set_log_message(self, message: str) -> None:
+        """Update the optional log line shown below the status label."""
+        text = message.strip()
+        self._log_label.setText(text)
+        self._log_label.setVisible(bool(text))
 
     # ------------------------------------------------------------------
     # Private

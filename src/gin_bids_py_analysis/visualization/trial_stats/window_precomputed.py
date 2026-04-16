@@ -34,6 +34,9 @@ from gin_bids_py_analysis.processing.trial_stats import (
 from gin_bids_py_analysis.processing.trial_stats import (
     RegressionProcessingResult,
 )
+from gin_bids_py_analysis.processing.trial_stats_group.processor import (
+    format_manual_roi_missing_channels_message,
+)
 
 from .panels.group_params_panel import GroupParamsPanel
 from .panels.group_plot_panel import GroupPlotPanel
@@ -333,6 +336,7 @@ class TrialStatsPrecomputedWindow(QMainWindow):
 
         self._group_plot_panel.show_placeholder()
         self._group_params_panel.set_computing(True)
+        self._group_params_panel.set_log_message("")
         self._group_params_panel.set_status(
             f"Computing group stats for {len(self._all_results)} subject(s)\u2026"
         )
@@ -354,10 +358,14 @@ class TrialStatsPrecomputedWindow(QMainWindow):
         if excluded:
             status += f" ({excluded} excluded)"
         self._group_params_panel.set_status(status)
+        self._group_params_panel.set_log_message(
+            _group_result_log_message(result)
+        )
         self._group_plot_panel.update_plots(result, 0)
 
     def _on_group_compute_error(self, message: str) -> None:
         self._group_params_panel.set_computing(False)
+        self._group_params_panel.set_log_message("")
         self._group_params_panel.set_status(f"Error: {message}")
 
 
@@ -394,3 +402,10 @@ class _LoadStatusPanel(QWidget):
 
 def _is_slope_result(result: object) -> bool:
     return hasattr(result, "analysis_type") and getattr(result, "analysis_type", "") == "slope_regression"
+
+
+def _group_result_log_message(result: object) -> str:
+    missing_manual_channels = getattr(result, "manual_roi_missing_channels", {})
+    if not missing_manual_channels:
+        return ""
+    return format_manual_roi_missing_channels_message(missing_manual_channels)
