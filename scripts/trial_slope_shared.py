@@ -14,6 +14,7 @@ from gin_bids_py_analysis.processing.utils.condition_rules import ConditionExpr
 from gin_bids_py_analysis.processing.utils.trial_annotator import (
     EventAnnotationInvalidationRule,
     EventFileWindowAnnotator,
+    TrialMetadataInvalidationRule,
 )
 from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
 
@@ -57,7 +58,6 @@ TRIAL_SLOPE_RESOLVER_CONDITIONS = [
         "when": {
             "all": [
                 {"column": "pleasant", "op": "==", "value": 1},
-                {"column": "rating", "op": ">=", "value": 0},
             ]
         },
     },
@@ -66,7 +66,6 @@ TRIAL_SLOPE_RESOLVER_CONDITIONS = [
         "when": {
             "all": [
                 {"column": "pleasant", "op": "==", "value": 2},
-                {"column": "rating", "op": ">=", "value": 0},
             ]
         },
     },
@@ -112,6 +111,13 @@ GROUP_PARAM_KWARGS = {
 }
 
 VM_PFC_SPIKE_EXCLUSION_REASON = "vmPFC_spike_0_5s"
+
+# Behavioral thresholds applied as annotator invalidation rules (orthogonal to
+# condition classification).  These replicate MATLAB b2:
+#   opts.removeoutlierRTs  → trials with RT > MAX_RT_S are excluded (all channels)
+#   opts.removenegratings  → trials with rating < 0 are excluded (all channels)
+MAX_RT_S: float = 20.0
+MIN_RATING: float = 0.0
 
 _NA_LIKE_TOKENS = frozenset({"nan", "na", "n/a", "none", "null"})
 _FIRST_CONTACT_PATTERN = re.compile(r"^([A-Za-z]+[0-9]+)")
@@ -250,12 +256,23 @@ def build_vmPFC_spike_filter(
 
 def build_trial_annotators(
     manual_region_channels: dict[str, dict[str, list[str]]],
-) -> list[EventFileWindowAnnotator | EventAnnotationInvalidationRule]:
+) -> list[EventFileWindowAnnotator | EventAnnotationInvalidationRule | TrialMetadataInvalidationRule]:
     vm_pfc_channels_by_subject = manual_region_channels.get("vmPFC", {})
     if not vm_pfc_channels_by_subject:
         raise ValueError("vmPFC ROI channels are required to exclude Delphos spike trials.")
 
     return [
+        # Behavioral validity: exclude trials with RT > MAX_RT_S or rating < MIN_RATING.
+        # These checks are orthogonal to condition classification and mirror MATLAB b2
+        # steps opts.removeoutlierRTs and opts.removenegratings.
+        TrialMetadataInvalidationRule(
+            condition={"all": [
+                {"column": "RT", "op": "<=", "value": MAX_RT_S},
+                {"column": "rating", "op": ">=", "value": MIN_RATING},
+            ]},
+            exclusion_reason="behavioral_threshold",
+        ),
+        # Delphos vmPFC spike invalidation.
         EventFileWindowAnnotator(
             filter={"suffix": "events", "desc": "delphos"},
             metadata_events_key="delphos_events",

@@ -14,6 +14,13 @@ shared list between trial resolution and normalization:
   ``trial.keep = False`` when the count of matching events reaches the
   configured threshold.
 
+* ``TrialMetadataInvalidationRule`` — invalidates trials based on scalar
+  values stored in ``trial.metadata`` (e.g. ``RT``, ``rating``).  Evaluates a
+  :class:`ConditionExpr` directly against the metadata dict and sets
+  ``trial.keep = False`` when the expression is *not* satisfied.  This
+  separates behavioral validity checks (RT threshold, minimum rating) from
+  condition classification in :class:`~.trial_resolver.TableTrialResolver`.
+
 Both classes are valid ``TrialWindowAnnotator`` implementations and can be
 mixed freely in the same annotators list.
 """
@@ -291,3 +298,86 @@ class EventAnnotationInvalidationRule(BaseModel):
                 trial.keep = False
                 if trial.exclusion_reason is None:
                     trial.exclusion_reason = self.exclusion_reason
+
+
+class TrialMetadataInvalidationRule(BaseModel):
+    """Invalidate trials whose metadata does not satisfy a behavioral condition.
+
+    Evaluates a :class:`ConditionExpr` directly against ``trial.metadata``
+    and sets ``trial.keep = False`` when the expression is *not* satisfied.
+
+    Typical use-cases:
+
+    * Exclude trials with RT above a threshold::
+
+          TrialMetadataInvalidationRule(
+              condition={"column": "RT", "op": "<=", "value": 3.0},
+              exclusion_reason="rt_too_long",
+          )
+
+    * Require a minimum rating::
+
+          TrialMetadataInvalidationRule(
+              condition={"column": "rating", "op": ">=", "value": 0},
+              exclusion_reason="negative_rating",
+          )
+
+    * Combine multiple criteria::
+
+          TrialMetadataInvalidationRule(
+              condition={"all": [
+                  {"column": "RT", "op": "<=", "value": 3.0},
+                  {"column": "rating", "op": ">=", "value": 0},
+              ]},
+              exclusion_reason="behavioral_threshold",
+          )
+
+    The metadata values must have already been extracted before this rule
+    runs.  Use ``extract_columns`` in
+    :class:`~.trial_resolver.TableTrialResolver` to populate them from the
+    behavioral TSV.
+
+    Trials that are already excluded (``trial.keep = False``) are skipped so
+    that their existing ``exclusion_reason`` is preserved.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    condition: ConditionExpr = Field(
+        description=(
+            "Boolean expression evaluated against ``trial.metadata``. "
+            "Trials that do *not* satisfy it are invalidated."
+        ),
+    )
+    exclusion_reason: str = Field(
+        default="behavioral_threshold",
+        description="Exclusion reason written to ``trial.exclusion_reason`` upon invalidation.",
+    )
+
+    @field_validator("exclusion_reason", mode="before")
+    @classmethod
+    def _normalize_exclusion_reason(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("exclusion_reason must be a non-empty string.")
+        return cleaned
+
+    def annotate_trials(
+        self,
+        group: BIDSFileGroup,
+        ieeg_file: BIDSFile,
+        trials: list[ResolvedTrial],
+        tmin_s: float,
+        tmax_s: float,
+        *,
+        ieeg_channel_names: list[str],
+    ) -> None:
+        """Invalidate trials whose metadata does not satisfy ``self.condition``."""
+        del group, ieeg_file, tmin_s, tmax_s, ieeg_channel_names  # not used
+
+        for trial in trials:
+            if not trial.keep:
+                continue
+            if not matches_condition_expr(self.condition, trial.metadata):
+                trial.keep = False
+                trial.exclusion_reason = self.exclusion_reason

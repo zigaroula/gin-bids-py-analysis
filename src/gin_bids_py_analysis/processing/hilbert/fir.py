@@ -174,11 +174,21 @@ class FirBandPass:
 
        with corresponding *gains* ``[0, 0, 1, 1, 0, 0]``.
 
+    **Default path** (``use_fir2_design=False``):
+
     2. Apply a linear phase delay to form a Hermitian-symmetric spectrum of
        size ``2*(npt-1)`` (where ``npt = _number_of_points(signal_length)``).
     3. IFFT → take first ``signal_length`` real taps → apply Hamming window.
     4. FFT → ``fir_coeff`` (magnitude, float32, length ``signal_length``).
     5. ``combined = fir_coeff x hilbert_coeff``.
+
+    **firwin2 path** (``use_fir2_design=True``):
+
+    2. ``scipy.signal.firwin2(signal_length, freq, gain, window='hamming')``
+       → ``signal_length`` FIR taps with Hamming window (matches MATLAB
+       ``fir2`` + Hamming design used in ``spm2env.m``).
+    3. FFT → magnitude → ``fir_coeff``.
+    4. ``combined = fir_coeff x hilbert_coeff``.
 
     Applying the filter
     -------------------
@@ -188,11 +198,16 @@ class FirBandPass:
         envelope = |Y|
 
     Args:
-        f_low:         Lower edge of the pass-band in Hz.
-        f_high:        Upper edge of the pass-band in Hz.
-        fs:            Sampling frequency in Hz.
-        signal_length: Number of samples in the signals that will be
-                       filtered.  The coefficient array has this length.
+        f_low:            Lower edge of the pass-band in Hz.
+        f_high:           Upper edge of the pass-band in Hz.
+        fs:               Sampling frequency in Hz.
+        signal_length:    Number of samples in the signals that will be
+                          filtered.  The coefficient array has this length.
+        use_fir2_design:  When ``True``, use ``scipy.signal.firwin2`` to
+                          design the FIR coefficients (closer to MATLAB
+                          ``fir2`` as used in ``spm2env.m``).  When
+                          ``False`` (default), use the original custom
+                          interpolation + phase-delay + IFFT path.
     """
 
     def __init__(
@@ -201,11 +216,13 @@ class FirBandPass:
         f_high: float,
         fs: float,
         signal_length: int,
+        use_fir2_design: bool = False,
     ) -> None:
         self.f_low = f_low
         self.f_high = f_high
         self.fs = fs
         self.signal_length = signal_length
+        self.use_fir2_design = use_fir2_design
 
         nyquist = fs / 2.0
 
@@ -224,7 +241,7 @@ class FirBandPass:
         gains = np.array([0.0, 0.0, 1.0, 1.0, 0.0, 0.0], dtype=np.float32)
 
         # FIR magnitude response (float32, length signal_length)
-        fir_coeff = self._build_fir_coefficients(signal_length, breakpoints, gains)
+        fir_coeff = self._build_fir_coefficients(signal_length, breakpoints, gains, use_fir2_design)
 
         # Combine with Hilbert coefficients (real float32 x float32).
         # Values are in [0, 2] for pass-band frequencies, 0 elsewhere.
@@ -251,10 +268,11 @@ class FirBandPass:
         n_samples: int,
         frequency: np.ndarray,
         magnitude: np.ndarray,
+        use_fir2_design: bool = False,
     ) -> np.ndarray:
         """Compute FIR frequency-domain magnitude coefficients.
 
-        Steps:
+        When *use_fir2_design* is ``False`` (default):
 
         1. Interpolate breakpoints → one-sided magnitude grid (float32).
         2. Apply a linear phase delay to form a phase-delayed one-sided spectrum.
@@ -263,15 +281,33 @@ class FirBandPass:
         4. IFFT → take real part of first ``n_samples`` taps → apply Hamming window.
         5. FFT → magnitude (zero-phase FIR response, float32).
 
+        When *use_fir2_design* is ``True``:
+
+        1. ``scipy.signal.firwin2(n_samples, frequency, magnitude, window='hamming',
+           fs=2.0)`` → ``n_samples`` taps designed with a Hamming window.
+        2. FFT → magnitude (float32).
+
         Args:
-            n_samples: Length of the signal that will be filtered.  The returned
-                    coefficient array has this many elements.
-            frequency: Six normalised frequency breakpoints in [0, 1].
-            magnitude: Six corresponding gain values.
+            n_samples:        Length of the signal that will be filtered.  The
+                              returned coefficient array has this many elements.
+            frequency:        Six normalised frequency breakpoints in [0, 1].
+            magnitude:        Six corresponding gain values.
+            use_fir2_design:  When ``True``, use ``firwin2`` instead of the
+                              custom interpolation path.
 
         Returns:
             float32 array of length ``n_samples``.
         """
+        if use_fir2_design:
+            from scipy.signal import firwin2
+            b = firwin2(
+                n_samples,
+                frequency.astype(np.float64),
+                magnitude.astype(np.float64),
+                window="hamming",
+                fs=2.0,
+            )
+            return np.abs(_fftmod.fft(b.astype(np.float32))).astype(np.float32)
         npt = _number_of_points(n_samples)
         dt = np.float32(0.5 * (n_samples - 1))
 

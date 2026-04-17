@@ -339,7 +339,8 @@ def process_channel(
     # is the only thing needed for the hot path below.
     if combined_matrix is None:
         if filters is None:
-            filters = [FirBandPass(low, high, fs, n_samples)
+            use_fir2 = params.method == ProcessingMethod.SPM2ENV
+            filters = [FirBandPass(low, high, fs, n_samples, use_fir2_design=use_fir2)
                        for low, high in zip(bins[:-1], bins[1:])]
         combined_matrix = np.stack([fir.combined for fir in filters], axis=0)
 
@@ -505,7 +506,8 @@ def process_all_channels(
     # process_channel never rebuilds it per channel.
     # ------------------------------------------------------------------
     n_samples = montaged_data.shape[1]
-    filters = [FirBandPass(low, high, fs, n_samples)
+    use_fir2 = params.method == ProcessingMethod.SPM2ENV
+    filters = [FirBandPass(low, high, fs, n_samples, use_fir2_design=use_fir2)
                for low, high in zip(bins[:-1], bins[1:])]
     combined_matrix = np.stack([fir.combined for fir in filters], axis=0)
     n_channels = montaged_data.shape[0]

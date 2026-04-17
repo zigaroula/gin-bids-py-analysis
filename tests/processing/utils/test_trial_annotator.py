@@ -12,6 +12,7 @@ from gin_bids_py_analysis.processing.utils.condition_rules import ConditionExpr
 from gin_bids_py_analysis.processing.utils.trial_annotator import (
     EventAnnotationInvalidationRule,
     EventFileWindowAnnotator,
+    TrialMetadataInvalidationRule,
 )
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 
@@ -409,3 +410,87 @@ def test_combined_annotator_then_invalidation_rule(tmp_path: Path) -> None:
 
     assert trial.keep is False
     assert trial.exclusion_reason == "vmPFC_spike"
+
+
+# ---------------------------------------------------------------------------
+# TrialMetadataInvalidationRule tests
+# ---------------------------------------------------------------------------
+
+
+def _make_trial_with_metadata(metadata: dict[str, Any], keep: bool = True) -> ResolvedTrial:
+    trial = _make_trial(keep=keep)
+    trial.metadata.update(metadata)
+    return trial
+
+
+def test_metadata_condition_satisfied_keeps_trial() -> None:
+    trial = _make_trial_with_metadata({"RT": 2.5, "rating": 1})
+    group = _make_group([])
+    rule = TrialMetadataInvalidationRule(
+        condition={"column": "RT", "op": "<=", "value": 20.0},
+        exclusion_reason="rt_too_long",
+    )
+    rule.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=3.0, ieeg_channel_names=[])
+
+    assert trial.keep is True
+    assert trial.exclusion_reason is None
+
+
+def test_metadata_condition_not_satisfied_invalidates_trial() -> None:
+    trial = _make_trial_with_metadata({"RT": 25.0, "rating": 1})
+    group = _make_group([])
+    rule = TrialMetadataInvalidationRule(
+        condition={"column": "RT", "op": "<=", "value": 20.0},
+        exclusion_reason="rt_too_long",
+    )
+    rule.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=3.0, ieeg_channel_names=[])
+
+    assert trial.keep is False
+    assert trial.exclusion_reason == "rt_too_long"
+
+
+def test_metadata_already_excluded_reason_not_overwritten() -> None:
+    trial = _make_trial_with_metadata({"RT": 25.0}, keep=False)
+    trial.exclusion_reason = "vmPFC_spike"
+    group = _make_group([])
+    rule = TrialMetadataInvalidationRule(
+        condition={"column": "RT", "op": "<=", "value": 20.0},
+        exclusion_reason="rt_too_long",
+    )
+    rule.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=3.0, ieeg_channel_names=[])
+
+    assert trial.exclusion_reason == "vmPFC_spike"
+
+
+def test_metadata_missing_key_invalidates_trial() -> None:
+    """Missing metadata key → condition not satisfiable → trial excluded."""
+    trial = _make_trial_with_metadata({})
+    group = _make_group([])
+    rule = TrialMetadataInvalidationRule(
+        condition={"column": "RT", "op": "<=", "value": 20.0},
+        exclusion_reason="rt_too_long",
+    )
+    rule.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=3.0, ieeg_channel_names=[])
+
+    assert trial.keep is False
+
+
+def test_metadata_compound_all_condition() -> None:
+    """Compound 'all' condition: both RT and rating must pass."""
+    trial_pass = _make_trial_with_metadata({"RT": 5.0, "rating": 2})
+    trial_fail_rt = _make_trial_with_metadata({"RT": 25.0, "rating": 2})
+    trial_fail_rating = _make_trial_with_metadata({"RT": 5.0, "rating": -1})
+    group = _make_group([])
+    rule = TrialMetadataInvalidationRule(
+        condition={"all": [
+            {"column": "RT", "op": "<=", "value": 20.0},
+            {"column": "rating", "op": ">=", "value": 0},
+        ]},
+        exclusion_reason="behavioral_threshold",
+    )
+    for trial in [trial_pass, trial_fail_rt, trial_fail_rating]:
+        rule.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=3.0, ieeg_channel_names=[])
+
+    assert trial_pass.keep is True
+    assert trial_fail_rt.keep is False
+    assert trial_fail_rating.keep is False

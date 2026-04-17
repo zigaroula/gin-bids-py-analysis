@@ -2,6 +2,7 @@ from .events import AnnotationEvent, coerce_annotation_events, parse_annotation_
 from .trial_annotator import (
     EventAnnotationInvalidationRule,
     EventFileWindowAnnotator,
+    TrialMetadataInvalidationRule,
     TrialWindowAnnotator,
 )
 
@@ -11,5 +12,6 @@ __all__ = [
     "parse_annotation_description",
     "EventAnnotationInvalidationRule",
     "EventFileWindowAnnotator",
+    "TrialMetadataInvalidationRule",
     "TrialWindowAnnotator",
 ]
