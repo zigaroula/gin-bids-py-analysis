@@ -21,7 +21,7 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResol
 # Shared parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
+BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
 
 IEEG_FILTERS = {
     "suffix": "ieeg",
@@ -100,9 +100,9 @@ PARAMS = RegressionParams(
 )
 
 ROI_CSV_FILES = {
-    "vmPFC": Path(r"D:\Boulot\csv\PFCvm_elecs_tbl.csv"),
-    "daINS": Path(r"D:\Boulot\csv\aINS_dors_elecs_tbl.csv"),
-    "vaINS": Path(r"D:\Boulot\csv\aINS_vent_elecs_tbl.csv"),
+    "vmPFC": Path(r"D:\data_clarissa\valuation\csv\PFCvm_elecs_tbl.csv"),
+    "daINS": Path(r"D:\data_clarissa\valuation\csv\aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"D:\data_clarissa\valuation\csv\aINS_vent_elecs_tbl.csv"),
 }
 
 GROUP_PARAM_KWARGS = {
@@ -111,7 +111,7 @@ GROUP_PARAM_KWARGS = {
     "roi_mode": "manual",
 }
 
-VM_PFC_SPIKE_EXCLUSION_REASON = "vmPFC_spike_0_3s"
+VM_PFC_SPIKE_EXCLUSION_REASON = "vmPFC_spike_0_5s"
 
 _NA_LIKE_TOKENS = frozenset({"nan", "na", "n/a", "none", "null"})
 _FIRST_CONTACT_PATTERN = re.compile(r"^([A-Za-z]+[0-9]+)")
@@ -260,7 +260,7 @@ def build_trial_annotators(
             filter={"suffix": "events", "desc": "delphos"},
             metadata_events_key="delphos_events",
             window_tmin_s=0.0,
-            window_tmax_s=3.0,
+            window_tmax_s=5.0,
         ),
         EventAnnotationInvalidationRule(
             metadata_events_key="delphos_events",

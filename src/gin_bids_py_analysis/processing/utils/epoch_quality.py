@@ -107,12 +107,14 @@ def detect_outlier_trial_channel_pairs_by_max(
     epochs: np.ndarray,
     threshold_factor: float = 3.0,
 ) -> np.ndarray:
-    """Detect per-channel trial outliers using the epoch temporal maximum.
+    """Detect per-channel trial outliers using the epoch temporal absolute maximum.
 
     Same as :func:`detect_outlier_trial_channel_pairs_by_mean` but uses the
-    per-trial temporal maximum instead of the mean.  Equivalent to Matlab's
+    per-trial temporal absolute maximum instead of the mean.  This captures
+    large-amplitude artefacts regardless of polarity.  Inspired by Matlab's
     ``rmoutliers(max_alldata_pertrial(:, ichan), 'mean', 'ThresholdFactor',
-    std_thresh)``.
+    std_thresh)`` but applied to ``abs(epochs)`` for correctness on biphasic
+    signals.
 
     Parameters
     ----------
@@ -127,7 +129,7 @@ def detect_outlier_trial_channel_pairs_by_max(
         Bool array of shape ``(n_trials, n_channels)``.
     """
     epochs_arr = np.asarray(epochs, dtype=np.float64)
-    trial_maxes = np.max(epochs_arr, axis=2)  # [n_trials, n_channels]
+    trial_maxes = np.max(np.abs(epochs_arr), axis=2)  # [n_trials, n_channels]
     chan_means = np.mean(trial_maxes, axis=0)  # [n_channels]
     chan_stds = np.std(trial_maxes, axis=0, ddof=1)  # [n_channels]
     deviation = np.abs(trial_maxes - chan_means[np.newaxis, :])
@@ -205,10 +207,10 @@ def reject_channels_by_trial_max_spread(
     epochs: np.ndarray,
     threshold_factor: float = 1.0,
 ) -> np.ndarray:
-    """Flag channels whose across-trial spread (from trial maxima) is an outlier.
+    """Flag channels whose across-trial spread (from trial absolute maxima) is an outlier.
 
     Same as :func:`reject_channels_by_trial_mean_spread` but uses the
-    per-trial temporal maximum instead of the mean.
+    per-trial temporal absolute maximum instead of the mean.
 
     Parameters
     ----------
@@ -225,7 +227,7 @@ def reject_channels_by_trial_max_spread(
     epochs_arr = np.asarray(epochs, dtype=np.float64)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
-        trial_maxes = np.nanmax(epochs_arr, axis=2)  # [n_trials, n_channels]
+        trial_maxes = np.nanmax(np.abs(epochs_arr), axis=2)  # [n_trials, n_channels]
     chan_spread = np.nanstd(trial_maxes, axis=0, ddof=1)  # [n_channels]
     return _mean_outlier_mask_1d(chan_spread, threshold_factor)
 

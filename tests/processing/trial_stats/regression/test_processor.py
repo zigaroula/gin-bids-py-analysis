@@ -177,14 +177,6 @@ def test_process_group_computes_condition_slopes(tmp_path: Path) -> None:
     assert result.condition_b_stats_valid is True
     np.testing.assert_allclose(result.condition_a_slope, np.full((1, 3), 2.0), atol=1e-8)
     np.testing.assert_allclose(result.condition_b_slope, np.full((1, 3), -1.0), atol=1e-8)
-    np.testing.assert_allclose(
-        result.condition_a_trial_activity_summary_values,
-        result.condition_a_epoch_means,
-    )
-    np.testing.assert_allclose(
-        result.condition_b_trial_activity_summary_values,
-        result.condition_b_epoch_means,
-    )
     assert result.condition_a_trial_count == 3
     assert result.condition_b_trial_count == 3
 
@@ -474,7 +466,6 @@ def test_process_group_activity_zscore_preserves_regression_significance(
     assert z_result.activity_baseline_tmin_s == pytest.approx(0.0)
     assert z_result.activity_baseline_tmax_s == pytest.approx(0.1)
     assert not np.allclose(z_result.condition_a_slope, raw_result.condition_a_slope)
-    assert not np.allclose(z_result.condition_a_epoch_means, raw_result.condition_a_epoch_means)
 
 
 def test_process_group_supports_numeric_condition_rules_with_predictor_extraction(
@@ -745,14 +736,6 @@ def test_process_group_trial_activity_summary_anchor_to_response_from_table_colu
         resolver=_SlopeResolverWithMetadata(labels, predictors, metadata_rows),
     ).process_group(BIDSFileGroup(primary=ieeg_file))
 
-    np.testing.assert_allclose(
-        result.condition_a_epoch_means,
-        np.full((1, 3), 3.0, dtype=np.float64),
-    )
-    np.testing.assert_allclose(
-        result.condition_b_epoch_means,
-        np.full((1, 3), 3.0, dtype=np.float64),
-    )
     np.testing.assert_allclose(
         result.condition_a_trial_activity_summary_values,
         np.array([[2.0, np.nan, 3.0]], dtype=np.float64),

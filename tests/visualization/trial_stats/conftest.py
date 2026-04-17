@@ -178,8 +178,6 @@ def synthetic_slope_result(default_slope_params: RegressionParams) -> Regression
         condition_b_predictor_values=np.linspace(0.0, 1.0, 11),
         condition_a_trial_activity_summary_values=epoch_means_a.copy(),
         condition_b_trial_activity_summary_values=epoch_means_b.copy(),
-        condition_a_epoch_means=epoch_means_a,
-        condition_b_epoch_means=epoch_means_b,
         resolved_trials=[],
         source_ieeg_files=[str(mock_file.path)],
         source_table_files=[],

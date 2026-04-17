@@ -272,22 +272,6 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
             condition_a_epochs = np.array([])
             condition_b_epochs = np.array([])
 
-        if "scatter" in fh:
-            sg = fh["scatter"]
-            condition_a_epoch_means = (
-                np.asarray(sg["condition_a_epoch_means"][:], dtype=np.float64)
-                if "condition_a_epoch_means" in sg
-                else np.array([])
-            )
-            condition_b_epoch_means = (
-                np.asarray(sg["condition_b_epoch_means"][:], dtype=np.float64)
-                if "condition_b_epoch_means" in sg
-                else np.array([])
-            )
-        else:
-            condition_a_epoch_means = np.array([])
-            condition_b_epoch_means = np.array([])
-
         if "trial_activity_summary" in fh:
             tg = fh["trial_activity_summary"]
             condition_a_trial_activity_summary_values = (
@@ -331,16 +315,8 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
                 default=trial_activity_summary_label,
             ) or trial_activity_summary_label
         else:
-            condition_a_trial_activity_summary_values = (
-                np.asarray(condition_a_epoch_means, dtype=np.float64)
-                if np.asarray(condition_a_epoch_means).ndim == 2
-                else np.empty((n_features, 0), dtype=np.float64)
-            )
-            condition_b_trial_activity_summary_values = (
-                np.asarray(condition_b_epoch_means, dtype=np.float64)
-                if np.asarray(condition_b_epoch_means).ndim == 2
-                else np.empty((n_features, 0), dtype=np.float64)
-            )
+            condition_a_trial_activity_summary_values = np.empty((n_features, 0), dtype=np.float64)
+            condition_b_trial_activity_summary_values = np.empty((n_features, 0), dtype=np.float64)
             trial_activity_summary_kind = "epoch_mean"
             trial_activity_summary_missing_response_policy = "nan_if_missing"
             trial_activity_summary_source = {}
@@ -437,8 +413,6 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
         condition_b_epochs=condition_b_epochs,
         condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
         condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
-        condition_a_epoch_means=condition_a_epoch_means,
-        condition_b_epoch_means=condition_b_epoch_means,
         condition_a_permuted_slopes=condition_a_permuted_slopes,
         condition_b_permuted_slopes=condition_b_permuted_slopes,
     )
@@ -453,7 +427,6 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
     means = data.means
     uncertainty = getattr(data, "uncertainty", None)
     predictor = getattr(data, "predictor", None)
-    scatter = getattr(data, "scatter", None)
     axes = data.axes
     meta = data.meta
     prov = getattr(data, "provenance", None)
@@ -573,8 +546,6 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
         getattr(predictor, "condition_b_values", np.array([], dtype=np.float64)),
         dtype=np.float64,
     ).ravel()
-    condition_a_epoch_means = _mat_feature_trial_2d(scatter, "condition_a_epoch_means")
-    condition_b_epoch_means = _mat_feature_trial_2d(scatter, "condition_b_epoch_means")
     trial_activity_summary_kind = "epoch_mean"
     trial_activity_summary_missing_response_policy = "nan_if_missing"
     trial_activity_summary_source = {}
@@ -623,8 +594,8 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
             default=trial_activity_summary_label,
         ) or trial_activity_summary_label
     else:
-        condition_a_trial_activity_summary_values = condition_a_epoch_means
-        condition_b_trial_activity_summary_values = condition_b_epoch_means
+        condition_a_trial_activity_summary_values = np.empty((n_features, 0), dtype=np.float64)
+        condition_b_trial_activity_summary_values = np.empty((n_features, 0), dtype=np.float64)
         trial_activity_summary_kind = "epoch_mean"
         trial_activity_summary_missing_response_policy = "nan_if_missing"
         trial_activity_summary_source = {}
@@ -803,8 +774,6 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
         condition_b_epochs=np.array([]),
         condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
         condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
-        condition_a_epoch_means=condition_a_epoch_means,
-        condition_b_epoch_means=condition_b_epoch_means,
         condition_a_permuted_slopes=condition_a_permuted_slopes,
         condition_b_permuted_slopes=condition_b_permuted_slopes,
     )

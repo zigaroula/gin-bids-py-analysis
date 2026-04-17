@@ -86,8 +86,6 @@ class _RawRegressionStatsData(BaseRawTrialStatsData):
     condition_b_predictor_transformed_values: np.ndarray  # (n_trials_b,)
     condition_a_predictor_values: np.ndarray  # (n_trials_a,)
     condition_b_predictor_values: np.ndarray  # (n_trials_b,)
-    condition_a_epoch_means: np.ndarray       # (n_channels, n_trials_a)  or empty
-    condition_b_epoch_means: np.ndarray       # (n_channels, n_trials_b)  or empty
     condition_a_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_a) or empty
     condition_b_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_b) or empty
     condition_a_permuted_slopes: np.ndarray | None  # (n_perm, n_channels, n_times) float32 or None
@@ -1010,15 +1008,6 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
             dataset_or_none(fh, "meta/activity_baseline_tmax_s"),
             default=0.0,
         )
-        condition_a_epoch_means = _read_epoch_means_hdf5(
-            stats_file,
-            "scatter/condition_a_epoch_means",
-        )
-        condition_b_epoch_means = _read_epoch_means_hdf5(
-            stats_file,
-            "scatter/condition_b_epoch_means",
-        )
-
         trial_activity_summary_kind = "epoch_mean"
         trial_activity_summary_missing_response_policy = "nan_if_missing"
         trial_activity_summary_source: dict[str, str] = {}
@@ -1072,16 +1061,8 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
                 or trial_activity_summary_label
             )
         else:
-            condition_a_trial_activity_summary_values = (
-                np.asarray(condition_a_epoch_means, dtype=np.float64)
-                if np.asarray(condition_a_epoch_means).ndim == 2
-                else np.empty((n_ch, 0), dtype=np.float64)
-            )
-            condition_b_trial_activity_summary_values = (
-                np.asarray(condition_b_epoch_means, dtype=np.float64)
-                if np.asarray(condition_b_epoch_means).ndim == 2
-                else np.empty((n_ch, 0), dtype=np.float64)
-            )
+            condition_a_trial_activity_summary_values = np.empty((n_ch, 0), dtype=np.float64)
+            condition_b_trial_activity_summary_values = np.empty((n_ch, 0), dtype=np.float64)
 
         source_ieeg_files: list[str] = []
         source_electrodes_files: list[str] = []
@@ -1142,8 +1123,6 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
         ),
         condition_a_predictor_values=_read_predictor_values_hdf5(stats_file, "predictor/condition_a_values"),
         condition_b_predictor_values=_read_predictor_values_hdf5(stats_file, "predictor/condition_b_values"),
-        condition_a_epoch_means=condition_a_epoch_means,
-        condition_b_epoch_means=condition_b_epoch_means,
         condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
         condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
         condition_a_permuted_slopes=raw_condition_a_permuted_slopes,
@@ -1313,22 +1292,6 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
             condition_a_predictor_values = np.empty(0, dtype=np.float64)
             condition_b_predictor_values = np.empty(0, dtype=np.float64)
 
-        scatter_raw = getattr(data, "scatter", None)
-        condition_a_epoch_means: np.ndarray
-        condition_b_epoch_means: np.ndarray
-        if scatter_raw is not None:
-            condition_a_epoch_means = _read_feature_trial_2d(
-                scatter_raw,
-                "condition_a_epoch_means",
-            )
-            condition_b_epoch_means = _read_feature_trial_2d(
-                scatter_raw,
-                "condition_b_epoch_means",
-            )
-        else:
-            condition_a_epoch_means = np.empty((n_ch, 0), dtype=np.float64)
-            condition_b_epoch_means = np.empty((n_ch, 0), dtype=np.float64)
-
         trial_activity_summary_kind = "epoch_mean"
         trial_activity_summary_missing_response_policy = "nan_if_missing"
         trial_activity_summary_source: dict[str, str] = {}
@@ -1380,8 +1343,8 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
                 or trial_activity_summary_label
             )
         else:
-            condition_a_trial_activity_summary_values = condition_a_epoch_means
-            condition_b_trial_activity_summary_values = condition_b_epoch_means
+            condition_a_trial_activity_summary_values = np.empty((n_ch, 0), dtype=np.float64)
+            condition_b_trial_activity_summary_values = np.empty((n_ch, 0), dtype=np.float64)
 
         _mat_perm_a = getattr(cond_a_reg, "permuted_slopes", None) if cond_a_reg is not None else None
         mat_condition_a_permuted_slopes: np.ndarray | None = (
@@ -1421,8 +1384,6 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
         condition_b_predictor_transformed_values=condition_b_predictor_transformed_values,
         condition_a_predictor_values=condition_a_predictor_values,
         condition_b_predictor_values=condition_b_predictor_values,
-        condition_a_epoch_means=condition_a_epoch_means,
-        condition_b_epoch_means=condition_b_epoch_means,
         condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
         condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
         condition_a_permuted_slopes=mat_condition_a_permuted_slopes,
@@ -1455,15 +1416,6 @@ def _read_predictor_values_hdf5(stats_file: BIDSFile, path: str) -> np.ndarray:
         if ds is None:
             return np.empty(0, dtype=np.float64)
         return np.asarray(ds[:], dtype=np.float64).ravel()
-
-
-def _read_epoch_means_hdf5(stats_file: BIDSFile, path: str) -> np.ndarray:
-    """Read a (n_channels, n_trials) epoch-means array from a subject slope-stats HDF5 file."""
-    with stats_file.ensure_loaded() as fh:
-        ds = dataset_or_none(fh, path)
-        if ds is None or ds.size == 0:
-            return np.empty((0, 0), dtype=np.float64)
-        return np.asarray(ds[:], dtype=np.float64)
 
 
 def _read_condition_labels_hdf5(fh: h5py.File) -> tuple[str, str]:

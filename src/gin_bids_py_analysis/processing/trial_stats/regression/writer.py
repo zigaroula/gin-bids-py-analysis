@@ -189,17 +189,6 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
             data=np.asarray(result.condition_b_predictor_values, dtype=np.float64),
         )
 
-        if result.condition_a_epoch_means.ndim == 2 and result.condition_a_epoch_means.size > 0:
-            scatter_grp = fh.create_group("scatter")
-            scatter_grp.create_dataset(
-                "condition_a_epoch_means",
-                data=result.condition_a_epoch_means.astype(np.float64),
-            )
-            scatter_grp.create_dataset(
-                "condition_b_epoch_means",
-                data=result.condition_b_epoch_means.astype(np.float64),
-            )
-
     def _build_matlab_meta_extra(
         self,
         result: RegressionProcessingResult,
@@ -265,16 +254,6 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
     ) -> dict[str, Any]:
         cond_a = matlab_safe_name(result.condition_a)
         cond_b = matlab_safe_name(result.condition_b)
-        if result.condition_a_epoch_means.ndim == 2 and result.condition_a_epoch_means.size > 0:
-            scatter_struct: object = make_struct(
-                condition_a_epoch_means=result.condition_a_epoch_means.astype(np.float64),
-                condition_b_epoch_means=result.condition_b_epoch_means.astype(np.float64),
-            )
-        else:
-            scatter_struct = make_struct(
-                condition_a_epoch_means=np.empty((0, 0), dtype=np.float64),
-                condition_b_epoch_means=np.empty((0, 0), dtype=np.float64),
-            )
 
         return {
             "regression": make_struct(
@@ -317,7 +296,6 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
                 condition_a_values=np.asarray(result.condition_a_predictor_values, dtype=np.float64),
                 condition_b_values=np.asarray(result.condition_b_predictor_values, dtype=np.float64),
             ),
-            "scatter": scatter_struct,
             "means": make_struct(
                 **{
                     cond_a: result.condition_a_mean.astype(np.float64),

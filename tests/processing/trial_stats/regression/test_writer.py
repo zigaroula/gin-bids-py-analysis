@@ -84,14 +84,6 @@ def _make_result(tmp_path: Path) -> RegressionProcessingResult:
             [[-0.15, -0.25, -0.35], [-0.45, -0.55, -0.65]],
             dtype=np.float64,
         ),
-        condition_a_epoch_means=np.array(
-            [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
-            dtype=np.float64,
-        ),
-        condition_b_epoch_means=np.array(
-            [[-0.1, -0.2, -0.3], [-0.4, -0.5, -0.6]],
-            dtype=np.float64,
-        ),
         resolved_trials=[
             ResolvedTrial(
                 source_file=primary,
@@ -172,14 +164,6 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
         )
         assert fh["trial_activity_summary"]["kind"].asstr()[()] == "anchor_to_response_mean"
         assert fh["meta"]["epoch_cleaning_audit_json"].asstr()[()] != ""
-        np.testing.assert_allclose(
-            fh["scatter"]["condition_a_epoch_means"][:],
-            result.condition_a_epoch_means,
-        )
-        np.testing.assert_allclose(
-            fh["scatter"]["condition_b_epoch_means"][:],
-            result.condition_b_epoch_means,
-        )
         assert list(fh["trials"]["predictor_raw"].asstr()[:]) == ["1.0"]
 
     loaded = load_regression_result(output_path)
@@ -193,8 +177,6 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
         loaded.condition_b_trial_activity_summary_values,
         result.condition_b_trial_activity_summary_values,
     )
-    np.testing.assert_allclose(loaded.condition_a_epoch_means, result.condition_a_epoch_means)
-    np.testing.assert_allclose(loaded.condition_b_epoch_means, result.condition_b_epoch_means)
     assert loaded.predictor == "predictor_value"
     assert loaded.activity_zscore == "baseline"
     assert loaded.activity_baseline_tmin_s == pytest.approx(-0.2)
@@ -230,12 +212,10 @@ def test_writer_outputs_matlab(tmp_path: Path) -> None:
         loaded.condition_b_trial_activity_summary_values,
         result.condition_b_trial_activity_summary_values,
     )
-    np.testing.assert_allclose(loaded.condition_a_epoch_means, result.condition_a_epoch_means)
-    np.testing.assert_allclose(loaded.condition_b_epoch_means, result.condition_b_epoch_means)
     assert loaded.epoch_cleaning_audit == result.epoch_cleaning_audit
 
 
-def test_loader_falls_back_to_legacy_epoch_means_for_trial_activity_summary(tmp_path: Path) -> None:
+def test_loader_falls_back_to_empty_when_no_trial_activity_summary(tmp_path: Path) -> None:
     result = _make_result(tmp_path)
     writer = RegressionProcessingWriter(
         RegressionWriterParams(
@@ -253,14 +233,8 @@ def test_loader_falls_back_to_legacy_epoch_means_for_trial_activity_summary(tmp_
 
     assert loaded.trial_activity_summary_kind == "epoch_mean"
     assert loaded.trial_activity_summary_label == "Epoch mean activity"
-    np.testing.assert_allclose(
-        loaded.condition_a_trial_activity_summary_values,
-        result.condition_a_epoch_means,
-    )
-    np.testing.assert_allclose(
-        loaded.condition_b_trial_activity_summary_values,
-        result.condition_b_epoch_means,
-    )
+    assert loaded.condition_a_trial_activity_summary_values.shape == (2, 0)
+    assert loaded.condition_b_trial_activity_summary_values.shape == (2, 0)
 
 
 def test_loader_rejects_legacy_within_condition_predictor_zscore(tmp_path: Path) -> None:
