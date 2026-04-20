@@ -160,6 +160,33 @@ class BaseProcessingWriter(ABC):
     def __init__(self, params: BaseWriterParams) -> None:
         self.params = params if params is not None else BaseWriterParams()
 
+    def _build_output_path(self, entities: dict[str, Any]) -> Path:
+        """Build the BIDS derivative output path from a pre-resolved entity dict.
+
+        Strips provenance-only keys, injects ``desc``, and delegates to
+        :func:`~gin_bids_py_analysis.bids.helpers.build_bids_path`.  This is the
+        single source of truth for path construction shared by :meth:`write` and
+        :meth:`get_output_path`.
+
+        Args:
+            entities: Raw entity dict (e.g. from ``BIDSFile.entities`` or
+                      ``result.output_entities``).  Provenance keys such as
+                      ``suffix`` and ``extension`` are stripped automatically.
+
+        Returns:
+            The fully resolved BIDS derivative :class:`~pathlib.Path`.
+        """
+        output_root = self.params.bids_root / "derivatives" / self.params.pipeline_label
+        clean = {k: v for k, v in entities.items() if k not in _PROVENANCE_ENTITIES}
+        clean["desc"] = self.params.output_description
+        return build_bids_path(
+            entities=clean,
+            root=output_root,
+            suffix=self.params.output_suffix,
+            extension=self.params.output_extension,
+            datatype=self.params.output_modality,
+        )
+
     def write(
         self,
         result: BaseProcessingResult,
@@ -175,30 +202,35 @@ class BaseProcessingWriter(ABC):
         Returns:
             :class:`~pathlib.Path` to the written output file.
         """
-        output_root = self.params.bids_root / "derivatives" / self.params.pipeline_label
-        primary = result.source_group.primary
-        entities = {
-            k: v
-            for k, v in (
-                result.output_entities
-                if result.output_entities is not None
-                else primary.entities
-            ).items()
-            if k not in _PROVENANCE_ENTITIES
-        }
-        entities["desc"] = self.params.output_description
-
-        output_path = build_bids_path(
-            entities=entities,
-            root=output_root,
-            suffix=self.params.output_suffix,
-            extension=self.params.output_extension,
-            datatype=self.params.output_modality,
+        source_entities = (
+            result.output_entities
+            if result.output_entities is not None
+            else result.source_group.primary.entities
         )
+        output_path = self._build_output_path(source_entities)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         self._write_data(result, output_path)
         return output_path
+
+    def get_output_path(self, group: BIDSFileGroup) -> Path:
+        """Compute the expected output path for *group* without processing it.
+
+        Used by :meth:`BaseProcessing.run` when ``skip_existing=True`` to check
+        whether a result is already on disk before starting computation.
+
+        The path is built from ``group.primary.entities`` using the same rules
+        as :meth:`write`.  Subclasses whose processor sets
+        ``result.output_entities`` should override this method to mirror that
+        override so the predicted path is accurate.
+
+        Args:
+            group: The file group for which to predict the output path.
+
+        Returns:
+            The predicted BIDS derivative output path.
+        """
+        return self._build_output_path(group.primary.entities)
 
     def write_dataset_description(self, processing_params: BaseProcessingParams | None = None) -> None:
         """
@@ -377,6 +409,7 @@ class BaseProcessing(ABC):
         groups: list[BIDSFile | BIDSFileGroup],
         writer: "BaseProcessingWriter",
         n_jobs: int = 1,
+        skip_existing: bool = False,
     ) -> list[Path]:
         """
         Process each group and write its result immediately, then discard it
@@ -387,15 +420,21 @@ class BaseProcessing(ABC):
         moving on.
 
         Args:
-            groups:  :class:`~gin_bids_py_analysis.bids.file_group.BIDSFileGroup`
-                     or bare :class:`~gin_bids_py_analysis.bids.file.BIDSFile`
-                     objects (auto-wrapped into single-file groups).
-            writer:  Writer instance (holds the BIDS root, derives the
-                     derivatives subfolder automatically).
-            n_jobs:  Parallel workers (``1`` = sequential, ``-1`` = all CPUs).
+            groups:        :class:`~gin_bids_py_analysis.bids.file_group.BIDSFileGroup`
+                           or bare :class:`~gin_bids_py_analysis.bids.file.BIDSFile`
+                           objects (auto-wrapped into single-file groups).
+            writer:        Writer instance (holds the BIDS root, derives the
+                           derivatives subfolder automatically).
+            n_jobs:        Parallel workers (``1`` = sequential, ``-1`` = all CPUs).
+            skip_existing: When ``True``, groups whose predicted output path
+                           already exists on disk are skipped without processing.
+                           Their existing paths are included in the return value.
+                           Use this to resume an interrupted run without
+                           reprocessing already-completed groups.
 
         Returns:
-            List of output :class:`~pathlib.Path` objects in group order.
+            List of output :class:`~pathlib.Path` objects (both newly written
+            and, when *skip_existing* is ``True``, previously existing ones).
         """
         _ensure_logger_output()
         writer.write_dataset_description(getattr(self, "params", None))
@@ -407,18 +446,49 @@ class BaseProcessing(ABC):
         if resolved_n_jobs == 1:
             paths: list[Path] = []
             for g in coerced:
+                if skip_existing:
+                    expected_path = writer.get_output_path(g)
+                    if expected_path.exists():
+                        logger.info(
+                            "Skipping %s \u2014 output already exists at %s",
+                            g.primary.path,
+                            expected_path,
+                        )
+                        paths.append(expected_path)
+                        continue
                 try:
                     result = self.process_group(g, progress_tracking_position=0)
                     out_path = writer.write(result)
                 except Exception:
                     logger.error(
-                        "Error processing group %s â€” skipping.\n%s",
+                        "Error processing group %s \u2014 skipping.\n%s",
                         g.primary.path,
                         traceback.format_exc(),
                     )
                     continue
                 paths.append(out_path)
             return paths
+
+        # Parallel path: partition groups into those already done and those
+        # that still need processing before spinning up workers.
+        already_done: list[Path] = []
+        if skip_existing:
+            remaining: list[BIDSFileGroup] = []
+            for g in coerced:
+                expected_path = writer.get_output_path(g)
+                if expected_path.exists():
+                    logger.info(
+                        "Skipping %s \u2014 output already exists at %s",
+                        g.primary.path,
+                        expected_path,
+                    )
+                    already_done.append(expected_path)
+                else:
+                    remaining.append(g)
+            coerced = remaining
+
+        if not coerced:
+            return already_done
 
         # Set up a multiprocessing-safe queue to assign worker positions for
         # progress tracking in true parallel runs only.
@@ -434,7 +504,7 @@ class BaseProcessing(ABC):
                 return writer.write(result)
             except Exception:
                 logger.error(
-                    "Error processing group %s — skipping.\n%s",
+                    "Error processing group %s \u2014 skipping.\n%s",
                     g.primary.path,
                     traceback.format_exc(),
                 )
@@ -442,5 +512,5 @@ class BaseProcessing(ABC):
             finally:
                 position_queue.put(pos)  # Return the position to the queue
 
-        paths = Parallel(n_jobs=n_jobs)(delayed(_process_and_write)(g) for g in coerced)
-        return [p for p in paths if p is not None]
+        new_paths = Parallel(n_jobs=n_jobs)(delayed(_process_and_write)(g) for g in coerced)
+        return already_done + [p for p in new_paths if p is not None]

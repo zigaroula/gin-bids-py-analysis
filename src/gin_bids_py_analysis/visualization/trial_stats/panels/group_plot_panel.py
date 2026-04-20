@@ -26,6 +26,7 @@ from .plot_panel import (
     _filter_matrix_rows,
     _fit_scatter_regression,
     _scatter_activity_axis_label,
+    _set_symmetric_ylim,
 )
 
 if TYPE_CHECKING:
@@ -361,6 +362,7 @@ class GroupPlotPanel(QWidget):
                 transform=ax.get_xaxis_transform(),
                 zorder=5,
             )
+        _set_symmetric_ylim(ax)
         self._canvas_means.draw_idle()
 
         ax = self._ax_t
@@ -386,6 +388,7 @@ class GroupPlotPanel(QWidget):
             f"{roi_label} - t-values - {n_ch} channel(s) / {n_subj} subject(s)",
             fontsize=9,
         )
+        _set_symmetric_ylim(ax)
         self._canvas_t.draw_idle()
 
         ax = self._ax_p
@@ -535,6 +538,7 @@ class GroupPlotPanel(QWidget):
             ax.fill_between(t, 0.005, 0.025, where=sig_activity, alpha=0.75, color="red",
                             transform=ax.get_xaxis_transform(), zorder=5)
         _safe_legend(ax)
+        _set_symmetric_ylim(ax)
         self._canvas_means.draw_idle()
 
         # ---- Activity t-values ----
@@ -553,6 +557,7 @@ class GroupPlotPanel(QWidget):
         ax.set_ylabel("activity t-value")
         ax.set_title(f"{roi_label} — activity ({cond_a_label} vs {cond_b_label})", fontsize=9)
         _safe_legend(ax)
+        _set_symmetric_ylim(ax)
         self._canvas_activity_t.draw_idle()
 
         # ---- Activity p-values ----
@@ -642,6 +647,7 @@ class GroupPlotPanel(QWidget):
             ax.fill_between(t, 0.005, 0.025, where=sig_slope, alpha=0.75, color="red",
                             transform=ax.get_xaxis_transform(), zorder=5)
         _safe_legend(ax)
+        _set_symmetric_ylim(ax)
         self._canvas_slope.draw_idle()
 
         # ---- Slope t-values ----
@@ -659,6 +665,7 @@ class GroupPlotPanel(QWidget):
         ax.set_ylabel(f"{metric_label} t-value")
         ax.set_title(f"{roi_label} — {metric_label} ({contrast_label})", fontsize=9)
         _safe_legend(ax)
+        _set_symmetric_ylim(ax)
         self._canvas_t.draw_idle()
 
         # ---- Slope p-values ----

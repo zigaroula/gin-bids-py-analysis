@@ -241,7 +241,7 @@ def test_process_group_manual_mode_and_thresholds() -> None:
         result = processor.process_group(BIDSFileGroup(primary=file_01, secondaries=[file_02]))
 
         assert result.region_names == ["ROI_POS", "ROI_NEG"]
-        assert result.output_entities == {"subject": "group", "task": "decid"}
+        assert result.output_entities is None
         assert result.activity_t_values.shape == (2, 3)
         assert np.all(result.metric_mean[0] > 0.0)
         assert np.all(result.metric_mean[1] < 0.0)
@@ -599,7 +599,7 @@ def test_process_group_manual_mode_mat_input() -> None:
         result = processor.process_group(BIDSFileGroup(primary=file_01, secondaries=[file_02]))
 
         assert result.region_names == ["ROI_POS", "ROI_NEG"]
-        assert result.output_entities == {"subject": "group", "task": "decid"}
+        assert result.output_entities is None
         assert result.activity_t_values.shape == (2, 3)
         assert np.all(result.metric_mean[0] > 0.0)
         assert np.all(result.metric_mean[1] < 0.0)

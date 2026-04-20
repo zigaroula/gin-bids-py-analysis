@@ -27,6 +27,8 @@ from gin_bids_py_analysis.processing.utils.epoch_quality import (
     apply_trial_nan_mask,
     detect_outlier_trial_channel_pairs_by_max,
     detect_outlier_trial_channel_pairs_by_mean,
+    reject_channels_by_trial_max_spread,
+    reject_channels_by_trial_mean_spread,
 )
 from gin_bids_py_analysis.processing.utils.statistics import zscore_activity_by_baseline
 
@@ -35,14 +37,14 @@ from gin_bids_py_analysis.processing.utils.statistics import zscore_activity_by_
 # ---------------------------------------------------------------------------
 
 MATLAB_PATH = Path(
-    r"D:\data_clarissa\transfer_12408284_files_bbf26a92"
-    r"\edGRE_2021_AICb_MD_CHOICE_Partie1_BPF_f50f150_sf100_sm250_onset.mat"
+    r"/Volumes/Elements/data_clarissa/transfer_12408284_files_bbf26a92"
+    r"/edGRE_2021_AICb_MD_CHOICE_Partie1_BPF_f50f150_sf100_sm250_onset.mat"
 )
 
 # MNE needs the .vhdr header — derive it from the .eeg path.
 BV_EEG_PATH = Path(
-    r"D:\data_clarissa\valuation\bids\derivatives\hilbert"
-    r"\sub-GRE2021AICb\ieeg\sub-GRE2021AICb_task-MDCHOICE_desc-bgasm250_ieeg.eeg"
+    r"/Volumes/Elements/data_clarissa/valuation/bids/derivatives/hilbert"
+    r"/sub-GRE2021AICb/ieeg/sub-GRE2021AICb_task-MDCHOICE_desc-bgasm250_ieeg.eeg"
 )
 BV_VHDR_PATH = BV_EEG_PATH.with_suffix(".vhdr")
 
@@ -69,8 +71,22 @@ BASELINE_REMOVE_OUTLIERS: bool = True
 # pre-cleaning step before calling f_baseline_normalization.
 # Current evidence: keeping this False (no PRECLEAN) + BASELINE_REMOVE_OUTLIERS=True
 # is the closest match to MATLAB's f_baseline_normalization alone.
-PRECLEAN_BV: bool = False
+PRECLEAN_BV: bool = True
 PRECLEAN_THRESHOLD: float = 3.0
+# Replicate MATLAB's removebadchannelsSd step: NaN-ise entire channels whose
+# across-trial spread of mean HGA is an outlier (threshold=1σ, 'mean' method).
+# Applied after PRECLEAN, before z-scoring, matching b2_BPF_apply_options.m.
+REJECT_BAD_CHANNELS_SD: bool = True
+REJECT_BAD_CHANNELS_SD_THRESHOLD: float = 1.0
+# Replicate MATLAB b2_BPF_apply_options_R1 opts.removenegratings: NaN-ise trials
+# where the behavioral rating is negative (rating < MIN_RATING) across all channels.
+# Requires a beh TSV with a 'rating' column in EEG trial order.
+REMOVE_NEGATIVE_RATINGS: bool = True
+MIN_RATING: float = 0.0
+BEH_TSV_PATH = Path(
+    r"/Volumes/Elements/data_clarissa/valuation/bids"
+    r"/sub-GRE2021AICb/beh/sub-GRE2021AICb_task-MDCHOICE_beh.tsv"
+)
 
 
 # ===========================================================================
@@ -680,6 +696,46 @@ def main() -> None:
         bv_epochs = apply_trial_nan_mask(bv_epochs, combined_mask)
         print(f"    Masked {n_masked} (trial, channel) pairs "
               f"({int(np.sum(mask_mean))} by mean, {int(np.sum(mask_max))} by max).")
+
+    if REJECT_BAD_CHANNELS_SD:
+        print(f"  Rejecting bad channels by trial-mean spread (threshold={REJECT_BAD_CHANNELS_SD_THRESHOLD}σ)…")
+        bad_ch_mean = reject_channels_by_trial_mean_spread(bv_epochs, REJECT_BAD_CHANNELS_SD_THRESHOLD)
+        bad_ch_max = reject_channels_by_trial_max_spread(bv_epochs, REJECT_BAD_CHANNELS_SD_THRESHOLD)
+        bad_ch_mask = bad_ch_mean | bad_ch_max
+        n_bad_ch = int(np.sum(bad_ch_mask))
+        if n_bad_ch:
+            # NaN entire channel across all trials (matching MATLAB alldata(:,:,chans) = NaN)
+            bv_epochs[:, bad_ch_mask, :] = np.nan
+            bad_names = [bv_channels[i] for i in np.flatnonzero(bad_ch_mask)]
+            print(f"    NaN'd {n_bad_ch} channel(s): {bad_names}")
+        else:
+            print("    No bad channels detected.")
+
+    if REMOVE_NEGATIVE_RATINGS:
+        print(f"  Removing negative-rating trials (rating < {MIN_RATING}, from {BEH_TSV_PATH.name})…")
+        if not BEH_TSV_PATH.exists():
+            print(f"    WARNING: beh TSV not found, skipping: {BEH_TSV_PATH}")
+        else:
+            import csv as _csv
+            with BEH_TSV_PATH.open(newline="", encoding="utf-8-sig") as _f:
+                _rows = list(_csv.DictReader(_f, delimiter="\t"))
+            _ratings = np.array(
+                [float(r["rating"]) if r.get("rating", "").strip() not in ("", "n/a", "nan") else np.nan
+                 for r in _rows],
+                dtype=np.float64,
+            )
+            n_bv = bv_epochs.shape[0]
+            if len(_ratings) < n_bv:
+                print(f"    WARNING: beh has {len(_ratings)} rows but BV has {n_bv} trials — skipping.")
+            else:
+                _neg_mask = _ratings[:n_bv] < MIN_RATING  # (n_trials,)
+                n_neg = int(np.sum(_neg_mask))
+                if n_neg:
+                    # NaN all channels for those trials (matching MATLAB alldata(trialsToRemove,:,:) = NaN)
+                    bv_epochs[_neg_mask, :, :] = np.nan
+                    print(f"    NaN'd {n_neg} trial(s) with rating < {MIN_RATING}.")
+                else:
+                    print(f"    No negative-rating trials found.")
 
     # Compute z-score reference stats per channel (on pre-zscore data; NaN from PRECLEAN
     # already propagate).  Stored for display in the viewer infobox.

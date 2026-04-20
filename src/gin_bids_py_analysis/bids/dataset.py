@@ -71,7 +71,7 @@ class BIDSDataset:
             dataset.get_files(scope="raw", subject="01", suffix="ieeg")
             dataset.get_files(scope="hilbert", suffix="timeseries")
         """
-        raw = self._layout.get(return_type="object", **entities)
+        raw = self._layout.get(return_type="object", invalid_filters="allow", **entities)
         return [BIDSFile(f) for f in raw]
 
     def get_subjects(self, **entities: Any) -> list[BIDSSubject]:
@@ -83,7 +83,9 @@ class BIDSDataset:
                         same query keys as :meth:`get_files`, including
                         ``scope``.
         """
-        subject_ids = self._layout.get(return_type="id", target="subject", **entities)
+        subject_ids = self._layout.get(
+            return_type="id", target="subject", invalid_filters="allow", **entities
+        )
         return [
             BIDSSubject(
                 subject_id=sid,

@@ -170,6 +170,7 @@ class PlotPanel(QWidget):
             ),
             fontsize=9,
         )
+        _set_symmetric_ylim(ax)
         self._canvas_t.draw_idle()
 
         ax = self._ax_p
@@ -299,6 +300,7 @@ class PlotPanel(QWidget):
             fontsize=9,
         )
         ax.legend(fontsize="small", loc="upper right")
+        _set_symmetric_ylim(ax)
         self._canvas_t.draw_idle()
 
         ax = self._ax_p
@@ -399,6 +401,7 @@ class PlotPanel(QWidget):
                 zorder=5,
             )
         ax.legend(fontsize="small", loc="upper right")
+        _set_symmetric_ylim(ax)
         self._canvas_means.draw_idle()
 
     def _draw_trial_matrix(
@@ -724,6 +727,14 @@ class PlotPanel(QWidget):
 
 def _is_slope_result(result: object) -> bool:
     return hasattr(result, "analysis_type") and getattr(result, "analysis_type", "") == "slope_regression"
+
+
+def _set_symmetric_ylim(ax) -> None:
+    """Make the y-axis limits symmetric around zero: [-max_abs, +max_abs]."""
+    ymin, ymax = ax.get_ylim()
+    bound = max(abs(ymin), abs(ymax))
+    if bound > 0:
+        ax.set_ylim(-bound, bound)
 
 
 def _safe_legend(ax) -> None:

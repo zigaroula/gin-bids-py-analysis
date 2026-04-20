@@ -604,7 +604,6 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                 "trial_activity_summary_label": first.raw.trial_activity_summary_label,
                 "scatter_aggregation": "trial_pool",
             },
-            output_entities=self.build_output_entities(first.task),
             source_metric_t_values=source_metric_t_values,
             source_metric_p_values=source_metric_p_values,
             source_metric_p_values_uncorrected=source_metric_p_values_uncorr,

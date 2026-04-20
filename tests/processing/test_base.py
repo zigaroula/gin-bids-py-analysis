@@ -70,10 +70,23 @@ class _DummyWriter(BaseProcessingWriter):
         pass  # no-op for tests; output_path is already created by the base
 
 
+class _WritingDummyWriter(BaseProcessingWriter):
+    """Dummy writer that actually touches the output file on disk."""
+
+    def _write_data(self, result: BaseProcessingResult, output_path: Path) -> None:
+        output_path.touch()
+
+
 def _dummy_writer(bids_root: Path) -> _DummyWriter:
     """Helper: build a _DummyWriter with minimal BaseWriterParams."""
     params = _DummyWriterParams(bids_root=bids_root)
     return _DummyWriter(params)
+
+
+def _writing_dummy_writer(bids_root: Path) -> _WritingDummyWriter:
+    """Helper: build a _WritingDummyWriter that creates files on disk."""
+    params = _DummyWriterParams(bids_root=bids_root)
+    return _WritingDummyWriter(params)
 
 
 # ---------------------------------------------------------------------------
@@ -268,3 +281,105 @@ def test_run_dataset_description_no_params_key_when_none(mock_bids_file: BIDSFil
     desc_path = tmp_path / "derivatives" / "dummy" / "dataset_description.json"
     desc = json.loads(desc_path.read_text(encoding="utf-8"))
     assert "Parameters" not in desc["GeneratedBy"][0]
+
+
+# ---------------------------------------------------------------------------
+# skip_existing tests
+# ---------------------------------------------------------------------------
+
+def test_get_output_path_returns_path(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
+    """get_output_path() should return a Path derived from the group's primary entities."""
+    writer = _writing_dummy_writer(tmp_path)
+    group = BIDSFileGroup(primary=mock_bids_file)
+    out = writer.get_output_path(group)
+    assert isinstance(out, Path)
+    assert "dummy" in str(out)  # pipeline_label
+
+
+def test_get_output_path_matches_write_path(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
+    """get_output_path() must predict the same path that write() actually creates."""
+    writer = _writing_dummy_writer(tmp_path)
+    group = BIDSFileGroup(primary=mock_bids_file)
+    result = _DummyResult(source_group=group)
+
+    predicted = writer.get_output_path(group)
+    actual = writer.write(result)
+
+    assert predicted == actual
+
+
+def test_run_skip_existing_skips_already_written(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
+    """When skip_existing=True, a group whose output is already on disk is not reprocessed."""
+    writer = _writing_dummy_writer(tmp_path)
+    groups = [BIDSFileGroup(primary=mock_bids_file)]
+
+    # First run — writes the output.
+    paths_first = _DummyProcessor().run(groups, writer)
+    assert len(paths_first) == 1
+    assert paths_first[0].exists()
+
+    # Track how many times process_group is called on the second run.
+    call_count = {"n": 0}
+
+    class _CountingProcessor(_DummyProcessor):
+        def process_group(self, group: BIDSFileGroup, progress_tracking_position: int = 0) -> _DummyResult:
+            call_count["n"] += 1
+            return super().process_group(group, progress_tracking_position)
+
+    paths_second = _CountingProcessor().run(groups, writer, skip_existing=True)
+
+    assert call_count["n"] == 0, "process_group should not be called for an existing output"
+    assert len(paths_second) == 1
+    assert paths_second[0] == paths_first[0]
+
+
+def test_run_skip_existing_processes_missing(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
+    """When skip_existing=True, groups without existing output are still processed."""
+    writer = _writing_dummy_writer(tmp_path)
+    group = BIDSFileGroup(primary=mock_bids_file)
+
+    # No prior run — output does not exist yet.
+    paths = _DummyProcessor().run([group], writer, skip_existing=True)
+
+    assert len(paths) == 1
+    assert paths[0].exists()
+
+
+def test_run_skip_existing_false_always_processes(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
+    """When skip_existing=False (default), groups are always processed even if output exists."""
+    writer = _writing_dummy_writer(tmp_path)
+    groups = [BIDSFileGroup(primary=mock_bids_file)]
+
+    _DummyProcessor().run(groups, writer)  # first run creates the file
+
+    call_count = {"n": 0}
+
+    class _CountingProcessor(_DummyProcessor):
+        def process_group(self, group: BIDSFileGroup, progress_tracking_position: int = 0) -> _DummyResult:
+            call_count["n"] += 1
+            return super().process_group(group, progress_tracking_position)
+
+    _CountingProcessor().run(groups, writer, skip_existing=False)
+
+    assert call_count["n"] == 1, "process_group should be called when skip_existing=False"
+
+
+def test_run_skip_existing_parallel(mock_bids_file: BIDSFile, tmp_path: Path) -> None:
+    """skip_existing=True works in the parallel (n_jobs>1) code path."""
+    writer = _writing_dummy_writer(tmp_path)
+    groups = [BIDSFileGroup(primary=mock_bids_file), BIDSFileGroup(primary=mock_bids_file)]
+
+    # Write outputs first.
+    _DummyProcessor().run(groups, writer)
+
+    call_count = {"n": 0}
+
+    class _CountingProcessor(_DummyProcessor):
+        def process_group(self, group: BIDSFileGroup, progress_tracking_position: int = 0) -> _DummyResult:
+            call_count["n"] += 1
+            return super().process_group(group, progress_tracking_position)
+
+    paths = _CountingProcessor().run(groups, writer, n_jobs=2, skip_existing=True)
+
+    assert call_count["n"] == 0
+    assert len(paths) == 2

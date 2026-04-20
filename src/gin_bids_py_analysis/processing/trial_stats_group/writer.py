@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 
 import h5py
 import numpy as np
@@ -24,6 +25,16 @@ def package_version() -> str:
 
 class BaseTrialStatsGroupProcessingWriter(BaseProcessingWriter):
     """Shared helper methods for group-level result writers."""
+
+    def _build_output_path(self, entities: dict) -> Path:
+        """Force ``subject="group"`` before delegating to the base path builder.
+
+        All other entities (e.g. ``task``) are preserved as-is from the primary
+        file, so no entity logic needs to live in the processors.
+        """
+        group_entities = dict(entities)
+        group_entities["subject"] = "group"
+        return super()._build_output_path(group_entities)
 
     @staticmethod
     def string_dtype() -> h5py.Datatype:

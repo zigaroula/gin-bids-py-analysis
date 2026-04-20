@@ -338,7 +338,8 @@ def test_process_group_reports_missing_manual_channels(capsys: pytest.CaptureFix
         shutil.rmtree(case_dir, ignore_errors=True)
 
 
-def test_process_group_output_entities_set_to_group() -> None:
+def test_process_group_output_entities_is_none() -> None:
+    """Processor no longer sets output_entities; the writer injects subject='group' via _build_output_path."""
     case_dir = _make_case_dir("output_entities")
     try:
         time_s = np.array([0.0, 0.1], dtype=np.float64)
@@ -354,7 +355,7 @@ def test_process_group_output_entities_set_to_group() -> None:
             )
         )
         result = processor.process_group(BIDSFileGroup(primary=file_01))
-        assert result.output_entities.get("subject") == "group"
+        assert result.output_entities is None
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 

@@ -418,13 +418,6 @@ class BaseTrialStatsGroupProcessing(BaseProcessing):
         return sorted(group.all_files, key=lambda item: str(item.path))
 
     @staticmethod
-    def build_output_entities(task: str) -> dict[str, str]:
-        entities: dict[str, str] = {"subject": "group"}
-        if task:
-            entities["task"] = task
-        return entities
-
-    @staticmethod
     def stack_rows(rows: list[np.ndarray], n_times: int) -> np.ndarray:
         if rows:
             return np.stack(rows, axis=0).astype(np.float64)

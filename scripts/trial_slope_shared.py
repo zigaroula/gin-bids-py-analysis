@@ -5,7 +5,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
+import numpy as np
+
+from gin_bids_py_analysis.bids import BIDSDataset, BIDSFile, BIDSFileGroup, build_subject_groups
 from gin_bids_py_analysis.bids.helpers import normalize_subject_value
 from gin_bids_py_analysis.processing.trial_stats.regression import RegressionParams
 from gin_bids_py_analysis.processing.trial_stats.result import BaseTrialStatsProcessingResult
@@ -16,13 +18,30 @@ from gin_bids_py_analysis.processing.utils.trial_annotator import (
     EventFileWindowAnnotator,
     TrialMetadataInvalidationRule,
 )
-from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
+from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TableTrialResolver
 
 # ---------------------------------------------------------------------------
 # Shared parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
+BIDS_ROOT = Path(r"/Volumes/Elements/data_clarissa/valuation/bids")
+
+# ---------------------------------------------------------------------------
+# MATLAB z-score injection configuration
+# ---------------------------------------------------------------------------
+# Set USE_MATLAB_ZSCORES to True to replace the default 'rating' predictor
+# with pre-computed z-scored values loaded from an external MATLAB file.
+# When enabled:
+#  - Z-scores are loaded from MATLAB_ZSCORES_PATH and injected as metadata["matlab_zscore"]
+#  - The predictor is automatically changed to "matlab_zscore"
+#  - Behavioral filters (RT, rating thresholds) still apply to RAW rating values
+#  - Trials are matched by sequential order of appearance per subject
+# Set to False to restore default behavior (predictor="rating").
+
+USE_MATLAB_ZSCORES: bool = True
+
+MATLAB_ZSCORES_PATH = Path(r"/Volumes/Elements/data_clarissa/subjects.mat")
+MATLAB_ZSCORE_COLUMN_INDEX = 6  # 0-based index for column 7 in trial_characteristics1
 
 IEEG_FILTERS = {
     "suffix": "ieeg",
@@ -71,37 +90,43 @@ TRIAL_SLOPE_RESOLVER_CONDITIONS = [
     },
 ]
 
-PARAMS = RegressionParams(
-    anchor_event_codes=["11", "12"],
-    experiment_start_event_code="5",
-    tmin_s=-0.5,
-    tmax_s=5.0,
-    condition_a="pleasant",
-    condition_b="unpleasant",
-    predictor="rating",
-    predictor_transform_by_condition={
-        "pleasant": {"scale": 1.0, "offset": 0.0},
-        "unpleasant": {"scale": -1.0, "offset": 0.0},
-    },
-    predictor_zscore="none",
-    activity_zscore="baseline",
-    activity_baseline_tmin_s=-0.25,
-    activity_baseline_tmax_s=-0.05,
-    activity_baseline_scope="global",
-    activity_baseline_remove_outlier_trial_means=True,
-    p_value_correction_method="none",
-    significance_alpha=0.05,
-    trial_activity_summary={
-        "kind": "anchor_to_response_mean",
-        "response": {"source": "table_column", "column": "RT", "units": "s"},
-    },
-    epoch_cleaning=TRIAL_SLOPE_EPOCH_CLEANING,
-)
+
+def _build_params() -> RegressionParams:
+    """Build RegressionParams with conditional predictor based on USE_MATLAB_ZSCORES."""
+    return RegressionParams(
+        anchor_event_codes=["11", "12"],
+        experiment_start_event_code="5",
+        tmin_s=-0.5,
+        tmax_s=5.0,
+        condition_a="pleasant",
+        condition_b="unpleasant",
+        predictor="matlab_zscore" if USE_MATLAB_ZSCORES else "rating",
+        predictor_transform_by_condition={
+            "pleasant": {"scale": 1.0, "offset": 0.0},
+            "unpleasant": {"scale": -1.0, "offset": 0.0},
+        },
+        predictor_zscore="none",
+        activity_zscore="baseline",
+        activity_baseline_tmin_s=-0.25,
+        activity_baseline_tmax_s=-0.05,
+        activity_baseline_scope="global",
+        activity_baseline_remove_outlier_trial_means=True,
+        p_value_correction_method="none",
+        significance_alpha=0.05,
+        trial_activity_summary={
+            "kind": "anchor_to_response_mean",
+            "response": {"source": "table_column", "column": "RT", "units": "s"},
+        },
+        epoch_cleaning=TRIAL_SLOPE_EPOCH_CLEANING,
+    )
+
+
+PARAMS = _build_params()
 
 ROI_CSV_FILES = {
-    "vmPFC": Path(r"D:\data_clarissa\valuation\csv\PFCvm_elecs_tbl.csv"),
-    "daINS": Path(r"D:\data_clarissa\valuation\csv\aINS_dors_elecs_tbl.csv"),
-    "vaINS": Path(r"D:\data_clarissa\valuation\csv\aINS_vent_elecs_tbl.csv"),
+    "vmPFC": Path(r"/Volumes/Elements/data_clarissa/valuation/csv/PFCvm_elecs_tbl.csv"),
+    "daINS": Path(r"/Volumes/Elements/data_clarissa/valuation/csv/aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"/Volumes/Elements/data_clarissa/valuation/csv/aINS_vent_elecs_tbl.csv"),
 }
 
 GROUP_PARAM_KWARGS = {
@@ -118,6 +143,10 @@ VM_PFC_SPIKE_EXCLUSION_REASON = "vmPFC_spike_0_5s"
 #   opts.removenegratings  → trials with rating < 0 are excluded (all channels)
 MAX_RT_S: float = 20.0
 MIN_RATING: float = 0.0
+BEH_TSV_PATH = Path(
+    r"/Volumes/Elements/data_clarissa/valuation/bids"
+    r"/sub-GRE2021AICb/beh/sub-GRE2021AICb_task-MDCHOICE_beh.tsv"
+)
 
 _NA_LIKE_TOKENS = frozenset({"nan", "na", "n/a", "none", "null"})
 _FIRST_CONTACT_PATTERN = re.compile(r"^([A-Za-z]+[0-9]+)")
@@ -254,17 +283,230 @@ def build_vmPFC_spike_filter(
     return ConditionExpr(any=per_subject_filters)
 
 
+def load_matlab_zscores(mat_path: Path) -> dict[str, np.ndarray]:
+    """Load z-scored predictor values from MATLAB subjects.mat file.
+
+    Parameters
+    ----------
+    mat_path : Path
+        Path to the MATLAB .mat file containing subject trial characteristics.
+
+    Returns
+    -------
+    dict[str, np.ndarray]
+        Dictionary mapping normalized BIDS subject IDs to z-score arrays.
+        Subject names are normalized (underscores removed) to match BIDS format.
+
+    Raises
+    ------
+    FileNotFoundError
+        If mat_path does not exist.
+    ValueError
+        If the .mat file structure is invalid or missing expected fields.
+
+    Notes
+    -----
+    The function expects the .mat file to contain a 'subjects' array with fields:
+    - 'name': subject identifier (underscores will be removed for BIDS matching)
+    - 'trial_characteristics1': (n_trials, 7) array where column 7 (index 6)
+      contains the z-scored predictor values.
+    """
+    if not mat_path.exists():
+        raise FileNotFoundError(f"MATLAB z-scores file not found: {mat_path}")
+
+    try:
+        from scipy.io import loadmat  # noqa: PLC0415
+    except ImportError as exc:
+        raise ImportError(
+            "scipy is required to load MATLAB files. Install with: pip install scipy"
+        ) from exc
+
+    try:
+        mat = loadmat(str(mat_path), squeeze_me=True, struct_as_record=False)
+    except Exception as exc:
+        raise ValueError(f"Failed to load MATLAB file {mat_path}: {exc}") from exc
+
+    if "subjects" not in mat:
+        raise ValueError(f"MATLAB file {mat_path} does not contain 'subjects' field.")
+
+    subjects_data = mat["subjects"]
+    if not hasattr(subjects_data, "__iter__"):
+        subjects_data = [subjects_data]
+
+    zscores_by_subject: dict[str, np.ndarray] = {}
+
+    for subject_obj in subjects_data:
+        if not hasattr(subject_obj, "name"):
+            continue
+
+        raw_name = str(subject_obj.name).strip()
+        if not raw_name:
+            continue
+
+        # Normalize subject name: remove underscores to match BIDS format
+        normalized_name = normalize_subject_value(raw_name.replace("_", ""))
+
+        if not hasattr(subject_obj, "trial_characteristics1"):
+            raise ValueError(
+                f"Subject {raw_name} is missing 'trial_characteristics1' field."
+            )
+
+        tc = subject_obj.trial_characteristics1
+        if not isinstance(tc, np.ndarray):
+            tc = np.asarray(tc, dtype=np.float64)
+
+        if tc.ndim != 2:
+            raise ValueError(
+                f"Subject {raw_name}: trial_characteristics1 must be 2D, got shape {tc.shape}."
+            )
+
+        if tc.shape[1] <= MATLAB_ZSCORE_COLUMN_INDEX:
+            raise ValueError(
+                f"Subject {raw_name}: trial_characteristics1 has only {tc.shape[1]} columns, "
+                f"cannot extract column {MATLAB_ZSCORE_COLUMN_INDEX + 1}."
+            )
+
+        zscores = tc[:, MATLAB_ZSCORE_COLUMN_INDEX].astype(np.float64)
+        zscores_by_subject[normalized_name] = zscores
+
+    if not zscores_by_subject:
+        raise ValueError(f"No valid subjects found in MATLAB file {mat_path}.")
+
+    return zscores_by_subject
+
+
+class MatlabZscorePredictorAnnotator:
+    """Inject MATLAB-derived z-scored predictor values into trial metadata.
+
+    This annotator loads z-scores from an external MATLAB file and injects them
+    into ``trial.metadata["matlab_zscore"]`` for each resolved trial. Trials are
+    matched by sequential order of appearance (index) per subject.
+
+    Trials that are already excluded (``keep=False``) or fall outside the available
+    z-score range receive ``np.nan``.
+
+    This allows substituting the default predictor (e.g., 'rating') with pre-computed
+    z-scored values while preserving behavioral filtering on the original raw values.
+
+    Parameters
+    ----------
+    mat_path : Path
+        Path to the MATLAB .mat file. Loaded once at construction.
+
+    Attributes
+    ----------
+    zscores_by_subject : dict[str, np.ndarray]
+        Pre-loaded z-score arrays indexed by normalized BIDS subject ID.
+
+    Notes
+    -----
+    - Implements the ``TrialWindowAnnotator`` protocol.
+    - Z-scores are matched by trial index within each subject's kept trials.
+    - Missing subjects or out-of-range trial indices result in NaN values.
+    - Does not modify ``trial.keep`` or ``trial.exclusion_reason``.
+    """
+
+    def __init__(self, mat_path: Path) -> None:
+        self.zscores_by_subject = load_matlab_zscores(mat_path)
+
+    def annotate_trials(
+        self,
+        group: BIDSFileGroup,
+        ieeg_file: BIDSFile,
+        trials: list[ResolvedTrial],
+        tmin_s: float,
+        tmax_s: float,
+        *,
+        ieeg_channel_names: list[str],
+    ) -> None:
+        """Inject matlab_zscore into trial metadata by sequential order.
+
+        Parameters
+        ----------
+        group : BIDSFileGroup
+            File group being processed (unused).
+        ieeg_file : BIDSFile
+            Current iEEG file. Subject ID is extracted from this file.
+        trials : list[ResolvedTrial]
+            Resolved trials to annotate. Modified in-place.
+        tmin_s : float
+            Epoch start time (unused).
+        tmax_s : float
+            Epoch end time (unused).
+        ieeg_channel_names : list[str]
+            Available channel names (unused).
+        """
+        del group, tmin_s, tmax_s, ieeg_channel_names  # Unused
+
+        subject_id = ieeg_file.get("subject", "")
+        if not subject_id:
+            # No subject ID available; mark all trials with NaN
+            for trial in trials:
+                trial.metadata["matlab_zscore"] = np.nan
+            return
+
+        zscores = self.zscores_by_subject.get(subject_id)
+        if zscores is None:
+            # Subject not found in MATLAB file; mark all trials with NaN
+            for trial in trials:
+                trial.metadata["matlab_zscore"] = np.nan
+            return
+
+        # Match z-scores by sequential index of kept trials
+        kept_idx = 0
+        for trial in trials:
+            if not trial.keep:
+                trial.metadata["matlab_zscore"] = np.nan
+                continue
+
+            if kept_idx < len(zscores):
+                trial.metadata["matlab_zscore"] = float(zscores[kept_idx])
+            else:
+                # Out of range; use NaN
+                trial.metadata["matlab_zscore"] = np.nan
+
+            kept_idx += 1
+
+
 def build_trial_annotators(
     manual_region_channels: dict[str, dict[str, list[str]]],
-) -> list[EventFileWindowAnnotator | EventAnnotationInvalidationRule | TrialMetadataInvalidationRule]:
+) -> list:
+    """Build the list of trial annotators for trial slope processing.
+
+    When USE_MATLAB_ZSCORES is True, a MatlabZscorePredictorAnnotator is prepended
+    to inject z-scored predictor values before behavioral filtering.
+
+    Parameters
+    ----------
+    manual_region_channels : dict[str, dict[str, list[str]]]
+        ROI channel mapping by subject, used for vmPFC spike exclusion.
+
+    Returns
+    -------
+    list
+        List of annotators including optional MATLAB z-score injection,
+        behavioral thresholds, and Delphos spike filtering.
+
+    Raises
+    ------
+    ValueError
+        If vmPFC ROI channels are not provided.
+    """
     vm_pfc_channels_by_subject = manual_region_channels.get("vmPFC", {})
     if not vm_pfc_channels_by_subject:
         raise ValueError("vmPFC ROI channels are required to exclude Delphos spike trials.")
 
-    return [
+    annotators: list = []
+
+    # Optionally inject MATLAB z-scores BEFORE behavioral filtering
+    if USE_MATLAB_ZSCORES:
+        annotators.append(MatlabZscorePredictorAnnotator(MATLAB_ZSCORES_PATH))
+
+    annotators.extend([
         # Behavioral validity: exclude trials with RT > MAX_RT_S or rating < MIN_RATING.
         # These checks are orthogonal to condition classification and mirror MATLAB b2
         # steps opts.removeoutlierRTs and opts.removenegratings.
+        # NOTE: These filters still apply to RAW rating values even when USE_MATLAB_ZSCORES is True.
         TrialMetadataInvalidationRule(
             condition={"all": [
                 {"column": "RT", "op": "<=", "value": MAX_RT_S},
@@ -273,18 +515,20 @@ def build_trial_annotators(
             exclusion_reason="behavioral_threshold",
         ),
         # Delphos vmPFC spike invalidation.
-        EventFileWindowAnnotator(
-            filter={"suffix": "events", "desc": "delphos"},
-            metadata_events_key="delphos_events",
-            window_tmin_s=0.0,
-            window_tmax_s=5.0,
-        ),
-        EventAnnotationInvalidationRule(
-            metadata_events_key="delphos_events",
-            event_filter=build_vmPFC_spike_filter(vm_pfc_channels_by_subject),
-            exclusion_reason=VM_PFC_SPIKE_EXCLUSION_REASON,
-        ),
-    ]
+        # EventFileWindowAnnotator(
+        #     filter={"suffix": "events", "desc": "delphos"},
+        #     metadata_events_key="delphos_events",
+        #     window_tmin_s=0.0,
+        #     window_tmax_s=5.0,
+        # ),
+        # EventAnnotationInvalidationRule(
+        #     metadata_events_key="delphos_events",
+        #     event_filter=build_vmPFC_spike_filter(vm_pfc_channels_by_subject),
+        #     exclusion_reason=VM_PFC_SPIKE_EXCLUSION_REASON,
+        # ),
+    ])
+
+    return annotators
 
 
 def build_group_params(

@@ -381,11 +381,8 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
         else:
             significant_mask = np.isfinite(p_values) & (p_values < self.params.significance_alpha)
 
-        output_entities = self.build_output_entities(first.task)
-
         return ConditionTestGroupProcessingResult(
             source_group=group,
-            output_entities=output_entities,
             metadata={
                 "source_metric": self.params.source_metric,
                 "roi_mode": self.params.roi_mode,
