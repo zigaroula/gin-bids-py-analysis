@@ -44,7 +44,7 @@ MATLAB_PATH = Path(
 # MNE needs the .vhdr header — derive it from the .eeg path.
 BV_EEG_PATH = Path(
     r"D:/data_clarissa/valuation/bids/derivatives/hilbert"
-    r"/sub-GRE2021AICb/ieeg/sub-GRE2021AICb_task-MDCHOICE_desc-gammasm250_ieeg.eeg"
+    r"/sub-GRE2021AICb/ieeg/sub-GRE2021AICb_task-MDCHOICE_desc-bgasm250_ieeg.eeg"
 )
 BV_VHDR_PATH = BV_EEG_PATH.with_suffix(".vhdr")
 
@@ -431,6 +431,7 @@ class ComparisonViewer:
         channel_mapping: dict[int, int],   # mat_idx → bv_idx
         bv_ref_std: np.ndarray | None = None,  # (N_bv_channels,) z-score σ used per channel
         bv_n_clean: np.ndarray | None = None,  # (N_bv_channels,) # clean trials per channel
+        bv_diag: dict | None = None,  # raw cleaning test values for always-on display
     ) -> None:
         if not channel_mapping:
             raise ValueError("No channels matched — cannot display comparison.")
@@ -453,6 +454,7 @@ class ComparisonViewer:
         self.n_trials = min(mat_epochs.shape[0], bv_epochs.shape[0])
         self.bv_ref_std = bv_ref_std  # may be None if ZSCORE_BV is False
         self.bv_n_clean = bv_n_clean
+        self.bv_diag = bv_diag or {}
 
         self._ch = 0
         self._trial = 0
@@ -512,6 +514,13 @@ class ComparisonViewer:
         # ---- Key bindings ----
         self.fig.canvas.mpl_connect("key_press_event", self._on_key)
 
+        # ---- Suppression status text (bottom of figure) ----
+        self.status_text = self.fig.text(
+            0.07, 0.03, "",
+            fontsize=8, verticalalignment="bottom",
+            color="darkred",
+        )
+
         self._render()
 
     # ------------------------------------------------------------------
@@ -569,6 +578,8 @@ class ComparisonViewer:
         bv_display_mask = (self.bv_time >= MAT_TMIN_S) & (self.bv_time <= MAT_TMAX_S)
         bv_time_display = self.bv_time[bv_display_mask] + BV_DISPLAY_OFFSET_S
         bv_trace = self.bv_epochs[trial_i, bv_ch_i, bv_display_mask]
+        bv_nan = np.all(np.isnan(bv_trace))
+        mat_nan = np.all(np.isnan(mat_trace))
 
         bv_label = f"BrainVision ({self.bv_sfreq:.0f} Hz)"
         if ZSCORE_BV:
@@ -637,6 +648,49 @@ class ComparisonViewer:
         )
         self.info_text.set_text(info)
 
+        # ---- Always-on diagnostic panel ----
+        diag_lines: list[str] = []
+        d = self.bv_diag
+        if d:
+            # PRECLEAN mean
+            if "trial_means_pre" in d:
+                val = d["trial_means_pre"][trial_i, bv_ch_i]
+                lo = d["ch_mean_m"][bv_ch_i] - PRECLEAN_THRESHOLD * d["ch_std_m"][bv_ch_i]
+                hi = d["ch_mean_m"][bv_ch_i] + PRECLEAN_THRESHOLD * d["ch_std_m"][bv_ch_i]
+                mark = "✗" if (val < lo or val > hi) else "✓"
+                diag_lines.append(f"PRECLEAN mean: {val:.3f}  [{lo:.3f}…{hi:.3f}] {mark}")
+            # PRECLEAN max
+            if "trial_maxes_pre" in d:
+                val = d["trial_maxes_pre"][trial_i, bv_ch_i]
+                lo = d["ch_mean_x"][bv_ch_i] - PRECLEAN_THRESHOLD * d["ch_std_x"][bv_ch_i]
+                hi = d["ch_mean_x"][bv_ch_i] + PRECLEAN_THRESHOLD * d["ch_std_x"][bv_ch_i]
+                mark = "✗" if (val < lo or val > hi) else "✓"
+                diag_lines.append(f"PRECLEAN max:  {val:.3f}  [{lo:.3f}…{hi:.3f}] {mark}")
+            # Bad channel (channel-level, same for all trials)
+            if "ch_spread_m" in d:
+                val_m = d["ch_spread_m"][bv_ch_i]
+                lo_m = d["spm_mean"] - REJECT_BAD_CHANNELS_SD_THRESHOLD * d["spm_std"]
+                hi_m = d["spm_mean"] + REJECT_BAD_CHANNELS_SD_THRESHOLD * d["spm_std"]
+                mark_m = "✗" if (val_m < lo_m or val_m > hi_m) else "✓"
+                val_x = d["ch_spread_x"][bv_ch_i]
+                lo_x = d["spx_mean"] - REJECT_BAD_CHANNELS_SD_THRESHOLD * d["spx_std"]
+                hi_x = d["spx_mean"] + REJECT_BAD_CHANNELS_SD_THRESHOLD * d["spx_std"]
+                mark_x = "✗" if (val_x < lo_x or val_x > hi_x) else "✓"
+                diag_lines.append(
+                    f"Ch spread mean: {val_m:.3f}  [{lo_m:.3f}…{hi_m:.3f}] {mark_m}  "
+                    f"max: {val_x:.3f}  [{lo_x:.3f}…{hi_x:.3f}] {mark_x}"
+                )
+            # Negative rating
+            if "ratings" in d and trial_i < len(d["ratings"]):
+                rating = d["ratings"][trial_i]
+                r_str = f"{rating:.3f}" if np.isfinite(rating) else "n/a"
+                mark = "✗" if (np.isfinite(rating) and rating < MIN_RATING) else "✓"
+                diag_lines.append(f"Rating: {r_str} (min={MIN_RATING:.1f}) {mark}")
+        if mat_nan:
+            diag_lines.append("MATLAB: NaN")
+        self.status_text.set_text("\n".join(diag_lines))
+        self.status_text.set_color("darkred" if (bv_nan or mat_nan) else "darkgreen")
+
         self.fig.canvas.draw_idle()
 
     # ------------------------------------------------------------------
@@ -687,10 +741,26 @@ def main() -> None:
     print(f"  BV epochs shape: {bv_epochs.shape}  (N_trials, N_channels, N_samples)")
     print(f"  time range     : {bv_time[0]:.3f} s → {bv_time[-1]:.3f} s")
 
+    # Diagnostic arrays stored for viewer display (raw test values, always shown).
+    bv_diag: dict = {}
+
     if PRECLEAN_BV:
         print(f"  Pre-cleaning: NaN-masking outlier trials per channel (threshold={PRECLEAN_THRESHOLD}σ)…")
+        _ep_f64 = np.asarray(bv_epochs, dtype=np.float64)
+        _tr_means_pre = np.mean(_ep_f64, axis=2)          # (n_trials, n_ch)
+        _ch_means_m = np.mean(_tr_means_pre, axis=0)
+        _ch_stds_m  = np.std(_tr_means_pre, axis=0, ddof=1)
+        _tr_maxes_pre = np.max(np.abs(_ep_f64), axis=2)   # (n_trials, n_ch)
+        _ch_means_x = np.mean(_tr_maxes_pre, axis=0)
+        _ch_stds_x  = np.std(_tr_maxes_pre, axis=0, ddof=1)
+        bv_diag.update({
+            "trial_means_pre": _tr_means_pre,
+            "ch_mean_m": _ch_means_m, "ch_std_m": _ch_stds_m,
+            "trial_maxes_pre": _tr_maxes_pre,
+            "ch_mean_x": _ch_means_x, "ch_std_x": _ch_stds_x,
+        })
         mask_mean = detect_outlier_trial_channel_pairs_by_mean(bv_epochs, PRECLEAN_THRESHOLD)
-        mask_max = detect_outlier_trial_channel_pairs_by_max(bv_epochs, PRECLEAN_THRESHOLD)
+        mask_max  = detect_outlier_trial_channel_pairs_by_max(bv_epochs, PRECLEAN_THRESHOLD)
         combined_mask = mask_mean | mask_max
         n_masked = int(np.sum(combined_mask))
         bv_epochs = apply_trial_nan_mask(bv_epochs, combined_mask)
@@ -699,8 +769,20 @@ def main() -> None:
 
     if REJECT_BAD_CHANNELS_SD:
         print(f"  Rejecting bad channels by trial-mean spread (threshold={REJECT_BAD_CHANNELS_SD_THRESHOLD}σ)…")
+        _tr_means_bc = np.nanmean(bv_epochs, axis=2)      # (n_trials, n_ch)
+        _ch_spread_m = np.nanstd(_tr_means_bc, axis=0, ddof=1)
+        _spm_mean = float(np.nanmean(_ch_spread_m[np.isfinite(_ch_spread_m)]))
+        _spm_std  = float(np.nanstd(_ch_spread_m[np.isfinite(_ch_spread_m)], ddof=1))
+        _tr_maxes_bc = np.nanmax(np.abs(bv_epochs), axis=2)
+        _ch_spread_x = np.nanstd(_tr_maxes_bc, axis=0, ddof=1)
+        _spx_mean = float(np.nanmean(_ch_spread_x[np.isfinite(_ch_spread_x)]))
+        _spx_std  = float(np.nanstd(_ch_spread_x[np.isfinite(_ch_spread_x)], ddof=1))
+        bv_diag.update({
+            "ch_spread_m": _ch_spread_m, "spm_mean": _spm_mean, "spm_std": _spm_std,
+            "ch_spread_x": _ch_spread_x, "spx_mean": _spx_mean, "spx_std": _spx_std,
+        })
         bad_ch_mean = reject_channels_by_trial_mean_spread(bv_epochs, REJECT_BAD_CHANNELS_SD_THRESHOLD)
-        bad_ch_max = reject_channels_by_trial_max_spread(bv_epochs, REJECT_BAD_CHANNELS_SD_THRESHOLD)
+        bad_ch_max  = reject_channels_by_trial_max_spread(bv_epochs, REJECT_BAD_CHANNELS_SD_THRESHOLD)
         bad_ch_mask = bad_ch_mean | bad_ch_max
         n_bad_ch = int(np.sum(bad_ch_mask))
         if n_bad_ch:
@@ -736,6 +818,7 @@ def main() -> None:
                     print(f"    NaN'd {n_neg} trial(s) with rating < {MIN_RATING}.")
                 else:
                     print(f"    No negative-rating trials found.")
+                bv_diag["ratings"] = _ratings[:n_bv]
 
     # Compute z-score reference stats per channel (on pre-zscore data; NaN from PRECLEAN
     # already propagate).  Stored for display in the viewer infobox.
@@ -830,6 +913,7 @@ def main() -> None:
         channel_mapping=channel_mapping,
         bv_ref_std=bv_ref_std,
         bv_n_clean=bv_n_clean,
+        bv_diag=bv_diag,
     )
     viewer.show()
 
