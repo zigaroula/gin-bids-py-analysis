@@ -41,7 +41,7 @@ PARAMS = HilbertParams(
     f_min=50,
     f_max=150,
     f_step=10,
-    method=ProcessingMethod.LOCALIZER,
+    method=ProcessingMethod.SPM2ENV,
     downsampled_frequency_hz=100.0,
     smoothing_windows_ms= [0, 250, 500, 1000, 2500, 5000],
     montage_mode=MontageMode.BIPOLAR,
@@ -54,7 +54,7 @@ PARAMS = HilbertParams(
 
 WRITER_PARAMS = HilbertWriterParams(
     bids_root=BIDS_ROOT,
-    output_description="gamma",
+    output_description="bga",
     output_format="brainvision"
 )
 

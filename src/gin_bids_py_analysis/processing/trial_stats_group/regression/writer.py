@@ -81,6 +81,99 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
                 data=result.epoch_source_metric_df.astype(np.float64),
             )
 
+            vs_zero_a = source_metric.create_group("condition_a_vs_zero")
+            vs_zero_a.create_dataset(
+                "t_values",
+                data=result.condition_a_source_metric_vs_zero_t_values.astype(np.float64),
+            )
+            vs_zero_a.create_dataset(
+                "p_values_uncorrected",
+                data=result.condition_a_source_metric_vs_zero_p_values_uncorrected.astype(np.float64),
+            )
+            vs_zero_a.create_dataset(
+                "p_values",
+                data=result.condition_a_source_metric_vs_zero_p_values.astype(np.float64),
+            )
+            vs_zero_a.create_dataset(
+                "significant_mask",
+                data=result.condition_a_source_metric_vs_zero_significant_mask.astype(bool),
+            )
+            if result.condition_a_source_metric_vs_zero_cluster_p_values is not None:
+                cs_a = vs_zero_a.create_group("cluster_stats")
+                cs_a.create_dataset(
+                    "p_values",
+                    data=result.condition_a_source_metric_vs_zero_cluster_p_values.astype(np.float64),
+                )
+                windows_a = result.condition_a_source_metric_vs_zero_cluster_windows_s or []
+                cs_a.create_dataset(
+                    "best_cluster_start_s",
+                    data=np.array(
+                        [w[0] if w is not None else np.nan for w in windows_a],
+                        dtype=np.float64,
+                    ),
+                )
+                cs_a.create_dataset(
+                    "best_cluster_end_s",
+                    data=np.array(
+                        [w[1] if w is not None else np.nan for w in windows_a],
+                        dtype=np.float64,
+                    ),
+                )
+                nulls_a = result.condition_a_source_metric_vs_zero_cluster_null_distributions or []
+                max_null_len_a = max((len(n) for n in nulls_a), default=0)
+                null_mat_a = np.full(
+                    (len(nulls_a), max_null_len_a), np.nan, dtype=np.float64
+                )
+                for i, n in enumerate(nulls_a):
+                    null_mat_a[i, : len(n)] = n
+                cs_a.create_dataset("null_distributions", data=null_mat_a)
+            vs_zero_b = source_metric.create_group("condition_b_vs_zero")
+            vs_zero_b.create_dataset(
+                "t_values",
+                data=result.condition_b_source_metric_vs_zero_t_values.astype(np.float64),
+            )
+            vs_zero_b.create_dataset(
+                "p_values_uncorrected",
+                data=result.condition_b_source_metric_vs_zero_p_values_uncorrected.astype(np.float64),
+            )
+            vs_zero_b.create_dataset(
+                "p_values",
+                data=result.condition_b_source_metric_vs_zero_p_values.astype(np.float64),
+            )
+            vs_zero_b.create_dataset(
+                "significant_mask",
+                data=result.condition_b_source_metric_vs_zero_significant_mask.astype(bool),
+            )
+            if result.condition_b_source_metric_vs_zero_cluster_p_values is not None:
+                cs_b = vs_zero_b.create_group("cluster_stats")
+                cs_b.create_dataset(
+                    "p_values",
+                    data=result.condition_b_source_metric_vs_zero_cluster_p_values.astype(np.float64),
+                )
+                windows_b = result.condition_b_source_metric_vs_zero_cluster_windows_s or []
+                cs_b.create_dataset(
+                    "best_cluster_start_s",
+                    data=np.array(
+                        [w[0] if w is not None else np.nan for w in windows_b],
+                        dtype=np.float64,
+                    ),
+                )
+                cs_b.create_dataset(
+                    "best_cluster_end_s",
+                    data=np.array(
+                        [w[1] if w is not None else np.nan for w in windows_b],
+                        dtype=np.float64,
+                    ),
+                )
+                nulls_b = result.condition_b_source_metric_vs_zero_cluster_null_distributions or []
+                max_null_len_b = max((len(n) for n in nulls_b), default=0)
+                null_mat_b = np.full(
+                    (len(nulls_b), max_null_len_b), np.nan, dtype=np.float64
+                )
+                for i, n in enumerate(nulls_b):
+                    null_mat_b[i, : len(n)] = n
+                cs_b.create_dataset("null_distributions", data=null_mat_b)
+
             self.write_activity_stats_hdf5(fh, result=result, group_name="activity")
             ep_act = fh["activity"].create_group("epoch_summary")
             ep_act.create_dataset("t", data=result.epoch_activity_t.astype(np.float64))
@@ -220,6 +313,8 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
                 p=result.epoch_source_metric_p.astype(np.float64),
                 df=result.epoch_source_metric_df.astype(np.float64),
             ),
+            condition_a_vs_zero=_make_vs_zero_struct(result, condition="a"),
+            condition_b_vs_zero=_make_vs_zero_struct(result, condition="b"),
         )
 
         activity_struct = self.make_activity_stats_struct(
@@ -420,6 +515,47 @@ def _write_scatter_hdf5(
             "condition_b_activity",
             data=np.asarray(condition_b_activity[i], dtype=np.float64),
         )
+
+
+def _make_vs_zero_struct(
+    result: RegressionGroupProcessingResult,
+    condition: str,
+) -> object:
+    """Build a MATLAB struct for a per-condition vs-zero test."""
+    from gin_bids_py_analysis.processing.utils.matlab import make_struct
+
+    t_values = getattr(result, f"condition_{condition}_source_metric_vs_zero_t_values")
+    p_values_uncorr = getattr(result, f"condition_{condition}_source_metric_vs_zero_p_values_uncorrected")
+    p_values = getattr(result, f"condition_{condition}_source_metric_vs_zero_p_values")
+    sig_mask = getattr(result, f"condition_{condition}_source_metric_vs_zero_significant_mask")
+    cp = getattr(result, f"condition_{condition}_source_metric_vs_zero_cluster_p_values")
+    cw = getattr(result, f"condition_{condition}_source_metric_vs_zero_cluster_windows_s")
+    cn = getattr(result, f"condition_{condition}_source_metric_vs_zero_cluster_null_distributions")
+
+    kwargs: dict = {
+        "t_values": np.asarray(t_values, dtype=np.float64),
+        "p_values_uncorrected": np.asarray(p_values_uncorr, dtype=np.float64),
+        "p_values": np.asarray(p_values, dtype=np.float64),
+        "significant_mask": np.asarray(sig_mask, dtype=np.uint8),
+    }
+    if cp is not None:
+        windows = cw or []
+        null_dists = cn or []
+        max_len = max((len(nd) for nd in null_dists), default=0)
+        null_matrix = np.full((len(null_dists), max_len), np.nan, dtype=np.float64)
+        for i, nd in enumerate(null_dists):
+            null_matrix[i, : len(nd)] = nd
+        kwargs["cluster_stats"] = make_struct(
+            p_values=np.asarray(cp, dtype=np.float64),
+            best_cluster_start_s=np.array(
+                [w[0] if w is not None else np.nan for w in windows], dtype=np.float64
+            ),
+            best_cluster_end_s=np.array(
+                [w[1] if w is not None else np.nan for w in windows], dtype=np.float64
+            ),
+            null_distributions=null_matrix,
+        )
+    return make_struct(**kwargs)
 
 
 def _make_cluster_stats_struct(result: RegressionGroupProcessingResult) -> object:

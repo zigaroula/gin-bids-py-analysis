@@ -24,7 +24,7 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, 
 # Shared parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"/Volumes/Elements/data_clarissa/valuation/bids")
+BIDS_ROOT = Path(r"D:/data_clarissa/valuation/bids")
 
 # ---------------------------------------------------------------------------
 # MATLAB z-score injection configuration
@@ -40,13 +40,13 @@ BIDS_ROOT = Path(r"/Volumes/Elements/data_clarissa/valuation/bids")
 
 USE_MATLAB_ZSCORES: bool = True
 
-MATLAB_ZSCORES_PATH = Path(r"/Volumes/Elements/data_clarissa/subjects.mat")
+MATLAB_ZSCORES_PATH = Path(r"D:/data_clarissa/subjects.mat")
 MATLAB_ZSCORE_COLUMN_INDEX = 6  # 0-based index for column 7 in trial_characteristics1
 
 IEEG_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    "desc": "gammasm250",
+    "desc": "bgasm250",
 }
 
 SECONDARY_FILTERS = [
@@ -118,15 +118,16 @@ def _build_params() -> RegressionParams:
             "response": {"source": "table_column", "column": "RT", "units": "s"},
         },
         epoch_cleaning=TRIAL_SLOPE_EPOCH_CLEANING,
+        n_permutations=500
     )
 
 
 PARAMS = _build_params()
 
 ROI_CSV_FILES = {
-    "vmPFC": Path(r"/Volumes/Elements/data_clarissa/valuation/csv/PFCvm_elecs_tbl.csv"),
-    "daINS": Path(r"/Volumes/Elements/data_clarissa/valuation/csv/aINS_dors_elecs_tbl.csv"),
-    "vaINS": Path(r"/Volumes/Elements/data_clarissa/valuation/csv/aINS_vent_elecs_tbl.csv"),
+    "vmPFC": Path(r"D:/data_clarissa/valuation/csv/PFCvm_elecs_tbl.csv"),
+    "daINS": Path(r"D:/data_clarissa/valuation/csv/aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"D:/data_clarissa/valuation/csv/aINS_vent_elecs_tbl.csv"),
 }
 
 GROUP_PARAM_KWARGS = {
@@ -144,7 +145,7 @@ VM_PFC_SPIKE_EXCLUSION_REASON = "vmPFC_spike_0_5s"
 MAX_RT_S: float = 20.0
 MIN_RATING: float = 0.0
 BEH_TSV_PATH = Path(
-    r"/Volumes/Elements/data_clarissa/valuation/bids"
+    r"D:/data_clarissa/valuation/bids"
     r"/sub-GRE2021AICb/beh/sub-GRE2021AICb_task-MDCHOICE_beh.tsv"
 )
 

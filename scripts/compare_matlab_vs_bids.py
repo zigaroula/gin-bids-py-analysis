@@ -37,14 +37,14 @@ from gin_bids_py_analysis.processing.utils.statistics import zscore_activity_by_
 # ---------------------------------------------------------------------------
 
 MATLAB_PATH = Path(
-    r"/Volumes/Elements/data_clarissa/transfer_12408284_files_bbf26a92"
+    r"D:/data_clarissa/transfer_12408284_files_bbf26a92"
     r"/edGRE_2021_AICb_MD_CHOICE_Partie1_BPF_f50f150_sf100_sm250_onset.mat"
 )
 
 # MNE needs the .vhdr header — derive it from the .eeg path.
 BV_EEG_PATH = Path(
-    r"/Volumes/Elements/data_clarissa/valuation/bids/derivatives/hilbert"
-    r"/sub-GRE2021AICb/ieeg/sub-GRE2021AICb_task-MDCHOICE_desc-bgasm250_ieeg.eeg"
+    r"D:/data_clarissa/valuation/bids/derivatives/hilbert"
+    r"/sub-GRE2021AICb/ieeg/sub-GRE2021AICb_task-MDCHOICE_desc-gammasm250_ieeg.eeg"
 )
 BV_VHDR_PATH = BV_EEG_PATH.with_suffix(".vhdr")
 
@@ -84,7 +84,7 @@ REJECT_BAD_CHANNELS_SD_THRESHOLD: float = 1.0
 REMOVE_NEGATIVE_RATINGS: bool = True
 MIN_RATING: float = 0.0
 BEH_TSV_PATH = Path(
-    r"/Volumes/Elements/data_clarissa/valuation/bids"
+    r"D:/data_clarissa/valuation/bids"
     r"/sub-GRE2021AICb/beh/sub-GRE2021AICb_task-MDCHOICE_beh.tsv"
 )
 

@@ -104,6 +104,14 @@ def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> Regression
         source_subject_stats_files=[str(primary.path)],
         source_electrodes_files=[],
         excluded_rois={"ROI_BAD": "no_channels"},
+        condition_a_source_metric_vs_zero_t_values=np.full(shape, 1.8, dtype=np.float64),
+        condition_a_source_metric_vs_zero_p_values_uncorrected=np.full(shape, 0.04, dtype=np.float64),
+        condition_a_source_metric_vs_zero_p_values=np.full(shape, 0.04, dtype=np.float64),
+        condition_a_source_metric_vs_zero_significant_mask=np.ones(shape, dtype=bool),
+        condition_b_source_metric_vs_zero_t_values=np.full(shape, -1.2, dtype=np.float64),
+        condition_b_source_metric_vs_zero_p_values_uncorrected=np.full(shape, 0.08, dtype=np.float64),
+        condition_b_source_metric_vs_zero_p_values=np.full(shape, 0.08, dtype=np.float64),
+        condition_b_source_metric_vs_zero_significant_mask=np.zeros(shape, dtype=bool),
     )
 
 

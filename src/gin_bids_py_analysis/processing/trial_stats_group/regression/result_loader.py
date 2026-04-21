@@ -86,6 +86,101 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
         epoch_source_metric_p = _read_1d("source_metric/epoch_summary/p", fill=1.0)
         epoch_source_metric_df = _read_1d("source_metric/epoch_summary/df")
 
+        # Per-condition vs-zero — graceful fallback for old files
+        condition_a_vs_zero_t = _read_2d("source_metric/condition_a_vs_zero/t_values")
+        # p_values is the corrected p (new files); fall back to p_values for old files that only
+        # had one p dataset (which was uncorrected in the original impl).
+        condition_a_vs_zero_p_uncorr_ds = dataset_or_none(
+            fh, "source_metric/condition_a_vs_zero/p_values_uncorrected"
+        )
+        if condition_a_vs_zero_p_uncorr_ds is not None:
+            condition_a_vs_zero_p_uncorr = np.asarray(
+                condition_a_vs_zero_p_uncorr_ds[:], dtype=np.float64
+            ).reshape(n_rois, n_t)
+        else:
+            condition_a_vs_zero_p_uncorr = _read_2d(
+                "source_metric/condition_a_vs_zero/p_values", fill=1.0
+            )
+        condition_a_vs_zero_p = _read_2d("source_metric/condition_a_vs_zero/p_values", fill=1.0)
+        sig_a_vz_ds = dataset_or_none(fh, "source_metric/condition_a_vs_zero/significant_mask")
+        if sig_a_vz_ds is not None:
+            condition_a_vs_zero_sig = np.asarray(sig_a_vz_ds[:], dtype=bool).reshape(n_rois, n_t)
+        else:
+            condition_a_vs_zero_sig = np.isfinite(condition_a_vs_zero_p) & (condition_a_vs_zero_p < significance_alpha)
+        # Cluster stats for condition A vs zero
+        vz_a_cluster_p: np.ndarray | None = None
+        vz_a_cluster_windows: list[tuple[float, float] | None] | None = None
+        vz_a_cluster_null_dists: list[np.ndarray] | None = None
+        if "source_metric/condition_a_vs_zero/cluster_stats" in fh:
+            cs_a = fh["source_metric/condition_a_vs_zero/cluster_stats"]
+            vz_a_cluster_p = np.asarray(cs_a["p_values"][:], dtype=np.float64)
+            starts_a = np.asarray(cs_a["best_cluster_start_s"][:], dtype=np.float64)
+            ends_a = np.asarray(cs_a["best_cluster_end_s"][:], dtype=np.float64)
+            vz_a_cluster_windows = [
+                (float(s), float(e)) if np.isfinite(s) and np.isfinite(e) else None
+                for s, e in zip(starts_a, ends_a)
+            ]
+            null_mat_a = np.asarray(cs_a["null_distributions"][:], dtype=np.float64)
+            vz_a_cluster_null_dists = [
+                null_mat_a[i, np.isfinite(null_mat_a[i])]
+                for i in range(null_mat_a.shape[0])
+            ]
+            # Override sig mask from cluster windows
+            condition_a_vs_zero_sig = np.zeros((n_rois, n_t), dtype=bool)
+            for roi_idx, (p_clust, window) in enumerate(
+                zip(vz_a_cluster_p, vz_a_cluster_windows)
+            ):
+                if p_clust < significance_alpha and window is not None:
+                    t_start_s, t_end_s = window
+                    in_window = (time_axis_s >= t_start_s) & (time_axis_s <= t_end_s)
+                    condition_a_vs_zero_sig[roi_idx, in_window] = True
+
+        condition_b_vs_zero_t = _read_2d("source_metric/condition_b_vs_zero/t_values")
+        condition_b_vs_zero_p_uncorr_ds = dataset_or_none(
+            fh, "source_metric/condition_b_vs_zero/p_values_uncorrected"
+        )
+        if condition_b_vs_zero_p_uncorr_ds is not None:
+            condition_b_vs_zero_p_uncorr = np.asarray(
+                condition_b_vs_zero_p_uncorr_ds[:], dtype=np.float64
+            ).reshape(n_rois, n_t)
+        else:
+            condition_b_vs_zero_p_uncorr = _read_2d(
+                "source_metric/condition_b_vs_zero/p_values", fill=1.0
+            )
+        condition_b_vs_zero_p = _read_2d("source_metric/condition_b_vs_zero/p_values", fill=1.0)
+        sig_b_vz_ds = dataset_or_none(fh, "source_metric/condition_b_vs_zero/significant_mask")
+        if sig_b_vz_ds is not None:
+            condition_b_vs_zero_sig = np.asarray(sig_b_vz_ds[:], dtype=bool).reshape(n_rois, n_t)
+        else:
+            condition_b_vs_zero_sig = np.isfinite(condition_b_vs_zero_p) & (condition_b_vs_zero_p < significance_alpha)
+        # Cluster stats for condition B vs zero
+        vz_b_cluster_p: np.ndarray | None = None
+        vz_b_cluster_windows: list[tuple[float, float] | None] | None = None
+        vz_b_cluster_null_dists: list[np.ndarray] | None = None
+        if "source_metric/condition_b_vs_zero/cluster_stats" in fh:
+            cs_b = fh["source_metric/condition_b_vs_zero/cluster_stats"]
+            vz_b_cluster_p = np.asarray(cs_b["p_values"][:], dtype=np.float64)
+            starts_b = np.asarray(cs_b["best_cluster_start_s"][:], dtype=np.float64)
+            ends_b = np.asarray(cs_b["best_cluster_end_s"][:], dtype=np.float64)
+            vz_b_cluster_windows = [
+                (float(s), float(e)) if np.isfinite(s) and np.isfinite(e) else None
+                for s, e in zip(starts_b, ends_b)
+            ]
+            null_mat_b = np.asarray(cs_b["null_distributions"][:], dtype=np.float64)
+            vz_b_cluster_null_dists = [
+                null_mat_b[i, np.isfinite(null_mat_b[i])]
+                for i in range(null_mat_b.shape[0])
+            ]
+            # Override sig mask from cluster windows
+            condition_b_vs_zero_sig = np.zeros((n_rois, n_t), dtype=bool)
+            for roi_idx, (p_clust, window) in enumerate(
+                zip(vz_b_cluster_p, vz_b_cluster_windows)
+            ):
+                if p_clust < significance_alpha and window is not None:
+                    t_start_s, t_end_s = window
+                    in_window = (time_axis_s >= t_start_s) & (time_axis_s <= t_end_s)
+                    condition_b_vs_zero_sig[roi_idx, in_window] = True
+
         activity_t_values = _read_2d("activity/t_values")
         activity_p_values = _read_2d("activity/p_values", fill=1.0)
         activity_p_values_uncorrected = _read_2d(
@@ -275,6 +370,20 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
         source_metric_p_values=source_metric_p_values,
         source_metric_p_values_uncorrected=source_metric_p_values_uncorrected,
         source_metric_significant_mask=source_metric_significant_mask,
+        condition_a_source_metric_vs_zero_t_values=condition_a_vs_zero_t,
+        condition_a_source_metric_vs_zero_p_values_uncorrected=condition_a_vs_zero_p_uncorr,
+        condition_a_source_metric_vs_zero_p_values=condition_a_vs_zero_p,
+        condition_a_source_metric_vs_zero_significant_mask=condition_a_vs_zero_sig,
+        condition_a_source_metric_vs_zero_cluster_p_values=vz_a_cluster_p,
+        condition_a_source_metric_vs_zero_cluster_windows_s=vz_a_cluster_windows,
+        condition_a_source_metric_vs_zero_cluster_null_distributions=vz_a_cluster_null_dists,
+        condition_b_source_metric_vs_zero_t_values=condition_b_vs_zero_t,
+        condition_b_source_metric_vs_zero_p_values_uncorrected=condition_b_vs_zero_p_uncorr,
+        condition_b_source_metric_vs_zero_p_values=condition_b_vs_zero_p,
+        condition_b_source_metric_vs_zero_significant_mask=condition_b_vs_zero_sig,
+        condition_b_source_metric_vs_zero_cluster_p_values=vz_b_cluster_p,
+        condition_b_source_metric_vs_zero_cluster_windows_s=vz_b_cluster_windows,
+        condition_b_source_metric_vs_zero_cluster_null_distributions=vz_b_cluster_null_dists,
         activity_t_values=activity_t_values,
         activity_p_values=activity_p_values,
         activity_p_values_uncorrected=activity_p_values_uncorrected,
@@ -380,6 +489,128 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
         source_metric_significant_mask = np.isfinite(source_metric_p_values) & (
             source_metric_p_values < significance_alpha
         )
+
+    # Per-condition vs-zero — read from nested struct, fallback gracefully for old files
+    vz_a_raw = getattr(source_metric, "condition_a_vs_zero", None)
+    condition_a_vs_zero_t = _mat_2d(vz_a_raw, "t_values")
+    # p_values_uncorrected: new field; fall back to p_values for old files
+    vz_a_p_uncorr_raw = getattr(vz_a_raw, "p_values_uncorrected", None) if vz_a_raw is not None else None
+    if vz_a_p_uncorr_raw is not None:
+        condition_a_vs_zero_p_uncorr = _mat_2d(vz_a_raw, "p_values_uncorrected", fill=1.0)
+    else:
+        condition_a_vs_zero_p_uncorr = _mat_2d(vz_a_raw, "p_values", fill=1.0)
+    condition_a_vs_zero_p = _mat_2d(vz_a_raw, "p_values", fill=1.0)
+    sig_vz_a_raw = getattr(vz_a_raw, "significant_mask", None) if vz_a_raw is not None else None
+    if sig_vz_a_raw is not None:
+        condition_a_vs_zero_sig = np.asarray(sig_vz_a_raw, dtype=bool).reshape(n_rois, n_t)
+    else:
+        condition_a_vs_zero_sig = np.isfinite(condition_a_vs_zero_p) & (condition_a_vs_zero_p < significance_alpha)
+    # Cluster stats for condition A vs zero
+    mat_vz_a_cluster_p: np.ndarray | None = None
+    mat_vz_a_cluster_windows: list[tuple[float, float] | None] | None = None
+    mat_vz_a_cluster_null_dists: list[np.ndarray] | None = None
+    cs_vz_a_raw = getattr(vz_a_raw, "cluster_stats", None) if vz_a_raw is not None else None
+    if cs_vz_a_raw is not None:
+        _p_vz_a = getattr(cs_vz_a_raw, "p_values", None)
+        if _p_vz_a is not None:
+            mat_vz_a_cluster_p = np.asarray(_p_vz_a, dtype=np.float64).ravel()
+            _starts_a = np.asarray(
+                getattr(cs_vz_a_raw, "best_cluster_start_s", np.full(len(mat_vz_a_cluster_p), np.nan)),
+                dtype=np.float64,
+            ).ravel()
+            _ends_a = np.asarray(
+                getattr(cs_vz_a_raw, "best_cluster_end_s", np.full(len(mat_vz_a_cluster_p), np.nan)),
+                dtype=np.float64,
+            ).ravel()
+            mat_vz_a_cluster_windows = [
+                (float(s), float(e)) if np.isfinite(s) and np.isfinite(e) else None
+                for s, e in zip(_starts_a, _ends_a)
+            ]
+            _null_vz_a = getattr(cs_vz_a_raw, "null_distributions", None)
+            if _null_vz_a is not None:
+                _null_m_a = np.asarray(_null_vz_a, dtype=np.float64)
+                if _null_m_a.ndim == 2:
+                    mat_vz_a_cluster_null_dists = [
+                        _null_m_a[i, np.isfinite(_null_m_a[i])]
+                        for i in range(_null_m_a.shape[0])
+                    ]
+                else:
+                    mat_vz_a_cluster_null_dists = [
+                        np.zeros(0, dtype=np.float64)
+                    ] * len(mat_vz_a_cluster_p)
+            else:
+                mat_vz_a_cluster_null_dists = [
+                    np.zeros(0, dtype=np.float64)
+                ] * len(mat_vz_a_cluster_p)
+            # Override sig mask from cluster windows
+            condition_a_vs_zero_sig = np.zeros((n_rois, n_t), dtype=bool)
+            for roi_idx, (p_clust, window) in enumerate(
+                zip(mat_vz_a_cluster_p, mat_vz_a_cluster_windows)
+            ):
+                if p_clust < significance_alpha and window is not None:
+                    t_start_s, t_end_s = window
+                    in_window = (time_axis_s >= t_start_s) & (time_axis_s <= t_end_s)
+                    condition_a_vs_zero_sig[roi_idx, in_window] = True
+
+    vz_b_raw = getattr(source_metric, "condition_b_vs_zero", None)
+    condition_b_vs_zero_t = _mat_2d(vz_b_raw, "t_values")
+    vz_b_p_uncorr_raw = getattr(vz_b_raw, "p_values_uncorrected", None) if vz_b_raw is not None else None
+    if vz_b_p_uncorr_raw is not None:
+        condition_b_vs_zero_p_uncorr = _mat_2d(vz_b_raw, "p_values_uncorrected", fill=1.0)
+    else:
+        condition_b_vs_zero_p_uncorr = _mat_2d(vz_b_raw, "p_values", fill=1.0)
+    condition_b_vs_zero_p = _mat_2d(vz_b_raw, "p_values", fill=1.0)
+    sig_vz_b_raw = getattr(vz_b_raw, "significant_mask", None) if vz_b_raw is not None else None
+    if sig_vz_b_raw is not None:
+        condition_b_vs_zero_sig = np.asarray(sig_vz_b_raw, dtype=bool).reshape(n_rois, n_t)
+    else:
+        condition_b_vs_zero_sig = np.isfinite(condition_b_vs_zero_p) & (condition_b_vs_zero_p < significance_alpha)
+    # Cluster stats for condition B vs zero
+    mat_vz_b_cluster_p: np.ndarray | None = None
+    mat_vz_b_cluster_windows: list[tuple[float, float] | None] | None = None
+    mat_vz_b_cluster_null_dists: list[np.ndarray] | None = None
+    cs_vz_b_raw = getattr(vz_b_raw, "cluster_stats", None) if vz_b_raw is not None else None
+    if cs_vz_b_raw is not None:
+        _p_vz_b = getattr(cs_vz_b_raw, "p_values", None)
+        if _p_vz_b is not None:
+            mat_vz_b_cluster_p = np.asarray(_p_vz_b, dtype=np.float64).ravel()
+            _starts_b = np.asarray(
+                getattr(cs_vz_b_raw, "best_cluster_start_s", np.full(len(mat_vz_b_cluster_p), np.nan)),
+                dtype=np.float64,
+            ).ravel()
+            _ends_b = np.asarray(
+                getattr(cs_vz_b_raw, "best_cluster_end_s", np.full(len(mat_vz_b_cluster_p), np.nan)),
+                dtype=np.float64,
+            ).ravel()
+            mat_vz_b_cluster_windows = [
+                (float(s), float(e)) if np.isfinite(s) and np.isfinite(e) else None
+                for s, e in zip(_starts_b, _ends_b)
+            ]
+            _null_vz_b = getattr(cs_vz_b_raw, "null_distributions", None)
+            if _null_vz_b is not None:
+                _null_m_b = np.asarray(_null_vz_b, dtype=np.float64)
+                if _null_m_b.ndim == 2:
+                    mat_vz_b_cluster_null_dists = [
+                        _null_m_b[i, np.isfinite(_null_m_b[i])]
+                        for i in range(_null_m_b.shape[0])
+                    ]
+                else:
+                    mat_vz_b_cluster_null_dists = [
+                        np.zeros(0, dtype=np.float64)
+                    ] * len(mat_vz_b_cluster_p)
+            else:
+                mat_vz_b_cluster_null_dists = [
+                    np.zeros(0, dtype=np.float64)
+                ] * len(mat_vz_b_cluster_p)
+            # Override sig mask from cluster windows
+            condition_b_vs_zero_sig = np.zeros((n_rois, n_t), dtype=bool)
+            for roi_idx, (p_clust, window) in enumerate(
+                zip(mat_vz_b_cluster_p, mat_vz_b_cluster_windows)
+            ):
+                if p_clust < significance_alpha and window is not None:
+                    t_start_s, t_end_s = window
+                    in_window = (time_axis_s >= t_start_s) & (time_axis_s <= t_end_s)
+                    condition_b_vs_zero_sig[roi_idx, in_window] = True
     condition_a_source_metric_mean = _mat_2d(source_metric, "condition_a_mean")
     condition_a_source_metric_sem = _mat_2d(source_metric, "condition_a_sem")
     condition_b_source_metric_mean = _mat_2d(source_metric, "condition_b_mean")
@@ -568,6 +799,20 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
         source_metric_p_values=source_metric_p_values,
         source_metric_p_values_uncorrected=source_metric_p_values_uncorrected,
         source_metric_significant_mask=source_metric_significant_mask,
+        condition_a_source_metric_vs_zero_t_values=condition_a_vs_zero_t,
+        condition_a_source_metric_vs_zero_p_values_uncorrected=condition_a_vs_zero_p_uncorr,
+        condition_a_source_metric_vs_zero_p_values=condition_a_vs_zero_p,
+        condition_a_source_metric_vs_zero_significant_mask=condition_a_vs_zero_sig,
+        condition_a_source_metric_vs_zero_cluster_p_values=mat_vz_a_cluster_p,
+        condition_a_source_metric_vs_zero_cluster_windows_s=mat_vz_a_cluster_windows,
+        condition_a_source_metric_vs_zero_cluster_null_distributions=mat_vz_a_cluster_null_dists,
+        condition_b_source_metric_vs_zero_t_values=condition_b_vs_zero_t,
+        condition_b_source_metric_vs_zero_p_values_uncorrected=condition_b_vs_zero_p_uncorr,
+        condition_b_source_metric_vs_zero_p_values=condition_b_vs_zero_p,
+        condition_b_source_metric_vs_zero_significant_mask=condition_b_vs_zero_sig,
+        condition_b_source_metric_vs_zero_cluster_p_values=mat_vz_b_cluster_p,
+        condition_b_source_metric_vs_zero_cluster_windows_s=mat_vz_b_cluster_windows,
+        condition_b_source_metric_vs_zero_cluster_null_distributions=mat_vz_b_cluster_null_dists,
         activity_t_values=activity_t_values,
         activity_p_values=activity_p_values,
         activity_p_values_uncorrected=activity_p_values_uncorrected,

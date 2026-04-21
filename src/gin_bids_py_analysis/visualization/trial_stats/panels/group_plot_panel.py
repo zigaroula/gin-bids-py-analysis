@@ -634,6 +634,23 @@ class GroupPlotPanel(QWidget):
             ax.plot(t, slope_mean_b, color="tomato", label=cond_b_label)
             ax.fill_between(t, slope_mean_b - slope_sem_b, slope_mean_b + slope_sem_b,
                             alpha=0.25, color="tomato")
+            # Bold overlay on segments where per-condition mean slope is significant vs 0
+            sig_a_vz = (
+                result.condition_a_source_metric_vs_zero_significant_mask[roi_idx].astype(bool)
+                if result.condition_a_source_metric_vs_zero_significant_mask.size > 0
+                else np.zeros(len(t), dtype=bool)
+            )
+            sig_b_vz = (
+                result.condition_b_source_metric_vs_zero_significant_mask[roi_idx].astype(bool)
+                if result.condition_b_source_metric_vs_zero_significant_mask.size > 0
+                else np.zeros(len(t), dtype=bool)
+            )
+            if sig_a_vz.any():
+                ax.plot(t, np.ma.array(slope_mean_a, mask=~sig_a_vz),
+                        color="steelblue", linewidth=4.5)
+            if sig_b_vz.any():
+                ax.plot(t, np.ma.array(slope_mean_b, mask=~sig_b_vz),
+                        color="tomato", linewidth=4.5)
             all_slopes = np.concatenate([slope_mean_a, slope_mean_b])
             if np.nanmin(all_slopes) < 0 < np.nanmax(all_slopes):
                 ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
