@@ -58,6 +58,7 @@ GROUP_PARAM_KWARGS = {
     "p_value_correction_method": "cluster_permutation",
     "significance_alpha": 0.05,
     "roi_mode": "manual",
+    "n_clusters_to_keep": 2,
 }
 
 WRITER_PARAMS = RegressionGroupWriterParams(

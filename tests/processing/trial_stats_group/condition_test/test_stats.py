@@ -191,7 +191,7 @@ def test_compute_mne_cluster_permutation_returns_expected_shapes() -> None:
     rng = np.random.default_rng(0)
     samples = rng.normal(loc=1.5, scale=0.5, size=(6, 20)).astype(np.float64)
 
-    p_value, window, null = compute_mne_cluster_permutation(
+    p_value, top_windows, top_p_values, null = compute_mne_cluster_permutation(
         samples,
         cluster_threshold_alpha=0.05,
         n_group_perm=50,
@@ -199,6 +199,10 @@ def test_compute_mne_cluster_permutation_returns_expected_shapes() -> None:
     )
 
     assert 0.0 <= p_value <= 1.0
-    assert window is None or (0 <= window[0] <= window[1] < samples.shape[1])
+    assert isinstance(top_windows, list)
+    assert isinstance(top_p_values, list)
+    assert len(top_windows) == len(top_p_values)
+    for w in top_windows:
+        assert 0 <= w[0] <= w[1] < samples.shape[1]
     assert null.ndim == 1
 

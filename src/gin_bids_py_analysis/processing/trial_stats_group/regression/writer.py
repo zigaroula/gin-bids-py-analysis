@@ -105,20 +105,16 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
                     data=result.condition_a_source_metric_vs_zero_cluster_p_values.astype(np.float64),
                 )
                 windows_a = result.condition_a_source_metric_vs_zero_cluster_windows_s or []
-                cs_a.create_dataset(
-                    "best_cluster_start_s",
-                    data=np.array(
-                        [w[0] if w is not None else np.nan for w in windows_a],
-                        dtype=np.float64,
-                    ),
-                )
-                cs_a.create_dataset(
-                    "best_cluster_end_s",
-                    data=np.array(
-                        [w[1] if w is not None else np.nan for w in windows_a],
-                        dtype=np.float64,
-                    ),
-                )
+                n_rois_a = len(result.condition_a_source_metric_vs_zero_cluster_p_values)
+                n_max_a = max((len(w) for w in windows_a), default=0)
+                starts_2d_a = np.full((n_rois_a, n_max_a), np.nan, dtype=np.float64)
+                ends_2d_a = np.full((n_rois_a, n_max_a), np.nan, dtype=np.float64)
+                for i, roi_windows in enumerate(windows_a):
+                    for j, (t_start, t_end) in enumerate(roi_windows):
+                        starts_2d_a[i, j] = t_start
+                        ends_2d_a[i, j] = t_end
+                cs_a.create_dataset("cluster_starts_s", data=starts_2d_a)
+                cs_a.create_dataset("cluster_ends_s", data=ends_2d_a)
                 nulls_a = result.condition_a_source_metric_vs_zero_cluster_null_distributions or []
                 max_null_len_a = max((len(n) for n in nulls_a), default=0)
                 null_mat_a = np.full(
@@ -151,20 +147,16 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
                     data=result.condition_b_source_metric_vs_zero_cluster_p_values.astype(np.float64),
                 )
                 windows_b = result.condition_b_source_metric_vs_zero_cluster_windows_s or []
-                cs_b.create_dataset(
-                    "best_cluster_start_s",
-                    data=np.array(
-                        [w[0] if w is not None else np.nan for w in windows_b],
-                        dtype=np.float64,
-                    ),
-                )
-                cs_b.create_dataset(
-                    "best_cluster_end_s",
-                    data=np.array(
-                        [w[1] if w is not None else np.nan for w in windows_b],
-                        dtype=np.float64,
-                    ),
-                )
+                n_rois_b = len(result.condition_b_source_metric_vs_zero_cluster_p_values)
+                n_max_b = max((len(w) for w in windows_b), default=0)
+                starts_2d_b = np.full((n_rois_b, n_max_b), np.nan, dtype=np.float64)
+                ends_2d_b = np.full((n_rois_b, n_max_b), np.nan, dtype=np.float64)
+                for i, roi_windows in enumerate(windows_b):
+                    for j, (t_start, t_end) in enumerate(roi_windows):
+                        starts_2d_b[i, j] = t_start
+                        ends_2d_b[i, j] = t_end
+                cs_b.create_dataset("cluster_starts_s", data=starts_2d_b)
+                cs_b.create_dataset("cluster_ends_s", data=ends_2d_b)
                 nulls_b = result.condition_b_source_metric_vs_zero_cluster_null_distributions or []
                 max_null_len_b = max((len(n) for n in nulls_b), default=0)
                 null_mat_b = np.full(
@@ -256,21 +248,17 @@ class RegressionGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
                     "p_values",
                     data=result.cluster_p_values.astype(np.float64),
                 )
-                windows = result.cluster_best_cluster_windows_s or []
-                cs.create_dataset(
-                    "best_cluster_start_s",
-                    data=np.array(
-                        [w[0] if w is not None else np.nan for w in windows],
-                        dtype=np.float64,
-                    ),
-                )
-                cs.create_dataset(
-                    "best_cluster_end_s",
-                    data=np.array(
-                        [w[1] if w is not None else np.nan for w in windows],
-                        dtype=np.float64,
-                    ),
-                )
+                windows_list = result.cluster_windows_s or []
+                n_rois_cs = len(result.cluster_p_values)
+                n_max_clusters = max((len(w) for w in windows_list), default=0)
+                starts_2d = np.full((n_rois_cs, n_max_clusters), np.nan, dtype=np.float64)
+                ends_2d = np.full((n_rois_cs, n_max_clusters), np.nan, dtype=np.float64)
+                for i, roi_windows in enumerate(windows_list):
+                    for j, (t_start, t_end) in enumerate(roi_windows):
+                        starts_2d[i, j] = t_start
+                        ends_2d[i, j] = t_end
+                cs.create_dataset("cluster_starts_s", data=starts_2d)
+                cs.create_dataset("cluster_ends_s", data=ends_2d)
                 null_dists = result.cluster_null_distributions or []
                 max_len = max((len(nd) for nd in null_dists), default=0)
                 null_matrix = np.full(
@@ -545,14 +533,18 @@ def _make_vs_zero_struct(
         null_matrix = np.full((len(null_dists), max_len), np.nan, dtype=np.float64)
         for i, nd in enumerate(null_dists):
             null_matrix[i, : len(nd)] = nd
+        n_rois_vz = len(cp)
+        n_max_vz = max((len(w) for w in windows), default=0)
+        starts_2d = np.full((n_rois_vz, n_max_vz), np.nan, dtype=np.float64)
+        ends_2d = np.full((n_rois_vz, n_max_vz), np.nan, dtype=np.float64)
+        for i, roi_windows in enumerate(windows):
+            for j, (t_start, t_end) in enumerate(roi_windows):
+                starts_2d[i, j] = t_start
+                ends_2d[i, j] = t_end
         kwargs["cluster_stats"] = make_struct(
             p_values=np.asarray(cp, dtype=np.float64),
-            best_cluster_start_s=np.array(
-                [w[0] if w is not None else np.nan for w in windows], dtype=np.float64
-            ),
-            best_cluster_end_s=np.array(
-                [w[1] if w is not None else np.nan for w in windows], dtype=np.float64
-            ),
+            cluster_starts_s=starts_2d,
+            cluster_ends_s=ends_2d,
             null_distributions=null_matrix,
         )
     return make_struct(**kwargs)
@@ -563,7 +555,7 @@ def _make_cluster_stats_struct(result: RegressionGroupProcessingResult) -> objec
     from gin_bids_py_analysis.processing.utils.matlab import make_struct
 
     p_values = result.cluster_p_values
-    windows = result.cluster_best_cluster_windows_s or []
+    windows_list = result.cluster_windows_s or []
     null_dists = result.cluster_null_distributions or []
 
     max_len = max((len(nd) for nd in null_dists), default=0)
@@ -571,13 +563,18 @@ def _make_cluster_stats_struct(result: RegressionGroupProcessingResult) -> objec
     for i, nd in enumerate(null_dists):
         null_matrix[i, : len(nd)] = nd
 
+    n_rois = len(windows_list)
+    n_max_clusters = max((len(w) for w in windows_list), default=0)
+    starts_2d = np.full((n_rois, n_max_clusters), np.nan, dtype=np.float64)
+    ends_2d = np.full((n_rois, n_max_clusters), np.nan, dtype=np.float64)
+    for i, roi_windows in enumerate(windows_list):
+        for j, (t_start, t_end) in enumerate(roi_windows):
+            starts_2d[i, j] = t_start
+            ends_2d[i, j] = t_end
+
     return make_struct(
         p_values=np.asarray(p_values, dtype=np.float64),
-        best_cluster_start_s=np.array(
-            [w[0] if w is not None else np.nan for w in windows], dtype=np.float64
-        ),
-        best_cluster_end_s=np.array(
-            [w[1] if w is not None else np.nan for w in windows], dtype=np.float64
-        ),
+        cluster_starts_s=starts_2d,
+        cluster_ends_s=ends_2d,
         null_distributions=null_matrix,
     )

@@ -304,11 +304,12 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
         )
 
         cluster_p_values_out: np.ndarray | None = None
-        cluster_windows_out: list[tuple[float, float] | None] | None = None
+        cluster_windows_out: list[list[tuple[float, float]]] | None = None
         cluster_null_dists_out: list[np.ndarray] | None = None
         if method == "cluster_permutation" and rows_p_uncorrected and rng is not None:
+            n_keep = self.params.n_clusters_to_keep
             cluster_p_values_list: list[float] = []
-            cluster_windows_list: list[tuple[float, float] | None] = []
+            cluster_windows_list: list[list[tuple[float, float]]] = []
             cluster_null_dists_list: list[np.ndarray] = []
             for roi_idx in range(len(region_names)):
                 roi_t = rows_t[roi_idx]
@@ -321,28 +322,30 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
                         obs_samples = cluster_observed_collection[roi_idx]
                         if obs_samples is None:
                             cluster_p_values_list.append(1.0)
-                            cluster_windows_list.append(None)
+                            cluster_windows_list.append([])
                             cluster_null_dists_list.append(np.zeros(0, dtype=np.float64))
                             continue
                         seed = int(rng.integers(0, np.iinfo(np.int32).max))
-                        p_clust, window_idx, null = compute_mne_cluster_permutation(
+                        best_p, top_windows_idx, top_p_vals, null = compute_mne_cluster_permutation(
                             obs_samples,
                             cluster_threshold_alpha=self.params.cluster_threshold_alpha,
                             n_group_perm=self.params.n_group_permutations,
                             seed=seed,
+                            n_clusters_to_keep=n_keep,
                         )
-                        if window_idx is None:
-                            cluster_p_values_list.append(1.0)
-                            cluster_windows_list.append(None)
-                        else:
-                            t_start = float(first.time_axis_s[window_idx[0]])
-                            t_end = float(first.time_axis_s[window_idx[1]])
-                            cluster_p_values_list.append(p_clust)
-                            cluster_windows_list.append((t_start, t_end))
+                        roi_windows: list[tuple[float, float]] = []
+                        for win_idx, p in zip(top_windows_idx, top_p_vals):
+                            if p < self.params.significance_alpha:
+                                roi_windows.append((
+                                    float(first.time_axis_s[win_idx[0]]),
+                                    float(first.time_axis_s[win_idx[1]]),
+                                ))
+                        cluster_p_values_list.append(best_p)
+                        cluster_windows_list.append(roi_windows)
                         cluster_null_dists_list.append(null)
                     else:
                         cluster_p_values_list.append(1.0)
-                        cluster_windows_list.append(None)
+                        cluster_windows_list.append([])
                         cluster_null_dists_list.append(np.zeros(0, dtype=np.float64))
                 else:
                     null = compute_cluster_null_distribution(
@@ -351,28 +354,29 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
                         n_group_perm=self.params.n_group_permutations,
                         rng=rng,
                     )
-                    if observed_clusters:
-                        best_start, best_end, best_tsum = observed_clusters[0]
-                        p_clust = compute_cluster_permutation_pvalue(best_tsum, null)
-                        t_start = float(first.time_axis_s[best_start])
-                        t_end = float(first.time_axis_s[best_end])
-                        cluster_p_values_list.append(p_clust)
-                        cluster_windows_list.append((t_start, t_end))
-                    else:
-                        cluster_p_values_list.append(1.0)
-                        cluster_windows_list.append(None)
+                    top_candidates = observed_clusters[:n_keep]
+                    roi_windows = []
+                    best_p = 1.0
+                    for i, (start, end, tsum) in enumerate(top_candidates):
+                        p = compute_cluster_permutation_pvalue(tsum, null)
+                        if i == 0:
+                            best_p = p
+                        if p < self.params.significance_alpha:
+                            roi_windows.append((
+                                float(first.time_axis_s[start]),
+                                float(first.time_axis_s[end]),
+                            ))
+                    cluster_p_values_list.append(best_p)
+                    cluster_windows_list.append(roi_windows)
                     cluster_null_dists_list.append(null)
             cluster_p_values_out = np.asarray(cluster_p_values_list, dtype=np.float64)
             cluster_windows_out = cluster_windows_list
             cluster_null_dists_out = cluster_null_dists_list
 
-        if method == "cluster_permutation" and cluster_p_values_out is not None:
+        if method == "cluster_permutation" and cluster_windows_out is not None:
             significant_mask = np.zeros_like(p_values, dtype=bool)
-            for roi_idx, (p_clust, window) in enumerate(
-                zip(cluster_p_values_out, cluster_windows_out or [])
-            ):
-                if p_clust < self.params.significance_alpha and window is not None:
-                    t_start_s, t_end_s = window
+            for roi_idx, roi_windows in enumerate(cluster_windows_out):
+                for t_start_s, t_end_s in roi_windows:
                     in_window = (
                         (first.time_axis_s >= t_start_s)
                         & (first.time_axis_s <= t_end_s)
@@ -439,7 +443,7 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
             source_electrodes_files=sorted(used_electrode_paths),
             excluded_rois=excluded_rois,
             cluster_p_values=cluster_p_values_out,
-            cluster_best_cluster_windows_s=cluster_windows_out,
+            cluster_windows_s=cluster_windows_out,
             cluster_null_distributions=cluster_null_dists_out,
         )
 

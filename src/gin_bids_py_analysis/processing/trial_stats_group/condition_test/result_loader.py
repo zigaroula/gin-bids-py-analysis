@@ -139,20 +139,25 @@ def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
                 )
 
         cluster_p_values: np.ndarray | None = None
-        cluster_windows: list[tuple[float, float] | None] | None = None
+        cluster_windows: list[list[tuple[float, float]]] | None = None
         cluster_null_distributions: list[np.ndarray] | None = None
         if "cluster_stats" in fh:
             cluster_stats = fh["cluster_stats"]
             cluster_p_ds = dataset_or_none(cluster_stats, "p_values")
             if cluster_p_ds is not None:
                 cluster_p_values = np.asarray(cluster_p_ds[:], dtype=np.float64)
-                starts = np.asarray(cluster_stats["best_cluster_start_s"][:], dtype=np.float64)
-                ends = np.asarray(cluster_stats["best_cluster_end_s"][:], dtype=np.float64)
+                starts = np.asarray(cluster_stats["cluster_starts_s"][:], dtype=np.float64)
+                ends = np.asarray(cluster_stats["cluster_ends_s"][:], dtype=np.float64)
+                if starts.ndim == 1:
+                    starts = starts[:, np.newaxis]
+                    ends = ends[:, np.newaxis]
                 cluster_windows = [
-                    (float(start), float(end))
-                    if np.isfinite(start) and np.isfinite(end)
-                    else None
-                    for start, end in zip(starts, ends)
+                    [
+                        (float(s), float(e))
+                        for s, e in zip(row_s, row_e)
+                        if np.isfinite(s) and np.isfinite(e)
+                    ]
+                    for row_s, row_e in zip(starts, ends)
                 ]
                 null_ds = dataset_or_none(cluster_stats, "null_distributions")
                 if null_ds is not None:
@@ -207,7 +212,7 @@ def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
         source_electrodes_files=source_electrodes_files,
         excluded_rois=excluded_rois,
         cluster_p_values=cluster_p_values,
-        cluster_best_cluster_windows_s=cluster_windows,
+        cluster_windows_s=cluster_windows,
         cluster_null_distributions=cluster_null_distributions,
     )
 
@@ -313,26 +318,31 @@ def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
     )
 
     cluster_p_values: np.ndarray | None = None
-    cluster_windows: list[tuple[float, float] | None] | None = None
+    cluster_windows: list[list[tuple[float, float]]] | None = None
     cluster_null_distributions: list[np.ndarray] | None = None
     cluster_stats = getattr(data, "cluster_stats", None)
     if cluster_stats is not None:
         raw = getattr(cluster_stats, "p_values", None)
         if raw is not None:
             cluster_p_values = np.asarray(raw, dtype=np.float64).ravel()
-            starts = np.asarray(
-                getattr(cluster_stats, "best_cluster_start_s", np.array([])),
+            _starts = np.asarray(
+                getattr(cluster_stats, "cluster_starts_s", np.zeros((len(cluster_p_values), 0))),
                 dtype=np.float64,
-            ).ravel()
-            ends = np.asarray(
-                getattr(cluster_stats, "best_cluster_end_s", np.array([])),
+            )
+            _ends = np.asarray(
+                getattr(cluster_stats, "cluster_ends_s", np.zeros((len(cluster_p_values), 0))),
                 dtype=np.float64,
-            ).ravel()
+            )
+            if _starts.ndim == 1:
+                _starts = _starts[:, np.newaxis]
+                _ends = _ends[:, np.newaxis]
             cluster_windows = [
-                (float(start), float(end))
-                if np.isfinite(start) and np.isfinite(end)
-                else None
-                for start, end in zip(starts, ends)
+                [
+                    (float(s), float(e))
+                    for s, e in zip(row_s, row_e)
+                    if np.isfinite(s) and np.isfinite(e)
+                ]
+                for row_s, row_e in zip(_starts, _ends)
             ]
             raw_null = getattr(cluster_stats, "null_distributions", None)
             if raw_null is not None:
@@ -387,7 +397,7 @@ def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
         source_electrodes_files=source_electrodes_files,
         excluded_rois=excluded_rois,
         cluster_p_values=cluster_p_values,
-        cluster_best_cluster_windows_s=cluster_windows,
+        cluster_windows_s=cluster_windows,
         cluster_null_distributions=cluster_null_distributions,
     )
 

@@ -83,9 +83,10 @@ class RegressionGroupProcessingResult(BaseTrialStatsGroupProcessingResult):
     condition_a_source_metric_vs_zero_significant_mask: np.ndarray = field(default_factory=lambda: np.array([]))
     """Boolean significance mask for condition A slope vs 0, shape (n_rois, n_times)."""
     condition_a_source_metric_vs_zero_cluster_p_values: np.ndarray | None = None
-    """Cluster permutation p-values for condition A vs 0, one per ROI, shape (n_rois,). None when not computed."""
-    condition_a_source_metric_vs_zero_cluster_windows_s: list[tuple[float, float] | None] | None = None
-    """Best cluster window [t_start_s, t_end_s] per ROI for condition A vs 0. None when not computed."""
+    """Cluster permutation p-values for condition A vs 0 (best cluster), one per ROI, shape (n_rois,). None when not computed."""
+    condition_a_source_metric_vs_zero_cluster_windows_s: list[list[tuple[float, float]]] | None = None
+    """Significant cluster windows per ROI for condition A vs 0. Each inner list holds (start_s, end_s)
+    tuples for up to n_clusters_to_keep clusters that passed p < significance_alpha."""
     condition_a_source_metric_vs_zero_cluster_null_distributions: list[np.ndarray] | None = None
     """Per-ROI null distributions for condition A vs 0. Each array has shape (n_permutations,)."""
     condition_b_source_metric_vs_zero_t_values: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -97,17 +98,19 @@ class RegressionGroupProcessingResult(BaseTrialStatsGroupProcessingResult):
     condition_b_source_metric_vs_zero_significant_mask: np.ndarray = field(default_factory=lambda: np.array([]))
     """Boolean significance mask for condition B slope vs 0, shape (n_rois, n_times)."""
     condition_b_source_metric_vs_zero_cluster_p_values: np.ndarray | None = None
-    """Cluster permutation p-values for condition B vs 0, one per ROI, shape (n_rois,). None when not computed."""
-    condition_b_source_metric_vs_zero_cluster_windows_s: list[tuple[float, float] | None] | None = None
-    """Best cluster window [t_start_s, t_end_s] per ROI for condition B vs 0. None when not computed."""
+    """Cluster permutation p-values for condition B vs 0 (best cluster), one per ROI, shape (n_rois,). None when not computed."""
+    condition_b_source_metric_vs_zero_cluster_windows_s: list[list[tuple[float, float]]] | None = None
+    """Significant cluster windows per ROI for condition B vs 0. Each inner list holds (start_s, end_s)
+    tuples for up to n_clusters_to_keep clusters that passed p < significance_alpha."""
     condition_b_source_metric_vs_zero_cluster_null_distributions: list[np.ndarray] | None = None
     """Per-ROI null distributions for condition B vs 0. Each array has shape (n_permutations,)."""
 
     # --- Cluster permutation stats (only populated when p_value_correction_method='cluster_permutation') ---
     cluster_p_values: np.ndarray | None = None
-    """Cluster-based permutation p-values, one per ROI, shape (n_rois,). None when not computed."""
-    cluster_best_cluster_windows_s: list[tuple[float, float] | None] | None = None
-    """Best cluster window [t_start_s, t_end_s] per ROI. None entries mean no cluster was found."""
+    """Cluster-based permutation p-values (best cluster), one per ROI, shape (n_rois,). None when not computed."""
+    cluster_windows_s: list[list[tuple[float, float]]] | None = None
+    """Significant cluster windows per ROI for the slope contrast. Each inner list holds (start_s, end_s)
+    tuples for up to n_clusters_to_keep clusters that passed p < significance_alpha."""
     cluster_null_distributions: list[np.ndarray] | None = None
     """Per-ROI null distributions of max-cluster t-sum statistics. Each array has shape (n_permutations,)."""
     manual_roi_missing_channels: dict[str, dict[str, list[str]]] = field(default_factory=dict)

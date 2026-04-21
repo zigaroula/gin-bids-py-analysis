@@ -254,7 +254,8 @@ def compute_mne_cluster_permutation(
     cluster_threshold_alpha: float,
     n_group_perm: int,
     seed: int | None = None,
-) -> tuple[float, tuple[int, int] | None, np.ndarray]:
+    n_clusters_to_keep: int = 1,
+) -> tuple[float, list[tuple[int, int]], list[float], np.ndarray]:
     """Run MNE one-sample temporal cluster permutation and return best-cluster stats.
 
     Parameters
@@ -267,13 +268,21 @@ def compute_mne_cluster_permutation(
         Number of permutation iterations passed to MNE.
     seed : int or None
         Random seed forwarded to MNE.
+    n_clusters_to_keep : int
+        Number of largest clusters (by ``|t-sum|``) to return.  The returned
+        lists are sorted from strongest to weakest and may be shorter than
+        *n_clusters_to_keep* when fewer clusters are found.
 
     Returns
     -------
-    p_value : float
-        P-value of the best (strongest) observed cluster.
-    best_window : tuple ``(start_idx, end_idx)`` or None
-        Sample indices of the best cluster window, or None when no cluster is found.
+    best_p : float
+        P-value of the strongest observed cluster, or ``1.0`` when no cluster
+        is found.
+    top_windows : list of ``(start_idx, end_idx)``
+        Sample-index windows for the top ``n_clusters_to_keep`` clusters,
+        ordered by ``|t-sum|`` descending.  Empty when no cluster is found.
+    top_p_values : list of float
+        MNE p-values corresponding to each entry in *top_windows*.
     null_distribution : float64 array, shape ``(n_group_perm,)``
         Maximum cluster statistic from MNE's permutation distribution (``h0``).
     """
@@ -284,7 +293,7 @@ def compute_mne_cluster_permutation(
         )
     n_samples, n_times = samples.shape
     if n_samples < 2 or n_times == 0:
-        return 1.0, None, np.zeros(0, dtype=np.float64)
+        return 1.0, [], [], np.zeros(0, dtype=np.float64)
 
     threshold = float(t_dist.ppf(1.0 - (cluster_threshold_alpha / 2.0), df=n_samples - 1))
     if not np.isfinite(threshold) or threshold <= 0:
@@ -303,31 +312,35 @@ def compute_mne_cluster_permutation(
     t_values = np.asarray(t_obs, dtype=np.float64).ravel()
     null_distribution = np.asarray(h0, dtype=np.float64).ravel()
     if not clusters:
-        return 1.0, None, null_distribution
+        return 1.0, [], [], null_distribution
 
     cluster_p = np.asarray(cluster_p_values, dtype=np.float64).ravel()
-    best_idx = -1
-    best_abs_tsum = -np.inf
+
+    # Collect (|t_sum|, p_value, window) for every valid cluster.
+    all_cluster_info: list[tuple[float, float, tuple[int, int]]] = []
     for idx, cluster_mask in enumerate(clusters):
         mask = np.asarray(cluster_mask, dtype=bool).ravel()
         if mask.size != n_times or not mask.any():
             continue
         tsum = float(np.sum(t_values[mask]))
-        abs_tsum = abs(tsum)
-        if abs_tsum > best_abs_tsum:
-            best_abs_tsum = abs_tsum
-            best_idx = idx
+        indices = np.where(mask)[0]
+        if indices.size == 0:
+            continue
+        window = (int(indices[0]), int(indices[-1]))
+        p_val = float(cluster_p[idx]) if idx < cluster_p.size else 1.0
+        all_cluster_info.append((abs(tsum), p_val, window))
 
-    if best_idx < 0:
-        return 1.0, None, null_distribution
+    if not all_cluster_info:
+        return 1.0, [], [], null_distribution
 
-    best_mask = np.asarray(clusters[best_idx], dtype=bool).ravel()
-    indices = np.where(best_mask)[0]
-    if indices.size == 0:
-        return 1.0, None, null_distribution
-    best_window = (int(indices[0]), int(indices[-1]))
-    p_value = float(cluster_p[best_idx]) if best_idx < cluster_p.size else 1.0
-    return p_value, best_window, null_distribution
+    # Sort by |t_sum| descending and take the top n_clusters_to_keep.
+    all_cluster_info.sort(key=lambda x: x[0], reverse=True)
+    top = all_cluster_info[:n_clusters_to_keep]
+
+    best_p = top[0][1]
+    top_windows = [x[2] for x in top]
+    top_p_values = [x[1] for x in top]
+    return best_p, top_windows, top_p_values, null_distribution
 
 
 def _one_sample_ttest(samples: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

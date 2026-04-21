@@ -433,8 +433,9 @@ def test_process_group_cluster_permutation_custom_method() -> None:
         assert result.cluster_p_values is not None
         assert result.cluster_p_values.shape == (1,)
         assert 0.0 <= float(result.cluster_p_values[0]) <= 1.0
-        assert result.cluster_best_cluster_windows_s is not None
-        assert len(result.cluster_best_cluster_windows_s) == 1
+        assert result.cluster_windows_s is not None
+        assert len(result.cluster_windows_s) == 1
+        assert isinstance(result.cluster_windows_s[0], list)
         assert result.cluster_null_distributions is not None
         assert len(result.cluster_null_distributions) == 1
         assert result.cluster_null_distributions[0].shape == (50,)

@@ -512,11 +512,12 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
 
         # --- Cluster permutation pass ---
         cluster_p_values_out: np.ndarray | None = None
-        cluster_windows_out: list[tuple[float, float] | None] | None = None
+        cluster_windows_out: list[list[tuple[float, float]]] | None = None
         cluster_null_dists_out: list[np.ndarray] | None = None
         if method == "cluster_permutation" and rows_slope_p_uncorr and rng is not None:
+            n_keep = self.params.n_clusters_to_keep
             cluster_p_values_list: list[float] = []
-            cluster_windows_list: list[tuple[float, float] | None] = []
+            cluster_windows_list: list[list[tuple[float, float]]] = []
             cluster_null_dists_list: list[np.ndarray] = []
             for roi_idx in range(len(region_names)):
                 roi_t = rows_slope_t[roi_idx]
@@ -527,31 +528,33 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                     obs_samples = cluster_observed_collection[roi_idx]
                     if obs_samples is None:
                         cluster_p_values_list.append(1.0)
-                        cluster_windows_list.append(None)
+                        cluster_windows_list.append([])
                         cluster_null_dists_list.append(np.zeros(0, dtype=np.float64))
                         continue
                     seed = int(rng.integers(0, np.iinfo(np.int32).max))
-                    p_clust, window_idx, null = compute_mne_cluster_permutation(
+                    best_p, top_windows_idx, top_p_vals, null = compute_mne_cluster_permutation(
                         obs_samples,
                         cluster_threshold_alpha=self.params.cluster_threshold_alpha,
                         n_group_perm=self.params.n_group_permutations,
                         seed=seed,
+                        n_clusters_to_keep=n_keep,
                     )
-                    if window_idx is None:
-                        cluster_p_values_list.append(1.0)
-                        cluster_windows_list.append(None)
-                    else:
-                        t_start = float(first.time_axis_s[window_idx[0]])
-                        t_end = float(first.time_axis_s[window_idx[1]])
-                        cluster_p_values_list.append(p_clust)
-                        cluster_windows_list.append((t_start, t_end))
+                    roi_windows: list[tuple[float, float]] = []
+                    for win_idx, p in zip(top_windows_idx, top_p_vals):
+                        if p < alpha:
+                            roi_windows.append((
+                                float(first.time_axis_s[win_idx[0]]),
+                                float(first.time_axis_s[win_idx[1]]),
+                            ))
+                    cluster_p_values_list.append(best_p)
+                    cluster_windows_list.append(roi_windows)
                     cluster_null_dists_list.append(null)
                 else:
                     perm_a_roi = perm_slope_a_collection[roi_idx]
                     perm_b_roi = perm_slope_b_collection[roi_idx]
                     if not perm_a_roi or not perm_b_roi:
                         cluster_p_values_list.append(1.0)
-                        cluster_windows_list.append(None)
+                        cluster_windows_list.append([])
                         cluster_null_dists_list.append(np.zeros(0, dtype=np.float64))
                         continue
                     null = compute_cluster_null_distribution_paired(
@@ -561,30 +564,31 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                         n_group_perm=self.params.n_group_permutations,
                         rng=rng,
                     )
-                    if observed_clusters:
-                        best_start, best_end, best_tsum = observed_clusters[0]
-                        p_clust = compute_cluster_permutation_pvalue(best_tsum, null)
-                        t_start = float(first.time_axis_s[best_start])
-                        t_end = float(first.time_axis_s[best_end])
-                        cluster_p_values_list.append(p_clust)
-                        cluster_windows_list.append((t_start, t_end))
-                    else:
-                        cluster_p_values_list.append(1.0)
-                        cluster_windows_list.append(None)
+                    top_candidates = observed_clusters[:n_keep]
+                    roi_windows = []
+                    best_p = 1.0
+                    for i, (start, end, tsum) in enumerate(top_candidates):
+                        p = compute_cluster_permutation_pvalue(tsum, null)
+                        if i == 0:
+                            best_p = p
+                        if p < alpha:
+                            roi_windows.append((
+                                float(first.time_axis_s[start]),
+                                float(first.time_axis_s[end]),
+                            ))
+                    cluster_p_values_list.append(best_p)
+                    cluster_windows_list.append(roi_windows)
                     cluster_null_dists_list.append(null)
             cluster_p_values_out = np.asarray(cluster_p_values_list, dtype=np.float64)
             cluster_windows_out = cluster_windows_list
             cluster_null_dists_out = cluster_null_dists_list
 
-        if method == "cluster_permutation" and cluster_p_values_out is not None:
+        if method == "cluster_permutation" and cluster_windows_out is not None:
             source_metric_significant_mask = np.zeros(
                 (len(region_names), n_times), dtype=bool
             )
-            for roi_idx, (p_clust, window) in enumerate(
-                zip(cluster_p_values_out, cluster_windows_out or [])
-            ):
-                if p_clust < alpha and window is not None:
-                    t_start_s, t_end_s = window
+            for roi_idx, roi_windows in enumerate(cluster_windows_out):
+                for t_start_s, t_end_s in roi_windows:
                     in_window = (
                         (first.time_axis_s >= t_start_s)
                         & (first.time_axis_s <= t_end_s)
@@ -599,17 +603,18 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
 
         # --- Per-condition vs-zero cluster permutation pass ---
         vs_zero_cluster_p_a_out: np.ndarray | None = None
-        vs_zero_cluster_windows_a_out: list[tuple[float, float] | None] | None = None
+        vs_zero_cluster_windows_a_out: list[list[tuple[float, float]]] | None = None
         vs_zero_cluster_null_dists_a_out: list[np.ndarray] | None = None
         vs_zero_cluster_p_b_out: np.ndarray | None = None
-        vs_zero_cluster_windows_b_out: list[tuple[float, float] | None] | None = None
+        vs_zero_cluster_windows_b_out: list[list[tuple[float, float]]] | None = None
         vs_zero_cluster_null_dists_b_out: list[np.ndarray] | None = None
         if method == "cluster_permutation" and rows_vs_zero_t_a and rng is not None:
+            n_keep = self.params.n_clusters_to_keep
             vz_cp_a: list[float] = []
-            vz_cw_a: list[tuple[float, float] | None] = []
+            vz_cw_a: list[list[tuple[float, float]]] = []
             vz_cn_a: list[np.ndarray] = []
             vz_cp_b: list[float] = []
-            vz_cw_b: list[tuple[float, float] | None] = []
+            vz_cw_b: list[list[tuple[float, float]]] = []
             vz_cn_b: list[np.ndarray] = []
             for roi_idx in range(len(region_names)):
                 # Condition A vs zero
@@ -632,24 +637,26 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                     ]:
                         if obs is None or len(obs) < 2:
                             cp_list.append(1.0)
-                            cw_list.append(None)
+                            cw_list.append([])
                             cn_list.append(np.zeros(0, dtype=np.float64))
                             continue
                         seed = int(rng.integers(0, np.iinfo(np.int32).max))
-                        p_clust, window_idx, null = compute_mne_cluster_permutation(
+                        best_p, top_windows_idx, top_p_vals, null = compute_mne_cluster_permutation(
                             obs,
                             cluster_threshold_alpha=self.params.cluster_threshold_alpha,
                             n_group_perm=self.params.n_group_permutations,
                             seed=seed,
+                            n_clusters_to_keep=n_keep,
                         )
-                        if window_idx is None:
-                            cp_list.append(1.0)
-                            cw_list.append(None)
-                        else:
-                            t_start = float(first.time_axis_s[window_idx[0]])
-                            t_end = float(first.time_axis_s[window_idx[1]])
-                            cp_list.append(p_clust)
-                            cw_list.append((t_start, t_end))
+                        roi_vz_windows: list[tuple[float, float]] = []
+                        for win_idx, p in zip(top_windows_idx, top_p_vals):
+                            if p < alpha:
+                                roi_vz_windows.append((
+                                    float(first.time_axis_s[win_idx[0]]),
+                                    float(first.time_axis_s[win_idx[1]]),
+                                ))
+                        cp_list.append(best_p)
+                        cw_list.append(roi_vz_windows)
                         cn_list.append(null)
                 else:
                     # Custom method: use per-channel permuted slope pools
@@ -659,7 +666,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                     ]:
                         if not perm_list:
                             cp_list.append(1.0)
-                            cw_list.append(None)
+                            cw_list.append([])
                             cn_list.append(np.zeros(0, dtype=np.float64))
                             continue
                         null = compute_cluster_null_distribution(
@@ -668,16 +675,20 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                             n_group_perm=self.params.n_group_permutations,
                             rng=rng,
                         )
-                        if obs_clusters:
-                            best_start, best_end, best_tsum = obs_clusters[0]
-                            p_clust = compute_cluster_permutation_pvalue(best_tsum, null)
-                            t_start = float(first.time_axis_s[best_start])
-                            t_end = float(first.time_axis_s[best_end])
-                            cp_list.append(p_clust)
-                            cw_list.append((t_start, t_end))
-                        else:
-                            cp_list.append(1.0)
-                            cw_list.append(None)
+                        top_candidates = obs_clusters[:n_keep]
+                        roi_vz_windows = []
+                        best_p = 1.0
+                        for i, (start, end, tsum) in enumerate(top_candidates):
+                            p = compute_cluster_permutation_pvalue(tsum, null)
+                            if i == 0:
+                                best_p = p
+                            if p < alpha:
+                                roi_vz_windows.append((
+                                    float(first.time_axis_s[start]),
+                                    float(first.time_axis_s[end]),
+                                ))
+                        cp_list.append(best_p)
+                        cw_list.append(roi_vz_windows)
                         cn_list.append(null)
 
             vs_zero_cluster_p_a_out = np.asarray(vz_cp_a, dtype=np.float64)
@@ -688,25 +699,19 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             vs_zero_cluster_null_dists_b_out = vz_cn_b
 
         # Apply cluster-based significant masks for vs-zero tests.
-        if method == "cluster_permutation" and vs_zero_cluster_p_a_out is not None:
+        if method == "cluster_permutation" and vs_zero_cluster_windows_a_out is not None:
             vs_zero_sig_a = np.zeros((len(region_names), n_times), dtype=bool)
-            for roi_idx, (p_clust, window) in enumerate(
-                zip(vs_zero_cluster_p_a_out, vs_zero_cluster_windows_a_out or [])
-            ):
-                if p_clust < alpha and window is not None:
-                    t_start_s, t_end_s = window
+            for roi_idx, roi_windows in enumerate(vs_zero_cluster_windows_a_out):
+                for t_start_s, t_end_s in roi_windows:
                     in_window = (
                         (first.time_axis_s >= t_start_s)
                         & (first.time_axis_s <= t_end_s)
                     )
                     vs_zero_sig_a[roi_idx, in_window] = True
-        if method == "cluster_permutation" and vs_zero_cluster_p_b_out is not None:
+        if method == "cluster_permutation" and vs_zero_cluster_windows_b_out is not None:
             vs_zero_sig_b = np.zeros((len(region_names), n_times), dtype=bool)
-            for roi_idx, (p_clust, window) in enumerate(
-                zip(vs_zero_cluster_p_b_out, vs_zero_cluster_windows_b_out or [])
-            ):
-                if p_clust < alpha and window is not None:
-                    t_start_s, t_end_s = window
+            for roi_idx, roi_windows in enumerate(vs_zero_cluster_windows_b_out):
+                for t_start_s, t_end_s in roi_windows:
                     in_window = (
                         (first.time_axis_s >= t_start_s)
                         & (first.time_axis_s <= t_end_s)
@@ -813,7 +818,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             source_electrodes_files=sorted(used_electrode_paths),
             excluded_rois=excluded_rois,
             cluster_p_values=cluster_p_values_out,
-            cluster_best_cluster_windows_s=cluster_windows_out,
+            cluster_windows_s=cluster_windows_out,
             cluster_null_distributions=cluster_null_dists_out,
             manual_roi_missing_channels=missing_manual_channels,
         )

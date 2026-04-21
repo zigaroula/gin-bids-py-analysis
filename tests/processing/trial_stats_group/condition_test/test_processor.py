@@ -410,8 +410,9 @@ def test_process_group_cluster_permutation_custom_mode() -> None:
 
         assert result.cluster_p_values is not None
         assert result.cluster_p_values.shape == (1,)
-        assert result.cluster_best_cluster_windows_s is not None
-        assert len(result.cluster_best_cluster_windows_s) == 1
+        assert result.cluster_windows_s is not None
+        assert len(result.cluster_windows_s) == 1
+        assert isinstance(result.cluster_windows_s[0], list)
         assert result.cluster_null_distributions is not None
         assert result.cluster_null_distributions[0].shape == (40,)
         assert result.activity_p_values.shape == (1, len(time_s))
@@ -462,8 +463,9 @@ def test_process_group_cluster_permutation_mne_mode() -> None:
 
         assert result.cluster_p_values is not None
         assert result.cluster_p_values.shape == (1,)
-        assert result.cluster_best_cluster_windows_s is not None
-        assert len(result.cluster_best_cluster_windows_s) == 1
+        assert result.cluster_windows_s is not None
+        assert len(result.cluster_windows_s) == 1
+        assert isinstance(result.cluster_windows_s[0], list)
         assert result.cluster_null_distributions is not None
         assert result.cluster_null_distributions[0].ndim == 1
         assert result.activity_p_values.shape == (1, len(time_s))

@@ -80,18 +80,21 @@ class ConditionTestGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
         )
         if result.cluster_p_values is not None:
             n_rois_cs = len(result.cluster_p_values)
-            starts = np.full(n_rois_cs, np.nan, dtype=np.float64)
-            ends = np.full(n_rois_cs, np.nan, dtype=np.float64)
-            for i, window in enumerate(result.cluster_best_cluster_windows_s or []):
-                if window is not None:
-                    starts[i], ends[i] = window
+            windows_list = result.cluster_windows_s or []
+            n_max_clusters = max((len(w) for w in windows_list), default=0)
+            starts_2d = np.full((n_rois_cs, n_max_clusters), np.nan, dtype=np.float64)
+            ends_2d = np.full((n_rois_cs, n_max_clusters), np.nan, dtype=np.float64)
+            for i, roi_windows in enumerate(windows_list):
+                for j, (t_start, t_end) in enumerate(roi_windows):
+                    starts_2d[i, j] = t_start
+                    ends_2d[i, j] = t_end
             null_cell: np.ndarray = np.empty(n_rois_cs, dtype=object)
             for i, nd in enumerate(result.cluster_null_distributions or []):
                 null_cell[i] = nd.astype(np.float64)
             data.cluster_stats = make_struct(
                 p_values=result.cluster_p_values.astype(np.float64),
-                best_cluster_start_s=starts,
-                best_cluster_end_s=ends,
+                cluster_starts_s=starts_2d,
+                cluster_ends_s=ends_2d,
                 null_distributions=null_cell,
             )
         savemat(str(output_path), {"data": data}, do_compression=True, long_field_names=True)
@@ -173,13 +176,16 @@ class ConditionTestGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
                     data=result.cluster_p_values.astype(np.float64),
                 )
                 n_rois_cs = len(result.cluster_p_values)
-                starts = np.full(n_rois_cs, np.nan, dtype=np.float64)
-                ends = np.full(n_rois_cs, np.nan, dtype=np.float64)
-                for i, window in enumerate(result.cluster_best_cluster_windows_s or []):
-                    if window is not None:
-                        starts[i], ends[i] = window
-                cs_grp.create_dataset("best_cluster_start_s", data=starts)
-                cs_grp.create_dataset("best_cluster_end_s", data=ends)
+                windows_list = result.cluster_windows_s or []
+                n_max_clusters = max((len(w) for w in windows_list), default=0)
+                starts_2d = np.full((n_rois_cs, n_max_clusters), np.nan, dtype=np.float64)
+                ends_2d = np.full((n_rois_cs, n_max_clusters), np.nan, dtype=np.float64)
+                for i, roi_windows in enumerate(windows_list):
+                    for j, (t_start, t_end) in enumerate(roi_windows):
+                        starts_2d[i, j] = t_start
+                        ends_2d[i, j] = t_end
+                cs_grp.create_dataset("cluster_starts_s", data=starts_2d)
+                cs_grp.create_dataset("cluster_ends_s", data=ends_2d)
                 if result.cluster_null_distributions:
                     all_sizes = [nd.size for nd in result.cluster_null_distributions]
                     max_len = max(all_sizes, default=0)

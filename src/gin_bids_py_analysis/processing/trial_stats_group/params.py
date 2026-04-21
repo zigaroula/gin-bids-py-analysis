@@ -76,6 +76,18 @@ class BaseTrialStatsGroupParams(BaseProcessingParams):
             "mne.stats.permutation_cluster_1samp_test directly on contribution timecourses."
         ),
     )
+    n_clusters_to_keep: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "Number of largest clusters (by |t-sum|) to retain per ROI when "
+            "p_value_correction_method='cluster_permutation'. Each retained cluster "
+            "is individually tested against the null distribution; only clusters with "
+            "p < significance_alpha contribute time points to the significance mask. "
+            "The cluster-level p-value stored in the result always corresponds to the "
+            "largest (first) candidate cluster."
+        ),
+    )
 
     @field_validator("manual_region_channels", mode="before")
     @classmethod

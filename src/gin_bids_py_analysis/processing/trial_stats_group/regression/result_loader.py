@@ -109,16 +109,23 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
             condition_a_vs_zero_sig = np.isfinite(condition_a_vs_zero_p) & (condition_a_vs_zero_p < significance_alpha)
         # Cluster stats for condition A vs zero
         vz_a_cluster_p: np.ndarray | None = None
-        vz_a_cluster_windows: list[tuple[float, float] | None] | None = None
+        vz_a_cluster_windows: list[list[tuple[float, float]]] | None = None
         vz_a_cluster_null_dists: list[np.ndarray] | None = None
         if "source_metric/condition_a_vs_zero/cluster_stats" in fh:
             cs_a = fh["source_metric/condition_a_vs_zero/cluster_stats"]
             vz_a_cluster_p = np.asarray(cs_a["p_values"][:], dtype=np.float64)
-            starts_a = np.asarray(cs_a["best_cluster_start_s"][:], dtype=np.float64)
-            ends_a = np.asarray(cs_a["best_cluster_end_s"][:], dtype=np.float64)
+            starts_a = np.asarray(cs_a["cluster_starts_s"][:], dtype=np.float64)
+            ends_a = np.asarray(cs_a["cluster_ends_s"][:], dtype=np.float64)
+            if starts_a.ndim == 1:
+                starts_a = starts_a[:, np.newaxis]
+                ends_a = ends_a[:, np.newaxis]
             vz_a_cluster_windows = [
-                (float(s), float(e)) if np.isfinite(s) and np.isfinite(e) else None
-                for s, e in zip(starts_a, ends_a)
+                [
+                    (float(s), float(e))
+                    for s, e in zip(row_s, row_e)
+                    if np.isfinite(s) and np.isfinite(e)
+                ]
+                for row_s, row_e in zip(starts_a, ends_a)
             ]
             null_mat_a = np.asarray(cs_a["null_distributions"][:], dtype=np.float64)
             vz_a_cluster_null_dists = [
@@ -127,11 +134,8 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
             ]
             # Override sig mask from cluster windows
             condition_a_vs_zero_sig = np.zeros((n_rois, n_t), dtype=bool)
-            for roi_idx, (p_clust, window) in enumerate(
-                zip(vz_a_cluster_p, vz_a_cluster_windows)
-            ):
-                if p_clust < significance_alpha and window is not None:
-                    t_start_s, t_end_s = window
+            for roi_idx, roi_windows in enumerate(vz_a_cluster_windows):
+                for t_start_s, t_end_s in roi_windows:
                     in_window = (time_axis_s >= t_start_s) & (time_axis_s <= t_end_s)
                     condition_a_vs_zero_sig[roi_idx, in_window] = True
 
@@ -155,16 +159,23 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
             condition_b_vs_zero_sig = np.isfinite(condition_b_vs_zero_p) & (condition_b_vs_zero_p < significance_alpha)
         # Cluster stats for condition B vs zero
         vz_b_cluster_p: np.ndarray | None = None
-        vz_b_cluster_windows: list[tuple[float, float] | None] | None = None
+        vz_b_cluster_windows: list[list[tuple[float, float]]] | None = None
         vz_b_cluster_null_dists: list[np.ndarray] | None = None
         if "source_metric/condition_b_vs_zero/cluster_stats" in fh:
             cs_b = fh["source_metric/condition_b_vs_zero/cluster_stats"]
             vz_b_cluster_p = np.asarray(cs_b["p_values"][:], dtype=np.float64)
-            starts_b = np.asarray(cs_b["best_cluster_start_s"][:], dtype=np.float64)
-            ends_b = np.asarray(cs_b["best_cluster_end_s"][:], dtype=np.float64)
+            starts_b = np.asarray(cs_b["cluster_starts_s"][:], dtype=np.float64)
+            ends_b = np.asarray(cs_b["cluster_ends_s"][:], dtype=np.float64)
+            if starts_b.ndim == 1:
+                starts_b = starts_b[:, np.newaxis]
+                ends_b = ends_b[:, np.newaxis]
             vz_b_cluster_windows = [
-                (float(s), float(e)) if np.isfinite(s) and np.isfinite(e) else None
-                for s, e in zip(starts_b, ends_b)
+                [
+                    (float(s), float(e))
+                    for s, e in zip(row_s, row_e)
+                    if np.isfinite(s) and np.isfinite(e)
+                ]
+                for row_s, row_e in zip(starts_b, ends_b)
             ]
             null_mat_b = np.asarray(cs_b["null_distributions"][:], dtype=np.float64)
             vz_b_cluster_null_dists = [
@@ -173,11 +184,8 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
             ]
             # Override sig mask from cluster windows
             condition_b_vs_zero_sig = np.zeros((n_rois, n_t), dtype=bool)
-            for roi_idx, (p_clust, window) in enumerate(
-                zip(vz_b_cluster_p, vz_b_cluster_windows)
-            ):
-                if p_clust < significance_alpha and window is not None:
-                    t_start_s, t_end_s = window
+            for roi_idx, roi_windows in enumerate(vz_b_cluster_windows):
+                for t_start_s, t_end_s in roi_windows:
                     in_window = (time_axis_s >= t_start_s) & (time_axis_s <= t_end_s)
                     condition_b_vs_zero_sig[roi_idx, in_window] = True
 
@@ -345,16 +353,23 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
                 )
 
         hdf5_cluster_p_values: np.ndarray | None = None
-        hdf5_cluster_windows: list[tuple[float, float] | None] | None = None
+        hdf5_cluster_windows: list[list[tuple[float, float]]] | None = None
         hdf5_cluster_null_dists: list[np.ndarray] | None = None
         if "cluster_stats" in fh:
             cs = fh["cluster_stats"]
             hdf5_cluster_p_values = np.asarray(cs["p_values"][:], dtype=np.float64)
-            starts = np.asarray(cs["best_cluster_start_s"][:], dtype=np.float64)
-            ends = np.asarray(cs["best_cluster_end_s"][:], dtype=np.float64)
+            starts = np.asarray(cs["cluster_starts_s"][:], dtype=np.float64)
+            ends = np.asarray(cs["cluster_ends_s"][:], dtype=np.float64)
+            if starts.ndim == 1:
+                starts = starts[:, np.newaxis]
+                ends = ends[:, np.newaxis]
             hdf5_cluster_windows = [
-                (float(s), float(e)) if np.isfinite(s) and np.isfinite(e) else None
-                for s, e in zip(starts, ends)
+                [
+                    (float(s), float(e))
+                    for s, e in zip(row_s, row_e)
+                    if np.isfinite(s) and np.isfinite(e)
+                ]
+                for row_s, row_e in zip(starts, ends)
             ]
             null_matrix = np.asarray(cs["null_distributions"][:], dtype=np.float64)
             hdf5_cluster_null_dists = [
@@ -431,7 +446,7 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
         condition_b_scatter_predictor=condition_b_scatter_predictor,
         condition_b_scatter_activity=condition_b_scatter_activity,
         cluster_p_values=hdf5_cluster_p_values,
-        cluster_best_cluster_windows_s=hdf5_cluster_windows,
+        cluster_windows_s=hdf5_cluster_windows,
         cluster_null_distributions=hdf5_cluster_null_dists,
     )
 
@@ -507,7 +522,7 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
         condition_a_vs_zero_sig = np.isfinite(condition_a_vs_zero_p) & (condition_a_vs_zero_p < significance_alpha)
     # Cluster stats for condition A vs zero
     mat_vz_a_cluster_p: np.ndarray | None = None
-    mat_vz_a_cluster_windows: list[tuple[float, float] | None] | None = None
+    mat_vz_a_cluster_windows: list[list[tuple[float, float]]] | None = None
     mat_vz_a_cluster_null_dists: list[np.ndarray] | None = None
     cs_vz_a_raw = getattr(vz_a_raw, "cluster_stats", None) if vz_a_raw is not None else None
     if cs_vz_a_raw is not None:
@@ -515,16 +530,23 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
         if _p_vz_a is not None:
             mat_vz_a_cluster_p = np.asarray(_p_vz_a, dtype=np.float64).ravel()
             _starts_a = np.asarray(
-                getattr(cs_vz_a_raw, "best_cluster_start_s", np.full(len(mat_vz_a_cluster_p), np.nan)),
+                getattr(cs_vz_a_raw, "cluster_starts_s", np.zeros((len(mat_vz_a_cluster_p), 0))),
                 dtype=np.float64,
-            ).ravel()
+            )
             _ends_a = np.asarray(
-                getattr(cs_vz_a_raw, "best_cluster_end_s", np.full(len(mat_vz_a_cluster_p), np.nan)),
+                getattr(cs_vz_a_raw, "cluster_ends_s", np.zeros((len(mat_vz_a_cluster_p), 0))),
                 dtype=np.float64,
-            ).ravel()
+            )
+            if _starts_a.ndim == 1:
+                _starts_a = _starts_a[:, np.newaxis]
+                _ends_a = _ends_a[:, np.newaxis]
             mat_vz_a_cluster_windows = [
-                (float(s), float(e)) if np.isfinite(s) and np.isfinite(e) else None
-                for s, e in zip(_starts_a, _ends_a)
+                [
+                    (float(s), float(e))
+                    for s, e in zip(row_s, row_e)
+                    if np.isfinite(s) and np.isfinite(e)
+                ]
+                for row_s, row_e in zip(_starts_a, _ends_a)
             ]
             _null_vz_a = getattr(cs_vz_a_raw, "null_distributions", None)
             if _null_vz_a is not None:
@@ -544,11 +566,8 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
                 ] * len(mat_vz_a_cluster_p)
             # Override sig mask from cluster windows
             condition_a_vs_zero_sig = np.zeros((n_rois, n_t), dtype=bool)
-            for roi_idx, (p_clust, window) in enumerate(
-                zip(mat_vz_a_cluster_p, mat_vz_a_cluster_windows)
-            ):
-                if p_clust < significance_alpha and window is not None:
-                    t_start_s, t_end_s = window
+            for roi_idx, roi_windows in enumerate(mat_vz_a_cluster_windows):
+                for t_start_s, t_end_s in roi_windows:
                     in_window = (time_axis_s >= t_start_s) & (time_axis_s <= t_end_s)
                     condition_a_vs_zero_sig[roi_idx, in_window] = True
 
@@ -567,7 +586,7 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
         condition_b_vs_zero_sig = np.isfinite(condition_b_vs_zero_p) & (condition_b_vs_zero_p < significance_alpha)
     # Cluster stats for condition B vs zero
     mat_vz_b_cluster_p: np.ndarray | None = None
-    mat_vz_b_cluster_windows: list[tuple[float, float] | None] | None = None
+    mat_vz_b_cluster_windows: list[list[tuple[float, float]]] | None = None
     mat_vz_b_cluster_null_dists: list[np.ndarray] | None = None
     cs_vz_b_raw = getattr(vz_b_raw, "cluster_stats", None) if vz_b_raw is not None else None
     if cs_vz_b_raw is not None:
@@ -575,16 +594,23 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
         if _p_vz_b is not None:
             mat_vz_b_cluster_p = np.asarray(_p_vz_b, dtype=np.float64).ravel()
             _starts_b = np.asarray(
-                getattr(cs_vz_b_raw, "best_cluster_start_s", np.full(len(mat_vz_b_cluster_p), np.nan)),
+                getattr(cs_vz_b_raw, "cluster_starts_s", np.zeros((len(mat_vz_b_cluster_p), 0))),
                 dtype=np.float64,
-            ).ravel()
+            )
             _ends_b = np.asarray(
-                getattr(cs_vz_b_raw, "best_cluster_end_s", np.full(len(mat_vz_b_cluster_p), np.nan)),
+                getattr(cs_vz_b_raw, "cluster_ends_s", np.zeros((len(mat_vz_b_cluster_p), 0))),
                 dtype=np.float64,
-            ).ravel()
+            )
+            if _starts_b.ndim == 1:
+                _starts_b = _starts_b[:, np.newaxis]
+                _ends_b = _ends_b[:, np.newaxis]
             mat_vz_b_cluster_windows = [
-                (float(s), float(e)) if np.isfinite(s) and np.isfinite(e) else None
-                for s, e in zip(_starts_b, _ends_b)
+                [
+                    (float(s), float(e))
+                    for s, e in zip(row_s, row_e)
+                    if np.isfinite(s) and np.isfinite(e)
+                ]
+                for row_s, row_e in zip(_starts_b, _ends_b)
             ]
             _null_vz_b = getattr(cs_vz_b_raw, "null_distributions", None)
             if _null_vz_b is not None:
@@ -604,11 +630,8 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
                 ] * len(mat_vz_b_cluster_p)
             # Override sig mask from cluster windows
             condition_b_vs_zero_sig = np.zeros((n_rois, n_t), dtype=bool)
-            for roi_idx, (p_clust, window) in enumerate(
-                zip(mat_vz_b_cluster_p, mat_vz_b_cluster_windows)
-            ):
-                if p_clust < significance_alpha and window is not None:
-                    t_start_s, t_end_s = window
+            for roi_idx, roi_windows in enumerate(mat_vz_b_cluster_windows):
+                for t_start_s, t_end_s in roi_windows:
                     in_window = (time_axis_s >= t_start_s) & (time_axis_s <= t_end_s)
                     condition_b_vs_zero_sig[roi_idx, in_window] = True
     condition_a_source_metric_mean = _mat_2d(source_metric, "condition_a_mean")
@@ -759,7 +782,7 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
     )
 
     mat_cluster_p_values: np.ndarray | None = None
-    mat_cluster_windows: list[tuple[float, float] | None] | None = None
+    mat_cluster_windows: list[list[tuple[float, float]]] | None = None
     mat_cluster_null_dists: list[np.ndarray] | None = None
     cs_raw = getattr(data, "cluster_stats", None)
     if cs_raw is not None:
@@ -767,16 +790,23 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
         if _p is not None:
             mat_cluster_p_values = np.asarray(_p, dtype=np.float64).ravel()
             _starts = np.asarray(
-                getattr(cs_raw, "best_cluster_start_s", np.full(len(mat_cluster_p_values), np.nan)),
+                getattr(cs_raw, "cluster_starts_s", np.zeros((len(mat_cluster_p_values), 0))),
                 dtype=np.float64,
-            ).ravel()
+            )
             _ends = np.asarray(
-                getattr(cs_raw, "best_cluster_end_s", np.full(len(mat_cluster_p_values), np.nan)),
+                getattr(cs_raw, "cluster_ends_s", np.zeros((len(mat_cluster_p_values), 0))),
                 dtype=np.float64,
-            ).ravel()
+            )
+            if _starts.ndim == 1:
+                _starts = _starts[:, np.newaxis]
+                _ends = _ends[:, np.newaxis]
             mat_cluster_windows = [
-                (float(s), float(e)) if np.isfinite(s) and np.isfinite(e) else None
-                for s, e in zip(_starts, _ends)
+                [
+                    (float(s), float(e))
+                    for s, e in zip(row_s, row_e)
+                    if np.isfinite(s) and np.isfinite(e)
+                ]
+                for row_s, row_e in zip(_starts, _ends)
             ]
             _null_mat_raw = getattr(cs_raw, "null_distributions", None)
             if _null_mat_raw is not None:
@@ -860,7 +890,7 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
         condition_b_scatter_predictor=condition_b_scatter_predictor,
         condition_b_scatter_activity=condition_b_scatter_activity,
         cluster_p_values=mat_cluster_p_values,
-        cluster_best_cluster_windows_s=mat_cluster_windows,
+        cluster_windows_s=mat_cluster_windows,
         cluster_null_distributions=mat_cluster_null_dists,
     )
 

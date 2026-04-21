@@ -27,8 +27,10 @@ class ConditionTestGroupProcessingResult(BaseTrialStatsGroupProcessingResult):
 
     # --- Optional cluster-permutation results (only present when p_value_correction_method='cluster_permutation') ---
     cluster_p_values: np.ndarray | None = None
-    """Cluster-level p-value per ROI, shape (n_rois,); None when cluster permutation was not used."""
-    cluster_best_cluster_windows_s: list[tuple[float, float] | None] | None = None
-    """Time window (start_s, end_s) of the most significant cluster per ROI; None entry if no cluster found."""
+    """Cluster-level p-value per ROI (best/largest cluster), shape (n_rois,); None when cluster permutation was not used."""
+    cluster_windows_s: list[list[tuple[float, float]]] | None = None
+    """Significant cluster windows per ROI, each inner list contains (start_s, end_s) tuples for
+    up to n_clusters_to_keep clusters that passed p < significance_alpha; empty inner list if no
+    significant cluster was found for that ROI."""
     cluster_null_distributions: list[np.ndarray] | None = None
     """Per-ROI permutation null distributions of max-cluster-mass statistic, each shape (n_permutations,)."""
