@@ -24,7 +24,7 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, 
 # Shared parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:/data_clarissa/valuation/bids")
+BIDS_ROOT = Path(r"E:/data_clarissa/valuation/bids")
 
 # ---------------------------------------------------------------------------
 # MATLAB z-score injection configuration
@@ -38,9 +38,9 @@ BIDS_ROOT = Path(r"D:/data_clarissa/valuation/bids")
 #  - Trials are matched by sequential order of appearance per subject
 # Set to False to restore default behavior (predictor="rating").
 
-USE_MATLAB_ZSCORES: bool = True
+USE_MATLAB_ZSCORES: bool = False
 
-MATLAB_ZSCORES_PATH = Path(r"D:/data_clarissa/subjects.mat")
+MATLAB_ZSCORES_PATH = Path(r"E:/data_clarissa/subjects.mat")
 MATLAB_ZSCORE_COLUMN_INDEX = 6  # 0-based index for column 7 in trial_characteristics1
 
 IEEG_FILTERS = {
@@ -96,8 +96,8 @@ def _build_params() -> RegressionParams:
     return RegressionParams(
         anchor_event_codes=["11", "12"],
         experiment_start_event_code="5",
-        tmin_s=-0.5,
-        tmax_s=5.0,
+        tmin_s=-1,
+        tmax_s=10,
         condition_a="pleasant",
         condition_b="unpleasant",
         predictor="matlab_zscore" if USE_MATLAB_ZSCORES else "rating",
@@ -111,6 +111,7 @@ def _build_params() -> RegressionParams:
         activity_baseline_tmax_s=-0.05,
         activity_baseline_scope="global",
         activity_baseline_remove_outlier_trial_means=True,
+        activity_baseline_outlier_method="median_mad",
         p_value_correction_method="none",
         significance_alpha=0.05,
         trial_activity_summary={
@@ -118,16 +119,16 @@ def _build_params() -> RegressionParams:
             "response": {"source": "table_column", "column": "RT", "units": "s"},
         },
         epoch_cleaning=TRIAL_SLOPE_EPOCH_CLEANING,
-        n_permutations=500
+        #n_permutations=500
     )
 
 
 PARAMS = _build_params()
 
 ROI_CSV_FILES = {
-    "vmPFC": Path(r"D:/data_clarissa/valuation/csv/PFCvm_elecs_tbl.csv"),
-    "daINS": Path(r"D:/data_clarissa/valuation/csv/aINS_dors_elecs_tbl.csv"),
-    "vaINS": Path(r"D:/data_clarissa/valuation/csv/aINS_vent_elecs_tbl.csv"),
+    "vmPFC": Path(r"E:/data_clarissa/valuation/csv/PFCvm_elecs_tbl.csv"),
+    "daINS": Path(r"E:/data_clarissa/valuation/csv/aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"E:/data_clarissa/valuation/csv/aINS_vent_elecs_tbl.csv"),
 }
 
 GROUP_PARAM_KWARGS = {
@@ -145,7 +146,7 @@ VM_PFC_SPIKE_EXCLUSION_REASON = "vmPFC_spike_0_5s"
 MAX_RT_S: float = 20.0
 MIN_RATING: float = 0.0
 BEH_TSV_PATH = Path(
-    r"D:/data_clarissa/valuation/bids"
+    r"E:/data_clarissa/valuation/bids"
     r"/sub-GRE2021AICb/beh/sub-GRE2021AICb_task-MDCHOICE_beh.tsv"
 )
 

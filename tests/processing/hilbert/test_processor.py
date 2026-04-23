@@ -12,6 +12,7 @@ import math
 import numpy as np
 import pytest
 
+from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.hilbert.dsp import process_all_channels
 from gin_bids_py_analysis.processing.hilbert.params import HilbertParams, MontageMode, NormalizationMode
@@ -201,6 +202,64 @@ class _FakeRaw:
 
 
 class TestHilbertProcessingChannelSelection:
+    def test_process_group_can_use_events_tsv_secondary(
+        self,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+        mock_bids_file,
+    ) -> None:
+        fs = 512.0
+        data = np.zeros((1, 32), dtype=np.float32)
+        raw = _FakeRaw(data, ["A1"], fs)
+        events_file = BIDSFile.from_path(
+            tmp_path / "sub-01_ses-01_task-rest_run-1_events.tsv"
+        ).attach_data(
+            [
+                {
+                    "onset": "152.13746632495895",
+                    "duration": "0",
+                    "trial_type": "Trigger",
+                    "code": "11",
+                }
+            ]
+        )
+
+        def fake_process_all_channels(
+            data_2d: np.ndarray,
+            channel_names: list[str],
+            fs: float,
+            params: HilbertParams,
+            **_: object,
+        ):
+            del data_2d, fs, params
+            return (
+                {0: np.zeros((len(channel_names), 10), dtype=np.float32)},
+                list(channel_names),
+                [50.0, 60.0],
+            )
+
+        mock_bids_file.attach_data(raw)
+        monkeypatch.setattr(processor_module, "process_all_channels", fake_process_all_channels)
+
+        params = HilbertParams(
+            f_min=50,
+            f_max=60,
+            f_step=10,
+            montage_mode=MontageMode.MONO,
+            smoothing_windows_ms=[0],
+            downsampled_frequency_hz=100.0,
+            normalization_mode=NormalizationMode.NONE,
+            events_source="events_tsv",
+        )
+
+        result = processor_module.HilbertProcessing(params).process_group(
+            BIDSFileGroup(primary=mock_bids_file, secondaries=[events_file])
+        )
+
+        assert result.original_events[0]["onset"] == pytest.approx(152.13746632495895)
+        assert result.metadata["events_source_resolved"] == "events_tsv"
+        assert result.metadata["events_onset_precision"] == "exact_time"
+
     def test_process_group_subsets_data_and_names_together(
         self,
         monkeypatch: pytest.MonkeyPatch,

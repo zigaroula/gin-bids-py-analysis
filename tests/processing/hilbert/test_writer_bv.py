@@ -25,7 +25,11 @@ from gin_bids_py_analysis.processing.hilbert.params import (
     NormalizationMode,
 )
 from gin_bids_py_analysis.processing.hilbert.result import HilbertProcessingResult
-from gin_bids_py_analysis.processing.hilbert.writer import HilbertProcessingWriter
+from gin_bids_py_analysis.processing.hilbert.writer import (
+    HilbertProcessingWriter,
+    _downsample_events,
+)
+from gin_bids_py_analysis.processing.utils.matlab import matlab_round
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +182,71 @@ class TestBrainVisionWriter:
         out_vmrk = next((tmp_path / "derivatives" / "hilbert").rglob("*.vmrk"))
         vmrk_text = out_vmrk.read_text(encoding="utf-8")
         assert "Stimulus" in vmrk_text
+
+    def test_event_shift_is_applied_before_downsampling(self) -> None:
+        """A source-rate -1 sample shift is not equivalent to a 100 Hz -1 shift."""
+        original_fs = 512.0
+        downsampled_fs = 100.0
+        sample_changes_bin = 75984
+        sample_stays_in_bin = 77889
+        events = Annotations(
+            onset=[
+                sample_changes_bin / original_fs,
+                sample_stays_in_bin / original_fs,
+            ],
+            duration=[0.0, 0.0],
+            description=["Stimulus/S 11", "Stimulus/S 11"],
+        )
+
+        shifted = _downsample_events(
+            events,
+            downsampled_fs,
+            original_fs=original_fs,
+            event_sample_shift_samples=-1,
+        )
+
+        assert shifted is not None
+        assert shifted[0]["onset"] == matlab_round(
+            (sample_changes_bin - 1) * downsampled_fs / original_fs
+        )
+        assert shifted[0]["onset"] == 14840
+        assert shifted[1]["onset"] == matlab_round(
+            (sample_stays_in_bin - 1) * downsampled_fs / original_fs
+        )
+        assert shifted[1]["onset"] == 15213
+
+    def test_exact_time_events_keep_tsv_onsets_before_downsampling(self) -> None:
+        """Exact TSV onsets must not be snapped to source samples before projection."""
+        original_fs = 512.0
+        downsampled_fs = 100.0
+        events = [
+            {
+                "onset": 152.13746632495895,
+                "duration": 0.0,
+                "description": "Stimulus/S 11",
+            },
+            {
+                "onset": 1370.6371156999376,
+                "duration": 0.0,
+                "description": "Stimulus/S 11",
+            },
+            {
+                "onset": 1506.307274225168,
+                "duration": 0.0,
+                "description": "Stimulus/S 12",
+            },
+        ]
+
+        shifted = _downsample_events(
+            events,
+            downsampled_fs,
+            original_fs=original_fs,
+            event_sample_shift_samples=-1,
+            event_onset_precision="exact_time",
+        )
+
+        assert shifted is not None
+        assert [event["onset"] for event in shifted] == [15214, 137064, 150631]
 
 
 # ---------------------------------------------------------------------------

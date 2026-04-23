@@ -96,6 +96,7 @@ def zscore_activity_by_baseline(
     baseline_tmax_s: float,
     baseline_scope: Literal["trial", "condition", "global"] = "global",
     remove_outlier_trial_means: bool = False,
+    outlier_method: Literal["median_mad", "mean"] = "median_mad",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Z-score activity relative to a baseline window.
 
@@ -146,11 +147,13 @@ def zscore_activity_by_baseline(
                 arr_a,
                 baseline_mask,
                 remove_outlier_trial_means=remove_outlier_trial_means,
+                outlier_method=outlier_method,
             ),
             _zscore_activity_by_trial_mean_reference(
                 arr_b,
                 baseline_mask,
                 remove_outlier_trial_means=remove_outlier_trial_means,
+                outlier_method=outlier_method,
             ),
         )
 
@@ -171,6 +174,7 @@ def zscore_activity_by_baseline(
     reference_mean, reference_scale = _baseline_reference_from_trial_means(
         np.concatenate(trial_means_parts, axis=0),
         remove_outlier_trial_means=remove_outlier_trial_means,
+        outlier_method=outlier_method,
     )
     return (
         _apply_feature_reference(arr_a, reference_mean, reference_scale),
@@ -200,6 +204,7 @@ def _zscore_activity_by_trial_mean_reference(
     baseline_mask: np.ndarray,
     *,
     remove_outlier_trial_means: bool,
+    outlier_method: Literal["median_mad", "mean"] = "median_mad",
 ) -> np.ndarray:
     arr = np.asarray(epochs, dtype=np.float64)
     if arr.shape[0] == 0:
@@ -208,6 +213,7 @@ def _zscore_activity_by_trial_mean_reference(
     reference_mean, reference_scale = _baseline_reference_from_trial_means(
         trial_means,
         remove_outlier_trial_means=remove_outlier_trial_means,
+        outlier_method=outlier_method,
     )
     return _apply_feature_reference(arr, reference_mean, reference_scale)
 
@@ -228,6 +234,7 @@ def _baseline_reference_from_trial_means(
     trial_means: np.ndarray,
     *,
     remove_outlier_trial_means: bool,
+    outlier_method: Literal["median_mad", "mean"] = "median_mad",
 ) -> tuple[np.ndarray, np.ndarray]:
     means = np.asarray(trial_means, dtype=np.float64)
     if means.ndim != 2:
@@ -239,7 +246,7 @@ def _baseline_reference_from_trial_means(
         return empty, empty
 
     if remove_outlier_trial_means:
-        cleaned = _remove_outlier_trial_means(means)
+        cleaned = _remove_outlier_trial_means(means, method=outlier_method)
     else:
         cleaned = means
 
@@ -267,12 +274,17 @@ def _apply_feature_reference(
     return out
 
 
-def _outlier_trial_means_mask(trial_means: np.ndarray) -> np.ndarray:
+def _outlier_trial_means_mask(
+    trial_means: np.ndarray,
+    method: Literal["median_mad", "mean"] = "median_mad",
+) -> np.ndarray:
     """Return a bool mask ``(n_trials, n_features)`` flagging outlier baseline means.
 
-    Uses the same median/MAD criterion as ``_remove_outlier_trial_means`` but
-    returns the mask without modifying any array, so it can be used independently
-    for audit purposes.
+    ``method='median_mad'`` uses the median ± 3 × 1.4826 × MAD criterion
+    (matching MATLAB ``rmoutliers`` default).
+    ``method='mean'`` uses the mean ± 3σ criterion (matching MATLAB
+    ``rmoutliers(..., 'mean', 'ThresholdFactor', 3)`` as used in ``b2``
+    HGA-trial cleaning).
     """
     arr = np.asarray(trial_means, dtype=np.float64)
     if arr.ndim != 2 or arr.shape[0] == 0:
@@ -285,29 +297,39 @@ def _outlier_trial_means_mask(trial_means: np.ndarray) -> np.ndarray:
         finite_values = values[finite_positions]
         if finite_values.size < 3:
             continue
-        median = float(np.nanmedian(finite_values))
-        mad = float(np.nanmedian(np.abs(finite_values - median)))
-        if not np.isfinite(mad) or mad <= 0.0:
-            continue
-        scaled_mad = 1.4826 * mad
-        threshold = 3.0 * scaled_mad
-        outlier_positions = np.abs(finite_values - median) > threshold
+        if method == "mean":
+            center = float(np.nanmean(finite_values))
+            spread = float(np.nanstd(finite_values, ddof=1))
+            if not np.isfinite(spread) or spread <= 0.0:
+                continue
+            threshold = 3.0 * spread
+            outlier_positions = np.abs(finite_values - center) > threshold
+        else:  # median_mad
+            center = float(np.nanmedian(finite_values))
+            mad = float(np.nanmedian(np.abs(finite_values - center)))
+            if not np.isfinite(mad) or mad <= 0.0:
+                continue
+            threshold = 3.0 * 1.4826 * mad
+            outlier_positions = np.abs(finite_values - center) > threshold
         if np.any(outlier_positions):
             finite_indices = np.flatnonzero(finite_positions)
             mask[finite_indices[outlier_positions], feature_idx] = True
     return mask
 
 
-def _remove_outlier_trial_means(trial_means: np.ndarray) -> np.ndarray:
+def _remove_outlier_trial_means(
+    trial_means: np.ndarray,
+    method: Literal["median_mad", "mean"] = "median_mad",
+) -> np.ndarray:
     """Approximate MATLAB ``rmoutliers`` on per-feature trial means.
 
-    The default MATLAB method is median/MAD-based. We mirror that here so the
-    boolean option stays simple while remaining close to the intended behavior.
+    ``method='median_mad'`` mirrors the MATLAB default (median/MAD).
+    ``method='mean'`` mirrors ``rmoutliers(..., 'mean', 'ThresholdFactor', 3)``.
     """
     arr = np.asarray(trial_means, dtype=np.float64).copy()
     if arr.ndim != 2 or arr.shape[0] == 0:
         return arr
-    arr[_outlier_trial_means_mask(arr)] = np.nan
+    arr[_outlier_trial_means_mask(arr, method=method)] = np.nan
     return arr
 
 
@@ -320,6 +342,7 @@ def compute_baseline_outlier_mask(
     baseline_tmax_s: float,
     baseline_scope: Literal["trial", "condition", "global"] = "global",
     remove_outlier_trial_means: bool = False,
+    outlier_method: Literal["median_mad", "mean"] = "median_mad",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return per-trial outlier masks matching the detection in ``zscore_activity_by_baseline``.
 
@@ -368,12 +391,16 @@ def compute_baseline_outlier_mask(
 
     if scope == "condition":
         mask_a = (
-            _outlier_trial_means_mask(_trial_baseline_means(arr_a, baseline_mask))
+            _outlier_trial_means_mask(
+                _trial_baseline_means(arr_a, baseline_mask), method=outlier_method
+            )
             if n_a > 0
             else empty_a
         )
         mask_b = (
-            _outlier_trial_means_mask(_trial_baseline_means(arr_b, baseline_mask))
+            _outlier_trial_means_mask(
+                _trial_baseline_means(arr_b, baseline_mask), method=outlier_method
+            )
             if n_b > 0
             else empty_b
         )
@@ -388,7 +415,7 @@ def compute_baseline_outlier_mask(
             if n > 0
         ]
         pooled = np.concatenate(parts, axis=0)
-        pooled_mask = _outlier_trial_means_mask(pooled)
+        pooled_mask = _outlier_trial_means_mask(pooled, method=outlier_method)
         return pooled_mask[:n_a], pooled_mask[n_a:]
 
     return empty_a, empty_b

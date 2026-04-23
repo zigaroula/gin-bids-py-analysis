@@ -14,6 +14,7 @@ from gin_bids_py_analysis.processing.base import (
     BaseProcessingWriter,
 )
 from gin_bids_py_analysis.processing.utils.events import coerce_annotation_events
+from gin_bids_py_analysis.processing.utils.matlab import matlab_round
 
 from .result import HilbertProcessingResult
 
@@ -24,12 +25,29 @@ def _package_version() -> str:
         return "unknown"
 
 
-def _downsample_events(original_events: mne.Annotations | Any, downsampled_fs: float) -> list[dict] | None:
+def _downsample_events(
+    original_events: mne.Annotations | Any,
+    downsampled_fs: float,
+    *,
+    original_fs: float | None = None,
+    event_sample_shift_samples: int = 0,
+    event_onset_precision: str = "sample_quantized",
+) -> list[dict] | None:
     """Convert source annotations to sample indices at the envelope rate.
 
     Args:
         original_events: MNE Annotations object or any list of dicts with keys
                          "onset" (in seconds) and "duration" (in seconds).
+        downsampled_fs: Sampling frequency of the exported envelope signal.
+        original_fs: Source sampling frequency, required when applying a source
+                     sample offset before projection to ``downsampled_fs``.
+        event_sample_shift_samples: Offset to apply in source samples before
+                                    converting events to the envelope rate.
+        event_onset_precision: ``"sample_quantized"`` preserves the historical
+                               annotation path by snapping to a source sample
+                               before downsampling. ``"exact_time"`` keeps
+                               exact TSV onsets in seconds and applies the
+                               sample shift as a time offset.
 
     Returns:
         List of dicts with keys "onset" (in samples), "duration" (in samples),
@@ -37,6 +55,15 @@ def _downsample_events(original_events: mne.Annotations | Any, downsampled_fs: f
     """
     if not original_events:
         return None
+
+    if event_sample_shift_samples and original_fs is None:
+        raise ValueError(
+            "original_fs is required when event_sample_shift_samples is non-zero."
+        )
+    if event_onset_precision not in {"sample_quantized", "exact_time"}:
+        raise ValueError(
+            "event_onset_precision must be 'sample_quantized' or 'exact_time'."
+        )
 
     downsampled_events = []
     for ann in coerce_annotation_events(original_events):
@@ -49,8 +76,22 @@ def _downsample_events(original_events: mne.Annotations | Any, downsampled_fs: f
                 ann_type = "Comment"
             description = ann.description
 
-        onset_samples = round(ann.onset_s * downsampled_fs)
-        duration_samples = round(ann.duration_s * downsampled_fs)
+        if event_onset_precision == "exact_time":
+            shifted_onset_s = ann.onset_s
+            if event_sample_shift_samples:
+                shifted_onset_s += event_sample_shift_samples / float(original_fs)
+            onset_samples = matlab_round(shifted_onset_s * downsampled_fs)
+        elif event_sample_shift_samples:
+            source_onset_sample = (
+                matlab_round(ann.onset_s * float(original_fs))
+                + event_sample_shift_samples
+            )
+            onset_samples = matlab_round(
+                source_onset_sample * downsampled_fs / float(original_fs)
+            )
+        else:
+            onset_samples = matlab_round(ann.onset_s * downsampled_fs)
+        duration_samples = matlab_round(ann.duration_s * downsampled_fs)
 
         downsampled_events.append(
             {
@@ -220,6 +261,17 @@ class HilbertProcessingWriter(BaseProcessingWriter):
                 "centered",
                 data=bool(result.metadata.get("centered", False)),
             )
+            for key in (
+                "events_source_requested",
+                "events_source_resolved",
+                "events_onset_precision",
+                "events_file",
+                "event_sample_shift_samples",
+            ):
+                value = result.metadata.get(key)
+                if value is None:
+                    continue
+                meta_grp.create_dataset(key, data=str(value), dtype=str_dtype)
 
             # ------------------------------------------------------------------
             # /provenance
@@ -274,7 +326,19 @@ class HilbertProcessingWriter(BaseProcessingWriter):
                 "pybv is required for BrainVision output. Install it with: pip install pybv"
             ) from exc
 
-        events = _downsample_events(result.original_events, result.downsampled_fs)
+        event_sample_shift_samples = int(
+            result.metadata.get("event_sample_shift_samples", 0)
+        )
+        event_onset_precision = str(
+            result.metadata.get("events_onset_precision", "sample_quantized")
+        )
+        events = _downsample_events(
+            result.original_events,
+            result.downsampled_fs,
+            original_fs=result.original_fs,
+            event_sample_shift_samples=event_sample_shift_samples,
+            event_onset_precision=event_onset_precision,
+        )
 
         unit = result.metadata.get("unit", "µV")
         scale_factor = result.metadata.get("scale_factor", 1e-6)

@@ -11,6 +11,7 @@ from gin_bids_py_analysis.processing.utils.channels import (
     BipolarStorage,
     MontageMode,
 )
+from gin_bids_py_analysis.processing.utils.input_events import EventSource
 
 
 class NormalizationMode(str, Enum):
@@ -119,6 +120,18 @@ class HilbertParams(BaseProcessingParams):
     # Downsampling
     # ------------------------------------------------------------------
 
+    computation_frequency_hz: float | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Sampling rate at which BPF and Hilbert computations are performed in Hz. "
+            "When set, the signal is downsampled to this rate *before* filtering — "
+            "matching the Matlab ``b1`` pre-processing step "
+            "(``param.comp_freq = 512``) applied before ``spm2env``. "
+            "Set to ``None`` (default) to run computations at the native recording "
+            "sampling rate."
+        ),
+    )
     downsampled_frequency_hz: float | None = Field(
         default=64.0,
         gt=0,
@@ -127,6 +140,25 @@ class HilbertParams(BaseProcessingParams):
             "``scipy.signal.resample_poly`` is used to achieve the exact target rate "
             "with anti-aliasing. Set to ``None`` to skip downsampling and keep the "
             "envelopes at the original recording sampling rate."
+        ),
+    )
+    event_sample_shift_samples: int = Field(
+        default=0,
+        description=(
+            "Temporary compatibility offset applied to annotation/event onsets "
+            "in source-sampling-rate samples before exporting events at the "
+            "envelope sampling rate. This does not shift the signal itself. "
+            "Use -1 to reproduce the Micromed-to-SPM event offset observed in "
+            "the Matlab a1 pipeline."
+        ),
+    )
+    events_source: EventSource = Field(
+        default="annotations",
+        description=(
+            "Where continuous-file events are read from. 'annotations' reads the "
+            "signal file annotations; 'events_tsv' requires a matching _events.tsv "
+            "attached in BIDSFileGroup.secondaries; 'auto' prefers that secondary "
+            "_events.tsv and falls back to annotations."
         ),
     )
 

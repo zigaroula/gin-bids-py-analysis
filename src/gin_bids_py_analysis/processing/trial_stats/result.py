@@ -38,6 +38,7 @@ class BaseTrialStatsProcessingResult(BaseProcessingResult):
     activity_baseline_tmax_s: float = 0.0
     activity_baseline_scope: str = "global"
     activity_baseline_remove_outlier_trial_means: bool = False
+    activity_baseline_outlier_method: str = "median_mad"
     p_value_correction_method: str = "fdr_bh"
     significance_alpha: float = 0.05
     trial_activity_summary_kind: str = "epoch_mean"

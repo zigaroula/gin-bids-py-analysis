@@ -17,6 +17,7 @@ from .dsp import process_all_channels
 from .params import HilbertParams
 from .result import HilbertProcessingResult
 from ..utils.channels import select_channels_for_montage
+from ..utils.input_events import resolve_input_events
 from ..utils.multithreading import get_threads_for_worker
 
 
@@ -53,8 +54,9 @@ class HilbertProcessing(BaseProcessing):
         pipeline defined in :mod:`.dsp`, and returns a
         :class:`HilbertProcessingResult`.
 
-        For single-file analyses ``group.primary`` is the iEEG file.
-        ``group.secondaries`` is not used by this processor.
+        For single-file analyses ``group.primary`` is the iEEG file. When
+        ``params.events_source`` is ``"events_tsv"`` or ``"auto"``,
+        ``group.secondaries`` may contain the matching ``_events.tsv``.
 
         Args:
             group: The file group to process.
@@ -69,7 +71,11 @@ class HilbertProcessing(BaseProcessing):
             # get_data() returns shape [n_channels, n_times] as float64
             data: np.ndarray = raw.get_data().astype(np.float32)
             ch_names: list[str] = list(raw.ch_names)
-            original_events = raw.annotations
+            resolved_events = resolve_input_events(
+                group,
+                raw,
+                self.params.events_source,
+            )
 
         if _PYFFTW_AVAILABLE:
             pyfftw.config.NUM_THREADS = get_threads_for_worker()
@@ -107,6 +113,8 @@ class HilbertProcessing(BaseProcessing):
                 "unit": self.params.normalization_mode.unit,
                 "scale_factor": self.params.normalization_mode.scale_factor,
                 "processing_method": self.params.method.value,
+                "event_sample_shift_samples": self.params.event_sample_shift_samples,
+                **resolved_events.metadata(),
             },
-            original_events=original_events,
+            original_events=resolved_events.events,
         )

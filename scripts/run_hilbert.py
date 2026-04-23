@@ -5,7 +5,7 @@ Edit the parameters below and run: python scripts/run_hilbert.py
 
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset
+from gin_bids_py_analysis.bids import BIDSDataset, build_subject_groups
 from gin_bids_py_analysis.processing.hilbert import (
     HilbertParams,
     HilbertProcessing,
@@ -24,7 +24,7 @@ from gin_bids_py_analysis.processing.utils.channels import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
+BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
 
 # BIDS entity filters: only files matching ALL of these will be processed.
 # Remove any key you don't want to filter on.
@@ -42,7 +42,12 @@ PARAMS = HilbertParams(
     f_max=150,
     f_step=10,
     method=ProcessingMethod.SPM2ENV,
+    computation_frequency_hz=512.0,
     downsampled_frequency_hz=100.0,
+    # Temporary Matlab compatibility: a1 Micromed->SPM shifts events by -1
+    # source sample before b1 projects them to 100 Hz.
+    event_sample_shift_samples=-1,
+    events_source="events_tsv",
     smoothing_windows_ms= [0, 250, 500, 1000, 2500, 5000],
     montage_mode=MontageMode.BIPOLAR,
     bipolar_direction=BipolarDirection.NEXT_MINUS_PREVIOUS,
@@ -58,6 +63,15 @@ WRITER_PARAMS = HilbertWriterParams(
     output_format="brainvision"
 )
 
+SECONDARY_FILTERS = [
+    {
+        "scope": "raw",
+        "suffix": "events",
+        "extension": ".tsv",
+        "datatype": "ieeg",
+    },
+]
+
 N_JOBS = 1  # parallelism across files; set to -1 to use all available CPUs
 
 # ---------------------------------------------------------------------------
@@ -66,12 +80,17 @@ N_JOBS = 1  # parallelism across files; set to -1 to use all available CPUs
 
 if __name__ == "__main__":
     ds = BIDSDataset(BIDS_ROOT)
-    files = ds.get_files(scope="raw", **FILE_FILTERS)
-    print(f"Found {len(files)} file(s). Running with n_jobs={N_JOBS}.")
+    groups = build_subject_groups(
+        ds,
+        {"scope": "raw", **FILE_FILTERS},
+        SECONDARY_FILTERS,
+        aggregate_runs=False,
+    )
+    print(f"Found {len(groups)} file group(s). Running with n_jobs={N_JOBS}.")
 
     processor = HilbertProcessing(PARAMS)
     writer = HilbertProcessingWriter(WRITER_PARAMS)
 
-    out_paths = processor.run(files, writer, n_jobs=N_JOBS)
+    out_paths = processor.run(groups, writer, n_jobs=N_JOBS)
     for p in out_paths:
         print(f"Wrote {p}")

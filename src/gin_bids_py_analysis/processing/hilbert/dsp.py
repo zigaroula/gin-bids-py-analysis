@@ -489,6 +489,17 @@ def process_all_channels(
     )
 
     # ------------------------------------------------------------------
+    # Optional pre-downsample for BPF computation (matches Matlab
+    # param.comp_freq pre-processing in b1_BPF_computations).
+    # ------------------------------------------------------------------
+    if params.computation_frequency_hz is not None and params.computation_frequency_hz < fs:
+        _g = math.gcd(int(params.computation_frequency_hz), int(fs))
+        _up = int(params.computation_frequency_hz) // _g
+        _down = int(fs) // _g
+        montaged_data = resample_poly(montaged_data, _up, _down, axis=1).astype(np.float32)
+        fs = params.computation_frequency_hz
+
+    # ------------------------------------------------------------------
     # Build and clamp frequency bins
     # ------------------------------------------------------------------
     bins = build_frequency_bins(params.f_min, params.f_max, params.f_step)

@@ -9,7 +9,6 @@ from typing import Any, Sequence
 import warnings
 
 import numpy as np
-from mne import Annotations
 from mne.io import BaseRaw
 
 from gin_bids_py_analysis.bids.file import BIDSFile
@@ -40,6 +39,10 @@ from gin_bids_py_analysis.processing.utils.epoch_quality import (
 from gin_bids_py_analysis.processing.utils.events import (
     AnnotationEvent,
     parse_annotation_description,
+)
+from gin_bids_py_analysis.processing.utils.input_events import (
+    ResolvedInputEvents,
+    resolve_input_events,
 )
 from gin_bids_py_analysis.processing.utils.statistics import (
     compute_baseline_outlier_mask,
@@ -185,11 +188,25 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
                             f"{ieeg_file.path.name} but expected {feature_names_ref}."
                         )
 
+                resolved_input_events = resolve_input_events(
+                    group,
+                    raw,
+                    self.params.events_source,
+                    primary_file=ieeg_file,
+                )
+                self._record_input_events_metadata(state, resolved_input_events)
+                exact_event_records = (
+                    resolved_input_events.events
+                    if resolved_input_events.onset_precision == "exact_time"
+                    else None
+                )
+
                 anchor_events, anchor_samples = extract_anchor_events_with_mne(
                     raw,
                     anchor_codes=anchor_codes,
                     experiment_start_event_code=self.params.experiment_start_event_code,
                     experiment_end_event_code=self.params.experiment_end_event_code,
+                    raw_annotations=exact_event_records,
                 )
                 resolved_trials = self.resolver.resolve_trials(group, ieeg_file, anchor_events)
                 if len(resolved_trials) != len(anchor_events):
@@ -216,7 +233,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
                     trials=resolved_trials,
                 )
                 normalized_trials = self._attach_trial_activity_summary_metadata(
-                    raw_annotations=raw.annotations,
+                    raw_annotations=resolved_input_events.events,
                     anchor_events=anchor_events,
                     trials=normalized_trials,
                 )
@@ -598,6 +615,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
                 baseline_tmax_s=self.params.activity_baseline_tmax_s,
                 baseline_scope=self.params.activity_baseline_scope,
                 remove_outlier_trial_means=True,
+                outlier_method=self.params.activity_baseline_outlier_method,
             )
             state["baseline_outlier_audit"] = {"mask_a": mask_a, "mask_b": mask_b}
         return zscore_activity_by_baseline(
@@ -608,6 +626,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             baseline_tmax_s=self.params.activity_baseline_tmax_s,
             baseline_scope=self.params.activity_baseline_scope,
             remove_outlier_trial_means=self.params.activity_baseline_remove_outlier_trial_means,
+            outlier_method=self.params.activity_baseline_outlier_method,
         )
 
     def _annotate_baseline_outlier_metadata(
@@ -667,7 +686,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
     def _attach_trial_activity_summary_metadata(
         self,
         *,
-        raw_annotations: Annotations,
+        raw_annotations: Any,
         anchor_events: Sequence[Any],
         trials: list[ResolvedTrial],
     ) -> list[ResolvedTrial]:
@@ -734,7 +753,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
 
     def _response_times_from_annotations(
         self,
-        raw_annotations: Annotations,
+        raw_annotations: Any,
         anchor_events: list[AnnotationEvent],
         *,
         event_code: str,
@@ -776,10 +795,24 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
         self,
         epochs: np.ndarray,
         n_features: int,
+        time_axis_s: np.ndarray | None = None,
     ) -> np.ndarray:
         if epochs.ndim == 3 and epochs.size > 0:
+            cfg = self.params.trial_activity_summary
+            time_mask: np.ndarray | None = None
+            if (
+                time_axis_s is not None
+                and cfg.window_tmin_s is not None
+                and cfg.window_tmax_s is not None
+            ):
+                ta = np.asarray(time_axis_s, dtype=np.float64).ravel()
+                time_mask = (ta >= cfg.window_tmin_s) & (ta <= cfg.window_tmax_s)
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", RuntimeWarning)
+                if time_mask is not None and np.any(time_mask):
+                    return np.nanmean(
+                        epochs[:, :, time_mask], axis=2, dtype=np.float64
+                    ).T.astype(np.float64)
                 return np.nanmean(epochs, axis=2, dtype=np.float64).T.astype(np.float64)
         return np.empty((n_features, 0), dtype=np.float64)
 
@@ -792,7 +825,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
         n_features: int,
     ) -> np.ndarray:
         if self.params.trial_activity_summary.kind == "epoch_mean":
-            return self._compute_epoch_means(epochs, n_features)
+            return self._compute_epoch_means(epochs, n_features, time_axis_s)
 
         if epochs.ndim != 3 or epochs.size == 0:
             return np.empty((n_features, 0), dtype=np.float64)
@@ -847,6 +880,22 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             return "Mean activity (trigger to response)"
         return "Epoch mean activity"
 
+    def _record_input_events_metadata(
+        self,
+        state: dict[str, Any],
+        resolved_input_events: ResolvedInputEvents,
+    ) -> None:
+        state.setdefault("events_source_resolved", set()).add(
+            resolved_input_events.source_resolved
+        )
+        state.setdefault("events_onset_precision", set()).add(
+            resolved_input_events.onset_precision
+        )
+        if resolved_input_events.event_file is not None:
+            state.setdefault("events_files", set()).add(
+                str(resolved_input_events.event_file)
+            )
+
     def _build_shared_metadata(
         self,
         *,
@@ -858,9 +907,16 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
         effective_n_bins: int,
         state: dict[str, Any],
     ) -> dict[str, Any]:
-        del state
         return {
             "anchor_event_codes": list(self.params.anchor_event_codes),
+            "events_source_requested": self.params.events_source,
+            "events_source_resolved": sorted(
+                state.get("events_source_resolved", {"annotations"})
+            ),
+            "events_onset_precision": sorted(
+                state.get("events_onset_precision", {"sample_quantized"})
+            ),
+            "events_files": sorted(state.get("events_files", set())),
             "experiment_start_event_code": self.params.experiment_start_event_code,
             "experiment_end_event_code": self.params.experiment_end_event_code,
             "tmin_s": self.params.tmin_s,
@@ -884,6 +940,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             "activity_baseline_tmax_s": self.params.activity_baseline_tmax_s,
             "activity_baseline_scope": self.params.activity_baseline_scope,
             "activity_baseline_remove_outlier_trial_means": self.params.activity_baseline_remove_outlier_trial_means,
+            "activity_baseline_outlier_method": self.params.activity_baseline_outlier_method,
             "trial_activity_summary": json.loads(
                 self.params.trial_activity_summary.model_dump_json()
             ),
@@ -936,6 +993,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             "activity_baseline_tmax_s": self.params.activity_baseline_tmax_s,
             "activity_baseline_scope": self.params.activity_baseline_scope,
             "activity_baseline_remove_outlier_trial_means": self.params.activity_baseline_remove_outlier_trial_means,
+            "activity_baseline_outlier_method": self.params.activity_baseline_outlier_method,
             "p_value_correction_method": self.params.p_value_correction_method,
             "significance_alpha": self.params.significance_alpha,
             "trial_activity_summary_kind": self.params.trial_activity_summary.kind,

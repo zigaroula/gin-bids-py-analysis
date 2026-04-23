@@ -8,6 +8,7 @@ from gin_bids_py_analysis.processing.utils.matlab import (
     mat_int,
     mat_str,
     mat_str_list,
+    matlab_round,
 )
 
 
@@ -38,6 +39,20 @@ class TestMatStr:
 
     def test_none_returns_default(self) -> None:
         assert mat_str(None, default="x") == "x"
+
+
+class TestMatlabRound:
+    def test_half_values_round_away_from_zero(self) -> None:
+        assert matlab_round(1.5) == 2
+        assert matlab_round(2.5) == 3
+        assert matlab_round(-1.5) == -2
+        assert matlab_round(-2.5) == -3
+
+    def test_non_half_values_round_to_nearest(self) -> None:
+        assert matlab_round(1.49) == 1
+        assert matlab_round(1.51) == 2
+        assert matlab_round(-1.49) == -1
+        assert matlab_round(-1.51) == -2
 
 
 class TestMatFloat:

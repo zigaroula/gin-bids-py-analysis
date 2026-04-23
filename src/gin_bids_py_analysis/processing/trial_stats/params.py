@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from gin_bids_py_analysis.processing.base import BaseProcessingParams, BaseWriterParams
+from gin_bids_py_analysis.processing.utils.input_events import EventSource
 
 
 class TrialActivitySummaryTableColumnSource(BaseModel):
@@ -148,6 +149,26 @@ class TrialActivitySummaryConfig(BaseModel):
             "annotation event code."
         ),
     )
+    window_tmin_s: float | None = Field(
+        default=None,
+        description=(
+            "Start of a fixed averaging window in seconds relative to the anchor "
+            "event. When set together with ``window_tmax_s``, only samples within "
+            "``[window_tmin_s, window_tmax_s]`` are averaged for "
+            "``kind='epoch_mean'``. Has no effect for "
+            "``kind='anchor_to_response_mean'``."
+        ),
+    )
+    window_tmax_s: float | None = Field(
+        default=None,
+        description=(
+            "End of a fixed averaging window in seconds relative to the anchor "
+            "event. When set together with ``window_tmin_s``, only samples within "
+            "``[window_tmin_s, window_tmax_s]`` are averaged for "
+            "``kind='epoch_mean'``. Has no effect for "
+            "``kind='anchor_to_response_mean'``."
+        ),
+    )
     missing_response_policy: Literal["clamp_to_epoch", "nan_if_missing"] = Field(
         default="clamp_to_epoch",
         description=(
@@ -182,6 +203,15 @@ class BaseTrialStatsParams(BaseProcessingParams):
 
     anchor_event_codes: list[str] = Field(
         description="Event codes used to define trial anchors in iEEG annotations."
+    )
+    events_source: EventSource = Field(
+        default="annotations",
+        description=(
+            "Where continuous-file events are read from. 'annotations' reads the "
+            "signal file annotations; 'events_tsv' requires a matching _events.tsv "
+            "attached in BIDSFileGroup.secondaries; 'auto' prefers that secondary "
+            "_events.tsv and falls back to annotations."
+        ),
     )
     tmin_s: float = Field(description="Epoch start relative to the anchor event, in seconds.")
     tmax_s: float = Field(description="Epoch end relative to the anchor event, in seconds.")
@@ -271,6 +301,17 @@ class BaseTrialStatsParams(BaseProcessingParams):
         description=(
             "When True and activity_zscore='baseline' with scope 'condition' or 'global', "
             "remove outlier baseline trial-means before estimating the baseline reference."
+        ),
+    )
+    activity_baseline_outlier_method: Literal["median_mad", "mean"] = Field(
+        default="median_mad",
+        description=(
+            "Outlier-detection criterion used when "
+            "activity_baseline_remove_outlier_trial_means=True. "
+            "'median_mad' removes trial means more than 3 \u00d7 1.4826 \u00d7 MAD from the "
+            "median (matches MATLAB rmoutliers default). "
+            "'mean' removes trial means more than 3 standard deviations from the "
+            "mean (matches MATLAB rmoutliers(..., 'mean', 'ThresholdFactor', 3))."
         ),
     )
     experiment_start_event_code: str | None = Field(

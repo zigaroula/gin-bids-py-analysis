@@ -7,13 +7,14 @@ trial_stats and trial_slope_stats processors.  Atlas-based channel grouping live
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 import mne
 import numpy as np
 
 from gin_bids_py_analysis.processing.utils.events import (
     AnnotationEvent,
+    coerce_annotation_events,
     parse_annotation_description,
 )
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
@@ -41,6 +42,7 @@ def extract_anchor_events_with_mne(
     anchor_codes: set[str],
     experiment_start_event_code: str | None = None,
     experiment_end_event_code: str | None = None,
+    raw_annotations: Iterable[Mapping[str, Any]] | None = None,
 ) -> tuple[list[AnnotationEvent], np.ndarray]:
     """Extract anchor events using MNE's sample-accurate annotation parser.
 
@@ -62,6 +64,15 @@ def extract_anchor_events_with_mne(
     checked.
     """
     sfreq = float(raw.info["sfreq"])
+
+    if raw_annotations is not None:
+        return _extract_anchor_events_from_annotation_like(
+            raw_annotations,
+            sfreq=sfreq,
+            anchor_codes=anchor_codes,
+            experiment_start_event_code=experiment_start_event_code,
+            experiment_end_event_code=experiment_end_event_code,
+        )
 
     events, _ = mne.events_from_annotations(
         raw,
@@ -120,6 +131,45 @@ def extract_anchor_events_with_mne(
             )
         )
         anchor_samples.append(int(sample))
+
+    return anchor_events, np.asarray(anchor_samples, dtype=np.int64)
+
+
+def _extract_anchor_events_from_annotation_like(
+    raw_annotations: Iterable[Mapping[str, Any]],
+    *,
+    sfreq: float,
+    anchor_codes: set[str],
+    experiment_start_event_code: str | None,
+    experiment_end_event_code: str | None,
+) -> tuple[list[AnnotationEvent], np.ndarray]:
+    events = coerce_annotation_events(raw_annotations)
+    if not events:
+        return [], np.empty((0,), dtype=np.int64)
+
+    t_start = -float("inf")
+    t_end = float("inf")
+    if experiment_start_event_code is not None or experiment_end_event_code is not None:
+        for event in events:
+            code = event.code
+            if (
+                experiment_start_event_code is not None
+                and code == experiment_start_event_code
+                and t_start == -float("inf")
+            ):
+                t_start = event.onset_s
+            if experiment_end_event_code is not None and code == experiment_end_event_code:
+                t_end = event.onset_s
+
+    anchor_events: list[AnnotationEvent] = []
+    anchor_samples: list[int] = []
+    for event in events:
+        if event.code is None or event.code not in anchor_codes:
+            continue
+        if event.onset_s <= t_start or event.onset_s >= t_end:
+            continue
+        anchor_events.append(event)
+        anchor_samples.append(int(round(event.onset_s * sfreq)))
 
     return anchor_events, np.asarray(anchor_samples, dtype=np.int64)
 

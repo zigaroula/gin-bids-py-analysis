@@ -28,10 +28,20 @@ values defensively without knowing the exact squeeze shape.
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
 import numpy as np
+
+
+def matlab_round(value: float) -> int:
+    """Round like MATLAB: halves are rounded away from zero.
+
+    Python's built-in ``round`` uses bankers rounding, so values exactly at
+    ``.5`` can differ from MATLAB by one integer.
+    """
+    return math.floor(value + 0.5) if value >= 0 else math.ceil(value - 0.5)
 
 
 def matlab_safe_name(name: str) -> str:
