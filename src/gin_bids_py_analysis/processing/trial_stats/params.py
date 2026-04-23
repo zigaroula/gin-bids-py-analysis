@@ -213,6 +213,15 @@ class BaseTrialStatsParams(BaseProcessingParams):
             "_events.tsv and falls back to annotations."
         ),
     )
+    event_sample_shift_samples: int = Field(
+        default=0,
+        description=(
+            "Integer offset applied to anchor event samples after event parsing "
+            "and before epoch extraction. Use this to reproduce external "
+            "pipelines that epoch from a sample shifted relative to the parsed "
+            "annotation onset."
+        ),
+    )
     tmin_s: float = Field(description="Epoch start relative to the anchor event, in seconds.")
     tmax_s: float = Field(description="Epoch end relative to the anchor event, in seconds.")
     condition_a: str = Field(

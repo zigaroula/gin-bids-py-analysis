@@ -225,3 +225,21 @@ def test_anchor_within_bounds_is_kept_even_when_epoch_would_extend_outside() -> 
     )
     assert len(events) == 1
     assert events[0].onset_s == pytest.approx(4.8)
+
+
+def test_event_sample_shift_offsets_returned_anchor_samples_only() -> None:
+    """A sample shift moves epoch anchors without changing reported onset times."""
+    raw = _make_raw(
+        n_samples=100,
+        sfreq=10.0,
+        onsets=[1.0, 2.0, 3.0],
+        descriptions=[ANCHOR, ANCHOR, ANCHOR],
+    )
+    events, samples = extract_anchor_events_with_mne(
+        raw,
+        anchor_codes={ANCHOR_CODE},
+        event_sample_shift_samples=-1,
+    )
+
+    assert [e.onset_s for e in events] == pytest.approx([1.0, 2.0, 3.0])
+    assert samples.tolist() == [9, 19, 29]

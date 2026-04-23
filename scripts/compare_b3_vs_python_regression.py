@@ -27,10 +27,27 @@ from matplotlib.widgets import Button
 import numpy as np
 import scipy.io
 
+from gin_bids_py_analysis.bids import BIDSDataset
 from gin_bids_py_analysis.processing.trial_stats.regression.stats import (
     compute_linear_regression_maps,
 )
-from gin_bids_py_analysis.processing.trial_stats.regression import load_regression_result
+from gin_bids_py_analysis.processing.trial_stats.regression import (
+    RegressionProcessing,
+    load_regression_result,
+)
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from trial_slope_shared import (  # noqa: E402
+    BIDS_ROOT as PYTHON_SOURCE_BIDS_ROOT,
+    PARAMS as PYTHON_REGRESSION_PARAMS,
+    RESOLVER as PYTHON_REGRESSION_RESOLVER,
+    build_trial_annotators,
+    build_trial_slope_groups,
+    load_roi_channels_from_csv,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +64,7 @@ MATLAB_SMOOTHING_NAME = "sm250"
 MATLAB_TERM_INDEX = 0
 
 PYTHON_REGRESSION_PATH = Path(
-    r"E:\data_clarissa\valuation\bids\derivatives\regression"
+    r"D:\Boulot\clarissa_bids\derivatives\regression"
     r"\sub-GRE2021AICb\ieeg\sub-GRE2021AICb_task-MDCHOICE_desc-correlation_stats.h5"
 )
 
@@ -56,7 +73,7 @@ MATLAB_B2_PATH = Path(
     r"\edGRE_2021_AICb_MD_CHOICE_Partie1_BPF_f50f150_sf100_sm250_onset.mat"
 )
 BEHAVIOR_TSV_PATH = Path(
-    r"E:\data_clarissa\valuation\bids"
+    r"D:\Boulot\clarissa_bids"
     r"\sub-GRE2021AICb\beh\sub-GRE2021AICb_task-MDCHOICE_beh.tsv"
 )
 
@@ -517,6 +534,103 @@ def replay_regression_from_matlab_b2(
     )
 
 
+def replay_regression_from_python_epochs(
+    *,
+    python_result: object,
+    python_condition_field: str,
+    matlab_regression_name: str,
+    matlab_values: np.ndarray,
+    matlab_time: np.ndarray,
+    matlab_channels: list[str],
+    predictor_mode: str,
+) -> ComparisonBundle:
+    if python_condition_field == "condition_a":
+        condition_name = str(python_result.condition_a)
+        epochs = np.asarray(python_result.condition_a_epochs, dtype=np.float64)
+        predictor_raw = np.asarray(
+            python_result.condition_a_predictor_raw_values,
+            dtype=np.float64,
+        ).ravel()
+        predictor_transformed = np.asarray(
+            python_result.condition_a_predictor_transformed_values,
+            dtype=np.float64,
+        ).ravel()
+        predictor_effective = np.asarray(
+            python_result.condition_a_predictor_values,
+            dtype=np.float64,
+        ).ravel()
+    elif python_condition_field == "condition_b":
+        condition_name = str(python_result.condition_b)
+        epochs = np.asarray(python_result.condition_b_epochs, dtype=np.float64)
+        predictor_raw = np.asarray(
+            python_result.condition_b_predictor_raw_values,
+            dtype=np.float64,
+        ).ravel()
+        predictor_transformed = np.asarray(
+            python_result.condition_b_predictor_transformed_values,
+            dtype=np.float64,
+        ).ravel()
+        predictor_effective = np.asarray(
+            python_result.condition_b_predictor_values,
+            dtype=np.float64,
+        ).ravel()
+    else:
+        raise ValueError(f"Unsupported python condition field: {python_condition_field!r}")
+
+    if predictor_mode == "raw":
+        predictor_values = predictor_raw
+    elif predictor_mode == "transformed":
+        predictor_values = predictor_transformed
+    elif predictor_mode == "effective":
+        predictor_values = predictor_effective
+    else:
+        raise ValueError(
+            f"Unsupported predictor_mode={predictor_mode!r}. "
+            "Use 'raw', 'transformed', or 'effective'."
+        )
+
+    target_time = np.asarray(matlab_time, dtype=np.float64).ravel()
+    source_time = np.asarray(python_result.time_axis_s, dtype=np.float64).ravel()
+    time_idx = np.array(
+        [int(np.argmin(np.abs(source_time - t))) for t in target_time],
+        dtype=int,
+    )
+    max_time_err = (
+        float(np.max(np.abs(source_time[time_idx] - target_time)))
+        if target_time.size
+        else 0.0
+    )
+
+    epochs_aligned = np.asarray(epochs[:, :, time_idx], dtype=np.float64)
+    slopes, _, _, _, _stats_valid = compute_linear_regression_maps(
+        predictor_values,
+        epochs_aligned,
+        n_features=epochs_aligned.shape[1],
+        n_times=epochs_aligned.shape[2],
+    )
+
+    channel_mapping = match_channels(matlab_channels, list(python_result.channel_names))
+    matched_mat_indices = sorted(channel_mapping)
+    matched_py_indices = [channel_mapping[i] for i in matched_mat_indices]
+    return ComparisonBundle(
+        label=(
+            f"{matlab_regression_name} vs Python epoch replay "
+            f"({condition_name}, predictor={predictor_mode})"
+        ),
+        matlab_regression_name=matlab_regression_name,
+        python_condition_name=f"{condition_name}_epoch_replay_{predictor_mode}",
+        matlab_time=target_time,
+        python_time_aligned=target_time,
+        matched_mat_indices=matched_mat_indices,
+        matched_py_indices=matched_py_indices,
+        matlab_channels=list(matlab_channels),
+        python_channels=list(python_result.channel_names),
+        matlab_values=np.asarray(matlab_values[matched_mat_indices, :], dtype=np.float64),
+        python_values=np.asarray(slopes[matched_py_indices, :], dtype=np.float64),
+        time_alignment_error_s=max_time_err,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Comparison helpers
 # ---------------------------------------------------------------------------
@@ -629,22 +743,40 @@ def print_bundle_summary(bundle: ComparisonBundle, *, top_n: int = TOP_N) -> Non
         print(f"\n{bundle.label}: no finite matched channels.")
         return
 
+    valid_rows = [
+        row
+        for row in rows
+        if all(
+            np.isfinite(float(row[key]))
+            for key in ("mean_abs", "rms_diff", "corr", "slope")
+        )
+    ]
+    skipped_rows = len(rows) - len(valid_rows)
+    if not valid_rows:
+        print(
+            f"\n{bundle.label}: matched {len(rows)} channel(s), but none had enough "
+            "overlapping finite samples for metrics."
+        )
+        return
+
     abs_slope_dev = np.array(
-        [abs(float(row["slope"]) - 1.0) for row in rows if np.isfinite(float(row["slope"]))],
+        [abs(float(row["slope"]) - 1.0) for row in valid_rows],
         dtype=np.float64,
     )
     corrs = np.array(
-        [float(row["corr"]) for row in rows if np.isfinite(float(row["corr"]))],
+        [float(row["corr"]) for row in valid_rows],
         dtype=np.float64,
     )
     mean_abs_all = np.array(
-        [float(row["mean_abs"]) for row in rows if np.isfinite(float(row["mean_abs"]))],
+        [float(row["mean_abs"]) for row in valid_rows],
         dtype=np.float64,
     )
 
     print(f"\n=== {bundle.label} ===")
     print(
         f"  matched channels: {len(rows)}"
+        f"  |  metric-valid channels: {len(valid_rows)}"
+        f"  |  skipped (NaN overlap): {skipped_rows}"
         f"  |  time alignment max error: {bundle.time_alignment_error_s:.6f} s"
     )
     if abs_slope_dev.size and corrs.size and mean_abs_all.size:
@@ -662,7 +794,7 @@ def print_bundle_summary(bundle: ComparisonBundle, *, top_n: int = TOP_N) -> Non
             f"    {'MAT':>5}  {'PY':>5}  {'MATLAB bipole':<16}  {'Python':<10}"
             f"  {'mean|d|':>9}  {'RMSd':>9}  {'corr':>8}  {'slope':>8}"
         )
-        ordered = sorted(rows, key=sort_key, reverse=reverse)
+        ordered = sorted(valid_rows, key=sort_key, reverse=reverse)
         for row in ordered[:top_n]:
             print(
                 f"    [{int(row['mat_idx']):4d}]  [{int(row['py_idx']):4d}]  "
@@ -843,6 +975,58 @@ def _describe_vector(values: np.ndarray) -> str:
     )
 
 
+def _target_subject_from_regression_path(path: Path) -> str:
+    match = re.search(r"sub-([^_]+)", path.stem)
+    if match is None:
+        raise ValueError(f"Could not extract subject from regression path: {path}")
+    return str(match.group(1))
+
+
+def compute_python_regression_from_source(
+    *,
+    target_subject: str,
+) -> object:
+    manual_region_channels = load_roi_channels_from_csv()
+    annotators = build_trial_annotators(manual_region_channels)
+    ds = BIDSDataset(PYTHON_SOURCE_BIDS_ROOT)
+    groups = build_trial_slope_groups(ds)
+    for group in groups:
+        if str(group.primary.get("subject", "")).strip() == str(target_subject).strip():
+            processor = RegressionProcessing(
+                PYTHON_REGRESSION_PARAMS,
+                resolver=PYTHON_REGRESSION_RESOLVER,
+                annotators=annotators,
+            )
+            return processor.process_group(group)
+    raise ValueError(
+        f"Subject {target_subject!r} not found in trial slope groups built from "
+        f"{PYTHON_SOURCE_BIDS_ROOT}."
+    )
+
+
+def print_saved_vs_fresh_regression_diff(saved_result: object, fresh_result: object) -> None:
+    print("\n=== Saved regression vs fresh in-memory recompute ===")
+    for condition_field in ("condition_a", "condition_b"):
+        saved_slope = np.asarray(
+            getattr(saved_result, f"{condition_field}_slope"),
+            dtype=np.float64,
+        )
+        fresh_slope = np.asarray(
+            getattr(fresh_result, f"{condition_field}_slope"),
+            dtype=np.float64,
+        )
+        finite = np.isfinite(saved_slope) & np.isfinite(fresh_slope)
+        if not finite.any():
+            print(f"  {condition_field}: no overlapping finite slope values.")
+            continue
+        diff = fresh_slope[finite] - saved_slope[finite]
+        print(
+            f"  {condition_field}: max|diff|={float(np.max(np.abs(diff))):.6g}, "
+            f"mean|diff|={float(np.mean(np.abs(diff))):.6g}, "
+            f"corr={float(np.corrcoef(saved_slope[finite], fresh_slope[finite])[0, 1]):.6g}"
+        )
+
+
 def _default_matlab_path(regression_name: str) -> Path:
     return MATLAB_B3_ROOT / regression_name / MATLAB_LOG_DATA_FILENAME
 
@@ -856,6 +1040,23 @@ def main() -> None:
         f"  channels={len(py_result.channel_names)}, times={len(py_result.time_axis_s)}, "
         f"conditions={py_result.condition_a}/{py_result.condition_b}, predictor={py_result.predictor}"
     )
+
+    fresh_py_result: object | None = None
+    target_subject = _target_subject_from_regression_path(PYTHON_REGRESSION_PATH)
+    try:
+        print(
+            "\nRecomputing Python regression in memory from source Hilbert file "
+            f"for subject {target_subject}..."
+        )
+        fresh_py_result = compute_python_regression_from_source(
+            target_subject=target_subject,
+        )
+        print_saved_vs_fresh_regression_diff(py_result, fresh_py_result)
+    except Exception as exc:
+        print(
+            "\nWARNING: fresh in-memory Python regression replay could not be computed:\n"
+            f"  {type(exc).__name__}: {exc}"
+        )
 
     b2_data: np.ndarray | None = None
     b2_channels: list[str] = []
@@ -940,7 +1141,10 @@ def main() -> None:
         py_stack = np.asarray(python_values_aligned[matched_py_indices, :], dtype=np.float64)
 
         bundle = ComparisonBundle(
-            label=f"{matlab_regression_name} vs {python_condition_name}",
+            label=(
+                f"{matlab_regression_name} vs {python_condition_name}"
+                f"{' (pipeline output)' if python_condition_field == 'condition_b' else ''}"
+            ),
             matlab_regression_name=matlab_regression_name,
             python_condition_name=python_condition_name,
             matlab_time=np.asarray(matlab_time, dtype=np.float64),
@@ -976,6 +1180,26 @@ def main() -> None:
                 f" median corr={neg_summary['median_corr']:.4f},"
                 f" mean mean|d|={neg_summary['mean_mean_abs']:.5f}"
             )
+
+        if fresh_py_result is not None:
+            predictor_mode = "raw" if python_condition_field == "condition_b" else "effective"
+            source_replay_bundle = replay_regression_from_python_epochs(
+                python_result=fresh_py_result,
+                python_condition_field=python_condition_field,
+                matlab_regression_name=matlab_regression_name,
+                matlab_values=matlab_values,
+                matlab_time=matlab_time,
+                matlab_channels=matlab_channels,
+                predictor_mode=predictor_mode,
+            )
+            print_bundle_summary(source_replay_bundle)
+            if python_condition_field == "condition_b":
+                print(
+                    "\n  Note: this replay uses the RAW unpleasant predictor to stay "
+                    "comparable to MATLAB b3. The saved Python slope output below still "
+                    "uses the pipeline's transformed predictor (sign-flipped)."
+                )
+            bundles.append(source_replay_bundle)
 
         if b2_data is not None and b2_time.size and pleasantness.size:
             replay_bundle = replay_regression_from_matlab_b2(

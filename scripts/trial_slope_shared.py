@@ -24,7 +24,7 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, 
 # Shared parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"E:/data_clarissa/valuation/bids")
+BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
 
 # ---------------------------------------------------------------------------
 # MATLAB z-score injection configuration
@@ -38,9 +38,9 @@ BIDS_ROOT = Path(r"E:/data_clarissa/valuation/bids")
 #  - Trials are matched by sequential order of appearance per subject
 # Set to False to restore default behavior (predictor="rating").
 
-USE_MATLAB_ZSCORES: bool = False
+USE_MATLAB_ZSCORES: bool = True
 
-MATLAB_ZSCORES_PATH = Path(r"E:/data_clarissa/subjects.mat")
+MATLAB_ZSCORES_PATH = Path(r"D:\Boulot\clarissa_raw\subjects.mat")
 MATLAB_ZSCORE_COLUMN_INDEX = 6  # 0-based index for column 7 in trial_characteristics1
 
 IEEG_FILTERS = {
@@ -51,6 +51,7 @@ IEEG_FILTERS = {
 
 SECONDARY_FILTERS = [
     {"scope": "raw", "datatype": "beh", "suffix": "beh", "extension": ".tsv"},
+    {"scope": "raw", "datatype": "ieeg", "suffix": "events", "extension": ".tsv"},
     {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
     {
         "scope": "delphos",
@@ -95,9 +96,17 @@ def _build_params() -> RegressionParams:
     """Build RegressionParams with conditional predictor based on USE_MATLAB_ZSCORES."""
     return RegressionParams(
         anchor_event_codes=["11", "12"],
+        # For trial-slope stats the input is already the Hilbert derivative.
+        # Its BrainVision annotations carry the downsampled anchor positions that
+        # best match MATLAB b2. Re-reading the raw _events.tsv here re-introduces
+        # a timing mismatch for the regression epochs.
+        events_source="annotations",
+        # MATLAB/SPM extracts epochs from a one-sample-earlier anchor than the
+        # downsampled BrainVision annotation position exposed by MNE.
+        event_sample_shift_samples=-1,
         experiment_start_event_code="5",
         tmin_s=-1,
-        tmax_s=10,
+        tmax_s=6,
         condition_a="pleasant",
         condition_b="unpleasant",
         predictor="matlab_zscore" if USE_MATLAB_ZSCORES else "rating",
@@ -108,7 +117,9 @@ def _build_params() -> RegressionParams:
         predictor_zscore="none",
         activity_zscore="baseline",
         activity_baseline_tmin_s=-0.25,
-        activity_baseline_tmax_s=-0.05,
+        # MATLAB's nearest-index baseline uses an exclusive upper bound, which
+        # corresponds to -0.06 s at 100 Hz for the [-0.25, -0.05] request.
+        activity_baseline_tmax_s=-0.06,
         activity_baseline_scope="global",
         activity_baseline_remove_outlier_trial_means=True,
         activity_baseline_outlier_method="median_mad",
@@ -126,9 +137,9 @@ def _build_params() -> RegressionParams:
 PARAMS = _build_params()
 
 ROI_CSV_FILES = {
-    "vmPFC": Path(r"E:/data_clarissa/valuation/csv/PFCvm_elecs_tbl.csv"),
-    "daINS": Path(r"E:/data_clarissa/valuation/csv/aINS_dors_elecs_tbl.csv"),
-    "vaINS": Path(r"E:/data_clarissa/valuation/csv/aINS_vent_elecs_tbl.csv"),
+    "vmPFC": Path(r"D:\Boulot\csv\PFCvm_elecs_tbl.csv"),
+    "daINS": Path(r"D:\Boulot\csv\aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"D:\Boulot\csv\aINS_vent_elecs_tbl.csv"),
 }
 
 GROUP_PARAM_KWARGS = {
@@ -146,8 +157,8 @@ VM_PFC_SPIKE_EXCLUSION_REASON = "vmPFC_spike_0_5s"
 MAX_RT_S: float = 20.0
 MIN_RATING: float = 0.0
 BEH_TSV_PATH = Path(
-    r"E:/data_clarissa/valuation/bids"
-    r"/sub-GRE2021AICb/beh/sub-GRE2021AICb_task-MDCHOICE_beh.tsv"
+    r"D:\Boulot\clarissa_bids"
+    r"\sub-GRE2021AICb\beh\sub-GRE2021AICb_task-MDCHOICE_beh.tsv"
 )
 
 _NA_LIKE_TOKENS = frozenset({"nan", "na", "n/a", "none", "null"})

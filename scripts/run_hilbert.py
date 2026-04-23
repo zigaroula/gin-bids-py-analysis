@@ -31,7 +31,7 @@ BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
 FILE_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    #"subject": "TOU2021DUBl"
+    "subject": "TOU2022TISa"
     #"run": "01",
 }
 

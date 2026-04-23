@@ -24,6 +24,7 @@ def test_base_params_normalize_common_fields() -> None:
     assert params.atlas_regions == ["insula"]
     assert params.n_bins == 0
     assert params.events_source == "annotations"
+    assert params.event_sample_shift_samples == 0
     assert params.trial_activity_summary.kind == "epoch_mean"
 
 

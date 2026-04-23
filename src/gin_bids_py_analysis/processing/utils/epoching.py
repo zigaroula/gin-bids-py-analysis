@@ -43,6 +43,7 @@ def extract_anchor_events_with_mne(
     experiment_start_event_code: str | None = None,
     experiment_end_event_code: str | None = None,
     raw_annotations: Iterable[Mapping[str, Any]] | None = None,
+    event_sample_shift_samples: int = 0,
 ) -> tuple[list[AnnotationEvent], np.ndarray]:
     """Extract anchor events using MNE's sample-accurate annotation parser.
 
@@ -72,6 +73,7 @@ def extract_anchor_events_with_mne(
             anchor_codes=anchor_codes,
             experiment_start_event_code=experiment_start_event_code,
             experiment_end_event_code=experiment_end_event_code,
+            event_sample_shift_samples=event_sample_shift_samples,
         )
 
     events, _ = mne.events_from_annotations(
@@ -130,7 +132,7 @@ def extract_anchor_events_with_mne(
                 code=code,
             )
         )
-        anchor_samples.append(int(sample))
+        anchor_samples.append(int(sample) + int(event_sample_shift_samples))
 
     return anchor_events, np.asarray(anchor_samples, dtype=np.int64)
 
@@ -142,6 +144,7 @@ def _extract_anchor_events_from_annotation_like(
     anchor_codes: set[str],
     experiment_start_event_code: str | None,
     experiment_end_event_code: str | None,
+    event_sample_shift_samples: int = 0,
 ) -> tuple[list[AnnotationEvent], np.ndarray]:
     events = coerce_annotation_events(raw_annotations)
     if not events:
@@ -169,7 +172,9 @@ def _extract_anchor_events_from_annotation_like(
         if event.onset_s <= t_start or event.onset_s >= t_end:
             continue
         anchor_events.append(event)
-        anchor_samples.append(int(round(event.onset_s * sfreq)))
+        anchor_samples.append(
+            int(round(event.onset_s * sfreq)) + int(event_sample_shift_samples)
+        )
 
     return anchor_events, np.asarray(anchor_samples, dtype=np.int64)
 

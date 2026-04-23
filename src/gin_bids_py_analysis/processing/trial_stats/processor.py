@@ -207,6 +207,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
                     experiment_start_event_code=self.params.experiment_start_event_code,
                     experiment_end_event_code=self.params.experiment_end_event_code,
                     raw_annotations=exact_event_records,
+                    event_sample_shift_samples=self.params.event_sample_shift_samples,
                 )
                 resolved_trials = self.resolver.resolve_trials(group, ieeg_file, anchor_events)
                 if len(resolved_trials) != len(anchor_events):
@@ -919,6 +920,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             "events_files": sorted(state.get("events_files", set())),
             "experiment_start_event_code": self.params.experiment_start_event_code,
             "experiment_end_event_code": self.params.experiment_end_event_code,
+            "event_sample_shift_samples": self.params.event_sample_shift_samples,
             "tmin_s": self.params.tmin_s,
             "tmax_s": self.params.tmax_s,
             "min_trials_per_condition": self.params.min_trials_per_condition,

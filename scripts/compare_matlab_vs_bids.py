@@ -53,12 +53,16 @@ BV_EEG_PATH = Path(
 BV_VHDR_PATH = BV_EEG_PATH.with_suffix(".vhdr")
 
 # Epoching window to apply to the BrainVision file.
-# BV is epoched with the SAME window as the MATLAB alldata so that the
-# PRECLEAN mean/max are computed over the identical sample set.
-MAT_TMIN_S: float = -0.51   # MATLAB epoch start relative to anchor
-MAT_TMAX_S: float = 5.49  # MATLAB epoch end relative to anchor
-TMIN_S: float = -0.51  # BV epoching start — matches MATLAB to avoid 1-sample preclean discrepancy
-TMAX_S: float = 5.49   # BV epoching end  — matches MATLAB
+# MATLAB b2 runs ALL cleaning steps (PRECLEAN, removebadchannelsSd, negative-rating
+# removal, etc.) on the full b1 epoch window BEFORE time-trimming the output to the
+# strict interval (–0.5 s, 5.5 s).  We therefore epoch BV with the same full b1
+# window so that trial means/maxes computed during PRECLEAN and bad-channel-SD
+# steps match MATLAB's.  The comparison and viewer functions trim BV to MATLAB's
+# output range automatically via the bv_mask / bv_display_mask logic.
+MAT_TMIN_S: float = -0.51   # MATLAB b2 OUTPUT epoch start (≈ first sample after strict t > -0.5)
+MAT_TMAX_S: float = 5.49  # MATLAB b2 OUTPUT epoch end (last sample before strict t < 5.5)
+TMIN_S: float = -1.0   # full b1 epoch start  (param.timewin_epoch{1}.onset = [-1 6])
+TMAX_S: float = 6.0    # full b1 epoch end    (param.timewin_epoch{1}.onset = [-1 6])
 BV_DISPLAY_OFFSET_S: float = 0.0  # shift BV time axis by this amount for display
 ANCHOR_CODES: set[str] = {"11", "12"}
 EXPERIMENT_START_CODE: str = "5"
@@ -100,9 +104,8 @@ REJECT_BAD_CHANNELS_SD: bool = True
 REJECT_BAD_CHANNELS_SD_THRESHOLD: float = 1.0
 # Replicate MATLAB b2 opts.removenegratings: NaN-ise trials where the behavioral
 # rating is negative (rating < MIN_RATING) across all channels.
-# opts.removenegratings = 0 in b2_BPF_apply_options.m — set False to match exactly.
-# Set True to replicate b2_BPF_apply_options_R1.m or other variants that enable this.
-REMOVE_NEGATIVE_RATINGS: bool = False
+# opts.removenegratings = 1 in b2_BPF_apply_options.m — set True to match.
+REMOVE_NEGATIVE_RATINGS: bool = True
 MIN_RATING: float = 0.0
 # Replicate MATLAB b2 removeoutlierRTs: NaN-ise trials where RT > maxRT before z-scoring.
 # param.maxRT = 20 in init_2021_CB_seeg_R1.m.
