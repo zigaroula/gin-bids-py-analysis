@@ -27,7 +27,7 @@ mixed freely in the same annotators list.
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -43,6 +43,10 @@ from gin_bids_py_analysis.processing.utils.condition_rules import (
 )
 from gin_bids_py_analysis.processing.utils.tables import load_table_rows
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
+
+DEFERRED_TRIAL_EXCLUSIONS_KEY = "deferred_trial_exclusions"
+EXCLUDED_FROM_STATISTICS_KEY = "excluded_from_statistics"
+STATISTICS_EXCLUSION_REASON_KEY = "statistics_exclusion_reason"
 
 
 class TrialWindowAnnotator:
@@ -381,3 +385,68 @@ class TrialMetadataInvalidationRule(BaseModel):
             if not matches_condition_expr(self.condition, trial.metadata):
                 trial.keep = False
                 trial.exclusion_reason = self.exclusion_reason
+
+
+class DeferredTrialMetadataInvalidationRule(BaseModel):
+    """Mark trials for invalidation at a later processing phase.
+
+    This keeps an epoch available for cleaning steps that should still see it
+    while ensuring it can be excluded from downstream statistics at a precise
+    phase.  It is useful for reproducing pipelines where behavioral invalidation
+    happens after some signal-cleaning passes.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    condition: ConditionExpr = Field(
+        description=(
+            "Boolean expression evaluated against ``trial.metadata``. "
+            "Trials that do *not* satisfy it are marked for deferred exclusion."
+        ),
+    )
+    exclusion_reason: str = Field(
+        default="behavioral_threshold",
+        description="Exclusion reason applied when the deferred phase is reached.",
+    )
+    apply_phase: Literal[
+        "after_epoch_trial_rejection",
+        "before_activity_zscore",
+    ] = Field(
+        default="before_activity_zscore",
+        description="Processing phase at which the trial should be excluded.",
+    )
+
+    @field_validator("exclusion_reason", mode="before")
+    @classmethod
+    def _normalize_exclusion_reason(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("exclusion_reason must be a non-empty string.")
+        return cleaned
+
+    def annotate_trials(
+        self,
+        group: BIDSFileGroup,
+        ieeg_file: BIDSFile,
+        trials: list[ResolvedTrial],
+        tmin_s: float,
+        tmax_s: float,
+        *,
+        ieeg_channel_names: list[str],
+    ) -> None:
+        """Record deferred exclusions without changing ``trial.keep``."""
+        del group, ieeg_file, tmin_s, tmax_s, ieeg_channel_names  # not used
+
+        for trial in trials:
+            if not trial.keep:
+                continue
+            if matches_condition_expr(self.condition, trial.metadata):
+                continue
+            entries = list(trial.metadata.get(DEFERRED_TRIAL_EXCLUSIONS_KEY, []))
+            entries.append(
+                {
+                    "reason": self.exclusion_reason,
+                    "phase": self.apply_phase,
+                }
+            )
+            trial.metadata[DEFERRED_TRIAL_EXCLUSIONS_KEY] = entries

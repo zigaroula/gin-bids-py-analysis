@@ -48,7 +48,12 @@ from gin_bids_py_analysis.processing.utils.statistics import (
     compute_baseline_outlier_mask,
     zscore_activity_by_baseline,
 )
-from gin_bids_py_analysis.processing.utils.trial_annotator import TrialWindowAnnotator
+from gin_bids_py_analysis.processing.utils.trial_annotator import (
+    DEFERRED_TRIAL_EXCLUSIONS_KEY,
+    EXCLUDED_FROM_STATISTICS_KEY,
+    STATISTICS_EXCLUSION_REASON_KEY,
+    TrialWindowAnnotator,
+)
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from .params import BaseTrialStatsParams
@@ -483,10 +488,16 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
         if any_level_a:
             nan_tf_mask = np.zeros((epochs_pooled.shape[0], len(feature_names)), dtype=bool)
             if cfg.reject_trials_by_epoch_mean:
-                nan_tf_mask |= detect_outlier_trial_channel_pairs_by_mean(
+                mean_mask = detect_outlier_trial_channel_pairs_by_mean(
                     epochs_pooled,
                     threshold_factor=cfg.epoch_mean_threshold_factor,
                 )
+                nan_tf_mask |= mean_mask
+                # Apply mean mask before max detection so that mean outliers do
+                # not inflate the max distribution — mirrors Matlab's sequential
+                # two-pass rejection in b2_BPF_apply_options.
+                if np.any(mean_mask):
+                    epochs_pooled = apply_trial_nan_mask(epochs_pooled, mean_mask)
             if cfg.reject_trials_by_epoch_max:
                 nan_tf_mask |= detect_outlier_trial_channel_pairs_by_max(
                     epochs_pooled,
@@ -511,6 +522,15 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
                     ]
                     if flagged:
                         kept_trials_b[j].metadata["nan_masked_features"] = flagged
+
+        epochs_pooled = self._apply_deferred_trial_exclusions(
+            epochs_pooled=epochs_pooled,
+            kept_trials_a=kept_trials_a,
+            kept_trials_b=kept_trials_b,
+            n_a=n_a,
+            phase="after_epoch_trial_rejection",
+            state=state,
+        )
 
         if any_level_b and feature_names:
             reason_masks: dict[str, np.ndarray] = {}
@@ -558,6 +578,15 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
                         if not excluded
                     ]
 
+        epochs_pooled = self._apply_deferred_trial_exclusions(
+            epochs_pooled=epochs_pooled,
+            kept_trials_a=kept_trials_a,
+            kept_trials_b=kept_trials_b,
+            n_a=n_a,
+            phase="before_activity_zscore",
+            state=state,
+        )
+
         if epochs_pooled.ndim == 3 and epochs_pooled.shape[1] > 0:
             fully_masked_trials = np.all(~np.isfinite(epochs_pooled), axis=(1, 2))
             audit["fully_masked_trials_a"] = [
@@ -569,11 +598,13 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             if np.any(fully_masked_trials[:n_a]):
                 for idx in audit["fully_masked_trials_a"]:
                     kept_trials_a[idx].keep = False
-                    kept_trials_a[idx].exclusion_reason = "epoch_cleaning_all_features_nan"
+                    if kept_trials_a[idx].exclusion_reason is None:
+                        kept_trials_a[idx].exclusion_reason = "epoch_cleaning_all_features_nan"
             if np.any(fully_masked_trials[n_a:]):
                 for idx in audit["fully_masked_trials_b"]:
                     kept_trials_b[idx].keep = False
-                    kept_trials_b[idx].exclusion_reason = "epoch_cleaning_all_features_nan"
+                    if kept_trials_b[idx].exclusion_reason is None:
+                        kept_trials_b[idx].exclusion_reason = "epoch_cleaning_all_features_nan"
             if np.any(fully_masked_trials[:n_a]):
                 keep_mask_a = ~fully_masked_trials[:n_a]
                 epochs_a = epochs_pooled[:n_a][keep_mask_a]
@@ -594,8 +625,60 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             epochs_a = epochs_pooled[:n_a]
             epochs_b = epochs_pooled[n_a:]
 
+        deferred_audit = state.get("deferred_trial_exclusion_audit")
+        if deferred_audit:
+            audit["deferred_trial_exclusions"] = dict(deferred_audit)
         state["epoch_cleaning_audit"] = audit
         return epochs_a, epochs_b, feature_names, feature_indices
+
+    def _apply_deferred_trial_exclusions(
+        self,
+        *,
+        epochs_pooled: np.ndarray,
+        kept_trials_a: list[ResolvedTrial],
+        kept_trials_b: list[ResolvedTrial],
+        n_a: int,
+        phase: str,
+        state: dict[str, Any],
+    ) -> np.ndarray:
+        """NaN-mask trials whose exclusion is scheduled for *phase*."""
+        arr = np.asarray(epochs_pooled, dtype=np.float64)
+        if arr.ndim != 3 or arr.shape[0] == 0:
+            return arr
+
+        audit = state.setdefault("deferred_trial_exclusion_audit", {})
+        phase_a: list[int] = []
+        phase_b: list[int] = []
+        phase_reasons: dict[str, list[str]] = {}
+
+        for condition, trials, offset, indices_out in [
+            ("a", kept_trials_a, 0, phase_a),
+            ("b", kept_trials_b, n_a, phase_b),
+        ]:
+            for local_idx, trial in enumerate(trials):
+                pooled_idx = offset + local_idx
+                if pooled_idx >= arr.shape[0]:
+                    continue
+                reasons = _deferred_exclusion_reasons_for_phase(trial, phase)
+                if not reasons:
+                    continue
+                arr[pooled_idx, :, :] = np.nan
+                trial.keep = False
+                if trial.exclusion_reason is None:
+                    trial.exclusion_reason = ",".join(reasons)
+                trial.metadata[EXCLUDED_FROM_STATISTICS_KEY] = True
+                trial.metadata[STATISTICS_EXCLUSION_REASON_KEY] = ",".join(reasons)
+                trial.metadata["deferred_exclusion_applied_phase"] = phase
+                indices_out.append(local_idx)
+                phase_reasons[f"{condition}:{local_idx}"] = reasons
+
+        if phase_a or phase_b:
+            audit[str(phase)] = {
+                "condition_a": phase_a,
+                "condition_b": phase_b,
+                "reasons": phase_reasons,
+            }
+        return arr
 
     def _apply_activity_zscore(
         self,
@@ -1082,3 +1165,23 @@ def _empty_epoch_cleaning_audit() -> dict[str, object]:
         "fully_masked_trials_a": [],
         "fully_masked_trials_b": [],
     }
+
+
+def _deferred_exclusion_reasons_for_phase(
+    trial: ResolvedTrial,
+    phase: str,
+) -> list[str]:
+    entries = trial.metadata.get(DEFERRED_TRIAL_EXCLUSIONS_KEY, [])
+    if not isinstance(entries, list):
+        return []
+
+    reasons: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("phase", "")).strip() != phase:
+            continue
+        reason = str(entry.get("reason", "")).strip()
+        if reason:
+            reasons.append(reason)
+    return reasons

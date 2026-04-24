@@ -27,20 +27,17 @@ import numpy as np
 import scipy.io
 from matplotlib.widgets import Button, Slider
 
-# ---------------------------------------------------------------------------
-# File paths  (edit if needed)
-# ---------------------------------------------------------------------------
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
 
-MATLAB_B1_PATH = Path(
-    r"C:/GRE/dev/clarissa/seeg/b1_BPF_data"
-    r"/edGRE_2021_AICb_MD_CHOICE_Partie1_BPF_f50f150_sf100_sm250_onset.mat"
-)
+from compare_subject_config import BV_EEG_PATH, MATLAB_B1_PATH  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# File paths  (see compare_subject_config.py to change the subject)
+# ---------------------------------------------------------------------------
 
 # MNE needs the .vhdr header — derive it from the .eeg path.
-BV_EEG_PATH = Path(
-    r"D:/Boulot/clarissa_bids/derivatives/hilbert"
-    r"/sub-GRE2021AICb/ieeg/sub-GRE2021AICb_task-MDCHOICE_desc-bgasm250_ieeg.eeg"
-)
 BV_VHDR_PATH = BV_EEG_PATH.with_suffix(".vhdr")
 
 # Epoching window applied to the BrainVision recording.

@@ -77,6 +77,52 @@ def test_detect_outlier_by_max_no_flags_when_uniform() -> None:
     assert not np.any(mask)
 
 
+def test_detect_outlier_by_max_ignores_pre_nanmasked_trials() -> None:
+    """A pre-NaN'd trial must not inflate the max distribution.
+
+    Scenario mirrors the real bug: a large-spike trial in the pool inflates std
+    enough to hide a moderate outlier.  When that trial has already been NaN'd
+    (via apply_trial_nan_mask), the remaining moderate outlier must be detected.
+    """
+    # 21 trials, 1 channel, 4 time points.
+    # Trials 0-19 (normal): constant 1.0  → per-trial max = 1.0.
+    # Trial 15: pre-NaN'd (spike already removed by a prior mean pass).
+    # Trial 3: one sample = 6.0  → per-trial max = 6.0 (moderate outlier).
+    #
+    # With trial 15 NaN'd, valid maxes are {1.0}×19 + {6.0}:
+    #   nanmean ≈ 1.25, nanstd ≈ 1.12 → z_trial3 ≈ 4.25 > 3.0  → detected ✓
+    # Without NaN-ing trial 15 first (spike max >> 50), the std would be huge
+    # and trial 3 would fall below threshold — that was the pre-fix behaviour.
+    epochs = np.ones((21, 1, 4), dtype=np.float64)
+    epochs[3, 0, 2] = 6.0    # moderate max outlier
+    epochs[15, 0, :] = np.nan  # spike trial already NaN'd
+
+    mask = detect_outlier_trial_channel_pairs_by_max(epochs, threshold_factor=3.0)
+
+    assert mask[3, 0], "Trial 3 (moderate outlier) should be detected after NaN'd spike."
+    assert not mask[15, 0], "Already-NaN'd trial 15 should not be re-flagged."
+    assert not np.any(mask[[i for i in range(21) if i not in (3, 15)], 0])
+
+
+def test_detect_outlier_by_mean_ignores_pre_nanmasked_trials() -> None:
+    """Same two-pass NaN-awareness test for the mean-based detector."""
+    # 21 trials, 1 channel, 4 time points.
+    # Trial 3: all samples = 6.0  → per-trial mean = 6.0 (moderate outlier).
+    # Trial 15: pre-NaN'd → nanmean returns NaN, excluded from distribution.
+    #
+    # With trial 15 NaN'd, valid means are {1.0}×19 + {6.0}:
+    #   nanmean ≈ 1.25, nanstd ≈ 1.12 → z_trial3 ≈ 4.25 > 3.0  → detected ✓
+    epochs = np.ones((21, 1, 4), dtype=np.float64)
+    epochs[3, 0, :] = 6.0    # moderate mean outlier
+    epochs[15, 0, :] = np.nan  # spike trial already NaN'd
+
+    mask = detect_outlier_trial_channel_pairs_by_mean(epochs, threshold_factor=3.0)
+
+    assert mask[3, 0], "Trial 3 (moderate mean outlier) should be detected after NaN'd spike."
+    assert not mask[15, 0], "Already-NaN'd trial 15 should not be re-flagged."
+    assert not np.any(mask[[i for i in range(21) if i not in (3, 15)], 0])
+
+
 # ---------------------------------------------------------------------------
 # apply_trial_nan_mask
 # ---------------------------------------------------------------------------

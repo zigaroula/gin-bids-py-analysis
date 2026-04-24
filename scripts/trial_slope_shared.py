@@ -14,9 +14,9 @@ from gin_bids_py_analysis.processing.trial_stats.result import BaseTrialStatsPro
 from gin_bids_py_analysis.processing.trial_stats_group import RegressionGroupParams
 from gin_bids_py_analysis.processing.utils.condition_rules import ConditionExpr
 from gin_bids_py_analysis.processing.utils.trial_annotator import (
+    DeferredTrialMetadataInvalidationRule,
     EventAnnotationInvalidationRule,
     EventFileWindowAnnotator,
-    TrialMetadataInvalidationRule,
 )
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TableTrialResolver
 
@@ -47,6 +47,7 @@ IEEG_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
     "desc": "bgasm250",
+    "subject": "PRA2021AAAb"
 }
 
 SECONDARY_FILTERS = [
@@ -158,7 +159,7 @@ MAX_RT_S: float = 20.0
 MIN_RATING: float = 0.0
 BEH_TSV_PATH = Path(
     r"D:\Boulot\clarissa_bids"
-    r"\sub-GRE2021AICb\beh\sub-GRE2021AICb_task-MDCHOICE_beh.tsv"
+    r"\sub-PRA2021AAAb\beh\sub-PRA2021AAAb_task-MDCHOICE_beh.tsv"
 )
 
 _NA_LIKE_TOKENS = frozenset({"nan", "na", "n/a", "none", "null"})
@@ -516,16 +517,20 @@ def build_trial_annotators(
         annotators.append(MatlabZscorePredictorAnnotator(MATLAB_ZSCORES_PATH))
 
     annotators.extend([
-        # Behavioral validity: exclude trials with RT > MAX_RT_S or rating < MIN_RATING.
-        # These checks are orthogonal to condition classification and mirror MATLAB b2
-        # steps opts.removeoutlierRTs and opts.removenegratings.
+        # Behavioral validity is deferred to mirror MATLAB b2 ordering:
+        # RT outliers are NaN'd after HGA trial-level mean/max rejection but before
+        # channel-level spread/25%-NaN checks; negative ratings are NaN'd after
+        # channel-level cleaning and before baseline z-scoring/regression.
         # NOTE: These filters still apply to RAW rating values even when USE_MATLAB_ZSCORES is True.
-        TrialMetadataInvalidationRule(
-            condition={"all": [
-                {"column": "RT", "op": "<=", "value": MAX_RT_S},
-                {"column": "rating", "op": ">=", "value": MIN_RATING},
-            ]},
-            exclusion_reason="behavioral_threshold",
+        DeferredTrialMetadataInvalidationRule(
+            condition={"column": "RT", "op": "<=", "value": MAX_RT_S},
+            exclusion_reason="outlier_rt",
+            apply_phase="after_epoch_trial_rejection",
+        ),
+        DeferredTrialMetadataInvalidationRule(
+            condition={"column": "rating", "op": ">=", "value": MIN_RATING},
+            exclusion_reason="negative_rating",
+            apply_phase="before_activity_zscore",
         ),
         # Delphos vmPFC spike invalidation.
         # EventFileWindowAnnotator(

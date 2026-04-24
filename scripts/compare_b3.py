@@ -48,34 +48,23 @@ from trial_slope_shared import (  # noqa: E402
     build_trial_slope_groups,
     load_roi_channels_from_csv,
 )
+from compare_subject_config import (  # noqa: E402
+    BEHAVIOR_TSV_PATH,
+    MATLAB_B2_PATH,
+    MATLAB_B3_ROOT,
+    PYTHON_REGRESSION_PATH,
+)
 
 
 # ---------------------------------------------------------------------------
 # File paths and MATLAB path selection
 # ---------------------------------------------------------------------------
 
-MATLAB_B3_ROOT = Path(
-    r"C:\GRE\dev\clarissa\seeg\b3_BPF_indiv_analyses\GRE_2021_AICb\regressions"
-)
 MATLAB_LOG_DATA_FILENAME = "log_data.mat"
 MATLAB_REALIGN = "onset"
 MATLAB_F_RANGE_NAME = "f50f150"
 MATLAB_SMOOTHING_NAME = "sm250"
 MATLAB_TERM_INDEX = 0
-
-PYTHON_REGRESSION_PATH = Path(
-    r"D:\Boulot\clarissa_bids\derivatives\regression"
-    r"\sub-GRE2021AICb\ieeg\sub-GRE2021AICb_task-MDCHOICE_desc-correlation_stats.h5"
-)
-
-MATLAB_B2_PATH = Path(
-    r"C:\GRE\dev\clarissa\seeg\b2_BPF_apply_options"
-    r"\edGRE_2021_AICb_MD_CHOICE_Partie1_BPF_f50f150_sf100_sm250_onset.mat"
-)
-BEHAVIOR_TSV_PATH = Path(
-    r"D:\Boulot\clarissa_bids"
-    r"\sub-GRE2021AICb\beh\sub-GRE2021AICb_task-MDCHOICE_beh.tsv"
-)
 
 # MATLAB regression name -> Python condition field mapping.
 MATLAB_PYTHON_REGRESSION_MAP = [
@@ -512,11 +501,10 @@ def replay_regression_from_matlab_b2(
     )
 
     channel_mapping = match_exact_channels(matlab_channels, b2_channels)
-    matched_mat_indices = sorted(channel_mapping)
-    matched_b2_indices = [channel_mapping[i] for i in matched_mat_indices]
-    mat_stack = np.asarray(
-        np.asarray(slopes, dtype=np.float64)[matched_b2_indices, :],
-        dtype=np.float64,
+    matched_mat_indices, matched_b2_indices, mat_stack, py_stack = _matlab_driven_channel_stacks(
+        matlab_values=matlab_values,
+        python_values=np.asarray(slopes, dtype=np.float64),
+        channel_mapping=channel_mapping,
     )
     return ComparisonBundle(
         label=f"{matlab_regression_name} vs Python OLS replay on MATLAB b2",
@@ -528,8 +516,8 @@ def replay_regression_from_matlab_b2(
         matched_py_indices=matched_b2_indices,
         matlab_channels=list(matlab_channels),
         python_channels=list(b2_channels),
-        matlab_values=np.asarray(matlab_values[matched_mat_indices, :], dtype=np.float64),
-        python_values=mat_stack,
+        matlab_values=mat_stack,
+        python_values=py_stack,
         time_alignment_error_s=max_time_err,
     )
 
@@ -610,8 +598,11 @@ def replay_regression_from_python_epochs(
     )
 
     channel_mapping = match_channels(matlab_channels, list(python_result.channel_names))
-    matched_mat_indices = sorted(channel_mapping)
-    matched_py_indices = [channel_mapping[i] for i in matched_mat_indices]
+    matched_mat_indices, matched_py_indices, mat_stack, py_stack = _matlab_driven_channel_stacks(
+        matlab_values=matlab_values,
+        python_values=slopes,
+        channel_mapping=channel_mapping,
+    )
     return ComparisonBundle(
         label=(
             f"{matlab_regression_name} vs Python epoch replay "
@@ -625,8 +616,8 @@ def replay_regression_from_python_epochs(
         matched_py_indices=matched_py_indices,
         matlab_channels=list(matlab_channels),
         python_channels=list(python_result.channel_names),
-        matlab_values=np.asarray(matlab_values[matched_mat_indices, :], dtype=np.float64),
-        python_values=np.asarray(slopes[matched_py_indices, :], dtype=np.float64),
+        matlab_values=mat_stack,
+        python_values=py_stack,
         time_alignment_error_s=max_time_err,
     )
 
@@ -646,6 +637,57 @@ def _align_python_to_matlab_time(
     max_err = float(np.max(np.abs(py_time[py_idx] - mat_time))) if mat_time.size else 0.0
     aligned = np.asarray(python_values, dtype=np.float64)[:, py_idx]
     return aligned, py_idx, max_err
+
+
+def _matlab_driven_channel_stacks(
+    *,
+    matlab_values: np.ndarray,
+    python_values: np.ndarray,
+    channel_mapping: dict[int, int],
+) -> tuple[list[int], list[int], np.ndarray, np.ndarray]:
+    """Return stacks ordered by MATLAB channel, filling missing Python rows with NaN."""
+    mat_stack = np.asarray(matlab_values, dtype=np.float64)
+    py_source = np.asarray(python_values, dtype=np.float64)
+    matched_mat_indices = list(range(mat_stack.shape[0]))
+    matched_py_indices = [int(channel_mapping.get(mat_idx, -1)) for mat_idx in matched_mat_indices]
+    py_stack = np.full_like(mat_stack, np.nan, dtype=np.float64)
+    for row_idx, py_idx in enumerate(matched_py_indices):
+        if 0 <= py_idx < py_source.shape[0]:
+            py_stack[row_idx, :] = py_source[py_idx, :]
+    return matched_mat_indices, matched_py_indices, mat_stack, py_stack
+
+
+def _python_channel_name(channels: list[str], py_idx: int) -> str:
+    if 0 <= int(py_idx) < len(channels):
+        return channels[int(py_idx)]
+    return "(no HDF5)"
+
+
+def filter_bundle_to_finite_matlab(bundle: ComparisonBundle) -> ComparisonBundle:
+    """Keep MATLAB channels whose MATLAB b3 trace contains at least one finite value."""
+    keep_rows = [
+        row_idx
+        for row_idx in range(bundle.matlab_values.shape[0])
+        if np.any(np.isfinite(bundle.matlab_values[row_idx]))
+    ]
+    if len(keep_rows) == bundle.matlab_values.shape[0]:
+        return bundle
+
+    keep = np.asarray(keep_rows, dtype=np.int64)
+    return ComparisonBundle(
+        label=bundle.label,
+        matlab_regression_name=bundle.matlab_regression_name,
+        python_condition_name=bundle.python_condition_name,
+        matlab_time=bundle.matlab_time,
+        python_time_aligned=bundle.python_time_aligned,
+        matched_mat_indices=[bundle.matched_mat_indices[i] for i in keep_rows],
+        matched_py_indices=[bundle.matched_py_indices[i] for i in keep_rows],
+        matlab_channels=bundle.matlab_channels,
+        python_channels=bundle.python_channels,
+        matlab_values=bundle.matlab_values[keep, :] if keep.size else bundle.matlab_values[:0, :],
+        python_values=bundle.python_values[keep, :] if keep.size else bundle.python_values[:0, :],
+        time_alignment_error_s=bundle.time_alignment_error_s,
+    )
 
 
 def _channel_metrics(
@@ -731,7 +773,7 @@ def print_bundle_summary(bundle: ComparisonBundle, *, top_n: int = TOP_N) -> Non
                 "mat_idx": mat_idx,
                 "py_idx": py_idx,
                 "mat_name": bundle.matlab_channels[mat_idx],
-                "py_name": bundle.python_channels[py_idx],
+                "py_name": _python_channel_name(bundle.python_channels, py_idx),
                 "mean_abs": mean_abs,
                 "rms_diff": rms_diff,
                 "corr": corr,
@@ -774,8 +816,8 @@ def print_bundle_summary(bundle: ComparisonBundle, *, top_n: int = TOP_N) -> Non
 
     print(f"\n=== {bundle.label} ===")
     print(
-        f"  matched channels: {len(rows)}"
-        f"  |  metric-valid channels: {len(valid_rows)}"
+        f"  MATLAB channels shown: {len(rows)}"
+        f"  |  finite MATLAB/Python overlaps: {len(valid_rows)}"
         f"  |  skipped (NaN overlap): {skipped_rows}"
         f"  |  time alignment max error: {bundle.time_alignment_error_s:.6f} s"
     )
@@ -796,8 +838,10 @@ def print_bundle_summary(bundle: ComparisonBundle, *, top_n: int = TOP_N) -> Non
         )
         ordered = sorted(valid_rows, key=sort_key, reverse=reverse)
         for row in ordered[:top_n]:
+            py_idx = int(row["py_idx"])
+            py_idx_text = f"[{py_idx:4d}]" if py_idx >= 0 else "   n/a"
             print(
-                f"    [{int(row['mat_idx']):4d}]  [{int(row['py_idx']):4d}]  "
+                f"    [{int(row['mat_idx']):4d}]  {py_idx_text}  "
                 f"{str(row['mat_name'])[:16]:<16}  {str(row['py_name'])[:10]:<10}  "
                 f"{float(row['mean_abs']):9.5f}  {float(row['rms_diff']):9.5f}  "
                 f"{float(row['corr']):8.4f}  {float(row['slope']):8.4f}"
@@ -896,10 +940,12 @@ class RegressionComparisonViewer:
         mat_trace = bundle.matlab_values[self._ch_idx]
         py_trace = bundle.python_values[self._ch_idx]
         mean_abs, rms_diff, corr, slope = _channel_metrics(mat_trace, py_trace)
+        py_name = _python_channel_name(bundle.python_channels, py_idx)
 
         self.ax.clear()
         self.ax.plot(bundle.matlab_time, mat_trace, color="steelblue", linewidth=4.6, label="MATLAB b3")
-        self.ax.plot(bundle.matlab_time, py_trace, color="darkorange", linewidth=1.6, label="Python regression")
+        if np.any(np.isfinite(py_trace)):
+            self.ax.plot(bundle.matlab_time, py_trace, color="darkorange", linewidth=1.6, label="Python regression")
         self.ax.axvline(0.0, color="gray", linestyle="--", linewidth=1, alpha=0.6)
         self.ax.grid(True, alpha=0.3)
         self.ax.set_xlabel("Time relative to anchor onset (s)")
@@ -907,7 +953,7 @@ class RegressionComparisonViewer:
         self.ax.legend(loc="upper right")
         self.ax.set_title(
             f"{bundle.label}  |  channel {self._ch_idx + 1}/{n_ch}"
-            f"  |  MATLAB: {bundle.matlab_channels[mat_idx]} -> Python: {bundle.python_channels[py_idx]}",
+            f"  |  MATLAB: {bundle.matlab_channels[mat_idx]} -> Python: {py_name}",
             fontsize=11,
         )
 
@@ -918,7 +964,7 @@ class RegressionComparisonViewer:
             f"MATLAB idx: {mat_idx}\n"
             f"Python idx: {py_idx}\n"
             f"MATLAB bipole: {bundle.matlab_channels[mat_idx]}\n"
-            f"Python channel: {bundle.python_channels[py_idx]}\n"
+            f"Python channel: {py_name}\n"
             f"Time align max err: {bundle.time_alignment_error_s:.6f}s\n"
             f"mean|d|: {mean_abs:.5f}\n"
             f"RMSd: {rms_diff:.5f}\n"
@@ -1125,20 +1171,17 @@ def main() -> None:
                 "If MATLAB keeps the raw regressor sign, expect a sign inversion here."
             )
         channel_mapping = match_channels(matlab_channels, list(py_result.channel_names))
-        print(f"  matched channels: {len(channel_mapping)} / {len(matlab_channels)}")
-        if not channel_mapping:
-            print("  WARNING: no matched channels, skipping.")
-            continue
 
         python_values_aligned, _py_idx, max_time_err = _align_python_to_matlab_time(
             matlab_time,
             np.asarray(py_result.time_axis_s, dtype=np.float64),
             python_values,
         )
-        matched_mat_indices = sorted(channel_mapping)
-        matched_py_indices = [channel_mapping[i] for i in matched_mat_indices]
-        mat_stack = np.asarray(matlab_values[matched_mat_indices, :], dtype=np.float64)
-        py_stack = np.asarray(python_values_aligned[matched_py_indices, :], dtype=np.float64)
+        matched_mat_indices, matched_py_indices, mat_stack, py_stack = _matlab_driven_channel_stacks(
+            matlab_values=matlab_values,
+            python_values=python_values_aligned,
+            channel_mapping=channel_mapping,
+        )
 
         bundle = ComparisonBundle(
             label=(
@@ -1157,20 +1200,27 @@ def main() -> None:
             python_values=py_stack,
             time_alignment_error_s=max_time_err,
         )
+        n_matlab_before_filter = bundle.matlab_values.shape[0]
+        bundle = filter_bundle_to_finite_matlab(bundle)
+        print(
+            "  MATLAB non-NaN channel filter: "
+            f"{bundle.matlab_values.shape[0]}/{n_matlab_before_filter} kept "
+            f"(Python HDF5 match for {len(channel_mapping)})"
+        )
         print_bundle_summary(bundle)
         if python_condition_field == "condition_b":
             neg_bundle = ComparisonBundle(
                 label=f"{matlab_regression_name} vs NEG_{python_condition_name}",
                 matlab_regression_name=matlab_regression_name,
                 python_condition_name=f"NEG_{python_condition_name}",
-                matlab_time=np.asarray(matlab_time, dtype=np.float64),
-                python_time_aligned=np.asarray(matlab_time, dtype=np.float64),
-                matched_mat_indices=matched_mat_indices,
-                matched_py_indices=matched_py_indices,
-                matlab_channels=list(matlab_channels),
-                python_channels=list(py_result.channel_names),
-                matlab_values=mat_stack,
-                python_values=-py_stack,
+                matlab_time=bundle.matlab_time,
+                python_time_aligned=bundle.python_time_aligned,
+                matched_mat_indices=bundle.matched_mat_indices,
+                matched_py_indices=bundle.matched_py_indices,
+                matlab_channels=bundle.matlab_channels,
+                python_channels=bundle.python_channels,
+                matlab_values=bundle.matlab_values,
+                python_values=-bundle.python_values,
                 time_alignment_error_s=max_time_err,
             )
             neg_summary = _bundle_metric_summary(neg_bundle)
@@ -1192,6 +1242,7 @@ def main() -> None:
                 matlab_channels=matlab_channels,
                 predictor_mode=predictor_mode,
             )
+            source_replay_bundle = filter_bundle_to_finite_matlab(source_replay_bundle)
             print_bundle_summary(source_replay_bundle)
             if python_condition_field == "condition_b":
                 print(
@@ -1213,6 +1264,7 @@ def main() -> None:
                 matlab_channels=matlab_channels,
                 pleasantness=pleasantness,
             )
+            replay_bundle = filter_bundle_to_finite_matlab(replay_bundle)
             print_bundle_summary(replay_bundle)
             replay_summary = _bundle_metric_summary(replay_bundle)
             print(

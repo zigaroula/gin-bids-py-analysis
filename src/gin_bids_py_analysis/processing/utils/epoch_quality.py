@@ -78,11 +78,13 @@ def detect_outlier_trial_channel_pairs_by_mean(
     ``rmoutliers(mean_alldata_per_trial(:, ichan), 'mean', 'ThresholdFactor',
     std_thresh)``.
 
+    NaN values (e.g. from a prior masking pass) are excluded from all
+    distribution statistics and never flagged themselves.
+
     Parameters
     ----------
     epochs:
-        Array of shape ``(n_trials, n_channels, n_times)``.  Must not contain
-        NaN (call before :func:`apply_trial_nan_mask`).
+        Array of shape ``(n_trials, n_channels, n_times)``.
     threshold_factor:
         Number of standard deviations defining the outlier threshold.
 
@@ -93,9 +95,11 @@ def detect_outlier_trial_channel_pairs_by_mean(
         ``(t, c)`` means trial *t* is an outlier for channel *c*.
     """
     epochs_arr = np.asarray(epochs, dtype=np.float64)
-    trial_means = np.mean(epochs_arr, axis=2)  # [n_trials, n_channels]
-    chan_means = np.mean(trial_means, axis=0)  # [n_channels]
-    chan_stds = np.std(trial_means, axis=0, ddof=1)  # [n_channels]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN slice from pre-masked trials
+        trial_means = np.nanmean(epochs_arr, axis=2)  # [n_trials, n_channels]
+        chan_means = np.nanmean(trial_means, axis=0)  # [n_channels]
+        chan_stds = np.nanstd(trial_means, axis=0, ddof=1)  # [n_channels]
     deviation = np.abs(trial_means - chan_means[np.newaxis, :])
     valid_std = chan_stds > 0.0
     mask = np.zeros(trial_means.shape, dtype=bool)
@@ -116,6 +120,12 @@ def detect_outlier_trial_channel_pairs_by_max(
     std_thresh)`` but applied to ``abs(epochs)`` for correctness on biphasic
     signals.
 
+    NaN values (e.g. from a prior mean-detection pass via
+    :func:`apply_trial_nan_mask`) are excluded from all distribution
+    statistics and never flagged themselves.  This makes it safe to call this
+    function after applying a mean-outlier mask, mirroring Matlab's sequential
+    two-pass rejection.
+
     Parameters
     ----------
     epochs:
@@ -129,9 +139,11 @@ def detect_outlier_trial_channel_pairs_by_max(
         Bool array of shape ``(n_trials, n_channels)``.
     """
     epochs_arr = np.asarray(epochs, dtype=np.float64)
-    trial_maxes = np.max(np.abs(epochs_arr), axis=2)  # [n_trials, n_channels]
-    chan_means = np.mean(trial_maxes, axis=0)  # [n_channels]
-    chan_stds = np.std(trial_maxes, axis=0, ddof=1)  # [n_channels]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN slice from pre-masked trials
+        trial_maxes = np.nanmax(np.abs(epochs_arr), axis=2)  # [n_trials, n_channels]
+        chan_means = np.nanmean(trial_maxes, axis=0)  # [n_channels]
+        chan_stds = np.nanstd(trial_maxes, axis=0, ddof=1)  # [n_channels]
     deviation = np.abs(trial_maxes - chan_means[np.newaxis, :])
     valid_std = chan_stds > 0.0
     mask = np.zeros(trial_maxes.shape, dtype=bool)

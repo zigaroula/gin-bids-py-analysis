@@ -37,19 +37,22 @@ from gin_bids_py_analysis.processing.utils.statistics import (
     zscore_activity_by_baseline,
 )
 
-# ---------------------------------------------------------------------------
-# File paths  (edit if needed)
-# ---------------------------------------------------------------------------
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
 
-MATLAB_PATH = Path(
-    r"C:\GRE\dev\clarissa\seeg\b2_BPF_apply_options\edGRE_2021_AICb_MD_CHOICE_Partie1_BPF_f50f150_sf100_sm250_onset.mat"
+from compare_subject_config import (  # noqa: E402
+    BV_EEG_PATH,
+    BEHAVIOR_TSV_PATH as BEH_TSV_PATH,
+    MATLAB_B2_PATH as MATLAB_PATH,
+    MATLAB_BSL_INFO_PATH as BSL_INFO_PATH,
 )
+
+# ---------------------------------------------------------------------------
+# File paths  (see compare_subject_config.py to change the subject)
+# ---------------------------------------------------------------------------
 
 # MNE needs the .vhdr header — derive it from the .eeg path.
-BV_EEG_PATH = Path(
-    r"D:/Boulot/clarissa_bids/derivatives/hilbert"
-    r"/sub-GRE2021AICb/ieeg/sub-GRE2021AICb_task-MDCHOICE_desc-bgasm250_ieeg.eeg"
-)
 BV_VHDR_PATH = BV_EEG_PATH.with_suffix(".vhdr")
 
 # Epoching window to apply to the BrainVision file.
@@ -112,20 +115,12 @@ MIN_RATING: float = 0.0
 REMOVE_OUTLIER_RTS: bool = True
 MAX_RT_S: float = 20.0
 RT_COLUMN: str = "RT"  # column name in BEH_TSV_PATH for reaction time
-BEH_TSV_PATH = Path(
-    r"D:/Boulot/clarissa_bids"
-    r"/sub-GRE2021AICb/beh/sub-GRE2021AICb_task-MDCHOICE_beh.tsv"
-)
-
+# BEH_TSV_PATH and BSL_INFO_PATH are imported from compare_subject_config.py above.
 
 # Optional: path to the MATLAB bsl_info .mat file saved by b2 alongside the alldata file.
 # When set, MATLAB's per-channel z-score mean/σ are loaded and displayed in the infobox
 # so you can directly compare them with Python's reference values.
-# Typical path: <b2_BPF_backup>/<bpf_mat_name_norealign>_bsl_info.mat
-#BSL_INFO_PATH: Path | None = None
-BSL_INFO_PATH = Path(
-    r"C:\GRE\dev\clarissa\seeg\b2_BPF_apply_options\edGRE_2021_AICb_MD_CHOICE_Partie1_BPF_f50f150_sf100_sm250_bsl_info.mat"
-)
+# BSL_INFO_PATH is imported from compare_subject_config.py above.
 
 # When True, apply MATLAB's opts_log trial-rejection and bad-channel masks
 # directly to the BV data instead of recomputing Python's own PRECLEAN and
