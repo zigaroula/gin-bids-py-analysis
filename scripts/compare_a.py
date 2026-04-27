@@ -36,6 +36,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 from compare_subject_config import (  # noqa: E402
     BIDS_RAW_EEG_PATH,
     BIDS_RAW_EVENTS_TSV_PATH,
+    COMPARE_A_SPM_EVENT_SAMPLE_SHIFT_SAMPLES,
     MATLAB_A3_PATH,
 )
 
@@ -58,10 +59,12 @@ MAX_PLOT_POINTS: int = 12_000
 MAX_EVENT_LINES: int = 80
 EVENT_CODES_TO_DRAW: set[str] | None = None  # None = draw all events in the window.
 EXPERIMENT_START_CODE: str = "5"
-# SPM event times land one sample later than the BIDS zero-based sample grid for
-# the checked a3 files.  Apply the same one-sample correction used conceptually
-# in the b1/b2 comparisons so event lines sit on the signal samples they mark.
-SPM_EVENT_SAMPLE_SHIFT_SAMPLES: int = -1
+# Imported from compare_subject_config so the correct format-specific shift is
+# applied automatically when switching subjects.
+# Formula: 1 - gin2bids event_sample_offset_samples
+#   Micromed (gin2bids offset=0) -> 1
+#   Prague   (gin2bids offset=1) -> 0
+SPM_EVENT_SAMPLE_SHIFT_SAMPLES: int = COMPARE_A_SPM_EVENT_SAMPLE_SHIFT_SAMPLES
 
 
 @dataclass(frozen=True)

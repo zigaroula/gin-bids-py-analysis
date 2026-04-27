@@ -43,6 +43,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 
 from compare_subject_config import (  # noqa: E402
     BV_EEG_PATH,
+    BV_EVENT_SAMPLE_SHIFT_SAMPLES,
     BEHAVIOR_TSV_PATH as BEH_TSV_PATH,
     MATLAB_B2_PATH as MATLAB_PATH,
     MATLAB_BSL_INFO_PATH as BSL_INFO_PATH,
@@ -69,10 +70,9 @@ TMAX_S: float = 6.0    # full b1 epoch end    (param.timewin_epoch{1}.onset = [-
 BV_DISPLAY_OFFSET_S: float = 0.0  # shift BV time axis by this amount for display
 ANCHOR_CODES: set[str] = {"11", "12"}
 EXPERIMENT_START_CODE: str = "5"
-# SPM uses event samples as 1-based indices during epoch extraction; when
-# epoching the BrainVision derivative with MNE's zero-based samples, subtract
-# one output-rate sample to reproduce the extracted MATLAB epochs.
-BV_EVENT_SAMPLE_SHIFT_SAMPLES: int = 0
+# BV_EVENT_SAMPLE_SHIFT_SAMPLES is imported from compare_subject_config.py.
+# Set to -1 for Micromed/TRC subjects (Grenoble, Lyon) or 0 for Prague Matlab
+# subjects.  See compare_subject_config.py for the full explanation.
 
 # Global z-score baseline applied to BrainVision epochs.
 ZSCORE_BV: bool = True
@@ -773,21 +773,33 @@ def print_rejection_comparison(
 def print_bv_start_offset_diagnostics(
     mat_epochs: np.ndarray,
     bv_epochs: np.ndarray,
+    mat_time: np.ndarray,
     bv_time: np.ndarray,
     channel_mapping: dict[int, int],
     *,
     max_offset: int = SHIFT_DIAGNOSTIC_MAX_OFFSET,
 ) -> None:
-    """Report which BV start offset best matches the MATLAB matrix."""
-    extra = int(bv_epochs.shape[2] - mat_epochs.shape[1])
-    if extra < 0 or not channel_mapping:
+    """Report which BV display-window offset best matches the MATLAB matrix."""
+    if not channel_mapping:
         return
 
-    max_offset = min(max_offset, extra)
-    print("\nAlignment diagnostic — BV start offset vs MATLAB")
-    results: list[tuple[int, float, float, float, float]] = []
-    for start in range(max_offset + 1):
+    mat_time_arr = np.asarray(mat_time, dtype=np.float64).ravel()
+    bv_time_arr = np.asarray(bv_time, dtype=np.float64).ravel()
+    if mat_time_arr.size == 0 or bv_time_arr.size == 0:
+        return
+
+    candidates = np.flatnonzero(bv_time_arr >= mat_time_arr[0] - 1e-12)
+    if candidates.size == 0:
+        return
+    base_start = int(candidates[0])
+
+    print("\nAlignment diagnostic — BV display offset vs MATLAB")
+    results: list[tuple[int, int, float, float, float, float]] = []
+    for offset in range(-max_offset, max_offset + 1):
+        start = base_start + offset
         end = start + mat_epochs.shape[1]
+        if start < 0 or end > bv_epochs.shape[2]:
+            continue
         mean_abs_values: list[float] = []
         corrs: list[float] = []
         for mat_idx, bv_idx in sorted(channel_mapping.items()):
@@ -806,6 +818,7 @@ def print_bv_start_offset_diagnostics(
                     corrs.append(float(np.sum(a * b) / denom))
         if mean_abs_values:
             results.append((
+                offset,
                 start,
                 float(bv_time[start]),
                 float(bv_time[end - 1]),
@@ -813,9 +826,9 @@ def print_bv_start_offset_diagnostics(
                 float(np.nanmedian(corrs)) if corrs else np.nan,
             ))
 
-    for start, t0, t1, mean_abs, med_corr in sorted(results, key=lambda row: row[3]):
+    for offset, start, t0, t1, mean_abs, med_corr in sorted(results, key=lambda row: row[4]):
         print(
-            f"  start={start}  BV window {t0:.3f}→{t1:.3f} s  "
+            f"  offset={offset:+d} sample(s)  start={start}  BV window {t0:.3f}→{t1:.3f} s  "
             f"mean|Δ|={mean_abs:.6f}  median corr={med_corr:.6f}"
         )
 
@@ -2097,6 +2110,7 @@ def main() -> None:
     print_bv_start_offset_diagnostics(
         mat_data[:min(n_trials_mat, n_trials_bv)],
         bv_epochs[:min(n_trials_mat, n_trials_bv)],
+        mat_time,
         bv_time,
         channel_mapping,
     )

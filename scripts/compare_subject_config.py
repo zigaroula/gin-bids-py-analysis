@@ -1,10 +1,25 @@
 """Subject configuration for comparison scripts.
 
-Edit the single line below to switch subjects.  All paths are derived from
-this identifier automatically.
+Edit the two lines below to switch subjects.  All paths are derived from
+the subject identifier automatically.
 
 Subject format: ``GRE_2022_BRUp`` (underscores allowed).
 The BIDS subject label is obtained by removing underscores: ``GRE2022BRUp``.
+
+``BV_EVENT_SAMPLE_SHIFT_SAMPLES`` controls how compare_b1.py and compare_b2.py
+align the BrainVision Hilbert derivative events to MATLAB b1/b2 epoch anchors.
+
+This value is **-1 for all subjects and formats**.  gin2bids is configured
+so that BIDS event onsets match the SPM ``event.time`` convention used by the
+MATLAB a1 converters (ImaGIN for Micromed, spm_eeg_convert_Prague_data for
+Prague).  Both converters store event times as 1-based sample indices, which
+places them one sample later than the 0-based BrainVision derivative grid.
+Subtracting one sample reproduces MATLAB's epoch anchor.
+
+Corresponding gin2bids settings in ``config_clarissa.json``:
+
+* Micromed : ``event_sample_offset_samples=0``
+* Prague   : ``event_sample_offset_samples=1``
 """
 
 from __future__ import annotations
@@ -12,10 +27,12 @@ from __future__ import annotations
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Edit this line to switch subjects
+# Edit these two lines to switch subjects
 # ---------------------------------------------------------------------------
 
-SUBJECT: str = "PRA_2021_AAAb"
+SUBJECT: str = "TOU_2021_DUBl"
+BV_EVENT_SAMPLE_SHIFT_SAMPLES: int = 0
+COMPARE_A_SPM_EVENT_SAMPLE_SHIFT_SAMPLES: int = 0
 
 # ---------------------------------------------------------------------------
 # Derived identifiers (computed — do not edit)

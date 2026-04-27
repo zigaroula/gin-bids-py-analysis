@@ -8,6 +8,7 @@ import h5py
 import mne
 import numpy as np
 
+from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.bids.helpers import modify_entities
 from gin_bids_py_analysis.processing.base import (
     BaseProcessingResult,
@@ -191,11 +192,41 @@ class HilbertProcessingWriter(BaseProcessingWriter):
             raise TypeError(
                 f"Expected HilbertProcessingResult, got {type(result).__name__!r}"
             )
-        
+
         if self.params.output_format == "brainvision":
             self._write_brainvision_all_windows(result, output_path)
         else:
             self._write_hdf5(result, output_path)
+
+    def get_output_path(self, group: BIDSFileGroup) -> Path:
+        """Override to check per-window BrainVision files when skipping existing output.
+
+        For BrainVision format, the actual output is a set of per-smoothing-window
+        ``.vhdr`` files whose ``desc`` entity is suffixed with ``sm{N}``
+        (e.g. ``desc-bgasm0``).  The base-class path (e.g. ``desc-bga_….h5``)
+        never exists on disk, so ``skip_existing`` would never fire.
+
+        This override globs for any matching per-window ``.vhdr`` file.  If at
+        least one is found the first match is returned (it exists → skip).  If
+        none are found a predictable ``sm0`` canary path is returned so that
+        ``skip_existing`` correctly triggers processing.
+
+        For HDF5 format the default base-class behaviour is preserved.
+        """
+        base_path = self._build_output_path(group.primary.entities)
+        if self.params.output_format == "brainvision":
+            glob_stem = modify_entities(
+                base_path.stem, desc=f"{self.params.output_description}sm*"
+            )
+            matches = sorted(base_path.parent.glob(f"{glob_stem}.vhdr"))
+            if matches:
+                return matches[0]
+            # No files on disk yet — return a non-existent canary path.
+            fname_base = modify_entities(
+                base_path.stem, desc=f"{self.params.output_description}sm0"
+            )
+            return base_path.parent / f"{fname_base}.vhdr"
+        return base_path
 
     # ------------------------------------------------------------------
     # HDF5 writer
@@ -352,12 +383,6 @@ class HilbertProcessingWriter(BaseProcessingWriter):
         event_onset_precision = str(
             result.metadata.get("events_onset_precision", "sample_quantized")
         )
-        processing_method = str(result.metadata.get("processing_method", ""))
-        if (
-            processing_method == "spm2env"
-            and event_onset_precision == "exact_time"
-        ):
-            event_onset_precision = "spm_continuous_sample"
         events = _downsample_events(
             result.original_events,
             result.downsampled_fs,

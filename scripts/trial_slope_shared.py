@@ -47,7 +47,7 @@ IEEG_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
     "desc": "bgasm250",
-    "subject": "PRA2021AAAb"
+    #"subject": "GRE2022BRUp"
 }
 
 SECONDARY_FILTERS = [
@@ -93,16 +93,53 @@ TRIAL_SLOPE_RESOLVER_CONDITIONS = [
 ]
 
 
-def _build_params() -> RegressionParams:
-    """Build RegressionParams with conditional predictor based on USE_MATLAB_ZSCORES."""
+def event_sample_shift_for_subject(subject_id: str) -> int:
+    """Return the event_sample_shift_samples value for a given BIDS subject.
+
+    gin2bids is configured with different ``event_sample_offset_samples`` per
+    recording format so that BIDS event onsets match the SPM ``event.time``
+    convention (1-based sample index / sfreq):
+
+    * Micromed (``offset=0``) – BIDS sample = S_trc (1-based).  The Hilbert
+      derivative BrainVision annotation is therefore one sample ahead of the
+      0-based epoch grid, so a shift of **-1** is required to reproduce the
+      MATLAB b1 epoch anchor.
+    * Prague (``offset=1``) – BIDS sample = S_raw + 1.  The SPM event.time
+      for Prague already incorporates the same +1, so the BIDS annotation sits
+      exactly at the intended sample and no shift is needed: **0**.
+
+    Parameters
+    ----------
+    subject_id : str
+        BIDS subject identifier (e.g. ``"PRA2021AAAb"`` or ``"GRE2022BRUp"``).
+        Underscores are stripped automatically.
+    """
+    normalized = subject_id.replace("_", "").upper()
+    if normalized.startswith("PRA"):
+        return 0
+    return -1
+
+
+def build_params(subject_id: str = "") -> RegressionParams:
+    """Build RegressionParams for a given subject.
+
+    Parameters
+    ----------
+    subject_id : str
+        BIDS subject identifier (e.g. ``"PRA2021AAAb"`` or ``"GRE2022BRUp"``).
+        Used to select the correct ``event_sample_shift_samples`` via
+        :func:`event_sample_shift_for_subject`. Pass an empty string (default)
+        to fall back to the Micromed default (shift=-1).
+    """
     return RegressionParams(
         anchor_event_codes=["11", "12"],
         # For trial-slope stats the input is already the Hilbert derivative.
-        # Its BrainVision annotations carry SPM-compatible downsampled anchor
-        # positions. Re-reading the raw _events.tsv here re-introduces a timing
-        # mismatch for the regression epochs.
+        # Its BrainVision annotations carry event times. gin2bids is configured
+        # so that BIDS event onsets match the SPM event.time convention (1-based
+        # sample index) for all formats (Micromed offset=0, Prague offset=1).
+        # The required shift is format-dependent; see event_sample_shift_for_subject.
         events_source="annotations",
-        event_sample_shift_samples=0,
+        event_sample_shift_samples=event_sample_shift_for_subject(subject_id),
         experiment_start_event_code="5",
         tmin_s=-1,
         tmax_s=6,
@@ -133,7 +170,7 @@ def _build_params() -> RegressionParams:
     )
 
 
-PARAMS = _build_params()
+PARAMS = build_params()
 
 ROI_CSV_FILES = {
     "vmPFC": Path(r"D:\Boulot\csv\PFCvm_elecs_tbl.csv"),

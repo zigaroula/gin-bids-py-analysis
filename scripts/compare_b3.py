@@ -74,6 +74,20 @@ MATLAB_PYTHON_REGRESSION_MAP = [
 
 TOP_N = 12
 
+# ---------------------------------------------------------------------------
+# Bundle selection
+# ---------------------------------------------------------------------------
+# Set to True/False to include or skip each comparison bundle in the viewer.
+
+# Replay OLS on Python epochs (re-runs regression on the Python-extracted epochs).
+INCLUDE_REPLAY_PYTHON_EPOCHS: bool = False
+
+# Replay OLS on MATLAB b2 epochs (re-runs regression on MATLAB-extracted epochs).
+INCLUDE_REPLAY_MATLAB_B2: bool = False
+
+# Direct comparison: saved Python HDF5 slopes vs MATLAB b3 slopes.
+INCLUDE_HDF5_VS_MATLAB: bool = True
+
 
 # ---------------------------------------------------------------------------
 # Generic helpers
@@ -1250,7 +1264,8 @@ def main() -> None:
                     "comparable to MATLAB b3. The saved Python slope output below still "
                     "uses the pipeline's transformed predictor (sign-flipped)."
                 )
-            bundles.append(source_replay_bundle)
+            if INCLUDE_REPLAY_PYTHON_EPOCHS:
+                bundles.append(source_replay_bundle)
 
         if b2_data is not None and b2_time.size and pleasantness.size:
             replay_bundle = replay_regression_from_matlab_b2(
@@ -1273,8 +1288,10 @@ def main() -> None:
                 f" median corr={replay_summary['median_corr']:.6g},"
                 f" mean mean|d|={replay_summary['mean_mean_abs']:.6g}"
             )
-            bundles.append(replay_bundle)
-        bundles.append(bundle)
+            if INCLUDE_REPLAY_MATLAB_B2:
+                bundles.append(replay_bundle)
+        if INCLUDE_HDF5_VS_MATLAB:
+            bundles.append(bundle)
 
     if not bundles:
         sys.exit(

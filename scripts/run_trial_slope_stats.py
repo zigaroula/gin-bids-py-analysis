@@ -21,8 +21,8 @@ if str(_SCRIPT_DIR) not in sys.path:
 
 from trial_slope_shared import (  # noqa: E402
     BIDS_ROOT,
-    PARAMS,
     RESOLVER,
+    build_params,
     build_trial_annotators,
     build_trial_slope_groups,
     load_roi_channels_from_csv,
@@ -47,10 +47,14 @@ def main() -> list[Path]:
     groups = build_trial_slope_groups(ds)
     print(f"Found {len(groups)} subject group(s). Running with n_jobs={N_JOBS}.")
 
-    processor = RegressionProcessing(PARAMS, resolver=RESOLVER, annotators=annotators)
     writer = RegressionProcessingWriter(WRITER_PARAMS)
-
-    out_paths = processor.run(groups, writer, n_jobs=N_JOBS)
+    out_paths: list[Path] = []
+    for group in groups:
+        subject_id = group.primary.get("subject") or ""
+        params = build_params(subject_id)
+        processor = RegressionProcessing(params, resolver=RESOLVER, annotators=annotators)
+        paths = processor.run([group], writer, n_jobs=N_JOBS, skip_existing=True)
+        out_paths.extend(paths)
     for path in out_paths:
         print(f"Wrote {path}")
     return out_paths

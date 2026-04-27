@@ -31,7 +31,7 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
-from compare_subject_config import BV_EEG_PATH, MATLAB_B1_PATH  # noqa: E402
+from compare_subject_config import BV_EEG_PATH, BV_EVENT_SAMPLE_SHIFT_SAMPLES, MATLAB_B1_PATH  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # File paths  (see compare_subject_config.py to change the subject)
@@ -47,11 +47,9 @@ BV_DISPLAY_OFFSET_S: float = 0.0  # shift BV time axis by this amount for displa
 # Same anchor / experiment-start codes as the b2 comparison script.
 ANCHOR_CODES: set[str] = {"11", "12"}
 EXPERIMENT_START_CODE: str = "5"
-# After run_hilbert applies the native-rate a1 event shift, the exported
-# annotations match SPM event samples at 100 Hz. SPM then uses those samples as
-# 1-based indices during epoch extraction, which corresponds to one earlier
-# zero-based MNE sample.
-BV_EVENT_SAMPLE_SHIFT_SAMPLES: int = 0
+# BV_EVENT_SAMPLE_SHIFT_SAMPLES is imported from compare_subject_config.py.
+# Set to -1 for Micromed/TRC subjects (Grenoble, Lyon) or 0 for Prague Matlab
+# subjects.  See compare_subject_config.py for the full explanation.
 
 # MATLAB epoch window (for display trimming of BV data).
 MAT_TMIN_S: float = -1

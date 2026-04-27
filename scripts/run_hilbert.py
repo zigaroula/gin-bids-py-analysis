@@ -31,7 +31,7 @@ BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
 FILE_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    "subject": "PRA2021AAAb"
+    "subject": "TOU2021DUBl",
     #"run": "01",
 }
 
@@ -44,8 +44,7 @@ PARAMS = HilbertParams(
     method=ProcessingMethod.SPM2ENV,
     computation_frequency_hz=512.0,
     downsampled_frequency_hz=100.0,
-    # SPM2ENV BrainVision export projects events with SPM's continuous-file
-    # sample convention, so no extra source-sample shift is needed here.
+    # Events are normalized upstream during gin2bids conversion.
     event_sample_shift_samples=0,
     events_source="events_tsv",
     smoothing_windows_ms= [0, 250, 500, 1000, 2500, 5000],
@@ -91,6 +90,6 @@ if __name__ == "__main__":
     processor = HilbertProcessing(PARAMS)
     writer = HilbertProcessingWriter(WRITER_PARAMS)
 
-    out_paths = processor.run(groups, writer, n_jobs=N_JOBS)
+    out_paths = processor.run(groups, writer, n_jobs=N_JOBS, skip_existing=True)
     for p in out_paths:
         print(f"Wrote {p}")
