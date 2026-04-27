@@ -72,7 +72,7 @@ EXPERIMENT_START_CODE: str = "5"
 # SPM uses event samples as 1-based indices during epoch extraction; when
 # epoching the BrainVision derivative with MNE's zero-based samples, subtract
 # one output-rate sample to reproduce the extracted MATLAB epochs.
-BV_EVENT_SAMPLE_SHIFT_SAMPLES: int = -1
+BV_EVENT_SAMPLE_SHIFT_SAMPLES: int = 0
 
 # Global z-score baseline applied to BrainVision epochs.
 ZSCORE_BV: bool = True

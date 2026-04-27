@@ -48,6 +48,11 @@ def _downsample_events(
                                before downsampling. ``"exact_time"`` keeps
                                exact TSV onsets in seconds and applies the
                                sample shift as a time offset.
+                               ``"spm_continuous_sample"`` reproduces SPM's
+                               continuous-file event-to-sample conversion after
+                               downsampling: source samples are treated as
+                               MATLAB/SPM 1-based samples, then converted to
+                               BrainVision zero-based marker onsets.
 
     Returns:
         List of dicts with keys "onset" (in samples), "duration" (in samples),
@@ -60,9 +65,14 @@ def _downsample_events(
         raise ValueError(
             "original_fs is required when event_sample_shift_samples is non-zero."
         )
-    if event_onset_precision not in {"sample_quantized", "exact_time"}:
+    if event_onset_precision not in {
+        "sample_quantized",
+        "exact_time",
+        "spm_continuous_sample",
+    }:
         raise ValueError(
-            "event_onset_precision must be 'sample_quantized' or 'exact_time'."
+            "event_onset_precision must be 'sample_quantized', 'exact_time', "
+            "or 'spm_continuous_sample'."
         )
 
     downsampled_events = []
@@ -76,7 +86,17 @@ def _downsample_events(
                 ann_type = "Comment"
             description = ann.description
 
-        if event_onset_precision == "exact_time":
+        if event_onset_precision == "spm_continuous_sample":
+            if original_fs is None:
+                raise ValueError(
+                    "original_fs is required for event_onset_precision="
+                    "'spm_continuous_sample'."
+                )
+            shifted_onset_s = ann.onset_s + (
+                (event_sample_shift_samples + 1) / float(original_fs)
+            )
+            onset_samples = matlab_round(shifted_onset_s * downsampled_fs + 1) - 1
+        elif event_onset_precision == "exact_time":
             shifted_onset_s = ann.onset_s
             if event_sample_shift_samples:
                 shifted_onset_s += event_sample_shift_samples / float(original_fs)
@@ -332,6 +352,12 @@ class HilbertProcessingWriter(BaseProcessingWriter):
         event_onset_precision = str(
             result.metadata.get("events_onset_precision", "sample_quantized")
         )
+        processing_method = str(result.metadata.get("processing_method", ""))
+        if (
+            processing_method == "spm2env"
+            and event_onset_precision == "exact_time"
+        ):
+            event_onset_precision = "spm_continuous_sample"
         events = _downsample_events(
             result.original_events,
             result.downsampled_fs,

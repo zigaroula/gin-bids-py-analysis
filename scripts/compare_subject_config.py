@@ -34,6 +34,23 @@ MATLAB_ROOT: Path = Path(r"C:\GRE\dev\clarissa\seeg")
 # Derived paths (computed — do not edit)
 # ---------------------------------------------------------------------------
 
+# MATLAB a3 continuous SPM file after event correction and channel renaming.
+MATLAB_A3_PATH: Path = (
+    MATLAB_ROOT / "a3_channels_config"
+    / f"{SUBJECT}_MD_CHOICE_Partie1.mat"
+)
+
+# BIDS raw BrainVision file and event table.
+BIDS_RAW_EEG_PATH: Path = (
+    BIDS_ROOT / f"sub-{BIDS_SUBJECT}" / "ieeg"
+    / f"sub-{BIDS_SUBJECT}_task-MDCHOICE_ieeg.eeg"
+)
+
+BIDS_RAW_EVENTS_TSV_PATH: Path = (
+    BIDS_ROOT / f"sub-{BIDS_SUBJECT}" / "ieeg"
+    / f"sub-{BIDS_SUBJECT}_task-MDCHOICE_events.tsv"
+)
+
 # MATLAB b1 epochs file  (used by compare_b1_vs_bids_raw.py)
 MATLAB_B1_PATH: Path = (
     MATLAB_ROOT / "b1_BPF_data"

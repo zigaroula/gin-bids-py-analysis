@@ -275,6 +275,24 @@ def moving_average(signal: np.ndarray, coefficient: int) -> np.ndarray:
     return (totals * weight).astype(np.float32)
 
 
+def matlab_conv_same_moving_average(signal: np.ndarray, coefficient: int) -> np.ndarray:
+    """Moving average matching MATLAB ``conv2(x', ones(1, n)/n, 'same')``.
+
+    ``spm2env.m`` smooths the native-rate envelope with MATLAB's convolution
+    ``same`` mode before downsampling. For even-length kernels MATLAB keeps the
+    later central samples, which differs by one sample from several Python
+    centered-window conventions.
+    """
+    n = len(signal)
+    if coefficient <= 1:
+        return signal.astype(np.float32)
+
+    kernel = np.ones(int(coefficient), dtype=np.float64) / float(coefficient)
+    full = np.convolve(signal.astype(np.float64), kernel, mode="full")
+    start = int(coefficient) // 2
+    return full[start : start + n].astype(np.float32)
+
+
 # ---------------------------------------------------------------------------
 # Channel-level pipeline
 # ---------------------------------------------------------------------------
@@ -308,9 +326,10 @@ def process_channel(
 
     2. Normalise each subband envelope to percentage of baseline at native ``fs``.
     3. Average the resulting envelopes across subbands.
-    4. For each smoothing window: apply :func:`moving_average` at native ``fs``
-       (or identity for ``window_ms = 0``), then optionally subtract 100,
-       then resample with :func:`scipy.signal.resample_poly`.
+    4. For each smoothing window: apply MATLAB ``conv2(..., 'same')`` moving
+       average at native ``fs`` (or identity for ``window_ms = 0``), then
+       optionally subtract 100, then resample with
+       :func:`scipy.signal.resample_poly`.
 
     Args:
         signal_1d: 1-D array ``[n_samples]``.
@@ -425,7 +444,7 @@ def process_channel(
                 smoothed = mean_data.copy()
             else:
                 coefficient = int((fs * window_ms) / 1000)
-                smoothed = moving_average(mean_data, coefficient)
+                smoothed = matlab_conv_same_moving_average(mean_data, coefficient)
 
             if nm.is_centered:
                 smoothed = (smoothed - 100.0).astype(np.float32)

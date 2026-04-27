@@ -51,7 +51,7 @@ EXPERIMENT_START_CODE: str = "5"
 # annotations match SPM event samples at 100 Hz. SPM then uses those samples as
 # 1-based indices during epoch extraction, which corresponds to one earlier
 # zero-based MNE sample.
-BV_EVENT_SAMPLE_SHIFT_SAMPLES: int = -1
+BV_EVENT_SAMPLE_SHIFT_SAMPLES: int = 0
 
 # MATLAB epoch window (for display trimming of BV data).
 MAT_TMIN_S: float = -1

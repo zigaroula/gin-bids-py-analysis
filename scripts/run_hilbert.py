@@ -44,9 +44,9 @@ PARAMS = HilbertParams(
     method=ProcessingMethod.SPM2ENV,
     computation_frequency_hz=512.0,
     downsampled_frequency_hz=100.0,
-    # Temporary Matlab compatibility: a1 Micromed->SPM shifts events by -1
-    # source sample before b1 projects them to 100 Hz.
-    event_sample_shift_samples=-1,
+    # SPM2ENV BrainVision export projects events with SPM's continuous-file
+    # sample convention, so no extra source-sample shift is needed here.
+    event_sample_shift_samples=0,
     events_source="events_tsv",
     smoothing_windows_ms= [0, 250, 500, 1000, 2500, 5000],
     montage_mode=MontageMode.BIPOLAR,

@@ -248,6 +248,39 @@ class TestBrainVisionWriter:
         assert shifted is not None
         assert [event["onset"] for event in shifted] == [15214, 137064, 150631]
 
+    def test_spm_continuous_sample_events_match_spm_epoch_projection(self) -> None:
+        """SPM2ENV event export follows SPM's 1-based continuous sample logic."""
+        original_fs = 512.0
+        downsampled_fs = 100.0
+        events = [
+            {
+                "onset": 206.19921875,
+                "duration": 0.0,
+                "description": "Stimulus/S 11",
+            },
+            {
+                "onset": 232.623046875,
+                "duration": 0.0,
+                "description": "Stimulus/S 11",
+            },
+            {
+                "onset": 256.345703125,
+                "duration": 0.0,
+                "description": "Stimulus/S 11",
+            },
+        ]
+
+        shifted = _downsample_events(
+            events,
+            downsampled_fs,
+            original_fs=original_fs,
+            event_sample_shift_samples=0,
+            event_onset_precision="spm_continuous_sample",
+        )
+
+        assert shifted is not None
+        assert [event["onset"] for event in shifted] == [20620, 23263, 25635]
+
 
 # ---------------------------------------------------------------------------
 # HDF5 regression test

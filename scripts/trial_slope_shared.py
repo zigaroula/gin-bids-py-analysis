@@ -98,13 +98,11 @@ def _build_params() -> RegressionParams:
     return RegressionParams(
         anchor_event_codes=["11", "12"],
         # For trial-slope stats the input is already the Hilbert derivative.
-        # Its BrainVision annotations carry the downsampled anchor positions that
-        # best match MATLAB b2. Re-reading the raw _events.tsv here re-introduces
-        # a timing mismatch for the regression epochs.
+        # Its BrainVision annotations carry SPM-compatible downsampled anchor
+        # positions. Re-reading the raw _events.tsv here re-introduces a timing
+        # mismatch for the regression epochs.
         events_source="annotations",
-        # MATLAB/SPM extracts epochs from a one-sample-earlier anchor than the
-        # downsampled BrainVision annotation position exposed by MNE.
-        event_sample_shift_samples=-1,
+        event_sample_shift_samples=0,
         experiment_start_event_code="5",
         tmin_s=-1,
         tmax_s=6,

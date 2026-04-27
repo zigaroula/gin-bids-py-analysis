@@ -22,6 +22,7 @@ from gin_bids_py_analysis.processing.hilbert.dsp import (
     apply_shannon_clamp,
     build_frequency_bins,
     downsample,
+    matlab_conv_same_moving_average,
     moving_average,
     normalize_db,
     normalize_percent,
@@ -378,6 +379,23 @@ class TestMovingAverage:
     def test_output_is_float32(self):
         signal = np.ones(50, dtype=np.float64)
         out = moving_average(signal, coefficient=5)
+        assert out.dtype == np.float32
+
+
+class TestMatlabConvSameMovingAverage:
+    def test_matches_matlab_conv2_same_for_even_kernel(self):
+        signal = np.array([1, 2, 3, 4], dtype=np.float32)
+        out = matlab_conv_same_moving_average(signal, coefficient=2)
+        np.testing.assert_allclose(out, np.array([1.5, 2.5, 3.5, 2.0], dtype=np.float32))
+
+    def test_matches_matlab_conv2_same_for_odd_kernel(self):
+        signal = np.array([1, 2, 3, 4], dtype=np.float32)
+        out = matlab_conv_same_moving_average(signal, coefficient=3)
+        np.testing.assert_allclose(out, np.array([1.0, 2.0, 3.0, 7.0 / 3.0], dtype=np.float32))
+
+    def test_output_is_float32(self):
+        signal = np.ones(50, dtype=np.float64)
+        out = matlab_conv_same_moving_average(signal, coefficient=5)
         assert out.dtype == np.float32
 
 
