@@ -42,9 +42,9 @@ FILE_FILTERS = {
 # are merged into a single subject → channel-list mapping.
 # Set to an empty dict (or remove entries) to disable and use all channels.
 CHANNELS_CSV_FILES = {
-    "vmPFC": Path(r"E:\data_clarissa\valuation\csv\PFCvm_elecs_tbl.csv"),
-    "daINS": Path(r"E:\data_clarissa\valuation\csv\aINS_dors_elecs_tbl.csv"),
-    "vaINS": Path(r"E:\data_clarissa\valuation\csv\aINS_vent_elecs_tbl.csv"),
+    "vmPFC": Path(r"D:\Boulot\csv\PFCvm_elecs_tbl.csv"),
+    "daINS": Path(r"D:\Boulot\csv\aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"D:\Boulot\csv\aINS_vent_elecs_tbl.csv"),
 }
 
 # Algorithm parameters for detection
@@ -240,6 +240,6 @@ if __name__ == "__main__":
     processor = DelphosProcessing(PARAMS)
     writer = DelphosProcessingWriter(WRITER_PARAMS)
 
-    out_paths = processor.run(files, writer, n_jobs=N_JOBS)
+    out_paths = processor.run(files, writer, n_jobs=N_JOBS, skip_existing=True)
     for p in out_paths:
         print(f"Wrote {p}")

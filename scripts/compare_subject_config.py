@@ -30,8 +30,8 @@ from pathlib import Path
 # Edit these two lines to switch subjects
 # ---------------------------------------------------------------------------
 
-SUBJECT: str = "TOU_2021_DUBl"
-BV_EVENT_SAMPLE_SHIFT_SAMPLES: int = 0
+SUBJECT: str = "TOU_2022_TISa"
+BV_EVENT_SAMPLE_SHIFT_SAMPLES: int = -1
 COMPARE_A_SPM_EVENT_SAMPLE_SHIFT_SAMPLES: int = 0
 
 # ---------------------------------------------------------------------------

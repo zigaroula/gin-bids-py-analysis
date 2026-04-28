@@ -32,7 +32,7 @@ from trial_slope_shared import (  # noqa: E402
 WRITER_PARAMS = RegressionWriterParams(
     bids_root=BIDS_ROOT,
     output_format="hdf5",
-    output_description="correlation",
+    output_description="onsetnospike",
 )
 
 N_JOBS = 1
@@ -53,7 +53,7 @@ def main() -> list[Path]:
         subject_id = group.primary.get("subject") or ""
         params = build_params(subject_id)
         processor = RegressionProcessing(params, resolver=RESOLVER, annotators=annotators)
-        paths = processor.run([group], writer, n_jobs=N_JOBS, skip_existing=True)
+        paths = processor.run([group], writer, n_jobs=N_JOBS, skip_existing=False)
         out_paths.extend(paths)
     for path in out_paths:
         print(f"Wrote {path}")

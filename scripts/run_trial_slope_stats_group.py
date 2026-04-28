@@ -23,20 +23,7 @@ from gin_bids_py_analysis.processing.trial_stats_group import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
-
-# Kept aligned with scripts/run_trial_slope_stats.py inputs.
-IEEG_FILTERS = {
-    "suffix": "ieeg",
-    "extension": ".vhdr",
-    "desc": "gammasm250",
-}
-
-# Kept aligned with scripts/run_trial_slope_stats.py inputs.
-SECONDARY_FILTERS = [
-    {"scope": "raw", "datatype": "beh", "suffix": "beh", "extension": ".tsv"},
-    {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
-]
+BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
 
 # Query regression channel-level outputs from derivatives/regression.
 # desc must match RegressionWriterParams(output_description=...) used upstream.
@@ -44,27 +31,26 @@ TRIAL_SLOPE_STATS_FILTERS = {
     "scope": "regression",
     "suffix": "stats",
     "extension": ".h5",
-    "desc": "correlation",
-    # "task": "decid",
+    "desc": "onsetnospike",
 }
 
 ROI_CSV_FILES = {
-    "vmPFC": Path(r"D:\data_clarissa\valuation\csv\PFCvm_elecs_tbl.csv"),
-    "daINS": Path(r"D:\data_clarissa\valuation\csv\aINS_dors_elecs_tbl.csv"),
-    "vaINS": Path(r"D:\data_clarissa\valuation\csv\aINS_vent_elecs_tbl.csv"),
+    "vmPFC": Path(r"D:\Boulot\csv\PFCvm_elecs_tbl.csv"),
+    "daINS": Path(r"D:\Boulot\csv\aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"D:\Boulot\csv\aINS_vent_elecs_tbl.csv"),
 }
 
 GROUP_PARAM_KWARGS = {
     "p_value_correction_method": "cluster_permutation",
     "significance_alpha": 0.05,
     "roi_mode": "manual",
-    "n_clusters_to_keep": 2,
+    "n_clusters_to_keep": 3,
 }
 
 WRITER_PARAMS = RegressionGroupWriterParams(
     bids_root=BIDS_ROOT,
     output_format="hdf5",
-    output_description="none",
+    output_description="onsetnospike",
 )
 
 N_JOBS = 1

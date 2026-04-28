@@ -1,0 +1,308 @@
+"""
+Export the group visualizer "Mean slope" plot to an image file.
+
+Edit the parameters below, then run from the repository root:
+
+    python scripts/export_trial_slope_group_mean.py
+
+The plot is intentionally aligned with the "Group" -> "Mean slope" tab from
+the interactive trial slope visualizer.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+from gin_bids_py_analysis.bids import BIDSDataset
+from gin_bids_py_analysis.processing.trial_stats_group.regression.result_loader import (
+    load_regression_group_result,
+)
+
+# ---------------------------------------------------------------------------
+# Parameters  (edit these)
+# ---------------------------------------------------------------------------
+
+BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
+
+# Set this to an explicit .h5/.mat file to bypass BIDS discovery.
+GROUP_STATS_FILE: Path | None = None
+
+# Used only when GROUP_STATS_FILE is None.
+# scope matches RegressionGroupWriterParams.pipeline_label = "regression_group".
+GROUP_STATS_FILTERS = {
+    "scope": "regression_group",
+    "suffix": "stats",
+    "extension": ".h5",
+    "desc": "onsetnospike",
+}
+
+ROI_NAME = "vmPFC"
+
+# Image export settings.
+OUTPUT_FORMAT = "png"  # e.g. "png", "pdf", "svg", "eps", "tiff"
+OUTPUT_DPI = 300
+FIGSIZE_INCHES = (10.4, 6.8)
+OUTPUT_DIR = Path("outputs") / "trial_slope_group_mean"
+OUTPUT_FILE: Path | None = None
+TRANSPARENT = False
+
+# Optional axis limits. Leave as None to match the visualizer autoscaling.
+X_LIMITS: tuple[float, float] | None = None
+Y_LIMITS: tuple[float, float] | None = None
+
+# Visualizer-equivalent overlays.
+SHOW_CONTRAST_SIGNIFICANCE_BAR = True
+SHOW_VS_ZERO_BOLD_SEGMENTS = True
+
+# ---------------------------------------------------------------------------
+# Plot helpers
+# ---------------------------------------------------------------------------
+
+CONDITION_A_COLOR = "steelblue"
+CONDITION_B_COLOR = "tomato"
+
+
+def main() -> Path:
+    group_stats_file = _resolve_group_stats_file()
+    result = load_regression_group_result(group_stats_file)
+    roi_idx = _find_roi_index(result.region_names, ROI_NAME)
+
+    output_path = _resolve_output_path(
+        group_stats_file=group_stats_file,
+        roi_name=result.region_names[roi_idx],
+    )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig = _draw_mean_slope_figure(result, roi_idx)
+    fig.savefig(
+        output_path,
+        dpi=OUTPUT_DPI,
+        bbox_inches="tight",
+        transparent=TRANSPARENT,
+        format=OUTPUT_FORMAT,
+    )
+    plt.close(fig)
+
+    print(f"Loaded:  {group_stats_file}")
+    print(f"ROI:     {result.region_names[roi_idx]}")
+    print(f"Export:  {output_path}")
+    return output_path
+
+
+def _resolve_group_stats_file() -> Path:
+    if GROUP_STATS_FILE is not None:
+        path = Path(GROUP_STATS_FILE)
+        if not path.exists():
+            raise FileNotFoundError(f"Group stats file not found: {path}")
+        return path
+
+    dataset = BIDSDataset(BIDS_ROOT)
+    files = sorted(dataset.get_files(**GROUP_STATS_FILTERS), key=lambda file: str(file.path))
+    if not files:
+        raise FileNotFoundError(
+            f"No group stats file found in {BIDS_ROOT} matching {GROUP_STATS_FILTERS}"
+        )
+    if len(files) > 1:
+        print("Multiple group stats files matched; using the first one:")
+        for file in files:
+            print(f"  - {file.path}")
+    return files[0].path
+
+
+def _find_roi_index(region_names: list[str] | tuple[str, ...], roi_name: str) -> int:
+    roi_name_cf = roi_name.casefold()
+    for idx, name in enumerate(region_names):
+        if str(name).casefold() == roi_name_cf:
+            return idx
+    available = ", ".join(str(name) for name in region_names)
+    raise ValueError(f"ROI {roi_name!r} not found. Available ROIs: {available}")
+
+
+def _resolve_output_path(*, group_stats_file: Path, roi_name: str) -> Path:
+    if OUTPUT_FILE is not None:
+        path = Path(OUTPUT_FILE)
+        if path.suffix:
+            return path
+        return path.with_suffix(f".{OUTPUT_FORMAT}")
+
+    desc = _extract_bids_desc(group_stats_file)
+    safe_roi = _safe_filename_part(roi_name)
+    safe_desc = _safe_filename_part(desc)
+    filename = f"group_mean_slope_{safe_roi}_{safe_desc}.{OUTPUT_FORMAT}"
+    return OUTPUT_DIR / filename
+
+
+def _draw_mean_slope_figure(result: object, roi_idx: int) -> plt.Figure:
+    time_axis = np.asarray(result.time_axis_s, dtype=np.float64)
+    roi_label = str(result.region_names[roi_idx])
+    condition_a_label, condition_b_label = _condition_labels(result)
+    metric_label = _source_metric_label(result)
+
+    fig, ax = plt.subplots(figsize=FIGSIZE_INCHES, tight_layout=True)
+
+    has_slope_mean = (
+        np.asarray(result.condition_a_source_metric_mean).size > 0
+        and np.asarray(result.condition_b_source_metric_mean).size > 0
+    )
+    if not has_slope_mean:
+        ax.text(
+            0.5,
+            0.5,
+            f"No {metric_label} means available",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=9,
+            color="gray",
+        )
+    else:
+        slope_mean_a = np.asarray(result.condition_a_source_metric_mean[roi_idx], dtype=np.float64)
+        slope_sem_a = np.asarray(result.condition_a_source_metric_sem[roi_idx], dtype=np.float64)
+        slope_mean_b = np.asarray(result.condition_b_source_metric_mean[roi_idx], dtype=np.float64)
+        slope_sem_b = np.asarray(result.condition_b_source_metric_sem[roi_idx], dtype=np.float64)
+
+        ax.plot(time_axis, slope_mean_a, color=CONDITION_A_COLOR, label=condition_a_label)
+        ax.fill_between(
+            time_axis,
+            slope_mean_a - slope_sem_a,
+            slope_mean_a + slope_sem_a,
+            alpha=0.25,
+            color=CONDITION_A_COLOR,
+        )
+        ax.plot(time_axis, slope_mean_b, color=CONDITION_B_COLOR, label=condition_b_label)
+        ax.fill_between(
+            time_axis,
+            slope_mean_b - slope_sem_b,
+            slope_mean_b + slope_sem_b,
+            alpha=0.25,
+            color=CONDITION_B_COLOR,
+        )
+
+        if SHOW_VS_ZERO_BOLD_SEGMENTS:
+            sig_a_vz = _roi_bool_mask(
+                result.condition_a_source_metric_vs_zero_significant_mask,
+                roi_idx,
+                len(time_axis),
+            )
+            sig_b_vz = _roi_bool_mask(
+                result.condition_b_source_metric_vs_zero_significant_mask,
+                roi_idx,
+                len(time_axis),
+            )
+            if sig_a_vz.any():
+                ax.plot(
+                    time_axis,
+                    np.ma.array(slope_mean_a, mask=~sig_a_vz),
+                    color=CONDITION_A_COLOR,
+                    linewidth=4.5,
+                )
+            if sig_b_vz.any():
+                ax.plot(
+                    time_axis,
+                    np.ma.array(slope_mean_b, mask=~sig_b_vz),
+                    color=CONDITION_B_COLOR,
+                    linewidth=4.5,
+                )
+
+        all_slopes = np.concatenate([slope_mean_a, slope_mean_b])
+        if np.nanmin(all_slopes) < 0 < np.nanmax(all_slopes):
+            ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
+
+    ax.axvline(0, color="gray", linewidth=0.8, linestyle="--")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel(f"mean {metric_label}")
+    ax.set_title(f"{_title_base(result, roi_idx)} - {metric_label} mean", fontsize=9)
+
+    if SHOW_CONTRAST_SIGNIFICANCE_BAR:
+        sig_slope = _roi_bool_mask(result.source_metric_significant_mask, roi_idx, len(time_axis))
+        if sig_slope.any():
+            ax.fill_between(
+                time_axis,
+                0.005,
+                0.025,
+                where=sig_slope,
+                alpha=0.75,
+                color="red",
+                transform=ax.get_xaxis_transform(),
+                zorder=5,
+            )
+
+    _safe_legend(ax)
+    if X_LIMITS is not None:
+        ax.set_xlim(*X_LIMITS)
+    if Y_LIMITS is not None:
+        ax.set_ylim(*Y_LIMITS)
+    else:
+        _set_symmetric_ylim(ax)
+    return fig
+
+
+def _roi_bool_mask(mask_array: np.ndarray, roi_idx: int, n_times: int) -> np.ndarray:
+    arr = np.asarray(mask_array)
+    if arr.size == 0:
+        return np.zeros(n_times, dtype=bool)
+    return np.asarray(arr[roi_idx], dtype=bool).reshape(n_times)
+
+
+def _title_base(result: object, roi_idx: int) -> str:
+    n_channels = _safe_count(result.roi_channel_counts, roi_idx)
+    n_subjects = _safe_count(result.roi_subject_counts, roi_idx)
+    return f"{result.region_names[roi_idx]}  -  {n_channels} channel(s) / {n_subjects} subject(s)"
+
+
+def _safe_count(values: np.ndarray, idx: int) -> str:
+    arr = np.asarray(values)
+    if arr.size <= idx:
+        return "?"
+    return str(int(arr[idx]))
+
+
+def _condition_labels(result: object) -> tuple[str, str]:
+    labels = tuple(getattr(result, "condition_labels", ("condition_a", "condition_b")))
+    condition_a = str(labels[0]) if len(labels) >= 1 else "condition_a"
+    condition_b = str(labels[1]) if len(labels) >= 2 else "condition_b"
+    return condition_a, condition_b
+
+
+def _source_metric_label(result: object) -> str:
+    metric = str(getattr(result, "source_metric", "slope")).strip().lower()
+    if metric == "r_value":
+        return "r"
+    return "slope"
+
+
+def _set_symmetric_ylim(ax: plt.Axes) -> None:
+    ymin, ymax = ax.get_ylim()
+    bound = max(abs(ymin), abs(ymax))
+    if bound > 0:
+        ax.set_ylim(-bound, bound)
+
+
+def _safe_legend(ax: plt.Axes) -> None:
+    handles, labels = ax.get_legend_handles_labels()
+    if handles and labels:
+        ax.legend(fontsize="small", loc="upper right")
+
+
+def _extract_bids_desc(path: Path) -> str:
+    for part in path.stem.split("_"):
+        if part.startswith("desc-"):
+            return part.removeprefix("desc-")
+    return "stats"
+
+
+def _safe_filename_part(value: object) -> str:
+    text = str(value).strip()
+    safe = "".join(char if char.isalnum() or char in "-_" else "_" for char in text)
+    return safe.strip("_") or "value"
+
+
+if __name__ == "__main__":
+    main()

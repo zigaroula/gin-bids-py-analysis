@@ -54,6 +54,15 @@ def resolve_input_events(
         )
 
     primary = primary_file or group.primary
+    if source == "annotations":
+        return ResolvedInputEvents(
+            events=raw.annotations,
+            source_requested=source,
+            source_resolved="annotations",
+            onset_precision="sample_quantized",
+            event_file=None,
+        )
+
     events_file = _matching_events_tsv(group, primary)
 
     if source == "events_tsv" and events_file is None:
@@ -72,6 +81,7 @@ def resolve_input_events(
             event_file=events_file.path,
         )
 
+    # source == "auto" and no compatible events TSV was found.
     return ResolvedInputEvents(
         events=raw.annotations,
         source_requested=source,

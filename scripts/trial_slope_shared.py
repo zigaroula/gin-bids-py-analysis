@@ -25,6 +25,8 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, 
 # ---------------------------------------------------------------------------
 
 BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
+SUBJECT = "TOU2021HOUl"
+USE_DELPHOS_SPIKE_FILTER = True
 
 # ---------------------------------------------------------------------------
 # MATLAB z-score injection configuration
@@ -47,7 +49,7 @@ IEEG_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
     "desc": "bgasm250",
-    #"subject": "GRE2022BRUp"
+    #"subject": SUBJECT
 }
 
 SECONDARY_FILTERS = [
@@ -141,8 +143,8 @@ def build_params(subject_id: str = "") -> RegressionParams:
         events_source="annotations",
         event_sample_shift_samples=event_sample_shift_for_subject(subject_id),
         experiment_start_event_code="5",
-        tmin_s=-1,
-        tmax_s=6,
+        tmin_s=-0.5,
+        tmax_s=5,
         condition_a="pleasant",
         condition_b="unpleasant",
         predictor="matlab_zscore" if USE_MATLAB_ZSCORES else "rating",
@@ -166,7 +168,7 @@ def build_params(subject_id: str = "") -> RegressionParams:
             "response": {"source": "table_column", "column": "RT", "units": "s"},
         },
         epoch_cleaning=TRIAL_SLOPE_EPOCH_CLEANING,
-        #n_permutations=500
+        n_permutations=500
     )
 
 
@@ -179,12 +181,13 @@ ROI_CSV_FILES = {
 }
 
 GROUP_PARAM_KWARGS = {
-    "p_value_correction_method": "none",
+    "p_value_correction_method": "cluster_permutation",
     "significance_alpha": 0.05,
     "roi_mode": "manual",
+    "n_clusters_to_keep": 3,
 }
 
-VM_PFC_SPIKE_EXCLUSION_REASON = "vmPFC_spike_0_5s"
+VM_PFC_SPIKE_EXCLUSION_REASON = "vmPFC_spike_0_6s"
 
 # Behavioral thresholds applied as annotator invalidation rules (orthogonal to
 # condition classification).  These replicate MATLAB b2:
@@ -192,10 +195,6 @@ VM_PFC_SPIKE_EXCLUSION_REASON = "vmPFC_spike_0_5s"
 #   opts.removenegratings  → trials with rating < 0 are excluded (all channels)
 MAX_RT_S: float = 20.0
 MIN_RATING: float = 0.0
-BEH_TSV_PATH = Path(
-    r"D:\Boulot\clarissa_bids"
-    r"\sub-PRA2021AAAb\beh\sub-PRA2021AAAb_task-MDCHOICE_beh.tsv"
-)
 
 _NA_LIKE_TOKENS = frozenset({"nan", "na", "n/a", "none", "null"})
 _FIRST_CONTACT_PATTERN = re.compile(r"^([A-Za-z]+[0-9]+)")
@@ -567,19 +566,22 @@ def build_trial_annotators(
             exclusion_reason="negative_rating",
             apply_phase="before_activity_zscore",
         ),
-        # Delphos vmPFC spike invalidation.
-        # EventFileWindowAnnotator(
-        #     filter={"suffix": "events", "desc": "delphos"},
-        #     metadata_events_key="delphos_events",
-        #     window_tmin_s=0.0,
-        #     window_tmax_s=5.0,
-        # ),
-        # EventAnnotationInvalidationRule(
-        #     metadata_events_key="delphos_events",
-        #     event_filter=build_vmPFC_spike_filter(vm_pfc_channels_by_subject),
-        #     exclusion_reason=VM_PFC_SPIKE_EXCLUSION_REASON,
-        # ),
     ])
+
+    if USE_DELPHOS_SPIKE_FILTER:
+        annotators.extend([
+            EventFileWindowAnnotator(
+                filter={"suffix": "events", "desc": "delphos"},
+                metadata_events_key="delphos_events",
+                window_tmin_s=0.0,
+                window_tmax_s=6.0,
+            ),
+            EventAnnotationInvalidationRule(
+                metadata_events_key="delphos_events",
+                event_filter=build_vmPFC_spike_filter(vm_pfc_channels_by_subject),
+                exclusion_reason=VM_PFC_SPIKE_EXCLUSION_REASON,
+            ),
+        ])
 
     return annotators
 

@@ -23,7 +23,7 @@ from gin_bids_py_analysis.visualization.trial_stats import launch_group_precompu
 # Parameters  (edit these)
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\data_clarissa\valuation\bids")
+BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
 
 ROI_CSV_FILES = {
     "vmPFC": Path(r"D:\data_clarissa\valuation\csv\PFCvm_elecs_tbl.csv"),
@@ -33,9 +33,10 @@ ROI_CSV_FILES = {
 
 GROUP_PARAM_KWARGS = {
     "source_metric": "slope",
-    "p_value_correction_method": "none",
+    "p_value_correction_method": "cluster_permutation",
     "significance_alpha": 0.05,
     "roi_mode": "manual",
+    "n_clusters_to_keep": 3,
 }
 
 # Filters to discover the group stats file written by
@@ -46,7 +47,7 @@ GROUP_PARAM_KWARGS = {
 GROUP_STATS_FILTERS = {
     "suffix": "stats",
     "extension": ".h5",
-    "desc": "none",
+    "desc": "regfull",
     "scope": "regression_group",
 }
 
