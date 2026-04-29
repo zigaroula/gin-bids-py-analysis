@@ -17,6 +17,7 @@ from .dsp import process_all_channels
 from .params import HilbertParams
 from .result import HilbertProcessingResult
 from ..utils.channels import select_channels_for_montage
+from ..utils.filters import apply_notch_filter
 from ..utils.input_events import resolve_input_events
 from ..utils.multithreading import get_threads_for_worker
 
@@ -67,6 +68,7 @@ class HilbertProcessing(BaseProcessing):
             channel names, and frequency metadata.
         """
         with group.primary.ensure_loaded() as raw:
+            raw = apply_notch_filter(raw, self.params.notch_filter_freqs)
             fs: float = raw.info["sfreq"]
             # get_data() returns shape [n_channels, n_times] as float64
             data: np.ndarray = raw.get_data().astype(np.float32)
@@ -114,6 +116,8 @@ class HilbertProcessing(BaseProcessing):
                 "scale_factor": self.params.normalization_mode.scale_factor,
                 "processing_method": self.params.method.value,
                 "event_sample_shift_samples": self.params.event_sample_shift_samples,
+                "notch_filter_freqs": list(self.params.notch_filter_freqs),
+                "notch_filter_applied": bool(self.params.notch_filter_freqs),
                 **resolved_events.metadata(),
             },
             original_events=resolved_events.events,

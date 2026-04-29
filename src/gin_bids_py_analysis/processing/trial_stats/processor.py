@@ -40,6 +40,7 @@ from gin_bids_py_analysis.processing.utils.events import (
     AnnotationEvent,
     parse_annotation_description,
 )
+from gin_bids_py_analysis.processing.utils.filters import apply_notch_filter
 from gin_bids_py_analysis.processing.utils.input_events import (
     ResolvedInputEvents,
     resolve_input_events,
@@ -157,6 +158,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
 
         for ieeg_file in ieeg_files:
             with ieeg_file.ensure_loaded() as raw:
+                raw = apply_notch_filter(raw, self.params.notch_filter_freqs)
                 sfreq = float(raw.info["sfreq"])
                 channel_names = list(raw.ch_names)
                 if sfreq_ref is None:
@@ -1001,6 +1003,8 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
                 state.get("events_onset_precision", {"sample_quantized"})
             ),
             "events_files": sorted(state.get("events_files", set())),
+            "notch_filter_freqs": list(self.params.notch_filter_freqs),
+            "notch_filter_applied": bool(self.params.notch_filter_freqs),
             "experiment_start_event_code": self.params.experiment_start_event_code,
             "experiment_end_event_code": self.params.experiment_end_event_code,
             "event_sample_shift_samples": self.params.event_sample_shift_samples,

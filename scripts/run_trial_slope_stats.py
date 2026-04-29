@@ -32,7 +32,7 @@ from trial_slope_shared import (  # noqa: E402
 WRITER_PARAMS = RegressionWriterParams(
     bids_root=BIDS_ROOT,
     output_format="hdf5",
-    output_description="onsetnospike",
+    output_description="onset50hz",
 )
 
 N_JOBS = 1

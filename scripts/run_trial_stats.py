@@ -44,6 +44,8 @@ PARAMS = ConditionTestParams(
     condition_b="rejected",
     #atlas_name="MarsAtlas",
     #n_bins=24,
+    # Optional: remove residual line noise before epoch extraction.
+    #notch_filter_freqs=[50.0],
     activity_zscore="none",
     activity_baseline_tmin_s=-0.2,
     activity_baseline_tmax_s=0.0,

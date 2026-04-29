@@ -38,6 +38,32 @@ def default_params() -> HilbertParams:
     )
 
 
+def test_hilbert_params_normalize_notch_filter_freqs() -> None:
+    assert HilbertParams(
+        f_min=50,
+        f_max=100,
+        f_step=10,
+        notch_filter_freqs=50,
+    ).notch_filter_freqs == [50.0]
+    assert HilbertParams(
+        f_min=50,
+        f_max=100,
+        f_step=10,
+        notch_filter_freqs="50, 150",
+    ).notch_filter_freqs == [50.0, 150.0]
+
+
+@pytest.mark.parametrize("freqs", [0, -50, float("nan"), float("inf"), "bad"])
+def test_hilbert_params_reject_invalid_notch_filter_freqs(freqs: object) -> None:
+    with pytest.raises(ValueError, match="notch_filter_freqs"):
+        HilbertParams(
+            f_min=50,
+            f_max=100,
+            f_step=10,
+            notch_filter_freqs=freqs,
+        )
+
+
 @pytest.fixture()
 def synthetic_data():
     """
@@ -313,6 +339,70 @@ class TestHilbertProcessingChannelSelection:
         assert captured["channel_names"] == ["B1", "B2"]
         assert captured["fs"] == fs
         assert result.channel_names == ["B1", "B2"]
+
+    def test_process_group_applies_notch_filter_before_processing(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        mock_bids_file,
+    ) -> None:
+        fs = 1000.0
+        n_samples = 32
+        raw = _FakeRaw(
+            np.zeros((1, n_samples), dtype=np.float32),
+            ["A1"],
+            fs,
+        )
+        filtered_raw = _FakeRaw(
+            np.ones((1, n_samples), dtype=np.float32),
+            ["A1"],
+            fs,
+        )
+        captured: dict[str, object] = {}
+
+        def fake_apply_notch_filter(raw_arg, freqs):
+            captured["raw_arg"] = raw_arg
+            captured["freqs"] = list(freqs)
+            return filtered_raw
+
+        def fake_process_all_channels(
+            data_2d: np.ndarray,
+            channel_names: list[str],
+            fs: float,
+            params: HilbertParams,
+            **_: object,
+        ):
+            del channel_names, fs, params
+            captured["data"] = data_2d.copy()
+            return (
+                {0: np.zeros((1, data_2d.shape[1]), dtype=np.float32)},
+                ["A1"],
+                [50.0, 60.0],
+            )
+
+        mock_bids_file.attach_data(raw)
+        monkeypatch.setattr(processor_module, "apply_notch_filter", fake_apply_notch_filter)
+        monkeypatch.setattr(processor_module, "process_all_channels", fake_process_all_channels)
+
+        params = HilbertParams(
+            f_min=50,
+            f_max=60,
+            f_step=10,
+            montage_mode=MontageMode.MONO,
+            smoothing_windows_ms=[0],
+            downsampled_frequency_hz=None,
+            normalization_mode=NormalizationMode.NONE,
+            notch_filter_freqs=[50.0],
+        )
+
+        result = processor_module.HilbertProcessing(params).process_group(
+            BIDSFileGroup(primary=mock_bids_file)
+        )
+
+        assert captured["raw_arg"] is raw
+        assert captured["freqs"] == [50.0]
+        np.testing.assert_array_equal(captured["data"], np.ones((1, n_samples), dtype=np.float32))
+        assert result.metadata["notch_filter_freqs"] == [50.0]
+        assert result.metadata["notch_filter_applied"] is True
 
     def test_process_group_applies_exclusion_after_inclusion(
         self,

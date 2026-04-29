@@ -40,7 +40,7 @@ GROUP_STATS_FILTERS = {
     "scope": "regression_group",
     "suffix": "stats",
     "extension": ".h5",
-    "desc": "onsetnospike",
+    "desc": "onset50hz",
 }
 
 ROI_NAME = "vmPFC"

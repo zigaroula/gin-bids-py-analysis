@@ -231,6 +231,68 @@ def test_process_group_exposes_epoch_mean_trial_activity_summary(
     assert result.trial_activity_summary_label == "Epoch mean activity"
 
 
+def test_process_group_applies_notch_filter_and_preserves_original_raw(
+    tmp_path: Path,
+) -> None:
+    ieeg_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+
+    sfreq = 1000.0
+    duration_s = 8.0
+    times = np.arange(0.0, duration_s, 1.0 / sfreq)
+    data = np.sin(2.0 * np.pi * 50.0 * times)[None, :].astype(np.float64)
+    original_data = data.copy()
+    annotations = Annotations(
+        onset=[1.0, 3.0, 5.0, 7.0],
+        duration=[0.0] * 4,
+        description=["Stimulus/S  10"] * 4,
+    )
+    raw = _make_raw(data, ["A1"], sfreq, annotations)
+    ieeg_file.attach_data(raw)
+    group = BIDSFileGroup(primary=ieeg_file)
+    base_params = dict(
+        anchor_event_codes=["10"],
+        tmin_s=-0.2,
+        tmax_s=0.2,
+        condition_a="accepted",
+        condition_b="rejected",
+        min_trials_per_condition=2,
+        p_value_correction_method="none",
+    )
+
+    unfiltered = ConditionTestProcessing(
+        ConditionTestParams(**base_params),
+        resolver=_AlternatingResolver(),
+    ).process_group(group)
+    filtered = ConditionTestProcessing(
+        ConditionTestParams(**base_params, notch_filter_freqs=[50.0]),
+        resolver=_AlternatingResolver(),
+    ).process_group(group)
+
+    freqs = np.fft.rfftfreq(unfiltered.condition_a_epochs.shape[-1], d=1.0 / sfreq)
+    idx_50hz = int(np.argmin(np.abs(freqs - 50.0)))
+    unfiltered_amp = np.abs(
+        np.fft.rfft(unfiltered.condition_a_epochs[0, 0, :])
+    )[idx_50hz]
+    filtered_amp = np.abs(np.fft.rfft(filtered.condition_a_epochs[0, 0, :]))[
+        idx_50hz
+    ]
+
+    assert filtered_amp < (unfiltered_amp * 0.25)
+    assert filtered.metadata["notch_filter_freqs"] == [50.0]
+    assert filtered.metadata["notch_filter_applied"] is True
+    np.testing.assert_allclose(raw.get_data(), original_data)
+
+
 def test_process_group_supports_anchor_to_response_trial_activity_summary_for_condition_test(
     tmp_path: Path,
 ) -> None:

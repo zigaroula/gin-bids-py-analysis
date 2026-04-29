@@ -26,7 +26,7 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, 
 
 BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
 SUBJECT = "TOU2021HOUl"
-USE_DELPHOS_SPIKE_FILTER = True
+USE_DELPHOS_SPIKE_FILTER = False
 
 # ---------------------------------------------------------------------------
 # MATLAB z-score injection configuration
@@ -48,7 +48,7 @@ MATLAB_ZSCORE_COLUMN_INDEX = 6  # 0-based index for column 7 in trial_characteri
 IEEG_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
-    "desc": "bgasm250",
+    "desc": "bga50hzsm250",
     #"subject": SUBJECT
 }
 
@@ -153,6 +153,8 @@ def build_params(subject_id: str = "") -> RegressionParams:
             "unpleasant": {"scale": -1.0, "offset": 0.0},
         },
         predictor_zscore="none",
+        # Optional: remove residual line noise before epoch extraction.
+        #notch_filter_freqs=[50.0],
         activity_zscore="baseline",
         activity_baseline_tmin_s=-0.25,
         # MATLAB's nearest-index baseline uses an exclusive upper bound, which
@@ -316,7 +318,12 @@ def build_vmPFC_spike_filter(
             ConditionExpr(
                 all=[
                     ConditionExpr(column="subject", op="==", value=subject_id),
-                    ConditionExpr(column="event_type", op="==", value="Spike"),
+                    ConditionExpr(
+                        any=[
+                            ConditionExpr(column="event_type", op="==", value="Spike"),
+                            ConditionExpr(column="event_type", op="==", value="Ripple"),
+                        ]
+                    ),
                     ConditionExpr(column="channel", op="in", values=unique_channels),
                 ]
             )

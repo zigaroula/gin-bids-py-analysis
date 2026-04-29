@@ -1,9 +1,10 @@
 ﻿from __future__ import annotations
 
 from enum import Enum
+import math
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from gin_bids_py_analysis.processing.base import BaseProcessingParams, BaseWriterParams
 from gin_bids_py_analysis.processing.utils.channels import (
@@ -161,6 +162,13 @@ class HilbertParams(BaseProcessingParams):
             "_events.tsv and falls back to annotations."
         ),
     )
+    notch_filter_freqs: list[float] = Field(
+        default_factory=list,
+        description=(
+            "Optional notch-filter frequencies in Hz applied to the continuous Raw "
+            "before Hilbert band-pass/envelope extraction. Empty disables notch filtering."
+        ),
+    )
 
     # ------------------------------------------------------------------
     # Montage
@@ -235,6 +243,36 @@ class HilbertParams(BaseProcessingParams):
             "then downsamples (matches the Matlab ``spm2env.m`` pipeline)."
         ),
     )
+
+    @field_validator("notch_filter_freqs", mode="before")
+    @classmethod
+    def _coerce_notch_filter_freqs(cls, value: object) -> list[float]:
+        if value in (None, ""):
+            return []
+        values: list[object]
+        if isinstance(value, (str, int, float)):
+            if isinstance(value, str) and "," in value:
+                values = [item.strip() for item in value.split(",")]
+            else:
+                values = [value]
+        else:
+            try:
+                values = list(value)  # type: ignore[arg-type]
+            except TypeError as exc:
+                raise ValueError("notch_filter_freqs must be a number or a list of numbers.") from exc
+
+        freqs: list[float] = []
+        for item in values:
+            if item in (None, ""):
+                continue
+            try:
+                freq = float(item)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("notch_filter_freqs must contain only numeric frequencies.") from exc
+            if not math.isfinite(freq) or freq <= 0.0:
+                raise ValueError("notch_filter_freqs values must be finite and strictly positive.")
+            freqs.append(freq)
+        return freqs
 
     @model_validator(mode="after")
     def _check_frequency_range(self) -> "HilbertParams":

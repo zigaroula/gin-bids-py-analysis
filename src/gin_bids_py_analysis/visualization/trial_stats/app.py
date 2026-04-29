@@ -126,6 +126,7 @@ def launch_slope(
         atlas_regions=list(params.atlas_regions),
         window_ms=params.window_ms,
         n_bins=params.n_bins,
+        notch_filter_freqs=list(params.notch_filter_freqs),
         activity_zscore=params.activity_zscore,
         activity_baseline_tmin_s=params.activity_baseline_tmin_s,
         activity_baseline_tmax_s=params.activity_baseline_tmax_s,

@@ -44,6 +44,8 @@ PARAMS = HilbertParams(
     method=ProcessingMethod.SPM2ENV,
     computation_frequency_hz=512.0,
     downsampled_frequency_hz=100.0,
+    # Remove residual line noise before Hilbert band-pass/envelope extraction.
+    notch_filter_freqs=[50.0],
     # Events are normalized upstream during gin2bids conversion.
     event_sample_shift_samples=0,
     events_source="events_tsv",
@@ -58,7 +60,7 @@ PARAMS = HilbertParams(
 
 WRITER_PARAMS = HilbertWriterParams(
     bids_root=BIDS_ROOT,
-    output_description="bga",
+    output_description="bga50hz",
     output_format="brainvision"
 )
 

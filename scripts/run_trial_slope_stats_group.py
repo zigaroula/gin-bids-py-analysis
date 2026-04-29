@@ -31,7 +31,7 @@ TRIAL_SLOPE_STATS_FILTERS = {
     "scope": "regression",
     "suffix": "stats",
     "extension": ".h5",
-    "desc": "onsetnospike",
+    "desc": "onset50hz",
 }
 
 ROI_CSV_FILES = {
@@ -50,7 +50,7 @@ GROUP_PARAM_KWARGS = {
 WRITER_PARAMS = RegressionGroupWriterParams(
     bids_root=BIDS_ROOT,
     output_format="hdf5",
-    output_description="onsetnospike",
+    output_description="onset50hz",
 )
 
 N_JOBS = 1
