@@ -53,6 +53,7 @@ from gin_bids_py_analysis.processing.utils.trial_annotator import (
     DEFERRED_TRIAL_EXCLUSIONS_KEY,
     EXCLUDED_FROM_STATISTICS_KEY,
     STATISTICS_EXCLUSION_REASON_KEY,
+    TRIAL_FEATURE_NAN_MASKS_KEY,
     TrialWindowAnnotator,
 )
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
@@ -475,10 +476,6 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             or cfg.reject_by_trial_max_spread
             or cfg.max_nan_trial_ratio is not None
         )
-        if not (any_level_a or any_level_b):
-            state["epoch_cleaning_audit"] = audit
-            return epochs_a, epochs_b, feature_names, feature_indices
-
         total_trials = int(epochs_a.shape[0] + epochs_b.shape[0])
         if total_trials <= 0:
             state["epoch_cleaning_audit"] = audit
@@ -486,6 +483,14 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
 
         n_a = int(epochs_a.shape[0])
         epochs_pooled = np.concatenate([epochs_a, epochs_b], axis=0)
+        epochs_pooled = self._apply_annotated_trial_feature_nan_masks(
+            epochs_pooled=epochs_pooled,
+            kept_trials_a=kept_trials_a,
+            kept_trials_b=kept_trials_b,
+            n_a=n_a,
+            feature_names=feature_names,
+            audit=audit,
+        )
 
         if any_level_a:
             nan_tf_mask = np.zeros((epochs_pooled.shape[0], len(feature_names)), dtype=bool)
@@ -632,6 +637,70 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             audit["deferred_trial_exclusions"] = dict(deferred_audit)
         state["epoch_cleaning_audit"] = audit
         return epochs_a, epochs_b, feature_names, feature_indices
+
+    def _apply_annotated_trial_feature_nan_masks(
+        self,
+        *,
+        epochs_pooled: np.ndarray,
+        kept_trials_a: list[ResolvedTrial],
+        kept_trials_b: list[ResolvedTrial],
+        n_a: int,
+        feature_names: list[str],
+        audit: dict[str, Any],
+    ) -> np.ndarray:
+        """Apply feature masks scheduled by trial annotators."""
+        arr = np.asarray(epochs_pooled, dtype=np.float64)
+        if arr.ndim != 3 or arr.shape[0] == 0 or not feature_names:
+            return arr
+
+        feature_index_by_key = {
+            str(feature_name).casefold(): idx
+            for idx, feature_name in enumerate(feature_names)
+        }
+        annotated_pairs = audit.setdefault("nan_masked_trial_feature_pairs", {})
+
+        for condition, trials, offset in [
+            ("a", kept_trials_a, 0),
+            ("b", kept_trials_b, n_a),
+        ]:
+            del condition
+            for local_idx, trial in enumerate(trials):
+                pooled_idx = offset + local_idx
+                if pooled_idx >= arr.shape[0]:
+                    continue
+                entries = trial.metadata.get(TRIAL_FEATURE_NAN_MASKS_KEY, [])
+                if not isinstance(entries, list):
+                    continue
+
+                flagged_features: set[str] = set(trial.metadata.get("nan_masked_features", []))
+                reasons_by_feature = trial.metadata.setdefault("nan_masked_feature_reasons", {})
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    reason = str(entry.get("reason") or "annotated_feature_mask")
+                    raw_features = entry.get("features", [])
+                    if isinstance(raw_features, str):
+                        raw_features = [raw_features]
+                    if not isinstance(raw_features, Sequence):
+                        continue
+                    for raw_feature in raw_features:
+                        feature_idx = feature_index_by_key.get(str(raw_feature).casefold())
+                        if feature_idx is None:
+                            continue
+                        feature_name = str(feature_names[feature_idx])
+                        arr[pooled_idx, feature_idx, :] = np.nan
+                        flagged_features.add(feature_name)
+                        masked_trials = annotated_pairs.setdefault(feature_name, [])
+                        if int(pooled_idx) not in masked_trials:
+                            masked_trials.append(int(pooled_idx))
+                        reasons = reasons_by_feature.setdefault(feature_name, [])
+                        if reason not in reasons:
+                            reasons.append(reason)
+
+                if flagged_features:
+                    trial.metadata["nan_masked_features"] = sorted(flagged_features)
+
+        return arr
 
     def _apply_deferred_trial_exclusions(
         self,

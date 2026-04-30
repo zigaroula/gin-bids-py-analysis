@@ -5,6 +5,7 @@ from pathlib import Path
 from scripts.run_delphos import (
     _extract_first_bipolar_contact,
     _extract_second_bipolar_contact,
+    _filter_files_with_subject_channels,
     _load_subject_channels_from_csv,
 )
 
@@ -43,3 +44,21 @@ def test_load_subject_channels_from_csv_ignores_nan_only_in_extra_columns(
     loaded = _load_subject_channels_from_csv(csv_path)
 
     assert loaded["GRE2022NASo"] == ["R03", "R02"]
+
+
+def test_filter_files_with_subject_channels_skips_missing_subjects() -> None:
+    class _File:
+        def __init__(self, subject: str) -> None:
+            self.subject = subject
+
+        def get(self, key: str) -> str | None:
+            if key == "subject":
+                return self.subject
+            return None
+
+    kept = _filter_files_with_subject_channels(
+        [_File("S01"), _File("S02"), _File("S03")],
+        {"S01": ["A1"], "S02": []},
+    )
+
+    assert [file.subject for file in kept] == ["S01"]

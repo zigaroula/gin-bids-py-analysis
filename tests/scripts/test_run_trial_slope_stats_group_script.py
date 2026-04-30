@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from types import SimpleNamespace
 import uuid
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -85,6 +86,13 @@ def test_run_trial_slope_stats_group_script_main_smoke(monkeypatch) -> None:
                 pass
 
         monkeypatch.setattr(module, "BIDSDataset", _FakeDataset)
+        monkeypatch.setattr(
+            module,
+            "build_group_params",
+            lambda *_args, **_kwargs: SimpleNamespace(manual_region_channels={}),
+        )
+        monkeypatch.setattr(module, "print_recipe_summary", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(module, "print_roi_summary", lambda *_args, **_kwargs: None)
         monkeypatch.setattr(module, "RegressionGroupProcessing", _FakeProcessor)
         monkeypatch.setattr(module, "RegressionGroupProcessingWriter", _FakeWriter)
         monkeypatch.setattr(

@@ -11,6 +11,7 @@ the interactive trial slope visualizer.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -25,75 +26,68 @@ from gin_bids_py_analysis.processing.trial_stats_group.regression.result_loader 
     load_regression_group_result,
 )
 
-# ---------------------------------------------------------------------------
-# Parameters  (edit these)
-# ---------------------------------------------------------------------------
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
 
-BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
-
-# Set this to an explicit .h5/.mat file to bypass BIDS discovery.
-GROUP_STATS_FILE: Path | None = None
-
-# Used only when GROUP_STATS_FILE is None.
-# scope matches RegressionGroupWriterParams.pipeline_label = "regression_group".
-GROUP_STATS_FILTERS = {
-    "scope": "regression_group",
-    "suffix": "stats",
-    "extension": ".h5",
-    "desc": "onset50hz",
-}
-
-ROI_NAME = "vmPFC"
-
-# Image export settings.
-OUTPUT_FORMAT = "png"  # e.g. "png", "pdf", "svg", "eps", "tiff"
-OUTPUT_DPI = 300
-FIGSIZE_INCHES = (10.4, 6.8)
-OUTPUT_DIR = Path("outputs") / "trial_slope_group_mean"
-OUTPUT_FILE: Path | None = None
-TRANSPARENT = False
-
-# Optional axis limits. Leave as None to match the visualizer autoscaling.
-X_LIMITS: tuple[float, float] | None = None
-Y_LIMITS: tuple[float, float] | None = None
-
-# Visualizer-equivalent overlays.
-SHOW_CONTRAST_SIGNIFICANCE_BAR = True
-SHOW_VS_ZERO_BOLD_SEGMENTS = True
+from trial_slope_shared import (  # noqa: E402
+    BIDS_ROOT,
+    EXPORT_CONDITION_A_COLOR as CONDITION_A_COLOR,
+    EXPORT_CONDITION_B_COLOR as CONDITION_B_COLOR,
+    EXPORT_FIGSIZE_INCHES as FIGSIZE_INCHES,
+    EXPORT_OUTPUT_DIR as OUTPUT_DIR,
+    EXPORT_OUTPUT_DPI as OUTPUT_DPI,
+    EXPORT_OUTPUT_FILE as OUTPUT_FILE,
+    EXPORT_OUTPUT_FORMAT as OUTPUT_FORMAT,
+    EXPORT_ROI_NAME as ROI_NAME,
+    EXPORT_SHOW_CONTRAST_SIGNIFICANCE_BAR as SHOW_CONTRAST_SIGNIFICANCE_BAR,
+    EXPORT_SHOW_VS_ZERO_BOLD_SEGMENTS as SHOW_VS_ZERO_BOLD_SEGMENTS,
+    EXPORT_TRANSPARENT as TRANSPARENT,
+    EXPORT_X_LIMITS as X_LIMITS,
+    EXPORT_Y_LIMITS as Y_LIMITS,
+    GROUP_STATS_FILE,
+    GROUP_STATS_FILTERS,
+    print_recipe_summary,
+)
 
 # ---------------------------------------------------------------------------
 # Plot helpers
 # ---------------------------------------------------------------------------
 
-CONDITION_A_COLOR = "steelblue"
-CONDITION_B_COLOR = "tomato"
 
-
-def main() -> Path:
+def main() -> list[Path]:
+    print_recipe_summary()
     group_stats_file = _resolve_group_stats_file()
     result = load_regression_group_result(group_stats_file)
-    roi_idx = _find_roi_index(result.region_names, ROI_NAME)
-
-    output_path = _resolve_output_path(
-        group_stats_file=group_stats_file,
-        roi_name=result.region_names[roi_idx],
-    )
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig = _draw_mean_slope_figure(result, roi_idx)
-    fig.savefig(
-        output_path,
-        dpi=OUTPUT_DPI,
-        bbox_inches="tight",
-        transparent=TRANSPARENT,
-        format=OUTPUT_FORMAT,
-    )
-    plt.close(fig)
-
+    roi_names = _normalize_roi_names(ROI_NAME)
     print(f"Loaded:  {group_stats_file}")
-    print(f"ROI:     {result.region_names[roi_idx]}")
-    print(f"Export:  {output_path}")
-    return output_path
+
+    output_paths: list[Path] = []
+    for requested_roi_name in roi_names:
+        roi_idx = _find_roi_index(result.region_names, requested_roi_name)
+        resolved_roi_name = str(result.region_names[roi_idx])
+        output_path = _resolve_output_path(
+            group_stats_file=group_stats_file,
+            roi_name=resolved_roi_name,
+            multiple_rois=len(roi_names) > 1,
+        )
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig = _draw_mean_slope_figure(result, roi_idx)
+        fig.savefig(
+            output_path,
+            dpi=OUTPUT_DPI,
+            bbox_inches="tight",
+            transparent=TRANSPARENT,
+            format=OUTPUT_FORMAT,
+        )
+        plt.close(fig)
+
+        print(f"ROI:     {resolved_roi_name}")
+        print(f"Export:  {output_path}")
+        output_paths.append(output_path)
+
+    return output_paths
 
 
 def _resolve_group_stats_file() -> Path:
@@ -125,12 +119,28 @@ def _find_roi_index(region_names: list[str] | tuple[str, ...], roi_name: str) ->
     raise ValueError(f"ROI {roi_name!r} not found. Available ROIs: {available}")
 
 
-def _resolve_output_path(*, group_stats_file: Path, roi_name: str) -> Path:
+def _normalize_roi_names(value: object) -> list[str]:
+    if isinstance(value, str):
+        roi_names = [value]
+    else:
+        roi_names = [str(item) for item in value]
+
+    cleaned = [name.strip() for name in roi_names if name.strip()]
+    if not cleaned:
+        raise ValueError("EXPORT_ROI_NAME must contain at least one ROI name.")
+    return cleaned
+
+
+def _resolve_output_path(*, group_stats_file: Path, roi_name: str, multiple_rois: bool) -> Path:
     if OUTPUT_FILE is not None:
         path = Path(OUTPUT_FILE)
+        suffix = path.suffix or f".{OUTPUT_FORMAT}"
+        if multiple_rois:
+            safe_roi = _safe_filename_part(roi_name)
+            return path.with_name(f"{path.stem}_{safe_roi}{suffix}")
         if path.suffix:
             return path
-        return path.with_suffix(f".{OUTPUT_FORMAT}")
+        return path.with_suffix(suffix)
 
     desc = _extract_bids_desc(group_stats_file)
     safe_roi = _safe_filename_part(roi_name)

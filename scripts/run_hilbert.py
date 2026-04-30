@@ -1,97 +1,56 @@
 """
-Hilbert analysis — run script.
-Edit the parameters below and run: python scripts/run_hilbert.py
+Hilbert analysis run script.
+
+Edit the shared recipe in scripts/trial_slope_shared.py, then run:
+
+    python scripts/run_hilbert.py
 """
 
+from __future__ import annotations
+
+import sys
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset, build_subject_groups
+from gin_bids_py_analysis.bids import BIDSDataset
 from gin_bids_py_analysis.processing.hilbert import (
-    HilbertParams,
     HilbertProcessing,
     HilbertProcessingWriter,
-    HilbertWriterParams,
-    NormalizationMode,
-    ProcessingMethod,
-)
-from gin_bids_py_analysis.processing.utils.channels import (
-    BipolarDirection,
-    BipolarStorage,
-    MontageMode,
 )
 
-# ---------------------------------------------------------------------------
-# Parameters
-# ---------------------------------------------------------------------------
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
 
-BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
-
-# BIDS entity filters: only files matching ALL of these will be processed.
-# Remove any key you don't want to filter on.
-FILE_FILTERS = {
-    "suffix": "ieeg",
-    "extension": ".vhdr",
-    #"subject": "TOU2021HOUl",
-    #"run": "01",
-}
-
-# Frequency grid: bins [f_min, f_min+f_step, ..., f_max]
-# Adjacent pairs form subbands: (50-60 Hz), (60-70 Hz), ..., (140-150 Hz)
-PARAMS = HilbertParams(
-    f_min=50,
-    f_max=150,
-    f_step=10,
-    method=ProcessingMethod.SPM2ENV,
-    computation_frequency_hz=512.0,
-    downsampled_frequency_hz=100.0,
-    # Remove residual line noise before Hilbert band-pass/envelope extraction.
-    notch_filter_freqs=[50.0],
-    # Events are normalized upstream during gin2bids conversion.
-    event_sample_shift_samples=0,
-    events_source="events_tsv",
-    smoothing_windows_ms= [0, 250, 500, 1000, 2500, 5000],
-    montage_mode=MontageMode.BIPOLAR,
-    bipolar_direction=BipolarDirection.NEXT_MINUS_PREVIOUS,
-    bipolar_storage=BipolarStorage.NEXT,
-    normalization_mode=NormalizationMode.PERCENT,
-    channels_to_exclude_for_montage=r'(?:MKR|DELD|DELG|EOG|ECG|EMG|DC|EXG|EKG|REF|GND|EMPTY).*',
-    #channels_for_montage=r'[A-Z]p?([0-1][0-9])'
+from trial_slope_shared import (  # noqa: E402
+    BIDS_ROOT,
+    HILBERT_N_JOBS,
+    HILBERT_SKIP_EXISTING,
+    build_hilbert_groups,
+    build_hilbert_params,
+    build_hilbert_writer_params,
+    print_recipe_summary,
 )
 
-WRITER_PARAMS = HilbertWriterParams(
-    bids_root=BIDS_ROOT,
-    output_description="bga50hz",
-    output_format="brainvision"
-)
 
-SECONDARY_FILTERS = [
-    {
-        "scope": "raw",
-        "suffix": "events",
-        "extension": ".tsv",
-        "datatype": "ieeg",
-    },
-]
+def main() -> list[Path]:
+    print_recipe_summary()
+    ds = BIDSDataset(BIDS_ROOT)
+    groups = build_hilbert_groups(ds)
+    print(f"Found {len(groups)} file group(s). Running with n_jobs={HILBERT_N_JOBS}.")
 
-N_JOBS = 1  # parallelism across files; set to -1 to use all available CPUs
+    processor = HilbertProcessing(build_hilbert_params())
+    writer = HilbertProcessingWriter(build_hilbert_writer_params())
 
-# ---------------------------------------------------------------------------
-# Processing
-# ---------------------------------------------------------------------------
+    out_paths = processor.run(
+        groups,
+        writer,
+        n_jobs=HILBERT_N_JOBS,
+        skip_existing=HILBERT_SKIP_EXISTING,
+    )
+    for path in out_paths:
+        print(f"Wrote {path}")
+    return out_paths
+
 
 if __name__ == "__main__":
-    ds = BIDSDataset(BIDS_ROOT)
-    groups = build_subject_groups(
-        ds,
-        {"scope": "raw", **FILE_FILTERS},
-        SECONDARY_FILTERS,
-        aggregate_runs=False,
-    )
-    print(f"Found {len(groups)} file group(s). Running with n_jobs={N_JOBS}.")
-
-    processor = HilbertProcessing(PARAMS)
-    writer = HilbertProcessingWriter(WRITER_PARAMS)
-
-    out_paths = processor.run(groups, writer, n_jobs=N_JOBS, skip_existing=True)
-    for p in out_paths:
-        print(f"Wrote {p}")
+    main()

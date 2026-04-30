@@ -223,11 +223,39 @@ def _merge_subject_channels(
     return merged
 
 
+def _filter_files_with_subject_channels(
+    files: list,
+    channels_by_subject: dict[str, list[str]],
+) -> list:
+    """Keep only files whose subject has at least one configured channel."""
+    kept = []
+    skipped_subjects: set[str] = set()
+
+    for file in files:
+        subject = file.get("subject") if hasattr(file, "get") else None
+        channels = channels_by_subject.get(subject or "")
+        if channels:
+            kept.append(file)
+            continue
+        skipped_subjects.add(str(subject or "<unknown>"))
+
+    if skipped_subjects:
+        skipped = ", ".join(sorted(skipped_subjects))
+        print(
+            "Skipping "
+            f"{len(files) - len(kept)} file(s) because no selected channel "
+            f"was found for subject(s): {skipped}."
+        )
+
+    return kept
+
+
 # ---------------------------------------------------------------------------
 # Processing
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    channels_for_montage = None
     if CHANNELS_CSV_FILES:
         channels_for_montage = _merge_subject_channels(CHANNELS_CSV_FILES)
         print(f"Total: {sum(len(v) for v in channels_for_montage.values())} unique contact(s) across {len(channels_for_montage)} subject(s).")
@@ -235,6 +263,8 @@ if __name__ == "__main__":
 
     ds = BIDSDataset(BIDS_ROOT)
     files = ds.get_files(scope="raw", **FILE_FILTERS)
+    if channels_for_montage is not None:
+        files = _filter_files_with_subject_channels(files, channels_for_montage)
     print(f"Found {len(files)} file(s). Running with n_jobs={N_JOBS}.")
 
     processor = DelphosProcessing(PARAMS)

@@ -39,8 +39,8 @@ def test_run_trial_slope_stats_script_main_smoke(monkeypatch) -> None:
             def __init__(self, _params, resolver=None, annotators=None) -> None:
                 del resolver, annotators
 
-            def run(self, groups, writer, n_jobs=1):
-                del groups, writer, n_jobs
+            def run(self, groups, writer, n_jobs=1, skip_existing=False):
+                del groups, writer, n_jobs, skip_existing
                 return [
                     case_dir
                     / "derivatives"
@@ -55,6 +55,7 @@ def test_run_trial_slope_stats_script_main_smoke(monkeypatch) -> None:
                 pass
 
         monkeypatch.setattr(module, "BIDSDataset", _FakeDataset)
+        monkeypatch.setattr(module, "print_recipe_summary", lambda *_args, **_kwargs: None)
         monkeypatch.setattr(module, "load_roi_channels_from_csv", lambda *_args, **_kwargs: {})
         monkeypatch.setattr(module, "print_roi_summary", lambda *_args, **_kwargs: None)
         monkeypatch.setattr(module, "build_trial_annotators", lambda *_args, **_kwargs: [])

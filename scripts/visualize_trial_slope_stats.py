@@ -21,16 +21,21 @@ from trial_slope_shared import (  # noqa: E402
     BIDS_ROOT,
     PARAMS,
     RESOLVER,
+    VM_PFC_SPIKE_EXCLUSION_REASON,
     build_group_params,
     build_trial_annotators,
     build_trial_slope_subject_groups,
+    count_excluded_trials_by_reason as _count_excluded_trials_by_reason,
+    format_subject_trial_exclusion_summary as _format_subject_trial_exclusion_summary,
     load_roi_channels_from_csv,
+    print_recipe_summary,
     print_roi_summary,
     print_subject_trial_exclusion_summary,
 )
 
 
 def main() -> None:
+    print_recipe_summary()
     manual_region_channels = load_roi_channels_from_csv()
     group_params = build_group_params(manual_region_channels)
     print_roi_summary(group_params.manual_region_channels)

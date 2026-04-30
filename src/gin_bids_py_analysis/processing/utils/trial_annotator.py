@@ -14,6 +14,10 @@ shared list between trial resolution and normalization:
   ``trial.keep = False`` when the count of matching events reaches the
   configured threshold.
 
+* ``EventAnnotationFeatureMaskRule`` — feature-level masking.  Reads annotated
+  events and schedules only the matching event channels for downstream NaN
+  masking, preserving the rest of the trial.
+
 * ``TrialMetadataInvalidationRule`` — invalidates trials based on scalar
   values stored in ``trial.metadata`` (e.g. ``RT``, ``rating``).  Evaluates a
   :class:`ConditionExpr` directly against the metadata dict and sets
@@ -47,6 +51,7 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 DEFERRED_TRIAL_EXCLUSIONS_KEY = "deferred_trial_exclusions"
 EXCLUDED_FROM_STATISTICS_KEY = "excluded_from_statistics"
 STATISTICS_EXCLUSION_REASON_KEY = "statistics_exclusion_reason"
+TRIAL_FEATURE_NAN_MASKS_KEY = "trial_feature_nan_masks"
 
 
 class TrialWindowAnnotator:
@@ -302,6 +307,111 @@ class EventAnnotationInvalidationRule(BaseModel):
                 trial.keep = False
                 if trial.exclusion_reason is None:
                     trial.exclusion_reason = self.exclusion_reason
+
+
+class EventAnnotationFeatureMaskRule(BaseModel):
+    """Schedule feature-level NaN masking from annotated event lists.
+
+    Reads ``trial.metadata[metadata_events_key]``, applies an optional
+    :class:`ConditionExpr` to each event, then stores the matching channels in
+    ``trial.metadata[TRIAL_FEATURE_NAN_MASKS_KEY]``. The trial remains kept;
+    downstream trial-stat processors apply the mask after epoch extraction.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    metadata_events_key: str = Field(
+        description=(
+            "Metadata key to read from each trial. Must match a preceding "
+            "EventFileWindowAnnotator metadata key."
+        ),
+    )
+    event_filter: ConditionExpr | None = Field(
+        default=None,
+        description="Optional boolean expression evaluated on each event dict.",
+    )
+    channel_column: str = Field(
+        default="channel",
+        description="Event column containing the channel/feature name to mask.",
+    )
+    exclusion_reason: str = Field(
+        default="event_channel_in_window",
+        description="Reason stored with the requested feature mask.",
+    )
+
+    @field_validator("metadata_events_key", mode="before")
+    @classmethod
+    def _normalize_metadata_events_key(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("metadata_events_key must be a non-empty string.")
+        return cleaned
+
+    @field_validator("channel_column", mode="before")
+    @classmethod
+    def _normalize_channel_column(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("channel_column must be a non-empty string.")
+        return cleaned
+
+    @field_validator("exclusion_reason", mode="before")
+    @classmethod
+    def _normalize_exclusion_reason(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("exclusion_reason must be a non-empty string.")
+        return cleaned
+
+    def annotate_trials(
+        self,
+        group: BIDSFileGroup,
+        ieeg_file: BIDSFile,
+        trials: list[ResolvedTrial],
+        tmin_s: float,
+        tmax_s: float,
+        *,
+        ieeg_channel_names: list[str],
+    ) -> None:
+        """Append matching event channels to each trial's feature-mask metadata."""
+        del group, ieeg_file, tmin_s, tmax_s  # not used
+
+        feature_by_key = {
+            str(feature_name).casefold(): str(feature_name)
+            for feature_name in ieeg_channel_names
+        }
+
+        for trial in trials:
+            events: list[dict[str, Any]] = trial.metadata.get(self.metadata_events_key, [])
+            if self.event_filter is not None:
+                matching = [
+                    event
+                    for event in events
+                    if matches_condition_expr(self.event_filter, event)
+                ]
+            else:
+                matching = list(events)
+
+            features: list[str] = []
+            for event in matching:
+                raw_channel = event.get(self.channel_column)
+                if raw_channel is None:
+                    continue
+                feature_name = feature_by_key.get(str(raw_channel).strip().casefold())
+                if feature_name is not None:
+                    features.append(feature_name)
+
+            if not features:
+                continue
+
+            entries = list(trial.metadata.get(TRIAL_FEATURE_NAN_MASKS_KEY, []))
+            entries.append(
+                {
+                    "features": sorted(set(features)),
+                    "reason": self.exclusion_reason,
+                }
+            )
+            trial.metadata[TRIAL_FEATURE_NAN_MASKS_KEY] = entries
 
 
 class TrialMetadataInvalidationRule(BaseModel):

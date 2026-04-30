@@ -36,6 +36,7 @@ def test_format_subject_trial_exclusion_summary_reports_reason_and_totals() -> N
     message = _format_subject_trial_exclusion_summary("01", result)
 
     assert message == (
-        "Subject 01: removed 2 trial(s) by vmPFC_spike_0_3s "
-        "(3 excluded total / 4 resolved)."
+        f"Subject 01: removed 2 trial(s) by {VM_PFC_SPIKE_EXCLUSION_REASON} "
+        "(3 excluded total / 4 resolved) | "
+        "NaN-masked: 0 trial(s) | channels dropped: 0."
     )
