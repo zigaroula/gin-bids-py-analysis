@@ -39,7 +39,7 @@ def main() -> None:
     manual_region_channels = load_roi_channels_from_csv()
     group_params = build_group_params(manual_region_channels)
     print_roi_summary(group_params.manual_region_channels)
-    annotators = build_trial_annotators(group_params.manual_region_channels)
+    annotators = build_trial_annotators(manual_region_channels)
 
     ds = BIDSDataset(BIDS_ROOT)
     subject_groups = build_trial_slope_subject_groups(ds)

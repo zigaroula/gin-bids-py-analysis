@@ -84,7 +84,7 @@ TRIAL_SLOPE_GROUP_N_JOBS = 1
 
 # Export settings for export_trial_slope_group_mean.py.
 GROUP_STATS_FILE: Path | None = None
-EXPORT_ROI_NAME: str | Sequence[str] = ["vaINS", "daINS", "vmPFC"]
+EXPORT_ROI_NAME: str | Sequence[str] = ["aIns", "vmPFC"]
 EXPORT_OUTPUT_FORMAT = "png"
 EXPORT_OUTPUT_DPI = 300
 EXPORT_FIGSIZE_INCHES = (10.4, 6.8)
@@ -262,6 +262,11 @@ ROI_CSV_FILES = {
     "vaINS": Path(r"D:\Boulot\csv\aINS_vent_elecs_tbl.csv"),
 }
 
+GROUP_ROI_COMBINATIONS = {
+    "aIns": ["vaINS", "daINS"],
+}
+GROUP_KEEP_COMBINED_SOURCE_ROIS = False
+
 GROUP_PARAM_KWARGS = {
     "p_value_correction_method": "cluster_permutation",
     "significance_alpha": 0.05,
@@ -326,6 +331,8 @@ class TrialSlopeRecipe:
     trial_slope_ieeg_filters: dict[str, Any]
     trial_slope_secondary_filters: list[dict[str, Any]]
     roi_csv_files: dict[str, Path]
+    group_roi_combinations: dict[str, Sequence[str]]
+    group_keep_combined_source_rois: bool
     group_param_kwargs: dict[str, Any]
     use_matlab_zscores: bool
     matlab_zscores_path: Path
@@ -465,6 +472,11 @@ class TrialSlopeRecipe:
             if manual_region_channels is not None
             else load_roi_channels_from_csv(self.roi_csv_files)
         )
+        channels_by_roi = combine_manual_region_channels(
+            channels_by_roi,
+            self.group_roi_combinations,
+            keep_source_rois=self.group_keep_combined_source_rois,
+        )
         return RegressionGroupParams(
             manual_region_channels=channels_by_roi,
             **self.group_param_kwargs,
@@ -577,6 +589,11 @@ class TrialSlopeRecipe:
             f"Delphos spike filter: {self.use_delphos_spike_filter}",
             f"Delphos spike ROI(s): {list(self.delphos_spike_filter_rois)}",
             f"Delphos spike mode: {self.delphos_spike_filter_mode}",
+            f"Group ROI combinations: {self.group_roi_combinations or 'none'}",
+            (
+                "Keep combined source ROI(s): "
+                f"{self.group_keep_combined_source_rois}"
+            ),
             (
                 "Epoch: "
                 f"anchors={list(self.anchor_event_codes)}, "
@@ -612,6 +629,8 @@ RECIPE = TrialSlopeRecipe(
     trial_slope_ieeg_filters=TRIAL_SLOPE_IEEG_FILTERS,
     trial_slope_secondary_filters=TRIAL_SLOPE_SECONDARY_FILTERS,
     roi_csv_files=ROI_CSV_FILES,
+    group_roi_combinations=GROUP_ROI_COMBINATIONS,
+    group_keep_combined_source_rois=GROUP_KEEP_COMBINED_SOURCE_ROIS,
     group_param_kwargs=GROUP_PARAM_KWARGS,
     use_matlab_zscores=USE_MATLAB_ZSCORES,
     matlab_zscores_path=MATLAB_ZSCORES_PATH,
@@ -739,6 +758,74 @@ def load_roi_channels_from_csv(
         )
 
     return manual_region_channels
+
+
+def combine_manual_region_channels(
+    manual_region_channels: dict[str, dict[str, list[str]]],
+    roi_combinations: dict[str, Sequence[str]],
+    *,
+    keep_source_rois: bool = False,
+) -> dict[str, dict[str, list[str]]]:
+    if not roi_combinations:
+        return {
+            roi: {subject: list(channels) for subject, channels in subject_map.items()}
+            for roi, subject_map in manual_region_channels.items()
+        }
+
+    combined: dict[str, dict[str, list[str]]] = {
+        roi: {subject: list(channels) for subject, channels in subject_map.items()}
+        for roi, subject_map in manual_region_channels.items()
+    }
+    source_rois_to_remove: set[str] = set()
+
+    for raw_target_roi, raw_source_rois in roi_combinations.items():
+        target_roi = str(raw_target_roi).strip()
+        if not target_roi:
+            raise ValueError("Combined ROI names cannot be empty.")
+
+        source_rois = [str(roi).strip() for roi in raw_source_rois if str(roi).strip()]
+        if not source_rois:
+            raise ValueError(
+                f"Combined ROI {target_roi!r} requires at least one source ROI."
+            )
+
+        missing_source_rois = [
+            roi for roi in source_rois if roi not in manual_region_channels
+        ]
+        if missing_source_rois:
+            raise ValueError(
+                f"Combined ROI {target_roi!r} references missing source ROI(s): "
+                f"{', '.join(missing_source_rois)}."
+            )
+
+        target_subject_map: dict[str, list[str]] = {}
+        seen_by_subject: dict[str, set[str]] = {}
+        for source_roi in source_rois:
+            source_rois_to_remove.add(source_roi)
+            for subject, channels in manual_region_channels[source_roi].items():
+                subject_key = str(subject).strip()
+                if not subject_key:
+                    continue
+                seen = seen_by_subject.setdefault(subject_key, set())
+                for channel in channels:
+                    cleaned = str(channel).strip()
+                    if not cleaned:
+                        continue
+                    channel_key = cleaned.casefold()
+                    if channel_key in seen:
+                        continue
+                    seen.add(channel_key)
+                    target_subject_map.setdefault(subject_key, []).append(cleaned)
+
+        if target_subject_map:
+            combined[target_roi] = target_subject_map
+
+    if not keep_source_rois:
+        for source_roi in source_rois_to_remove:
+            if source_roi not in roi_combinations:
+                combined.pop(source_roi, None)
+
+    return combined
 
 
 def print_roi_summary(manual_region_channels: dict[str, dict[str, list[str]]]) -> None:

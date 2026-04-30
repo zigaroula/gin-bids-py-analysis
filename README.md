@@ -374,6 +374,8 @@ Core configuration in `RegressionGroupParams`
 - ROI definition mode:
   - `roi_mode="atlas"` with `atlas_name`
   - `roi_mode="manual"` with `manual_region_channels`
+  - `scripts/trial_slope_shared.py` can combine manual ROIs for group analyses
+    with `GROUP_ROI_COMBINATIONS`, for example `{"aIns": ["vaINS", "daINS"]}`
 - Inclusion thresholds:
   - `min_channels_per_roi`
   - `min_subjects_per_roi`

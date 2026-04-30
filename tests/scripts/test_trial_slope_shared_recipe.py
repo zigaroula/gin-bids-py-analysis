@@ -32,6 +32,52 @@ def test_recipe_can_disable_hilbert_notch_filter() -> None:
     assert recipe.build_hilbert_params().notch_filter_freqs == []
 
 
+def test_combine_manual_region_channels_merges_sources_and_deduplicates() -> None:
+    manual_region_channels = {
+        "vaINS": {"01": ["A1", "A2"], "02": ["B1"]},
+        "daINS": {"01": ["A2", "C1"], "03": ["D1"]},
+        "vmPFC": {"01": ["P1"]},
+    }
+
+    combined = shared.combine_manual_region_channels(
+        manual_region_channels,
+        {"aIns": ["vaINS", "daINS"]},
+    )
+
+    assert combined == {
+        "vmPFC": {"01": ["P1"]},
+        "aIns": {
+            "01": ["A1", "A2", "C1"],
+            "02": ["B1"],
+            "03": ["D1"],
+        },
+    }
+
+
+def test_recipe_build_group_params_applies_configured_roi_combinations() -> None:
+    recipe = replace(
+        shared.RECIPE,
+        group_roi_combinations={"aIns": ["vaINS", "daINS"]},
+        group_keep_combined_source_rois=False,
+        group_param_kwargs={
+            **shared.GROUP_PARAM_KWARGS,
+            "p_value_correction_method": "none",
+        },
+    )
+    manual_region_channels = {
+        "vaINS": {"01": ["A1"]},
+        "daINS": {"02": ["B1"]},
+        "vmPFC": {"01": ["P1"]},
+    }
+
+    params = recipe.build_regression_group_params(manual_region_channels)
+
+    assert params.manual_region_channels == {
+        "vmPFC": {"01": ["P1"]},
+        "aIns": {"01": ["A1"], "02": ["B1"]},
+    }
+
+
 def test_recipe_builds_delphos_filter_from_selected_rois() -> None:
     recipe = replace(
         shared.RECIPE,
