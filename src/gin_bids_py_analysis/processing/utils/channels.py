@@ -45,6 +45,12 @@ class BipolarStorage(str, Enum):
     NEXT_MINUS_PREVIOUS = "next_minus_previous"
     """Label as ``A2-A1`` (higher - lower convention.)"""
 
+    PREVIOUS_NEXT = "previous_next"
+    """Label as ``A1A2`` (lower then higher, compact convention)."""
+
+    NEXT_PREVIOUS = "next_previous"
+    """Label as ``A2A1`` (higher then lower, compact convention)."""
+
 
 def normalize_channel_name(name: str) -> str:
     """Normalize channel labels for case-insensitive matching."""
@@ -154,8 +160,12 @@ def build_montage(
                 label = next_name
             elif storage == BipolarStorage.PREVIOUS_MINUS_NEXT:
                 label = f"{prev_name}-{next_name}"
-            else:  # NEXT_MINUS_PREVIOUS
+            elif storage == BipolarStorage.NEXT_MINUS_PREVIOUS:
                 label = f"{next_name}-{prev_name}"
+            elif storage == BipolarStorage.PREVIOUS_NEXT:
+                label = f"{prev_name}{next_name}"
+            else:  # NEXT_PREVIOUS
+                label = f"{next_name}{prev_name}"
 
             out_rows.append(diff)
             out_names.append(label)

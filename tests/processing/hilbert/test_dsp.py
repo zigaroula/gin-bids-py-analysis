@@ -467,6 +467,16 @@ class TestBuildMontageBipolar:
         _, out_names = build_montage(data, names, "bipolar", "next_minus_previous", "next_minus_previous")
         assert out_names[0] == "A2-A1"
 
+    def test_storage_previous_next_label(self, four_channel_data):
+        data, names = four_channel_data
+        _, out_names = build_montage(data, names, "bipolar", "next_minus_previous", "previous_next")
+        assert out_names[0] == "A1A2"
+
+    def test_storage_next_previous_label(self, four_channel_data):
+        data, names = four_channel_data
+        _, out_names = build_montage(data, names, "bipolar", "next_minus_previous", "next_previous")
+        assert out_names[0] == "A2A1"
+
     def test_non_adjacent_contacts_skipped(self):
         # A1 and A3 are not adjacent (gap of 2) → only A1-A2 and A3-A4 if present
         data = np.random.default_rng(0).random((3, 50)).astype(np.float32)

@@ -127,7 +127,8 @@ Main configuration is in `HilbertParams` (`src/gin_bids_py_analysis/processing/h
   - `downsampled_frequency_hz` (`None` keeps original sampling rate).
 - Montage:
   - `montage_mode` (`mono` or `bipolar`)
-  - `bipolar_direction`, `bipolar_storage`
+  - `bipolar_direction`
+  - `bipolar_storage` (`previous`, `next`, `previous_minus_next`, `next_minus_previous`, `previous_next`, `next_previous`)
   - `channels_for_montage` and `channels_to_exclude_for_montage` (list or regex via `re.fullmatch`).
 - Post-processing:
   - `smoothing_windows_ms` (`[0]` means no smoothing)
