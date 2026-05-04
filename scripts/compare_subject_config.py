@@ -30,7 +30,7 @@ from pathlib import Path
 # Edit these two lines to switch subjects
 # ---------------------------------------------------------------------------
 
-SUBJECT: str = "TOU_2022_TISa"
+SUBJECT: str = "GRE_3021_GUIa"
 BV_EVENT_SAMPLE_SHIFT_SAMPLES: int = -1
 COMPARE_A_SPM_EVENT_SAMPLE_SHIFT_SAMPLES: int = 0
 
@@ -98,7 +98,7 @@ BV_EEG_PATH: Path = (
 PYTHON_REGRESSION_PATH: Path = (
     BIDS_ROOT / "derivatives" / "regression"
     / f"sub-{BIDS_SUBJECT}" / "ieeg"
-    / f"sub-{BIDS_SUBJECT}_task-MDCHOICE_desc-correlation_stats.h5"
+    / f"sub-{BIDS_SUBJECT}_task-MDCHOICE_desc-onset_stats.h5"
 )
 
 # Behavior TSV  (used by compare_b2.py and compare_b3_vs_python_regression.py)

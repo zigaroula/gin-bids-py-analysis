@@ -24,7 +24,6 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 import sys
-from typing import Iterable
 
 import h5py
 import numpy as np
@@ -40,19 +39,28 @@ from compare_b3 import _read_h5_char_dataset  # noqa: E402
 from trial_slope_shared import BIDS_ROOT  # noqa: E402
 
 
-MATLAB_B5_PATH = Path(
-    r"C:\GRE\dev\clarissa\seeg\b5_BPF_group_analyses_UPlow\PFCvm\log_data.mat"
-)
-MATLAB_B5_ELECS_CSV = Path(
-    r"C:\GRE\dev\clarissa\seeg\b5_BPF_group_analyses_UPlow\PFCvm\PFCvm_elecs_tbl.csv"
-)
 
-MATLAB_ROI = "PFCvm"
+MATLAB_ROI = "aIns"
 MATLAB_REALIGN = "onset"
 MATLAB_BAND = "f50f150"
 MATLAB_SMOOTHING = "sm250"
+MATLAB_B5_PATH = Path(
+    rf"C:\GRE\dev\clarissa\seeg\b5_BPF_group_analyses_UPlow\{MATLAB_ROI}\log_data.mat"
+)
+MATLAB_B5_ELECS_CSV = Path(
+    rf"C:\GRE\dev\clarissa\seeg\b5_BPF_group_analyses_UPlow\{MATLAB_ROI}\{MATLAB_ROI}_elecs_tbl.csv"
+)
 
-PYTHON_DESC = "correlation"
+PYTHON_DESC = "onset"
+PYTHON_ROI = "aIns"
+PYTHON_GROUP_STATS_PATH = (
+    BIDS_ROOT
+    / "derivatives"
+    / "regression_group"
+    / "sub-group"
+    / "ieeg"
+    / f"sub-group_task-MDCHOICE_desc-{PYTHON_DESC}_stats.h5"
+)
 
 
 @dataclass(frozen=True)
@@ -70,6 +78,25 @@ class B5Data:
     labels: list[str]
     condition_a: np.ndarray
     condition_b: np.ndarray
+
+
+@dataclass(frozen=True)
+class PythonGroupB5Data:
+    path: Path
+    time_s: np.ndarray
+    labels: list[str]
+    condition_a_rows: np.ndarray
+    condition_b_rows: np.ndarray
+    condition_a_mean: np.ndarray
+    condition_b_mean: np.ndarray
+    condition_a_sem: np.ndarray
+    condition_b_sem: np.ndarray
+    condition_a_vs_zero_t: np.ndarray
+    condition_a_vs_zero_p: np.ndarray
+    condition_b_vs_zero_t: np.ndarray
+    condition_b_vs_zero_p: np.ndarray
+    contrast_t: np.ndarray
+    contrast_p: np.ndarray
 
 
 def _subject_to_bids(subject: str) -> str:
@@ -102,12 +129,33 @@ def _format_label(subject: str, channel: str) -> str:
     return f"{_subject_to_bids(subject)}/{_first_contact(channel)}"
 
 
+def _norm_label(label: str) -> str:
+    subject, channel = str(label).split("/", 1)
+    return f"{_subject_to_bids(subject).casefold()}/{_norm_channel(channel)}"
+
+
 def _load_b5_labels(csv_path: Path) -> list[str]:
     with csv_path.open("r", encoding="utf-8-sig", newline="") as fh:
         reader = csv.DictReader(fh)
         if not reader.fieldnames or "subname" not in reader.fieldnames or "channel" not in reader.fieldnames:
             raise ValueError(f"{csv_path}: expected columns 'subname' and 'channel'.")
         return [_format_label(row["subname"], row["channel"]) for row in reader]
+
+
+def _h5_child_case_insensitive(group: h5py.Group, name: str) -> h5py.Group:
+    if name in group:
+        child = group[name]
+    else:
+        matches = [key for key in group.keys() if key.casefold() == name.casefold()]
+        if not matches:
+            available = ", ".join(sorted(group.keys()))
+            raise KeyError(
+                f"{group.name}: child {name!r} not found. Available children: {available}"
+            )
+        child = group[matches[0]]
+    if not isinstance(child, h5py.Group):
+        raise KeyError(f"{child.name}: expected an HDF5 group.")
+    return child
 
 
 def _load_b5_data(
@@ -121,7 +169,9 @@ def _load_b5_data(
 ) -> B5Data:
     labels = _load_b5_labels(labels_csv)
     with h5py.File(path, "r") as fh:
-        base = f"parcel_log/{roi}"
+        parcel_log = _h5_child_case_insensitive(fh, "parcel_log")
+        roi_group = _h5_child_case_insensitive(parcel_log, roi)
+        base = roi_group.name
         time_s = np.asarray(
             fh[f"{base}/P_Rating/{realign}/time/timelist"][()],
             dtype=np.float64,
@@ -156,85 +206,138 @@ def _load_b5_data(
     )
 
 
-def _python_regression_path(subject: str, *, bids_root: Path, desc: str) -> Path:
-    bids_subject = _subject_to_bids(subject)
-    return (
-        bids_root
-        / "derivatives"
-        / "regression"
-        / f"sub-{bids_subject}"
-        / "ieeg"
-        / f"sub-{bids_subject}_task-MDCHOICE_desc-{desc}_stats.h5"
-    )
-
-
-def _load_python_rows(
-    labels: Iterable[str],
-    target_time_s: np.ndarray,
-    *,
-    bids_root: Path,
-    desc: str,
-) -> tuple[np.ndarray, np.ndarray, list[str], list[str], float]:
-    labels_in = list(labels)
-    rows_a: list[np.ndarray] = []
-    rows_b: list[np.ndarray] = []
-    kept_labels: list[str] = []
-    missing_labels: list[str] = []
-    max_time_error = 0.0
-    cache: dict[str, tuple[np.ndarray, list[str], np.ndarray, np.ndarray]] = {}
-
-    for label in labels_in:
-        subject, channel = label.split("/", 1)
-        if subject not in cache:
-            path = _python_regression_path(subject, bids_root=bids_root, desc=desc)
-            if not path.exists():
-                missing_labels.append(label)
-                continue
-            with h5py.File(path, "r") as fh:
-                channels = decode_str_array(np.asarray(fh["axes/channel"][:], dtype=object))
-                time_s = np.asarray(fh["axes/time_s"][:], dtype=np.float64)
-                slope_a = np.asarray(fh["regression/condition_a/slope"][:], dtype=np.float64)
-                slope_b = np.asarray(fh["regression/condition_b/slope"][:], dtype=np.float64)
-            cache[subject] = (time_s, channels, slope_a, slope_b)
-
-        time_s, channels, slope_a, slope_b = cache[subject]
-        channel_index = {
-            _norm_channel(name): idx for idx, name in enumerate(channels)
-        }.get(_norm_channel(channel))
-        if channel_index is None:
-            missing_labels.append(label)
+def _find_roi_contribution_group(fh: h5py.File, roi: str) -> h5py.Group:
+    if "source_metric_contributions" not in fh:
+        raise KeyError("Group HDF5 does not contain source_metric_contributions.")
+    root = fh["source_metric_contributions"]
+    for key, child in root.items():
+        if not key.isdigit() or not isinstance(child, h5py.Group):
             continue
+        attr_roi = str(child.attrs.get("roi", ""))
+        if attr_roi.casefold() == roi.casefold():
+            return child
 
-        time_index = np.array(
-            [int(np.argmin(np.abs(time_s - t))) for t in target_time_s],
-            dtype=int,
-        )
-        if target_time_s.size:
-            max_time_error = max(
-                max_time_error,
-                float(np.max(np.abs(time_s[time_index] - target_time_s))),
-            )
-        rows_a.append(slope_a[channel_index, time_index])
-        rows_b.append(slope_b[channel_index, time_index])
-        kept_labels.append(label)
+    if "region_names" in root:
+        region_names = decode_str_array(np.asarray(root["region_names"][:], dtype=object))
+        for idx, region_name in enumerate(region_names):
+            if str(region_name).casefold() == roi.casefold() and str(idx) in root:
+                child = root[str(idx)]
+                if isinstance(child, h5py.Group):
+                    return child
 
-    if not rows_a:
-        n_times = len(target_time_s)
-        return (
-            np.empty((0, n_times), dtype=np.float64),
-            np.empty((0, n_times), dtype=np.float64),
-            kept_labels,
-            missing_labels,
-            max_time_error,
-        )
+    available = []
+    for key, child in root.items():
+        if key.isdigit() and isinstance(child, h5py.Group):
+            available.append(str(child.attrs.get("roi", key)))
+    raise KeyError(f"ROI {roi!r} not found in group HDF5. Available: {available}")
 
-    return (
-        np.stack(rows_a, axis=0),
-        np.stack(rows_b, axis=0),
-        kept_labels,
-        missing_labels,
-        max_time_error,
+
+def _find_roi_index(region_names: list[str], roi: str) -> int:
+    for idx, region_name in enumerate(region_names):
+        if str(region_name).casefold() == roi.casefold():
+            return idx
+    raise KeyError(f"ROI {roi!r} not found in group HDF5 axes/region: {region_names}")
+
+
+def _align_vector_to_time(
+    values: np.ndarray,
+    source_time_s: np.ndarray,
+    target_time_s: np.ndarray,
+) -> tuple[np.ndarray, float]:
+    source_time = np.asarray(source_time_s, dtype=np.float64).ravel()
+    target_time = np.asarray(target_time_s, dtype=np.float64).ravel()
+    time_index = np.array(
+        [int(np.argmin(np.abs(source_time - t))) for t in target_time],
+        dtype=int,
     )
+    max_time_error = (
+        float(np.max(np.abs(source_time[time_index] - target_time)))
+        if target_time.size
+        else 0.0
+    )
+    return np.asarray(values, dtype=np.float64).ravel()[time_index], max_time_error
+
+
+def _load_python_group_b5_data(
+    path: Path,
+    *,
+    roi: str,
+    target_time_s: np.ndarray,
+) -> tuple[PythonGroupB5Data, float]:
+    if not path.exists():
+        raise FileNotFoundError(f"Python group HDF5 not found: {path}")
+
+    with h5py.File(path, "r") as fh:
+        region_names = decode_str_array(np.asarray(fh["axes/region"][:], dtype=object))
+        roi_idx = _find_roi_index(region_names, roi)
+        time_s = np.asarray(fh["axes/time_s"][:], dtype=np.float64)
+        contribution_group = _find_roi_contribution_group(fh, roi)
+
+        labels = decode_str_array(
+            np.asarray(contribution_group["labels"][:], dtype=object)
+        )
+        rows_a = np.asarray(contribution_group["condition_a"][:], dtype=np.float64)
+        rows_b = np.asarray(contribution_group["condition_b"][:], dtype=np.float64)
+
+        aligned_rows_a, max_time_error = _align_matrix_to_time(rows_a, time_s, target_time_s)
+        aligned_rows_b, err = _align_matrix_to_time(rows_b, time_s, target_time_s)
+        max_time_error = max(max_time_error, err)
+
+        def read_aligned(path_key: str) -> np.ndarray:
+            nonlocal max_time_error
+            values, err_inner = _align_vector_to_time(
+                np.asarray(fh[path_key][roi_idx], dtype=np.float64),
+                time_s,
+                target_time_s,
+            )
+            max_time_error = max(max_time_error, err_inner)
+            return values
+
+        data = PythonGroupB5Data(
+            path=path,
+            time_s=np.asarray(target_time_s, dtype=np.float64),
+            labels=list(labels),
+            condition_a_rows=aligned_rows_a,
+            condition_b_rows=aligned_rows_b,
+            condition_a_mean=read_aligned("source_metric/condition_a_mean"),
+            condition_b_mean=read_aligned("source_metric/condition_b_mean"),
+            condition_a_sem=read_aligned("source_metric/condition_a_sem"),
+            condition_b_sem=read_aligned("source_metric/condition_b_sem"),
+            condition_a_vs_zero_t=read_aligned(
+                "source_metric/condition_a_vs_zero/t_values"
+            ),
+            condition_a_vs_zero_p=read_aligned(
+                "source_metric/condition_a_vs_zero/p_values_uncorrected"
+            ),
+            condition_b_vs_zero_t=read_aligned(
+                "source_metric/condition_b_vs_zero/t_values"
+            ),
+            condition_b_vs_zero_p=read_aligned(
+                "source_metric/condition_b_vs_zero/p_values_uncorrected"
+            ),
+            contrast_t=read_aligned("source_metric/t_values"),
+            contrast_p=read_aligned("source_metric/p_values_uncorrected"),
+        )
+    return data, max_time_error
+
+
+def _align_matrix_to_time(
+    values: np.ndarray,
+    source_time_s: np.ndarray,
+    target_time_s: np.ndarray,
+) -> tuple[np.ndarray, float]:
+    source_time = np.asarray(source_time_s, dtype=np.float64).ravel()
+    target_time = np.asarray(target_time_s, dtype=np.float64).ravel()
+    time_index = np.array(
+        [int(np.argmin(np.abs(source_time - t))) for t in target_time],
+        dtype=int,
+    )
+    max_time_error = (
+        float(np.max(np.abs(source_time[time_index] - target_time)))
+        if target_time.size
+        else 0.0
+    )
+    return np.asarray(values, dtype=np.float64)[:, time_index], max_time_error
 
 
 def _finite_row_mask(*arrays: np.ndarray) -> np.ndarray:
@@ -307,6 +410,74 @@ def _print_metrics(label: str, metrics: ComparisonMetrics) -> None:
     )
 
 
+def _print_label_list(title: str, labels: list[str]) -> None:
+    print(f"{title}: {len(labels)}")
+    for label in labels:
+        print(f"  {label}")
+
+
+def _write_label_csv(path: Path, labels: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["subname", "channel"])
+        for label in labels:
+            subject, channel = str(label).split("/", 1)
+            writer.writerow([subject, channel])
+
+
+def _print_label_differences(
+    *,
+    matlab_all_labels: list[str],
+    matlab_finite_labels: list[str],
+    python_labels: list[str],
+) -> None:
+    matlab_all_by_norm = {_norm_label(label): label for label in matlab_all_labels}
+    matlab_finite_by_norm = {_norm_label(label): label for label in matlab_finite_labels}
+    python_by_norm = {_norm_label(label): label for label in python_labels}
+
+    matlab_finite_keys = set(matlab_finite_by_norm)
+    matlab_all_keys = set(matlab_all_by_norm)
+    python_keys = set(python_by_norm)
+
+    missing_in_python = [
+        matlab_finite_by_norm[key]
+        for key in sorted(matlab_finite_keys - python_keys)
+    ]
+    python_extra_keys = sorted(python_keys - matlab_finite_keys)
+    python_extra_from_matlab_nonfinite = [
+        python_by_norm[key]
+        for key in python_extra_keys
+        if key in matlab_all_keys
+    ]
+    python_extra_not_in_matlab_csv = [
+        python_by_norm[key]
+        for key in python_extra_keys
+        if key not in matlab_all_keys
+    ]
+    matlab_nonfinite_labels = [
+        matlab_all_by_norm[key]
+        for key in sorted(matlab_all_keys - matlab_finite_keys)
+    ]
+
+    print("\nLabel-set diagnostic:")
+    print(f"  MATLAB CSV rows       : {len(matlab_all_labels)}")
+    print(f"  MATLAB finite b5 rows : {len(matlab_finite_labels)}")
+    print(f"  Python group ROI rows : {len(python_labels)}")
+    print(f"  Common finite rows    : {len(matlab_finite_keys & python_keys)}")
+
+    _print_label_list("  MATLAB finite rows missing from Python group", missing_in_python)
+    _print_label_list(
+        "  Python rows also present in MATLAB CSV but non-finite/filtered in b5",
+        python_extra_from_matlab_nonfinite,
+    )
+    _print_label_list(
+        "  Python rows absent from MATLAB b5 CSV",
+        python_extra_not_in_matlab_csv,
+    )
+    _print_label_list("  All MATLAB CSV rows non-finite/filtered in b5", matlab_nonfinite_labels)
+
+
 def _print_removed_channel_diagnostic() -> None:
     """Print why the known REN channels are absent from MATLAB b5 PFCvm."""
     b3_path = (
@@ -361,8 +532,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--matlab-b5", type=Path, default=MATLAB_B5_PATH)
     parser.add_argument("--matlab-elecs-csv", type=Path, default=MATLAB_B5_ELECS_CSV)
-    parser.add_argument("--bids-root", type=Path, default=BIDS_ROOT)
-    parser.add_argument("--desc", default=PYTHON_DESC)
+    parser.add_argument("--python-group-h5", type=Path, default=PYTHON_GROUP_STATS_PATH)
+    parser.add_argument("--export-matlab-finite-channel-csv", type=Path)
     parser.add_argument("--include-all-matlab-rows", action="store_true")
     parser.add_argument("--diagnose-ren-roi", action="store_true")
     args = parser.parse_args()
@@ -376,6 +547,17 @@ def main() -> int:
         smoothing=MATLAB_SMOOTHING,
     )
     finite_matlab_rows = _finite_row_mask(b5.condition_a, b5.condition_b)
+    finite_matlab_labels = [
+        label for label, keep in zip(b5.labels, finite_matlab_rows) if bool(keep)
+    ]
+    if args.export_matlab_finite_channel_csv is not None:
+        _write_label_csv(args.export_matlab_finite_channel_csv, finite_matlab_labels)
+        print(
+            "Wrote MATLAB finite channel CSV: "
+            f"{args.export_matlab_finite_channel_csv} "
+            f"({len(finite_matlab_labels)} rows)"
+        )
+
     row_mask = (
         np.ones(len(b5.labels), dtype=bool)
         if args.include_all_matlab_rows
@@ -383,30 +565,49 @@ def main() -> int:
     )
     selected_labels = [label for label, keep in zip(b5.labels, row_mask) if bool(keep)]
 
-    py_a, py_b, kept_labels, missing_labels, max_time_error = _load_python_rows(
-        selected_labels,
-        b5.time_s,
-        bids_root=args.bids_root,
-        desc=args.desc,
+    py_group, max_time_error = _load_python_group_b5_data(
+        args.python_group_h5,
+        roi=PYTHON_ROI,
+        target_time_s=b5.time_s,
     )
-    kept_lookup = {label: idx for idx, label in enumerate(kept_labels)}
-    keep_both = [idx for idx, label in enumerate(selected_labels) if label in kept_lookup]
-    py_order = [kept_lookup[label] for label in selected_labels if label in kept_lookup]
+    py_label_lookup = {
+        _norm_label(label): idx for idx, label in enumerate(py_group.labels)
+    }
+    keep_both = [
+        idx
+        for idx, label in enumerate(selected_labels)
+        if _norm_label(label) in py_label_lookup
+    ]
+    py_order = [
+        py_label_lookup[_norm_label(label)]
+        for label in selected_labels
+        if _norm_label(label) in py_label_lookup
+    ]
+    missing_labels = [
+        label for label in selected_labels if _norm_label(label) not in py_label_lookup
+    ]
 
     mat_a = b5.condition_a[row_mask][keep_both]
     mat_b = b5.condition_b[row_mask][keep_both]
-    py_a = py_a[py_order]
-    py_b = py_b[py_order]
+    py_a = py_group.condition_a_rows[py_order]
+    py_b = py_group.condition_b_rows[py_order]
 
     print(f"MATLAB b5 file : {args.matlab_b5}")
+    print(f"Python group H5: {py_group.path}")
     print(f"MATLAB rows    : {len(b5.labels)} total, {int(finite_matlab_rows.sum())} finite")
     print(f"Compared rows  : {mat_a.shape[0]} ({len(missing_labels)} Python-missing)")
+    print(f"Python ROI rows: {len(py_group.labels)}")
     print(f"Time axis      : {b5.time_s[0]:.3f} -> {b5.time_s[-1]:.3f}s ({len(b5.time_s)} samples)")
     print(f"Max time error : {max_time_error:.9g}s")
     if missing_labels:
         print("Missing Python labels:")
         for label in missing_labels:
             print(f"  {label}")
+    _print_label_differences(
+        matlab_all_labels=b5.labels,
+        matlab_finite_labels=finite_matlab_labels,
+        python_labels=py_group.labels,
+    )
 
     print("\nMatrix comparisons:")
     _print_metrics("P rows", _metrics(mat_a, py_a))
@@ -414,12 +615,12 @@ def main() -> int:
 
     mat_mean_a = np.nanmean(mat_a, axis=0)
     mat_mean_b = np.nanmean(mat_b, axis=0)
-    py_mean_a = np.nanmean(py_a, axis=0)
-    py_mean_b = np.nanmean(py_b, axis=0)
+    py_mean_a = py_group.condition_a_mean
+    py_mean_b = py_group.condition_b_mean
     mat_sem_a = _nansem(mat_a, axis=0)
     mat_sem_b = _nansem(mat_b, axis=0)
-    py_sem_a = _nansem(py_a, axis=0)
-    py_sem_b = _nansem(py_b, axis=0)
+    py_sem_a = py_group.condition_a_sem
+    py_sem_b = py_group.condition_b_sem
 
     print("\nMean/SEM comparisons:")
     _print_metrics("P mean", _metrics(mat_mean_a, py_mean_a))
@@ -429,10 +630,10 @@ def main() -> int:
 
     mat_t_a, mat_p_a = _one_sample_t(mat_a)
     mat_t_b, mat_p_b = _one_sample_t(mat_b)
-    py_t_a, py_p_a = _one_sample_t(py_a)
-    py_t_b, py_p_b = _one_sample_t(py_b)
+    py_t_a, py_p_a = py_group.condition_a_vs_zero_t, py_group.condition_a_vs_zero_p
+    py_t_b, py_p_b = py_group.condition_b_vs_zero_t, py_group.condition_b_vs_zero_p
     mat_t_contrast, mat_p_contrast = _paired_t(mat_a, mat_b)
-    py_t_contrast, py_p_contrast = _paired_t(py_a, py_b)
+    py_t_contrast, py_p_contrast = py_group.contrast_t, py_group.contrast_p
 
     print("\nT-test comparisons:")
     _print_metrics("P vs zero t", _metrics(mat_t_a, py_t_a))

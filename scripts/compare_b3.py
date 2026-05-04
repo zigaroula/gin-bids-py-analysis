@@ -87,6 +87,7 @@ INCLUDE_REPLAY_MATLAB_B2: bool = False
 
 # Direct comparison: saved Python HDF5 slopes vs MATLAB b3 slopes.
 INCLUDE_HDF5_VS_MATLAB: bool = True
+FLIP_UNPLEASANT_MATLAB_IN_HDF5_VS_MATLAB: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -1092,37 +1093,54 @@ def _default_matlab_path(regression_name: str) -> Path:
 
 
 def main() -> None:
-    print(f"Loading Python regression file: {PYTHON_REGRESSION_PATH}")
-    if not PYTHON_REGRESSION_PATH.exists():
-        sys.exit(f"ERROR: Python regression file not found: {PYTHON_REGRESSION_PATH}")
-    py_result = load_regression_result(PYTHON_REGRESSION_PATH)
-    print(
-        f"  channels={len(py_result.channel_names)}, times={len(py_result.time_axis_s)}, "
-        f"conditions={py_result.condition_a}/{py_result.condition_b}, predictor={py_result.predictor}"
-    )
+    if not (
+        INCLUDE_REPLAY_PYTHON_EPOCHS
+        or INCLUDE_REPLAY_MATLAB_B2
+        or INCLUDE_HDF5_VS_MATLAB
+    ):
+        sys.exit("ERROR: all comparison panels are disabled by INCLUDE_* flags.")
+
+    py_result: object | None = None
+    if INCLUDE_HDF5_VS_MATLAB or INCLUDE_REPLAY_PYTHON_EPOCHS:
+        print(f"Loading Python regression file: {PYTHON_REGRESSION_PATH}")
+        if not PYTHON_REGRESSION_PATH.exists():
+            sys.exit(f"ERROR: Python regression file not found: {PYTHON_REGRESSION_PATH}")
+        py_result = load_regression_result(PYTHON_REGRESSION_PATH)
+        print(
+            f"  channels={len(py_result.channel_names)}, times={len(py_result.time_axis_s)}, "
+            f"conditions={py_result.condition_a}/{py_result.condition_b}, predictor={py_result.predictor}"
+        )
+    else:
+        print("Skipping Python regression HDF5 load because dependent panels are disabled.")
 
     fresh_py_result: object | None = None
-    target_subject = _target_subject_from_regression_path(PYTHON_REGRESSION_PATH)
-    try:
-        print(
-            "\nRecomputing Python regression in memory from source Hilbert file "
-            f"for subject {target_subject}..."
-        )
-        fresh_py_result = compute_python_regression_from_source(
-            target_subject=target_subject,
-        )
-        print_saved_vs_fresh_regression_diff(py_result, fresh_py_result)
-    except Exception as exc:
-        print(
-            "\nWARNING: fresh in-memory Python regression replay could not be computed:\n"
-            f"  {type(exc).__name__}: {exc}"
-        )
+    if INCLUDE_REPLAY_PYTHON_EPOCHS:
+        target_subject = _target_subject_from_regression_path(PYTHON_REGRESSION_PATH)
+        try:
+            print(
+                "\nRecomputing Python regression in memory from source Hilbert file "
+                f"for subject {target_subject}..."
+            )
+            fresh_py_result = compute_python_regression_from_source(
+                target_subject=target_subject,
+            )
+            if py_result is not None:
+                print_saved_vs_fresh_regression_diff(py_result, fresh_py_result)
+        except Exception as exc:
+            print(
+                "\nWARNING: fresh in-memory Python regression replay could not be computed:\n"
+                f"  {type(exc).__name__}: {exc}"
+            )
+    else:
+        print("\nSkipping Python epoch replay because INCLUDE_REPLAY_PYTHON_EPOCHS=False.")
 
     b2_data: np.ndarray | None = None
     b2_channels: list[str] = []
     b2_time = np.array([], dtype=np.float64)
     pleasantness = np.array([], dtype=int)
-    if MATLAB_B2_PATH.exists() and BEHAVIOR_TSV_PATH.exists():
+    if not INCLUDE_REPLAY_MATLAB_B2:
+        print("Skipping MATLAB b2 replay because INCLUDE_REPLAY_MATLAB_B2=False.")
+    elif MATLAB_B2_PATH.exists() and BEHAVIOR_TSV_PATH.exists():
         print(f"\nLoading MATLAB b2 file: {MATLAB_B2_PATH}")
         b2_data, b2_channels, b2_time = load_matlab_b2_data(MATLAB_B2_PATH)
         pleasantness = _load_behavior_pleasantness(BEHAVIOR_TSV_PATH)
@@ -1158,92 +1176,109 @@ def main() -> None:
             smoothing_name=MATLAB_SMOOTHING_NAME,
             term_index=MATLAB_TERM_INDEX,
         )
-        matlab_regressor = load_matlab_b3_regressor(
-            matlab_path,
-            regression_name=matlab_regression_name,
-        )
-        python_condition_name, python_values = _python_condition_values(py_result, python_condition_field)
-        _, python_predictor_raw, python_predictor_transformed = _python_condition_predictors(
-            py_result,
-            python_condition_field,
-        )
         print(
-            f"  MATLAB dots shape={matlab_values.shape}, MATLAB channels={len(matlab_channels)}, "
-            f"Python slope shape={python_values.shape}"
-        )
-        print(f"  MATLAB regressor: {_describe_vector(matlab_regressor)}")
-        print(f"  Python predictor raw: {_describe_vector(python_predictor_raw)}")
-        print(f"  Python predictor transformed: {_describe_vector(python_predictor_transformed)}")
-        if matlab_regressor.size != python_predictor_raw.size:
-            print(
-                "  WARNING: predictor trial-count mismatch "
-                f"(MATLAB={matlab_regressor.size}, Python={python_predictor_raw.size})."
-            )
-        if python_condition_field == "condition_b":
-            print(
-                "  NOTE: Python uses the transformed unpleasant predictor for this output. "
-                "If MATLAB keeps the raw regressor sign, expect a sign inversion here."
-            )
-        channel_mapping = match_channels(matlab_channels, list(py_result.channel_names))
-
-        python_values_aligned, _py_idx, max_time_err = _align_python_to_matlab_time(
-            matlab_time,
-            np.asarray(py_result.time_axis_s, dtype=np.float64),
-            python_values,
-        )
-        matched_mat_indices, matched_py_indices, mat_stack, py_stack = _matlab_driven_channel_stacks(
-            matlab_values=matlab_values,
-            python_values=python_values_aligned,
-            channel_mapping=channel_mapping,
+            f"  MATLAB dots shape={matlab_values.shape}, MATLAB channels={len(matlab_channels)}"
         )
 
-        bundle = ComparisonBundle(
-            label=(
-                f"{matlab_regression_name} vs {python_condition_name}"
-                f"{' (pipeline output)' if python_condition_field == 'condition_b' else ''}"
-            ),
-            matlab_regression_name=matlab_regression_name,
-            python_condition_name=python_condition_name,
-            matlab_time=np.asarray(matlab_time, dtype=np.float64),
-            python_time_aligned=np.asarray(matlab_time, dtype=np.float64),
-            matched_mat_indices=matched_mat_indices,
-            matched_py_indices=matched_py_indices,
-            matlab_channels=list(matlab_channels),
-            python_channels=list(py_result.channel_names),
-            matlab_values=mat_stack,
-            python_values=py_stack,
-            time_alignment_error_s=max_time_err,
-        )
-        n_matlab_before_filter = bundle.matlab_values.shape[0]
-        bundle = filter_bundle_to_finite_matlab(bundle)
-        print(
-            "  MATLAB non-NaN channel filter: "
-            f"{bundle.matlab_values.shape[0]}/{n_matlab_before_filter} kept "
-            f"(Python HDF5 match for {len(channel_mapping)})"
-        )
-        print_bundle_summary(bundle)
-        if python_condition_field == "condition_b":
-            neg_bundle = ComparisonBundle(
-                label=f"{matlab_regression_name} vs NEG_{python_condition_name}",
+        if INCLUDE_HDF5_VS_MATLAB:
+            if py_result is None:
+                raise RuntimeError("Internal error: py_result is required for HDF5 comparison.")
+            matlab_regressor = load_matlab_b3_regressor(
+                matlab_path,
+                regression_name=matlab_regression_name,
+            )
+            python_condition_name, python_values = _python_condition_values(
+                py_result,
+                python_condition_field,
+            )
+            _, python_predictor_raw, python_predictor_transformed = _python_condition_predictors(
+                py_result,
+                python_condition_field,
+            )
+            print(f"  Python slope shape={python_values.shape}")
+            print(f"  MATLAB regressor: {_describe_vector(matlab_regressor)}")
+            print(f"  Python predictor raw: {_describe_vector(python_predictor_raw)}")
+            print(f"  Python predictor transformed: {_describe_vector(python_predictor_transformed)}")
+            if matlab_regressor.size != python_predictor_raw.size:
+                print(
+                    "  WARNING: predictor trial-count mismatch "
+                    f"(MATLAB={matlab_regressor.size}, Python={python_predictor_raw.size})."
+                )
+            if python_condition_field == "condition_b":
+                print(
+                    "  NOTE: Python uses the transformed unpleasant predictor for this output. "
+                    "If MATLAB keeps the raw regressor sign, expect a sign inversion here."
+                )
+            channel_mapping = match_channels(matlab_channels, list(py_result.channel_names))
+
+            python_values_aligned, _py_idx, max_time_err = _align_python_to_matlab_time(
+                matlab_time,
+                np.asarray(py_result.time_axis_s, dtype=np.float64),
+                python_values,
+            )
+            matched_mat_indices, matched_py_indices, mat_stack, py_stack = (
+                _matlab_driven_channel_stacks(
+                    matlab_values=matlab_values,
+                    python_values=python_values_aligned,
+                    channel_mapping=channel_mapping,
+                )
+            )
+            flip_matlab_trace = (
+                FLIP_UNPLEASANT_MATLAB_IN_HDF5_VS_MATLAB
+                and python_condition_field == "condition_b"
+            )
+
+            bundle = ComparisonBundle(
+                label=(
+                    f"{matlab_regression_name}"
+                    f"{' (MATLAB flipped)' if flip_matlab_trace else ''}"
+                    f" vs {python_condition_name}"
+                    f"{' (pipeline output)' if python_condition_field == 'condition_b' else ''}"
+                ),
                 matlab_regression_name=matlab_regression_name,
-                python_condition_name=f"NEG_{python_condition_name}",
-                matlab_time=bundle.matlab_time,
-                python_time_aligned=bundle.python_time_aligned,
-                matched_mat_indices=bundle.matched_mat_indices,
-                matched_py_indices=bundle.matched_py_indices,
-                matlab_channels=bundle.matlab_channels,
-                python_channels=bundle.python_channels,
-                matlab_values=bundle.matlab_values,
-                python_values=-bundle.python_values,
+                python_condition_name=python_condition_name,
+                matlab_time=np.asarray(matlab_time, dtype=np.float64),
+                python_time_aligned=np.asarray(matlab_time, dtype=np.float64),
+                matched_mat_indices=matched_mat_indices,
+                matched_py_indices=matched_py_indices,
+                matlab_channels=list(matlab_channels),
+                python_channels=list(py_result.channel_names),
+                matlab_values=-mat_stack if flip_matlab_trace else mat_stack,
+                python_values=py_stack,
                 time_alignment_error_s=max_time_err,
             )
-            neg_summary = _bundle_metric_summary(neg_bundle)
+            n_matlab_before_filter = bundle.matlab_values.shape[0]
+            bundle = filter_bundle_to_finite_matlab(bundle)
             print(
-                "\n  Oracle check with sign-flipped Python slope:"
-                f" median |slope-1|={neg_summary['median_abs_slope_dev']:.4f},"
-                f" median corr={neg_summary['median_corr']:.4f},"
-                f" mean mean|d|={neg_summary['mean_mean_abs']:.5f}"
+                "  MATLAB non-NaN channel filter: "
+                f"{bundle.matlab_values.shape[0]}/{n_matlab_before_filter} kept "
+                f"(Python HDF5 match for {len(channel_mapping)})"
             )
+            print_bundle_summary(bundle)
+            if python_condition_field == "condition_b":
+                neg_bundle = ComparisonBundle(
+                    label=f"{matlab_regression_name} vs NEG_{python_condition_name}",
+                    matlab_regression_name=matlab_regression_name,
+                    python_condition_name=f"NEG_{python_condition_name}",
+                    matlab_time=bundle.matlab_time,
+                    python_time_aligned=bundle.python_time_aligned,
+                    matched_mat_indices=bundle.matched_mat_indices,
+                    matched_py_indices=bundle.matched_py_indices,
+                    matlab_channels=bundle.matlab_channels,
+                    python_channels=bundle.python_channels,
+                    matlab_values=bundle.matlab_values,
+                    python_values=-bundle.python_values,
+                    time_alignment_error_s=max_time_err,
+                )
+                neg_summary = _bundle_metric_summary(neg_bundle)
+                print(
+                    "\n  Oracle check with sign-flipped Python slope:"
+                    f" median |slope-1|={neg_summary['median_abs_slope_dev']:.4f},"
+                    f" median corr={neg_summary['median_corr']:.4f},"
+                    f" mean mean|d|={neg_summary['mean_mean_abs']:.5f}"
+                )
+
+            bundles.append(bundle)
 
         if fresh_py_result is not None:
             predictor_mode = "raw" if python_condition_field == "condition_b" else "effective"
@@ -1264,10 +1299,14 @@ def main() -> None:
                     "comparable to MATLAB b3. The saved Python slope output below still "
                     "uses the pipeline's transformed predictor (sign-flipped)."
                 )
-            if INCLUDE_REPLAY_PYTHON_EPOCHS:
-                bundles.append(source_replay_bundle)
+            bundles.append(source_replay_bundle)
 
         if b2_data is not None and b2_time.size and pleasantness.size:
+            matlab_regressor = load_matlab_b3_regressor(
+                matlab_path,
+                regression_name=matlab_regression_name,
+            )
+            print(f"  MATLAB regressor: {_describe_vector(matlab_regressor)}")
             replay_bundle = replay_regression_from_matlab_b2(
                 b2_data=b2_data,
                 b2_time=b2_time,
@@ -1288,10 +1327,7 @@ def main() -> None:
                 f" median corr={replay_summary['median_corr']:.6g},"
                 f" mean mean|d|={replay_summary['mean_mean_abs']:.6g}"
             )
-            if INCLUDE_REPLAY_MATLAB_B2:
-                bundles.append(replay_bundle)
-        if INCLUDE_HDF5_VS_MATLAB:
-            bundles.append(bundle)
+            bundles.append(replay_bundle)
 
     if not bundles:
         sys.exit(

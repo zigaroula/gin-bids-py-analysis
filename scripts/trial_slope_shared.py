@@ -48,27 +48,34 @@ BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
 # Set to a BIDS subject id to restrict the full pipeline, or None for all subjects.
 SUBJECT: str | None = None
 
+# Switch the pipeline package here: "regular", "delphos", or "50hz".
+# Add new entries to TRIAL_SLOPE_PRESET_OVERRIDES to create more presets.
+TRIAL_SLOPE_PRESET: str = "regular"
+
 # One description shared by subject-level regression, group stats, and exports.
-TRIAL_SLOPE_OUTPUT_DESCRIPTION = "onset50hz"
+TRIAL_SLOPE_OUTPUT_DESCRIPTION = "onset"
 
 # Hilbert derivative used as input for trial-slope stats.
-HILBERT_OUTPUT_DESCRIPTION = "bga50hz"
+HILBERT_OUTPUT_DESCRIPTION = "bga"
 HILBERT_SMOOTHING_WINDOW_MS_FOR_STATS = 250
 HILBERT_OUTPUT_FORMAT: Literal["hdf5", "brainvision"] = "brainvision"
 
 # Pipeline toggles that usually need to stay synchronized across scripts.
 ENABLE_HILBERT_NOTCH_FILTER = True
-HILBERT_NOTCH_FILTER_FREQS = [50.0]  # [50.0]
+HILBERT_NOTCH_FILTER_FREQS = []  # [50.0]
 USE_DELPHOS_SPIKE_FILTER = False
-DELPHOS_SPIKE_FILTER_ROIS = ["vmPFC", "daINS", "vaINS"]
+DELPHOS_SPIKE_FILTER_ROIS = ["vmPFC", "aIns", "daINS", "vaINS"]
 DELPHOS_SPIKE_FILTER_MODE: Literal["trial", "channel"] = "channel"
 
 # Subject-level trial-slope epoching.
+# MATLAB b2 computes trial/channel cleaning masks on the full b1 onset window
+# before b3 reads the 0..3.5 s regression interval.  Keep this wide window here
+# so the trials/canals sent to regression match the original MATLAB pipeline.
 ANCHOR_EVENT_CODES = ["11", "12"]
 EXPERIMENT_START_EVENT_CODE = "5"
 EXPERIMENT_END_EVENT_CODE: str | None = None
-EPOCH_TMIN_S = -0.5
-EPOCH_TMAX_S = 5.0
+EPOCH_TMIN_S = -1.0
+EPOCH_TMAX_S = 6.0
 
 # Optional post-Hilbert notch before epoch extraction. Leave disabled when the
 # notch is already applied upstream in Hilbert.
@@ -79,7 +86,7 @@ TRIAL_STATS_NOTCH_FILTER_FREQS = []
 HILBERT_N_JOBS = 1
 HILBERT_SKIP_EXISTING = True
 TRIAL_SLOPE_N_JOBS = 1
-TRIAL_SLOPE_SKIP_EXISTING = True
+TRIAL_SLOPE_SKIP_EXISTING = False
 TRIAL_SLOPE_GROUP_N_JOBS = 1
 
 # Export settings for export_trial_slope_group_mean.py.
@@ -91,7 +98,7 @@ EXPORT_FIGSIZE_INCHES = (10.4, 6.8)
 EXPORT_OUTPUT_DIR = Path("outputs")
 EXPORT_OUTPUT_FILE: Path | None = None
 EXPORT_TRANSPARENT = False
-EXPORT_X_LIMITS: tuple[float, float] | None = None
+EXPORT_X_LIMITS: tuple[float, float] | None = [-0.5, 5]
 EXPORT_Y_LIMITS: tuple[float, float] | None = None
 EXPORT_SHOW_CONTRAST_SIGNIFICANCE_BAR = True
 EXPORT_SHOW_VS_ZERO_BOLD_SEGMENTS = True
@@ -258,14 +265,13 @@ def event_sample_shift_for_subject(subject_id: str) -> int:
 
 ROI_CSV_FILES = {
     "vmPFC": Path(r"D:\Boulot\csv\PFCvm_elecs_tbl.csv"),
+    "aIns": Path(r"D:\Boulot\csv\aINS_b5_finite_channels.csv"),
     "daINS": Path(r"D:\Boulot\csv\aINS_dors_elecs_tbl.csv"),
     "vaINS": Path(r"D:\Boulot\csv\aINS_vent_elecs_tbl.csv"),
 }
 
-GROUP_ROI_COMBINATIONS = {
-    "aIns": ["vaINS", "daINS"],
-}
-GROUP_KEEP_COMBINED_SOURCE_ROIS = False
+GROUP_ROI_COMBINATIONS = {}
+GROUP_KEEP_COMBINED_SOURCE_ROIS = True
 
 GROUP_PARAM_KWARGS = {
     "p_value_correction_method": "cluster_permutation",
@@ -289,6 +295,56 @@ REGRESSION_OUTPUT_FORMAT: Literal["hdf5", "matlab"] = "hdf5"
 REGRESSION_INCLUDE_EPOCHS = False
 REGRESSION_GROUP_OUTPUT_FORMAT: Literal["hdf5", "matlab"] = "hdf5"
 
+TRIAL_SLOPE_PRESET_OVERRIDES: dict[str, dict[str, Any]] = {
+    "regular": {},
+    "delphos": {
+        "USE_DELPHOS_SPIKE_FILTER": True,
+        "TRIAL_SLOPE_OUTPUT_DESCRIPTION": "onsetdelphos",
+    },
+    "50hz": {
+        "HILBERT_NOTCH_FILTER_FREQS": [50.0],
+        "TRIAL_SLOPE_OUTPUT_DESCRIPTION": "onset50hz",
+        "HILBERT_OUTPUT_DESCRIPTION": "bga50hz",
+    },
+}
+
+
+def _build_trial_slope_preset_base_settings() -> dict[str, Any]:
+    setting_names = {
+        name
+        for overrides in TRIAL_SLOPE_PRESET_OVERRIDES.values()
+        for name in overrides
+    }
+    unknown_settings = [name for name in setting_names if name not in globals()]
+    if unknown_settings:
+        raise ValueError(
+            "Trial slope preset overrides unknown setting(s): "
+            f"{', '.join(sorted(unknown_settings))}."
+        )
+    return {name: globals()[name] for name in setting_names}
+
+
+_TRIAL_SLOPE_PRESET_BASE_SETTINGS = _build_trial_slope_preset_base_settings()
+
+
+def _apply_trial_slope_preset(preset_name: str) -> str:
+    preset_key = preset_name.strip().casefold()
+    if preset_key not in TRIAL_SLOPE_PRESET_OVERRIDES:
+        available_presets = ", ".join(sorted(TRIAL_SLOPE_PRESET_OVERRIDES))
+        raise ValueError(
+            f"Unknown trial slope preset {preset_name!r}. "
+            f"Available presets: {available_presets}."
+        )
+
+    for name, value in _TRIAL_SLOPE_PRESET_BASE_SETTINGS.items():
+        globals()[name] = value
+    for name, value in TRIAL_SLOPE_PRESET_OVERRIDES[preset_key].items():
+        globals()[name] = value
+    return preset_key
+
+
+TRIAL_SLOPE_PRESET = _apply_trial_slope_preset(TRIAL_SLOPE_PRESET)
+
 _NA_LIKE_TOKENS = frozenset({"nan", "na", "n/a", "none", "null"})
 _FIRST_CONTACT_PATTERN = re.compile(r"^([A-Za-z]+[0-9]+)")
 
@@ -307,6 +363,7 @@ def _output_extension(output_format: str) -> str:
 class TrialSlopeRecipe:
     """Single source of truth for the full trial-slope pipeline."""
 
+    preset: str
     bids_root: Path
     subject: str | None
     trial_slope_output_description: str
@@ -576,6 +633,7 @@ class TrialSlopeRecipe:
 
     def summary_lines(self) -> list[str]:
         return [
+            f"Preset: {self.preset}",
             f"BIDS root: {self.bids_root}",
             f"subject filter: {self.subject or 'all'}",
             f"Hilbert desc: {self.hilbert_output_description}",
@@ -605,6 +663,7 @@ class TrialSlopeRecipe:
 
 
 RECIPE = TrialSlopeRecipe(
+    preset=TRIAL_SLOPE_PRESET,
     bids_root=BIDS_ROOT,
     subject=SUBJECT,
     trial_slope_output_description=TRIAL_SLOPE_OUTPUT_DESCRIPTION,

@@ -32,6 +32,38 @@ def test_recipe_can_disable_hilbert_notch_filter() -> None:
     assert recipe.build_hilbert_params().notch_filter_freqs == []
 
 
+def test_preset_overrides_can_switch_cleanly() -> None:
+    settings = [
+        "HILBERT_NOTCH_FILTER_FREQS",
+        "HILBERT_OUTPUT_DESCRIPTION",
+        "TRIAL_SLOPE_OUTPUT_DESCRIPTION",
+        "USE_DELPHOS_SPIKE_FILTER",
+    ]
+    original_values = {name: getattr(shared, name) for name in settings}
+
+    try:
+        assert shared._apply_trial_slope_preset("50Hz") == "50hz"
+        assert shared.HILBERT_NOTCH_FILTER_FREQS == [50.0]
+        assert shared.HILBERT_OUTPUT_DESCRIPTION == "bga50hz"
+        assert shared.TRIAL_SLOPE_OUTPUT_DESCRIPTION == "onset50hz"
+        assert shared.USE_DELPHOS_SPIKE_FILTER is False
+
+        assert shared._apply_trial_slope_preset("delphos") == "delphos"
+        assert shared.HILBERT_NOTCH_FILTER_FREQS == []
+        assert shared.HILBERT_OUTPUT_DESCRIPTION == "bga"
+        assert shared.TRIAL_SLOPE_OUTPUT_DESCRIPTION == "onsetdelphos"
+        assert shared.USE_DELPHOS_SPIKE_FILTER is True
+
+        assert shared._apply_trial_slope_preset("regular") == "regular"
+        assert shared.HILBERT_NOTCH_FILTER_FREQS == []
+        assert shared.HILBERT_OUTPUT_DESCRIPTION == "bga"
+        assert shared.TRIAL_SLOPE_OUTPUT_DESCRIPTION == "onset"
+        assert shared.USE_DELPHOS_SPIKE_FILTER is False
+    finally:
+        for name, value in original_values.items():
+            setattr(shared, name, value)
+
+
 def test_combine_manual_region_channels_merges_sources_and_deduplicates() -> None:
     manual_region_channels = {
         "vaINS": {"01": ["A1", "A2"], "02": ["B1"]},
@@ -76,6 +108,13 @@ def test_recipe_build_group_params_applies_configured_roi_combinations() -> None
         "vmPFC": {"01": ["P1"]},
         "aIns": {"01": ["A1"], "02": ["B1"]},
     }
+
+
+def test_default_group_config_keeps_independent_insula_rois() -> None:
+    assert shared.ROI_CSV_FILES["aIns"].name == "aINS_b5_finite_channels.csv"
+    assert shared.ROI_CSV_FILES["daINS"].name == "aINS_dors_elecs_tbl.csv"
+    assert shared.ROI_CSV_FILES["vaINS"].name == "aINS_vent_elecs_tbl.csv"
+    assert shared.GROUP_ROI_COMBINATIONS == {}
 
 
 def test_recipe_builds_delphos_filter_from_selected_rois() -> None:
