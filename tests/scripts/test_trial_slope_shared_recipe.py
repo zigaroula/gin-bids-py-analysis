@@ -37,7 +37,7 @@ def test_preset_overrides_can_switch_cleanly() -> None:
         "HILBERT_NOTCH_FILTER_FREQS",
         "HILBERT_OUTPUT_DESCRIPTION",
         "TRIAL_SLOPE_OUTPUT_DESCRIPTION",
-        "USE_DELPHOS_SPIKE_FILTER",
+        "USE_HFO_SPIKE_EVENT_FILTER",
     ]
     original_values = {name: getattr(shared, name) for name in settings}
 
@@ -46,19 +46,19 @@ def test_preset_overrides_can_switch_cleanly() -> None:
         assert shared.HILBERT_NOTCH_FILTER_FREQS == [50.0]
         assert shared.HILBERT_OUTPUT_DESCRIPTION == "bga50hz"
         assert shared.TRIAL_SLOPE_OUTPUT_DESCRIPTION == "onset50hz"
-        assert shared.USE_DELPHOS_SPIKE_FILTER is False
+        assert shared.USE_HFO_SPIKE_EVENT_FILTER is False
 
-        assert shared._apply_trial_slope_preset("delphos") == "delphos"
+        assert shared._apply_trial_slope_preset("hfo_spike_detection") == "hfo_spike_detection"
         assert shared.HILBERT_NOTCH_FILTER_FREQS == []
         assert shared.HILBERT_OUTPUT_DESCRIPTION == "bga"
-        assert shared.TRIAL_SLOPE_OUTPUT_DESCRIPTION == "onsetdelphos"
-        assert shared.USE_DELPHOS_SPIKE_FILTER is True
+        assert shared.TRIAL_SLOPE_OUTPUT_DESCRIPTION == "onsethfospikes"
+        assert shared.USE_HFO_SPIKE_EVENT_FILTER is True
 
         assert shared._apply_trial_slope_preset("regular") == "regular"
         assert shared.HILBERT_NOTCH_FILTER_FREQS == []
         assert shared.HILBERT_OUTPUT_DESCRIPTION == "bga"
         assert shared.TRIAL_SLOPE_OUTPUT_DESCRIPTION == "onset"
-        assert shared.USE_DELPHOS_SPIKE_FILTER is False
+        assert shared.USE_HFO_SPIKE_EVENT_FILTER is False
     finally:
         for name, value in original_values.items():
             setattr(shared, name, value)
@@ -117,12 +117,12 @@ def test_default_group_config_keeps_independent_insula_rois() -> None:
     assert shared.GROUP_ROI_COMBINATIONS == {}
 
 
-def test_recipe_builds_delphos_filter_from_selected_rois() -> None:
+def test_recipe_builds_hfo_spike_event_filter_from_selected_rois() -> None:
     recipe = replace(
         shared.RECIPE,
-        use_delphos_spike_filter=True,
+        use_hfo_spike_event_filter=True,
         use_matlab_zscores=False,
-        delphos_spike_filter_rois=["vmPFC", "daINS"],
+        hfo_spike_event_filter_rois=["vmPFC", "daINS"],
     )
     manual_region_channels = {
         "vmPFC": {"01": ["A1"]},
@@ -143,13 +143,13 @@ def test_recipe_builds_delphos_filter_from_selected_rois() -> None:
     assert "D1" not in rendered
 
 
-def test_recipe_can_mask_only_delphos_channels() -> None:
+def test_recipe_can_mask_only_hfo_spike_channels() -> None:
     recipe = replace(
         shared.RECIPE,
-        use_delphos_spike_filter=True,
+        use_hfo_spike_event_filter=True,
         use_matlab_zscores=False,
-        delphos_spike_filter_rois=["vmPFC"],
-        delphos_spike_filter_mode="channel",
+        hfo_spike_event_filter_rois=["vmPFC"],
+        hfo_spike_event_filter_mode="channel",
     )
     manual_region_channels = {"vmPFC": {"01": ["A1"]}}
 
@@ -162,7 +162,7 @@ def test_recipe_can_mask_only_delphos_channels() -> None:
         anchor_onset_s=0.0,
         anchor_duration_s=0.0,
         metadata={
-            "delphos_events": [
+            "hfo_spike_events": [
                 {"subject": "01", "event_type": "Spike", "channel": "A1"},
                 {"subject": "01", "event_type": "Spike", "channel": "B1"},
             ],

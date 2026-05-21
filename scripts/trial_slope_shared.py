@@ -48,7 +48,7 @@ BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
 # Set to a BIDS subject id to restrict the full pipeline, or None for all subjects.
 SUBJECT: str | None = None
 
-# Switch the pipeline package here: "regular", "delphos", or "50hz".
+# Switch the pipeline package here: "regular", "hfo_spike_detection", or "50hz".
 # Add new entries to TRIAL_SLOPE_PRESET_OVERRIDES to create more presets.
 TRIAL_SLOPE_PRESET: str = "regular"
 
@@ -63,9 +63,9 @@ HILBERT_OUTPUT_FORMAT: Literal["hdf5", "brainvision"] = "brainvision"
 # Pipeline toggles that usually need to stay synchronized across scripts.
 ENABLE_HILBERT_NOTCH_FILTER = True
 HILBERT_NOTCH_FILTER_FREQS = []  # [50.0]
-USE_DELPHOS_SPIKE_FILTER = False
-DELPHOS_SPIKE_FILTER_ROIS = ["vmPFC", "aIns", "daINS", "vaINS"]
-DELPHOS_SPIKE_FILTER_MODE: Literal["trial", "channel"] = "channel"
+USE_HFO_SPIKE_EVENT_FILTER = False
+HFO_SPIKE_EVENT_FILTER_ROIS = ["vmPFC", "aIns", "daINS", "vaINS"]
+HFO_SPIKE_EVENT_FILTER_MODE: Literal["trial", "channel"] = "channel"
 
 # Subject-level trial-slope epoching.
 # MATLAB b2 computes trial/channel cleaning masks on the full b1 onset window
@@ -172,11 +172,11 @@ TRIAL_SLOPE_SECONDARY_FILTERS = [
     {"scope": "raw", "datatype": "ieeg", "suffix": "events", "extension": ".tsv"},
     {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
     {
-        "scope": "delphos",
+        "scope": "hfo_spike_detection",
         "datatype": "ieeg",
         "suffix": "events",
         "extension": ".tsv",
-        "desc": "delphos",
+        "desc": "hfospikes",
     },
 ]
 
@@ -281,8 +281,8 @@ GROUP_PARAM_KWARGS = {
 }
 
 VM_PFC_SPIKE_EXCLUSION_REASON = "spike_or_ripple"
-DELPHOS_SPIKE_WINDOW_TMIN_S = 0.0
-DELPHOS_SPIKE_WINDOW_TMAX_S = 6.0
+HFO_SPIKE_EVENT_WINDOW_TMIN_S = 0.0
+HFO_SPIKE_EVENT_WINDOW_TMAX_S = 6.0
 
 # Behavioral thresholds applied as annotator invalidation rules (orthogonal to
 # condition classification).  These replicate MATLAB b2:
@@ -297,9 +297,9 @@ REGRESSION_GROUP_OUTPUT_FORMAT: Literal["hdf5", "matlab"] = "hdf5"
 
 TRIAL_SLOPE_PRESET_OVERRIDES: dict[str, dict[str, Any]] = {
     "regular": {},
-    "delphos": {
-        "USE_DELPHOS_SPIKE_FILTER": True,
-        "TRIAL_SLOPE_OUTPUT_DESCRIPTION": "onsetdelphos",
+    "hfo_spike_detection": {
+        "USE_HFO_SPIKE_EVENT_FILTER": True,
+        "TRIAL_SLOPE_OUTPUT_DESCRIPTION": "onsethfospikes",
     },
     "50hz": {
         "HILBERT_NOTCH_FILTER_FREQS": [50.0],
@@ -372,9 +372,9 @@ class TrialSlopeRecipe:
     hilbert_output_format: Literal["hdf5", "brainvision"]
     enable_hilbert_notch_filter: bool
     hilbert_notch_filter_freqs: Sequence[float]
-    use_delphos_spike_filter: bool
-    delphos_spike_filter_rois: Sequence[str]
-    delphos_spike_filter_mode: Literal["trial", "channel"]
+    use_hfo_spike_event_filter: bool
+    hfo_spike_event_filter_rois: Sequence[str]
+    hfo_spike_event_filter_mode: Literal["trial", "channel"]
     anchor_event_codes: Sequence[str]
     experiment_start_event_code: str | None
     experiment_end_event_code: str | None
@@ -565,15 +565,15 @@ class TrialSlopeRecipe:
         self,
         manual_region_channels: dict[str, dict[str, list[str]]],
     ) -> list[Any]:
-        delphos_channels_by_subject = build_roi_channels_by_subject(
+        hfo_spike_channels_by_subject = build_roi_channels_by_subject(
             manual_region_channels,
-            self.delphos_spike_filter_rois,
+            self.hfo_spike_event_filter_rois,
         )
-        if self.use_delphos_spike_filter and not delphos_channels_by_subject:
-            roi_label = ", ".join(self.delphos_spike_filter_rois) or "<none>"
+        if self.use_hfo_spike_event_filter and not hfo_spike_channels_by_subject:
+            roi_label = ", ".join(self.hfo_spike_event_filter_rois) or "<none>"
             raise ValueError(
-                "At least one ROI with channels is required to exclude Delphos "
-                f"spike trials. Requested ROI(s): {roi_label}."
+                "At least one ROI with channels is required to exclude HFO/spike "
+                f"event trials. Requested ROI(s): {roi_label}."
             )
 
         annotators: list[Any] = []
@@ -600,33 +600,33 @@ class TrialSlopeRecipe:
             ),
         ])
 
-        if self.use_delphos_spike_filter:
-            delphos_event_filter = build_roi_spike_filter(delphos_channels_by_subject)
-            if self.delphos_spike_filter_mode == "trial":
-                delphos_filter_rule: Any = EventAnnotationInvalidationRule(
-                    metadata_events_key="delphos_events",
-                    event_filter=delphos_event_filter,
+        if self.use_hfo_spike_event_filter:
+            hfo_spike_event_filter = build_roi_spike_filter(hfo_spike_channels_by_subject)
+            if self.hfo_spike_event_filter_mode == "trial":
+                hfo_spike_filter_rule: Any = EventAnnotationInvalidationRule(
+                    metadata_events_key="hfo_spike_events",
+                    event_filter=hfo_spike_event_filter,
                     exclusion_reason=VM_PFC_SPIKE_EXCLUSION_REASON,
                 )
-            elif self.delphos_spike_filter_mode == "channel":
-                delphos_filter_rule = EventAnnotationFeatureMaskRule(
-                    metadata_events_key="delphos_events",
-                    event_filter=delphos_event_filter,
+            elif self.hfo_spike_event_filter_mode == "channel":
+                hfo_spike_filter_rule = EventAnnotationFeatureMaskRule(
+                    metadata_events_key="hfo_spike_events",
+                    event_filter=hfo_spike_event_filter,
                     exclusion_reason=VM_PFC_SPIKE_EXCLUSION_REASON,
                 )
             else:
                 raise ValueError(
-                    "Unsupported Delphos spike filter mode: "
-                    f"{self.delphos_spike_filter_mode!r}. Expected 'trial' or 'channel'."
+                    "Unsupported HFO/spike event filter mode: "
+                    f"{self.hfo_spike_event_filter_mode!r}. Expected 'trial' or 'channel'."
                 )
             annotators.extend([
                 EventFileWindowAnnotator(
-                    filter={"suffix": "events", "desc": "delphos"},
-                    metadata_events_key="delphos_events",
-                    window_tmin_s=DELPHOS_SPIKE_WINDOW_TMIN_S,
-                    window_tmax_s=DELPHOS_SPIKE_WINDOW_TMAX_S,
+                    filter={"suffix": "events", "desc": "hfospikes"},
+                    metadata_events_key="hfo_spike_events",
+                    window_tmin_s=HFO_SPIKE_EVENT_WINDOW_TMIN_S,
+                    window_tmax_s=HFO_SPIKE_EVENT_WINDOW_TMAX_S,
                 ),
-                delphos_filter_rule,
+                hfo_spike_filter_rule,
             ])
 
         return annotators
@@ -644,9 +644,9 @@ class TrialSlopeRecipe:
                 "Hilbert notch: "
                 f"{list(self.hilbert_notch_filter_freqs) if self.enable_hilbert_notch_filter else 'off'}"
             ),
-            f"Delphos spike filter: {self.use_delphos_spike_filter}",
-            f"Delphos spike ROI(s): {list(self.delphos_spike_filter_rois)}",
-            f"Delphos spike mode: {self.delphos_spike_filter_mode}",
+            f"HFO/spike event filter: {self.use_hfo_spike_event_filter}",
+            f"HFO/spike event ROI(s): {list(self.hfo_spike_event_filter_rois)}",
+            f"HFO/spike event mode: {self.hfo_spike_event_filter_mode}",
             f"Group ROI combinations: {self.group_roi_combinations or 'none'}",
             (
                 "Keep combined source ROI(s): "
@@ -672,9 +672,9 @@ RECIPE = TrialSlopeRecipe(
     hilbert_output_format=HILBERT_OUTPUT_FORMAT,
     enable_hilbert_notch_filter=ENABLE_HILBERT_NOTCH_FILTER,
     hilbert_notch_filter_freqs=HILBERT_NOTCH_FILTER_FREQS,
-    use_delphos_spike_filter=USE_DELPHOS_SPIKE_FILTER,
-    delphos_spike_filter_rois=DELPHOS_SPIKE_FILTER_ROIS,
-    delphos_spike_filter_mode=DELPHOS_SPIKE_FILTER_MODE,
+    use_hfo_spike_event_filter=USE_HFO_SPIKE_EVENT_FILTER,
+    hfo_spike_event_filter_rois=HFO_SPIKE_EVENT_FILTER_ROIS,
+    hfo_spike_event_filter_mode=HFO_SPIKE_EVENT_FILTER_MODE,
     anchor_event_codes=ANCHOR_EVENT_CODES,
     experiment_start_event_code=EXPERIMENT_START_EVENT_CODE,
     experiment_end_event_code=EXPERIMENT_END_EVENT_CODE,
@@ -961,7 +961,7 @@ def build_roi_spike_filter(
         )
 
     if not per_subject_filters:
-        raise ValueError("No ROI channels available to build the Delphos spike filter.")
+        raise ValueError("No ROI channels available to build the HFO/spike event filter.")
 
     if len(per_subject_filters) == 1:
         return per_subject_filters[0]
@@ -1172,18 +1172,18 @@ def build_trial_annotators(
     Parameters
     ----------
     manual_region_channels : dict[str, dict[str, list[str]]]
-        ROI channel mapping by subject, used for optional Delphos spike exclusion.
+        ROI channel mapping by subject, used for optional HFO/spike event exclusion.
 
     Returns
     -------
     list
         List of annotators including optional MATLAB z-score injection,
-        behavioral thresholds, and Delphos spike filtering.
+        behavioral thresholds, and HFO/spike event filtering.
 
     Raises
     ------
     ValueError
-        If the Delphos spike filter is enabled and no selected ROI channels are provided.
+        If the HFO/spike event filter is enabled and no selected ROI channels are provided.
     """
     return RECIPE.build_trial_annotators(manual_region_channels)
 

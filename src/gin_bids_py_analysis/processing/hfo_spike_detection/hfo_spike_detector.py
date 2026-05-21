@@ -1,7 +1,7 @@
 """
-Delphos Detector Algorithm
+HFO/Spike Detector Algorithm
 
-Python implementation of the MATLAB Delphos detector algorithm for detecting
+Python implementation of the MATLAB HFO/spike detector algorithm for detecting
 High-Frequency Oscillations (HFOs) and spikes in neural signals.
 
 This module replicates the complete algorithm including:
@@ -142,7 +142,7 @@ def _create_algorithm_parameters(
     return parameters
 
 
-def delphos_detector(
+def hfo_spike_detector(
     signal: np.ndarray,
     labels: List[str],
     alpha: float,
@@ -158,7 +158,7 @@ def delphos_detector(
     progress_callback: Optional[callable] = None
 ) -> DetectionResults:
     """
-    Main Delphos detector function.
+    Main HFO/spike detector function.
     
     Args:
         signal: Input signal array (n_channels x n_samples)

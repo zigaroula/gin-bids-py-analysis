@@ -1,9 +1,9 @@
 """
-Parameter models for the Delphos HFO/spike detection processing.
+Parameter models for the HFO/spike detection processing.
 
 Contains:
-    - DelphosParams: Algorithm parameters for detection
-    - DelphosWriterParams: Writer configuration for output files
+    - HfoSpikeDetectorParams: Algorithm parameters for detection
+    - HfoSpikeDetectorWriterParams: Writer configuration for output files
 """
 
 from __future__ import annotations
@@ -21,16 +21,16 @@ from gin_bids_py_analysis.processing.utils.channels import (
 )
 
 
-class DelphosParams(BaseProcessingParams):
+class HfoSpikeDetectorParams(BaseProcessingParams):
     """
-    Parameters for the Delphos HFO and spike detector.
+    Parameters for the HFO/spike detector.
 
-    The Delphos algorithm uses Derivative of Gaussian (DoG) wavelet transforms
+    The HFO/spike detection algorithm uses Derivative of Gaussian (DoG) wavelet transforms
     to detect high-frequency oscillations and spikes in iEEG signals.
 
     Example::
 
-        params = DelphosParams(
+        params = HfoSpikeDetectorParams(
             alpha=0.005,
             detection_type=["Osc", "Spk"],
             freq_band=[[80, 250], [250, 500]],
@@ -163,7 +163,7 @@ class DelphosParams(BaseProcessingParams):
     )
 
     @model_validator(mode="after")
-    def _check_params(self) -> "DelphosParams":
+    def _check_params(self) -> "HfoSpikeDetectorParams":
         if self.detection_type:
             valid_types = {"Osc", "Spk"}
             invalid = set(self.detection_type) - valid_types
@@ -175,12 +175,12 @@ class DelphosParams(BaseProcessingParams):
         return self
 
 
-class DelphosWriterParams(BaseWriterParams):
+class HfoSpikeDetectorWriterParams(BaseWriterParams):
     """
-    Writer parameters for Delphos detection output.
+    Writer parameters for HFO/spike detection output.
 
     Only ``bids_root`` must be supplied; all routing fields default to
-    Delphos-appropriate values.  Use ``output_format`` to choose the output
+    HFO/spike detection-appropriate values.  Use ``output_format`` to choose the output
     backend:
 
     * ``"hdf5"`` (default) — writes a single ``.h5`` file containing all
@@ -190,16 +190,16 @@ class DelphosWriterParams(BaseWriterParams):
     Example::
 
         from pathlib import Path
-        params = DelphosWriterParams(
+        params = HfoSpikeDetectorWriterParams(
             bids_root=Path("/path/to/bids"),
             output_format="tsv",
         )
     """
 
     bids_root: Path
-    pipeline_label: str = Field(default="delphos")
+    pipeline_label: str = Field(default="hfo_spike_detection")
     output_modality: str = Field(default="ieeg")
-    output_description: str = Field(default="delphos")
+    output_description: str = Field(default="hfospikes")
     output_suffix: str = Field(default="events")
     output_format: Literal["hdf5", "tsv"] = Field(
         default="hdf5",

@@ -73,18 +73,18 @@ def test_events_in_window_collected(tmp_path: Path) -> None:
             {"onset": "10.5", "event_type": "Spk", "channel": "A1"},  # inside [-1, +3] of anchor 10
             {"onset": "14.0", "event_type": "Spk", "channel": "A2"},  # outside
         ],
-        {"suffix": "events", "desc": "delphos"},
+        {"suffix": "events", "desc": "hfospikes"},
     )
     group = _make_group([event_file])
     trial = _make_trial(anchor_onset_s=10.0)
 
     annotator = EventFileWindowAnnotator(
-        filter={"suffix": "events", "desc": "delphos"},
-        metadata_events_key="delphos_events",
+        filter={"suffix": "events", "desc": "hfospikes"},
+        metadata_events_key="hfo_spike_events",
     )
     annotator.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=3.0, ieeg_channel_names=[])
 
-    events = trial.metadata["delphos_events"]
+    events = trial.metadata["hfo_spike_events"]
     assert len(events) == 1
     assert events[0]["onset"] == "10.5"
 
@@ -96,58 +96,58 @@ def test_events_outside_window_not_collected(tmp_path: Path) -> None:
             {"onset": "5.0", "event_type": "Spk", "channel": "A1"},   # before window
             {"onset": "15.0", "event_type": "Spk", "channel": "A2"},  # after window
         ],
-        {"suffix": "events", "desc": "delphos"},
+        {"suffix": "events", "desc": "hfospikes"},
     )
     group = _make_group([event_file])
     trial = _make_trial(anchor_onset_s=10.0)
 
     annotator = EventFileWindowAnnotator(
-        filter={"suffix": "events", "desc": "delphos"},
-        metadata_events_key="delphos_events",
+        filter={"suffix": "events", "desc": "hfospikes"},
+        metadata_events_key="hfo_spike_events",
     )
     annotator.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=3.0, ieeg_channel_names=[])
 
-    assert trial.metadata["delphos_events"] == []
+    assert trial.metadata["hfo_spike_events"] == []
 
 
 def test_metadata_events_key_always_set_even_when_no_events(tmp_path: Path) -> None:
-    event_file = _make_event_file(tmp_path, [], {"suffix": "events", "desc": "delphos"})
+    event_file = _make_event_file(tmp_path, [], {"suffix": "events", "desc": "hfospikes"})
     group = _make_group([event_file])
     trial = _make_trial(anchor_onset_s=10.0)
 
     annotator = EventFileWindowAnnotator(
-        filter={"suffix": "events", "desc": "delphos"},
-        metadata_events_key="delphos_events",
+        filter={"suffix": "events", "desc": "hfospikes"},
+        metadata_events_key="hfo_spike_events",
     )
     annotator.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=3.0, ieeg_channel_names=[])
 
-    assert "delphos_events" in trial.metadata
-    assert trial.metadata["delphos_events"] == []
+    assert "hfo_spike_events" in trial.metadata
+    assert trial.metadata["hfo_spike_events"] == []
 
 
 def test_filter_selects_correct_files(tmp_path: Path) -> None:
     """Only files matching the annotator filter should be loaded."""
-    delphos_file = _make_event_file(
+    hfo_spike_file = _make_event_file(
         tmp_path,
         [{"onset": "10.5", "event_type": "Spk", "channel": "A1"}],
-        {"suffix": "events", "desc": "delphos"},
+        {"suffix": "events", "desc": "hfospikes"},
     )
     beh_file = _make_event_file(
         tmp_path,
         [{"onset": "10.5", "event_type": "Osc", "channel": "A2"}],
         {"suffix": "beh"},
     )
-    group = _make_group([delphos_file, beh_file])
+    group = _make_group([hfo_spike_file, beh_file])
     trial = _make_trial(anchor_onset_s=10.0)
 
     annotator = EventFileWindowAnnotator(
-        filter={"suffix": "events", "desc": "delphos"},
-        metadata_events_key="delphos_events",
+        filter={"suffix": "events", "desc": "hfospikes"},
+        metadata_events_key="hfo_spike_events",
     )
     annotator.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=3.0, ieeg_channel_names=[])
 
-    events = trial.metadata["delphos_events"]
-    # Only the delphos file contributes; its event_type is "Spk", not "Osc"
+    events = trial.metadata["hfo_spike_events"]
+    # Only the HFO/spike file contributes; its event_type is "Spk", not "Osc"
     assert all(e["event_type"] == "Spk" for e in events)
 
 
@@ -159,21 +159,21 @@ def test_window_override(tmp_path: Path) -> None:
             {"onset": "9.5", "event_type": "Spk", "channel": "A1"},   # inside tight window [-0.5, +1]
             {"onset": "11.5", "event_type": "Spk", "channel": "A2"},  # outside tight window
         ],
-        {"suffix": "events", "desc": "delphos"},
+        {"suffix": "events", "desc": "hfospikes"},
     )
     group = _make_group([event_file])
     trial = _make_trial(anchor_onset_s=10.0)
 
     annotator = EventFileWindowAnnotator(
-        filter={"suffix": "events", "desc": "delphos"},
-        metadata_events_key="delphos_events",
+        filter={"suffix": "events", "desc": "hfospikes"},
+        metadata_events_key="hfo_spike_events",
         window_tmin_s=-0.5,
         window_tmax_s=1.0,
     )
     # Processor defaults are wider but should be ignored
     annotator.annotate_trials(group, group.primary, [trial], tmin_s=-5.0, tmax_s=5.0, ieeg_channel_names=[])
 
-    events = trial.metadata["delphos_events"]
+    events = trial.metadata["hfo_spike_events"]
     assert len(events) == 1
     assert events[0]["onset"] == "9.5"
 
@@ -185,18 +185,18 @@ def test_rows_with_invalid_onset_are_skipped(tmp_path: Path) -> None:
             {"onset": "n/a", "event_type": "Spk", "channel": "A1"},
             {"onset": "10.1", "event_type": "Spk", "channel": "A2"},
         ],
-        {"suffix": "events", "desc": "delphos"},
+        {"suffix": "events", "desc": "hfospikes"},
     )
     group = _make_group([event_file])
     trial = _make_trial(anchor_onset_s=10.0)
 
     annotator = EventFileWindowAnnotator(
-        filter={"suffix": "events", "desc": "delphos"},
-        metadata_events_key="delphos_events",
+        filter={"suffix": "events", "desc": "hfospikes"},
+        metadata_events_key="hfo_spike_events",
     )
     annotator.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=1.0, ieeg_channel_names=[])
 
-    events = trial.metadata["delphos_events"]
+    events = trial.metadata["hfo_spike_events"]
     assert len(events) == 1
     assert events[0]["channel"] == "A2"
 
@@ -205,12 +205,12 @@ def test_only_events_compatible_with_current_ieeg_file_are_collected(tmp_path: P
     run1_file = _make_event_file(
         tmp_path,
         [{"onset": "10.1", "event_type": "Spk", "channel": "A1"}],
-        {"subject": "01", "task": "decid", "run": "1", "suffix": "events", "desc": "delphos"},
+        {"subject": "01", "task": "decid", "run": "1", "suffix": "events", "desc": "hfospikes"},
     )
     run2_file = _make_event_file(
         tmp_path,
         [{"onset": "10.2", "event_type": "Spk", "channel": "A2"}],
-        {"subject": "01", "task": "decid", "run": "2", "suffix": "events", "desc": "delphos"},
+        {"subject": "01", "task": "decid", "run": "2", "suffix": "events", "desc": "hfospikes"},
     )
     primary = _make_bids_file(
         tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
@@ -227,17 +227,17 @@ def test_only_events_compatible_with_current_ieeg_file_are_collected(tmp_path: P
     trial = _make_trial(anchor_onset_s=10.0)
 
     annotator = EventFileWindowAnnotator(
-        filter={"suffix": "events", "desc": "delphos"},
-        metadata_events_key="delphos_events",
+        filter={"suffix": "events", "desc": "hfospikes"},
+        metadata_events_key="hfo_spike_events",
     )
     annotator.annotate_trials(group, primary, [trial], tmin_s=-1.0, tmax_s=1.0, ieeg_channel_names=[])
 
-    events = trial.metadata["delphos_events"]
+    events = trial.metadata["hfo_spike_events"]
     assert len(events) == 1
     assert events[0]["channel"] == "A1"
     assert events[0]["subject"] == "01"
     assert events[0]["run"] == "1"
-    assert str(events[0]["source_path"]).endswith("desc-delphos.tsv")
+    assert str(events[0]["source_path"]).endswith("desc-hfospikes.tsv")
 
 
 # ---------------------------------------------------------------------------
@@ -247,13 +247,13 @@ def test_only_events_compatible_with_current_ieeg_file_are_collected(tmp_path: P
 
 def test_no_filter_counts_all_events() -> None:
     trial = _make_trial()
-    trial.metadata["delphos_events"] = [
+    trial.metadata["hfo_spike_events"] = [
         {"onset": "10.1", "event_type": "Spk", "channel": "A1"},
         {"onset": "10.2", "event_type": "Osc", "channel": "A2"},
     ]
     group = _make_group([])
     rule = EventAnnotationInvalidationRule(
-        metadata_events_key="delphos_events",
+        metadata_events_key="hfo_spike_events",
         invalidate_if_count_gte=2,
     )
     rule.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=3.0, ieeg_channel_names=[])
@@ -263,13 +263,13 @@ def test_no_filter_counts_all_events() -> None:
 
 def test_event_filter_condition_expr_filters_before_count() -> None:
     trial = _make_trial()
-    trial.metadata["delphos_events"] = [
+    trial.metadata["hfo_spike_events"] = [
         {"onset": "10.1", "event_type": "Spk", "channel": "A1"},
         {"onset": "10.2", "event_type": "Osc", "channel": "A2"},
     ]
     group = _make_group([])
     rule = EventAnnotationInvalidationRule(
-        metadata_events_key="delphos_events",
+        metadata_events_key="hfo_spike_events",
         event_filter=ConditionExpr(column="event_type", op="==", value="Spk"),
         invalidate_if_count_gte=1,
     )
@@ -281,13 +281,13 @@ def test_event_filter_condition_expr_filters_before_count() -> None:
 def test_event_filter_channel_in_list() -> None:
     """event_filter with 'in' operator on channel column."""
     trial = _make_trial()
-    trial.metadata["delphos_events"] = [
+    trial.metadata["hfo_spike_events"] = [
         {"onset": "10.1", "event_type": "Spk", "channel": "vmPFC-1"},
         {"onset": "10.2", "event_type": "Spk", "channel": "A2"},  # not in vmPFC
     ]
     group = _make_group([])
     rule = EventAnnotationInvalidationRule(
-        metadata_events_key="delphos_events",
+        metadata_events_key="hfo_spike_events",
         event_filter=ConditionExpr(column="channel", op="in", values=["vmPFC-1", "vmPFC-2"]),
         invalidate_if_count_gte=1,
     )
@@ -298,12 +298,12 @@ def test_event_filter_channel_in_list() -> None:
 
 def test_event_filter_no_matching_events_keeps_trial() -> None:
     trial = _make_trial()
-    trial.metadata["delphos_events"] = [
+    trial.metadata["hfo_spike_events"] = [
         {"onset": "10.1", "event_type": "Osc", "channel": "A1"},
     ]
     group = _make_group([])
     rule = EventAnnotationInvalidationRule(
-        metadata_events_key="delphos_events",
+        metadata_events_key="hfo_spike_events",
         event_filter=ConditionExpr(column="event_type", op="==", value="Spk"),
         invalidate_if_count_gte=1,
     )
@@ -314,12 +314,12 @@ def test_event_filter_no_matching_events_keeps_trial() -> None:
 
 def test_threshold_not_met_keeps_trial() -> None:
     trial = _make_trial()
-    trial.metadata["delphos_events"] = [
+    trial.metadata["hfo_spike_events"] = [
         {"onset": "10.1", "event_type": "Spk", "channel": "A1"},
     ]
     group = _make_group([])
     rule = EventAnnotationInvalidationRule(
-        metadata_events_key="delphos_events",
+        metadata_events_key="hfo_spike_events",
         invalidate_if_count_gte=2,
     )
     rule.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=3.0, ieeg_channel_names=[])
@@ -329,13 +329,13 @@ def test_threshold_not_met_keeps_trial() -> None:
 
 def test_threshold_met_invalidates_trial() -> None:
     trial = _make_trial()
-    trial.metadata["delphos_events"] = [
+    trial.metadata["hfo_spike_events"] = [
         {"onset": "10.1", "event_type": "Spk", "channel": "A1"},
         {"onset": "10.2", "event_type": "Spk", "channel": "A2"},
     ]
     group = _make_group([])
     rule = EventAnnotationInvalidationRule(
-        metadata_events_key="delphos_events",
+        metadata_events_key="hfo_spike_events",
         invalidate_if_count_gte=2,
         exclusion_reason="spike_in_window",
     )
@@ -348,12 +348,12 @@ def test_threshold_met_invalidates_trial() -> None:
 def test_exclusion_reason_not_overwritten_when_already_set() -> None:
     trial = _make_trial(keep=False)
     trial.exclusion_reason = "missing_label"
-    trial.metadata["delphos_events"] = [
+    trial.metadata["hfo_spike_events"] = [
         {"onset": "10.1", "event_type": "Spk", "channel": "A1"},
     ]
     group = _make_group([])
     rule = EventAnnotationInvalidationRule(
-        metadata_events_key="delphos_events",
+        metadata_events_key="hfo_spike_events",
         invalidate_if_count_gte=1,
         exclusion_reason="spike_in_window",
     )
@@ -367,7 +367,7 @@ def test_missing_metadata_key_does_not_invalidate() -> None:
     trial = _make_trial()
     group = _make_group([])
     rule = EventAnnotationInvalidationRule(
-        metadata_events_key="delphos_events",
+        metadata_events_key="hfo_spike_events",
         invalidate_if_count_gte=1,
     )
     rule.annotate_trials(group, group.primary, [trial], tmin_s=-1.0, tmax_s=3.0, ieeg_channel_names=[])
@@ -384,17 +384,17 @@ def test_combined_annotator_then_invalidation_rule(tmp_path: Path) -> None:
             {"onset": "10.2", "event_type": "Spk", "channel": "vmPFC-1"},
             {"onset": "10.8", "event_type": "Osc", "channel": "A2"},
         ],
-        {"suffix": "events", "desc": "delphos"},
+        {"suffix": "events", "desc": "hfospikes"},
     )
     group = _make_group([event_file])
     trial = _make_trial(anchor_onset_s=10.0)
 
     annotator = EventFileWindowAnnotator(
-        filter={"suffix": "events", "desc": "delphos"},
-        metadata_events_key="delphos_events",
+        filter={"suffix": "events", "desc": "hfospikes"},
+        metadata_events_key="hfo_spike_events",
     )
     rule = EventAnnotationInvalidationRule(
-        metadata_events_key="delphos_events",
+        metadata_events_key="hfo_spike_events",
         event_filter=ConditionExpr(
             all=[
                 ConditionExpr(column="event_type", op="==", value="Spk"),

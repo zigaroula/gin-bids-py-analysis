@@ -1,5 +1,5 @@
 """
-Result container for Delphos HFO/spike detection processing.
+Result container for HFO/spike detection processing.
 """
 
 from __future__ import annotations
@@ -13,9 +13,9 @@ from gin_bids_py_analysis.processing.base import BaseProcessingResult
 
 
 @dataclass
-class DelphosProcessingResult(BaseProcessingResult):
+class HfoSpikeDetectorProcessingResult(BaseProcessingResult):
     """
-    Result of the Delphos detection pipeline for one processed file group.
+    Result of the HFO/spike detection pipeline for one processed file group.
 
     Attributes:
         markers:

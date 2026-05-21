@@ -1,5 +1,5 @@
 """
-Writer for Delphos detection results.
+Writer for HFO/spike detection results.
 
 Supports two output formats:
 
@@ -24,7 +24,7 @@ from gin_bids_py_analysis.processing.base import (
     BaseProcessingWriter,
 )
 
-from .result import DelphosProcessingResult
+from .result import HfoSpikeDetectorProcessingResult
 
 
 def _package_version() -> str:
@@ -35,11 +35,11 @@ def _package_version() -> str:
         return "unknown"
 
 
-class DelphosProcessingWriter(BaseProcessingWriter):
-    """Writes a :class:`DelphosProcessingResult` to BIDS derivatives.
+class HfoSpikeDetectorProcessingWriter(BaseProcessingWriter):
+    """Writes a :class:`HfoSpikeDetectorProcessingResult` to BIDS derivatives.
 
     The output format is chosen via
-    :attr:`~gin_bids_py_analysis.processing.delphos.DelphosWriterParams.output_format`:
+    :attr:`~gin_bids_py_analysis.processing.hfo_spike_detection.HfoSpikeDetectorWriterParams.output_format`:
 
     * **TSV** (``"tsv"``) — two files written to the same directory:
 
@@ -78,24 +78,24 @@ class DelphosProcessingWriter(BaseProcessingWriter):
             /n_events             scalar int64    — total number of detected events
         /provenance
             /raw_bids_path        str  — path to the source iEEG file
-            /pipeline_name        str  = "delphos"
+            /pipeline_name        str  = "hfo_spike_detection"
             /pipeline_version     str  — package version
 
     Example::
 
         from pathlib import Path
-        from gin_bids_py_analysis.processing.delphos import (
-            DelphosProcessingWriter,
-            DelphosWriterParams,
+        from gin_bids_py_analysis.processing.hfo_spike_detection import (
+            HfoSpikeDetectorProcessingWriter,
+            HfoSpikeDetectorWriterParams,
         )
 
-        writer = DelphosProcessingWriter(
-            DelphosWriterParams(bids_root=Path("/data"))
+        writer = HfoSpikeDetectorProcessingWriter(
+            HfoSpikeDetectorWriterParams(bids_root=Path("/data"))
         )
         output_path = writer.write(result)   # → …_events.h5
 
-        writer_tsv = DelphosProcessingWriter(
-            DelphosWriterParams(bids_root=Path("/data"), output_format="tsv")
+        writer_tsv = HfoSpikeDetectorProcessingWriter(
+            HfoSpikeDetectorWriterParams(bids_root=Path("/data"), output_format="tsv")
         )
         writer_tsv.write(result)   # writes …_events.tsv and …_rates.tsv
     """
@@ -106,9 +106,9 @@ class DelphosProcessingWriter(BaseProcessingWriter):
 
     def _write_data(self, result: BaseProcessingResult, output_path: Path) -> None:
         """Dispatch serialisation to the format selected by ``output_format``."""
-        if not isinstance(result, DelphosProcessingResult):
+        if not isinstance(result, HfoSpikeDetectorProcessingResult):
             raise TypeError(
-                f"Expected DelphosProcessingResult, got {type(result).__name__}"
+                f"Expected HfoSpikeDetectorProcessingResult, got {type(result).__name__}"
             )
 
         if self.params.output_format == "tsv":
@@ -121,7 +121,7 @@ class DelphosProcessingWriter(BaseProcessingWriter):
     # TSV writers
     # ------------------------------------------------------------------
 
-    def _write_events_tsv(self, result: DelphosProcessingResult, output_path: Path) -> None:
+    def _write_events_tsv(self, result: HfoSpikeDetectorProcessingResult, output_path: Path) -> None:
         """Write one TSV row per detected event to *output_path*.
 
         Columns (in order): ``onset``, ``channel``, ``event_type``,
@@ -129,7 +129,7 @@ class DelphosProcessingWriter(BaseProcessingWriter):
         ``detection_strength``.
 
         Args:
-            result: Detection result containing :attr:`~DelphosProcessingResult.markers`.
+            result: Detection result containing :attr:`~HfoSpikeDetectorProcessingResult.markers`.
             output_path: Destination ``.tsv`` path constructed by the base writer.
         """
         with open(output_path, "w", newline="", encoding="utf-8") as fh:
@@ -151,7 +151,7 @@ class DelphosProcessingWriter(BaseProcessingWriter):
                     event.get("visualization_color", "#808080"),
                 ])
 
-    def _write_rates_tsv(self, result: DelphosProcessingResult, events_path: Path) -> None:
+    def _write_rates_tsv(self, result: HfoSpikeDetectorProcessingResult, events_path: Path) -> None:
         """Write per-channel event rates (events / second) to a companion TSV.
 
         The output file is placed in the same directory as *events_path*, with
@@ -161,10 +161,10 @@ class DelphosProcessingWriter(BaseProcessingWriter):
         ``0.0``.
 
         Args:
-            result: Detection result with :attr:`~DelphosProcessingResult.markers`,
-                    :attr:`~DelphosProcessingResult.channel_names`,
-                    :attr:`~DelphosProcessingResult.metadata`, and
-                    :attr:`~DelphosProcessingResult.original_fs`.
+            result: Detection result with :attr:`~HfoSpikeDetectorProcessingResult.markers`,
+                    :attr:`~HfoSpikeDetectorProcessingResult.channel_names`,
+                    :attr:`~HfoSpikeDetectorProcessingResult.metadata`, and
+                    :attr:`~HfoSpikeDetectorProcessingResult.original_fs`.
             events_path: Path of the events TSV (used to derive the rates filename).
         """
         suffix = events_path.suffix
@@ -200,10 +200,10 @@ class DelphosProcessingWriter(BaseProcessingWriter):
     # HDF5 writer
     # ------------------------------------------------------------------
 
-    def _write_hdf5(self, result: DelphosProcessingResult, output_path: Path) -> None:
+    def _write_hdf5(self, result: HfoSpikeDetectorProcessingResult, output_path: Path) -> None:
         """Write *result* to a structured HDF5 file at *output_path*.
 
-        See the :class:`DelphosProcessingWriter` class docstring for the full
+        See the :class:`HfoSpikeDetectorProcessingWriter` class docstring for the full
         file schema.
 
         Args:
@@ -293,7 +293,7 @@ class DelphosProcessingWriter(BaseProcessingWriter):
                 data=str(result.source_group.primary.path),
                 dtype=str_dtype,
             )
-            prov_grp.create_dataset("pipeline_name", data="delphos", dtype=str_dtype)
+            prov_grp.create_dataset("pipeline_name", data="hfo_spike_detection", dtype=str_dtype)
             prov_grp.create_dataset(
                 "pipeline_version", data=_package_version(), dtype=str_dtype
             )

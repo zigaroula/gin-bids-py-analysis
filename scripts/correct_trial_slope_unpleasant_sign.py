@@ -62,7 +62,7 @@ from trial_slope_shared import (  # noqa: E402
 
 DESCRIPTION_MAP = {
     "onset": "onsetnoflip",
-    "onsetdelphos": "onsetdelphosnoflip",
+    "onsethfospikes": "onsethfospikesnoflip",
     "onset50hz": "onset50hznoflip",
 }
 

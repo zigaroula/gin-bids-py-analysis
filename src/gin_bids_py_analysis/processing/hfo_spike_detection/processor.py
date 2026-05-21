@@ -1,5 +1,5 @@
 """
-Delphos HFO/spike detection processor.
+HFO/spike detection processor.
 
 Handles orchestration: loading iEEG data, applying montage, delegating to
 the pure detection algorithm, and assembling results.
@@ -20,52 +20,52 @@ from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.base import BaseProcessing
 from gin_bids_py_analysis.processing.utils.channels import build_montage
 
-from .params import DelphosParams
-from .result import DelphosProcessingResult
-from .delphos_detector import delphos_detector
+from .params import HfoSpikeDetectorParams
+from .result import HfoSpikeDetectorProcessingResult
+from .hfo_spike_detector import hfo_spike_detector
 from ..utils.channels import select_channels_for_montage
 from ..utils.multithreading import get_threads_for_worker
 
 
-class DelphosProcessing(BaseProcessing):
+class HfoSpikeDetectorProcessing(BaseProcessing):
     """
-    Delphos HFO/spike detection processor.
+    HFO/spike detection processor.
 
-    Instantiate with a DelphosParams object; then call run() (process + write)
+    Instantiate with a HfoSpikeDetectorParams object; then call run() (process + write)
     or execute() (process only) with a list of BIDS files or file groups.
 
     The processor:
     1. Loads iEEG data via MNE (format auto-detected)
     2. Applies optional channel selection
     3. Applies montage (mono or bipolar)
-    4. Delegates to the pure detection algorithm (delphos_detector)
-    5. Assembles a DelphosProcessingResult with detected events
+    4. Delegates to the pure detection algorithm (hfo_spike_detector)
+    5. Assembles a HfoSpikeDetectorProcessingResult with detected events
 
     Example::
 
         from pathlib import Path
-        from gin_bids_py_analysis.processing.delphos import (
-            DelphosParams,
-            DelphosProcessing,
-            DelphosProcessingWriter,
-            DelphosWriterParams,
+        from gin_bids_py_analysis.processing.hfo_spike_detection import (
+            HfoSpikeDetectorParams,
+            HfoSpikeDetectorProcessing,
+            HfoSpikeDetectorProcessingWriter,
+            HfoSpikeDetectorWriterParams,
         )
 
-        params = DelphosParams(
+        params = HfoSpikeDetectorParams(
             alpha=0.005,
             detection_type=["Osc", "Spk"],
             freq_band=[[80, 250], [250, 500]],
         )
-        processor = DelphosProcessing(params)
-        writer = DelphosProcessingWriter(
-            DelphosWriterParams(bids_root=Path("/data"))
+        processor = HfoSpikeDetectorProcessing(params)
+        writer = HfoSpikeDetectorProcessingWriter(
+            HfoSpikeDetectorWriterParams(bids_root=Path("/data"))
         )
         out_paths = processor.run(ieeg_files, writer)
     """
 
-    def __init__(self, params: DelphosParams, verbose: bool = True) -> None:
+    def __init__(self, params: HfoSpikeDetectorParams, verbose: bool = True) -> None:
         """
-        Initialize the Delphos processor.
+        Initialize the HFO/spike detector processor.
 
         Args:
             params: Algorithm parameters
@@ -78,20 +78,20 @@ class DelphosProcessing(BaseProcessing):
         self,
         group: BIDSFileGroup,
         progress_tracking_position: int = 0,
-    ) -> DelphosProcessingResult:
+    ) -> HfoSpikeDetectorProcessingResult:
         """
-        Run the Delphos detection pipeline on one file group.
+        Run the HFO/spike detection pipeline on one file group.
 
         Reads the iEEG file via MNE (format auto-detected from extension),
         extracts the sampling frequency and channel data, applies montage,
-        runs the detection algorithm, and returns a DelphosProcessingResult.
+        runs the detection algorithm, and returns a HfoSpikeDetectorProcessingResult.
 
         Args:
             group: BIDS file group with primary iEEG file
             progress_tracking_position: Position for progress tracking (joblib)
 
         Returns:
-            DelphosProcessingResult containing detected events and metadata
+            HfoSpikeDetectorProcessingResult containing detected events and metadata
         """
         # Load iEEG data
         with group.primary.ensure_loaded() as raw:
@@ -145,7 +145,7 @@ class DelphosProcessing(BaseProcessing):
                 pbar.set_postfix_str(f"{step_desc}")
             pbar.update(current_channel - pbar.n)
 
-        detection_result = delphos_detector(
+        detection_result = hfo_spike_detector(
             signal=data,
             labels=channel_names,
             alpha=self.params.alpha,
@@ -170,7 +170,7 @@ class DelphosProcessing(BaseProcessing):
         algorithm_config = self.params.model_dump()
 
         # Build result
-        result = DelphosProcessingResult(
+        result = HfoSpikeDetectorProcessingResult(
             source_group=group,
             metadata={
                 "original_fs": original_fs,

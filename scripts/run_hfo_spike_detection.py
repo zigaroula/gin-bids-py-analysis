@@ -1,6 +1,6 @@
 """
-Delphos analysis — run script.
-Edit the parameters below and run: python scripts/run_delphos.py
+HFO/spike detector analysis — run script.
+Edit the parameters below and run: python scripts/run_hfo_spike_detection.py
 """
 
 from __future__ import annotations
@@ -11,11 +11,11 @@ from pathlib import Path
 
 from gin_bids_py_analysis.bids import BIDSDataset
 from gin_bids_py_analysis.bids.helpers import normalize_subject_value
-from gin_bids_py_analysis.processing.delphos import (
-    DelphosParams,
-    DelphosProcessing,
-    DelphosProcessingWriter,
-    DelphosWriterParams,
+from gin_bids_py_analysis.processing.hfo_spike_detection import (
+    HfoSpikeDetectorParams,
+    HfoSpikeDetectorProcessing,
+    HfoSpikeDetectorProcessingWriter,
+    HfoSpikeDetectorWriterParams,
 )
 from gin_bids_py_analysis.processing.utils.channels import (
     BipolarDirection,
@@ -48,7 +48,7 @@ CHANNELS_CSV_FILES = {
 }
 
 # Algorithm parameters for detection
-PARAMS = DelphosParams(
+PARAMS = HfoSpikeDetectorParams(
     detection_type=["Osc", "Spk"],
     montage_mode=MontageMode.BIPOLAR,
     bipolar_direction=BipolarDirection.NEXT_MINUS_PREVIOUS,
@@ -56,7 +56,7 @@ PARAMS = DelphosParams(
 )
 
 # Writer configuration for output files
-WRITER_PARAMS = DelphosWriterParams(
+WRITER_PARAMS = HfoSpikeDetectorWriterParams(
     bids_root=BIDS_ROOT,
     output_format="tsv"
 )
@@ -267,8 +267,8 @@ if __name__ == "__main__":
         files = _filter_files_with_subject_channels(files, channels_for_montage)
     print(f"Found {len(files)} file(s). Running with n_jobs={N_JOBS}.")
 
-    processor = DelphosProcessing(PARAMS)
-    writer = DelphosProcessingWriter(WRITER_PARAMS)
+    processor = HfoSpikeDetectorProcessing(PARAMS)
+    writer = HfoSpikeDetectorProcessingWriter(WRITER_PARAMS)
 
     out_paths = processor.run(files, writer, n_jobs=N_JOBS, skip_existing=True)
     for p in out_paths:

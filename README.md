@@ -2,7 +2,7 @@
 
 BIDS-based iEEG analysis pipelines:
 - `hilbert` (band envelope extraction)
-- `delphos` (HFO/spike detection)
+- `hfo_spike_detection` (HFO/spike detection)
 - `condition_test` (subject-level condition statistics)
 - `regression` (subject-level condition-specific slope regression)
 - `condition_test_group` (group-level ROI statistics from `condition_test`)
@@ -103,7 +103,7 @@ out_paths = processor.run(files, writer, n_jobs=1)
 
 ## Typical Pipeline Order
 
-1. `hilbert` or `delphos` from raw iEEG (`scope="raw"`).
+1. `hilbert` or `hfo_spike_detection` from raw iEEG (`scope="raw"`).
 2. `condition_test` from chosen iEEG derivatives (often Hilbert BrainVision outputs).
 3. `regression` from chosen iEEG derivatives when your analysis is `gamma ~ continuous_value`.
 4. `condition_test_group` from `condition_test` outputs (`scope="condition_test"`).
@@ -145,15 +145,15 @@ Important naming behavior:
 
 This is why `condition_test` often filters with `desc: "gammasm0"`.
 
-### 2) Delphos (`scripts/run_delphos.py`)
+### 2) HFO/spike detector (`scripts/run_hfo_spike_detection.py`)
 
 Run:
 
 ```bash
-python scripts/run_delphos.py
+python scripts/run_hfo_spike_detection.py
 ```
 
-Main configuration is in `DelphosParams` (`src/gin_bids_py_analysis/processing/delphos/params.py`):
+Main configuration is in `HfoSpikeDetectorParams` (`src/gin_bids_py_analysis/processing/hfo_spike_detection/params.py`):
 - Detection controls:
   - `alpha`
   - `detection_type` (`["Osc"]`, `["Spk"]`, or both)
@@ -168,7 +168,7 @@ Main configuration is in `DelphosParams` (`src/gin_bids_py_analysis/processing/d
 - Montage and channel selection:
   - same montage/channel selector pattern as Hilbert
 
-Writer configuration (`DelphosWriterParams`):
+Writer configuration (`HfoSpikeDetectorWriterParams`):
 - `output_format`: `"hdf5"` or `"tsv"`
 - TSV mode writes:
   - `*_events.tsv` (event rows)

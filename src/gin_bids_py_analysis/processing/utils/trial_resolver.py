@@ -130,7 +130,7 @@ class TableTrialResolver(BaseModel):
         description=(
             "Optional BIDS entity filter applied to ``group.secondaries`` before loading table "
             "rows.  When set, only secondary files whose entities match all key-value pairs are "
-            "read by this resolver.  Use this to prevent event TSV files (e.g. Delphos "
+            "read by this resolver.  Use this to prevent event TSV files (e.g. HFO/spike detector "
             "``_events.tsv``) from being accidentally treated as trial tables. "
             "Example: ``{'suffix': 'beh'}`` restricts the resolver to ``*_beh.tsv`` files."
         ),

@@ -111,8 +111,8 @@ class EventFileWindowAnnotator(BaseModel):
         description=(
             "BIDS entity filter used to select files from ``group.secondaries``. "
             "Passed directly to ``files_matching_entities()`` as keyword arguments. "
-            "For example ``{'suffix': 'events', 'desc': 'delphos'}`` selects only "
-            "Delphos detection output files."
+            "For example ``{'suffix': 'events', 'desc': 'hfospikes'}`` selects only "
+            "HFO/spike detection output files."
         ),
     )
     metadata_events_key: str = Field(

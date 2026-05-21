@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.run_delphos import (
+from scripts.run_hfo_spike_detection import (
     _extract_first_bipolar_contact,
     _extract_second_bipolar_contact,
     _filter_files_with_subject_channels,

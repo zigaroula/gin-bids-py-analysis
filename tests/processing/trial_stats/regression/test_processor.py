@@ -244,8 +244,8 @@ def test_process_group_applies_trial_annotators_before_regression(tmp_path: Path
             "datatype": "ieeg",
         },
     )
-    delphos_file = _make_bids_file(
-        tmp_path / "sub-01_task-decid_run-1_desc-delphos_events.tsv",
+    hfo_spike_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_desc-hfospikes_events.tsv",
         {
             "subject": "01",
             "task": "decid",
@@ -253,10 +253,10 @@ def test_process_group_applies_trial_annotators_before_regression(tmp_path: Path
             "suffix": "events",
             "extension": ".tsv",
             "datatype": "ieeg",
-            "desc": "delphos",
+            "desc": "hfospikes",
         },
     )
-    delphos_file.attach_data(
+    hfo_spike_file.attach_data(
         [
             {"onset": "1.1", "duration": "0.0", "channel": "A1", "event_type": "Spk"},
         ]
@@ -287,13 +287,13 @@ def test_process_group_applies_trial_annotators_before_regression(tmp_path: Path
 
     annotators = [
         EventFileWindowAnnotator(
-            filter={"suffix": "events", "desc": "delphos"},
-            metadata_events_key="delphos_events",
+            filter={"suffix": "events", "desc": "hfospikes"},
+            metadata_events_key="hfo_spike_events",
             window_tmin_s=0.0,
             window_tmax_s=0.2,
         ),
         EventAnnotationInvalidationRule(
-            metadata_events_key="delphos_events",
+            metadata_events_key="hfo_spike_events",
             event_filter=ConditionExpr(
                 all=[
                     ConditionExpr(column="subject", op="==", value="01"),
@@ -321,7 +321,7 @@ def test_process_group_applies_trial_annotators_before_regression(tmp_path: Path
     )
 
     result = processor.process_group(
-        BIDSFileGroup(primary=ieeg_file, secondaries=[delphos_file])
+        BIDSFileGroup(primary=ieeg_file, secondaries=[hfo_spike_file])
     )
 
     assert result.condition_a_trial_count == 2
@@ -329,7 +329,7 @@ def test_process_group_applies_trial_annotators_before_regression(tmp_path: Path
     assert any(trial.exclusion_reason == "vmPFC_spike_0_3s" for trial in result.resolved_trials)
 
 
-def test_process_group_can_mask_annotated_delphos_channels_only(tmp_path: Path) -> None:
+def test_process_group_can_mask_annotated_hfo_spike_channels_only(tmp_path: Path) -> None:
     ieeg_file = _make_bids_file(
         tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
         {
@@ -341,8 +341,8 @@ def test_process_group_can_mask_annotated_delphos_channels_only(tmp_path: Path) 
             "datatype": "ieeg",
         },
     )
-    delphos_file = _make_bids_file(
-        tmp_path / "sub-01_task-decid_run-1_desc-delphos_events.tsv",
+    hfo_spike_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_desc-hfospikes_events.tsv",
         {
             "subject": "01",
             "task": "decid",
@@ -350,10 +350,10 @@ def test_process_group_can_mask_annotated_delphos_channels_only(tmp_path: Path) 
             "suffix": "events",
             "extension": ".tsv",
             "datatype": "ieeg",
-            "desc": "delphos",
+            "desc": "hfospikes",
         },
     )
-    delphos_file.attach_data(
+    hfo_spike_file.attach_data(
         [
             {"onset": "1.1", "duration": "0.0", "channel": "A1", "event_type": "Spk"},
         ]
@@ -381,13 +381,13 @@ def test_process_group_can_mask_annotated_delphos_channels_only(tmp_path: Path) 
 
     annotators = [
         EventFileWindowAnnotator(
-            filter={"suffix": "events", "desc": "delphos"},
-            metadata_events_key="delphos_events",
+            filter={"suffix": "events", "desc": "hfospikes"},
+            metadata_events_key="hfo_spike_events",
             window_tmin_s=0.0,
             window_tmax_s=0.2,
         ),
         EventAnnotationFeatureMaskRule(
-            metadata_events_key="delphos_events",
+            metadata_events_key="hfo_spike_events",
             event_filter=ConditionExpr(
                 all=[
                     ConditionExpr(column="subject", op="==", value="01"),
@@ -412,7 +412,7 @@ def test_process_group_can_mask_annotated_delphos_channels_only(tmp_path: Path) 
         ),
         resolver=_SlopeResolver(labels, predictors),
         annotators=annotators,
-    ).process_group(BIDSFileGroup(primary=ieeg_file, secondaries=[delphos_file]))
+    ).process_group(BIDSFileGroup(primary=ieeg_file, secondaries=[hfo_spike_file]))
 
     assert result.condition_a_trial_count == 3
     assert result.condition_a_stats_valid is True
