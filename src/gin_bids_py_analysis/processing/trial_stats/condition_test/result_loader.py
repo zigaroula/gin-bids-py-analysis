@@ -26,7 +26,8 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
 )
 
 from ..params import normalize_trial_activity_summary_missing_response_policy
-from .result import ConditionTestProcessingResult
+from ..result import ActivityEstimate, ConditionActivity, ConditionEpochs, ConditionTrialSummaryValues
+from .result import ConditionContrast, ConditionTestProcessingResult, DifferenceEstimate
 
 _VALID_BASELINE_SCOPES = frozenset({"trial", "condition", "global"})
 _VALID_TRIAL_ACTIVITY_SUMMARY_KINDS = frozenset({"epoch_mean", "anchor_to_response_mean"})
@@ -74,6 +75,7 @@ def load_condition_test_result(path: Path | str) -> ConditionTestProcessingResul
 
 def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
     with h5py.File(path, "r") as fh:
+        _require_v2_schema(fh, path.name)
         # --- axes (channel / region names + time) ---
         analysis_level = str_scalar(
             dataset_or_none(fh, "meta/analysis_level"), default="channel"
@@ -90,15 +92,11 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
         _zeros = np.zeros((n_ch, n_t), dtype=np.float64)
 
         # --- condition labels ---
-        labels_ds = dataset_or_none(fh, "meta/trial_count_labels")
+        labels_ds = dataset_or_none(fh, "meta/condition_labels")
         if labels_ds is not None:
             labels = decode_str_array(np.asarray(labels_ds[:], dtype=object))
             condition_a = labels[0] if len(labels) >= 1 else "condition_a"
             condition_b = labels[1] if len(labels) >= 2 else "condition_b"
-        elif "means" in fh:
-            mean_keys = [k for k in fh["means"].keys() if k != "difference"]
-            condition_a = mean_keys[0] if len(mean_keys) >= 1 else "condition_a"
-            condition_b = mean_keys[1] if len(mean_keys) >= 2 else "condition_b"
         else:
             condition_a, condition_b = "condition_a", "condition_b"
 
@@ -119,10 +117,13 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
                 return np.full((n_ch, n_t), fill, dtype=np.float64)
             return np.asarray(ds[:], dtype=np.float64)
 
-        t_values = _read_stats("stats/t_values")
-        p_values = _read_stats("stats/p_values", fill=1.0)
-        p_values_uncorrected = _read_stats("stats/p_values_uncorrected", fill=1.0)
-        sig_ds = dataset_or_none(fh, "stats/significant_mask")
+        t_values = _read_stats("stats/condition_contrast/t_values")
+        p_values = _read_stats("stats/condition_contrast/p_values", fill=1.0)
+        p_values_uncorrected = _read_stats(
+            "stats/condition_contrast/p_values_uncorrected",
+            fill=1.0,
+        )
+        sig_ds = dataset_or_none(fh, "stats/condition_contrast/significant_mask")
         significance_alpha = float_scalar(
             dataset_or_none(fh, "meta/significance_alpha"), default=0.05
         )
@@ -138,13 +139,13 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
             significant_mask = np.isfinite(p_values) & (
                 p_values < significance_alpha
             )
-        perm_ds = dataset_or_none(fh, "stats/permuted_t_values")
+        perm_ds = dataset_or_none(fh, "stats/condition_contrast/permuted_t_values")
         permuted_t_values: np.ndarray | None = (
             np.asarray(perm_ds[:], dtype=np.float32)
             if perm_ds is not None
             else None
         )
-        ch_sig_ds = dataset_or_none(fh, "stats/channel_significant_mask")
+        ch_sig_ds = dataset_or_none(fh, "stats/condition_contrast/channel_significant_mask")
         channel_significant_mask: np.ndarray | None = (
             np.asarray(ch_sig_ds[:], dtype=bool)
             if ch_sig_ds is not None
@@ -156,16 +157,16 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
             ds = dataset_or_none(fh, key)
             return np.asarray(ds[:], dtype=np.float64) if ds is not None else _zeros.copy()
 
-        condition_a_mean = _read_arr(f"means/{condition_a}")
-        condition_b_mean = _read_arr(f"means/{condition_b}")
-        mean_difference = _read_arr("means/difference")
+        condition_a_mean = _read_arr("data/activity/condition_a/mean")
+        condition_b_mean = _read_arr("data/activity/condition_b/mean")
+        mean_difference = _read_arr("data/activity/difference/mean")
 
         # --- uncertainty ---
-        condition_a_sem = _read_arr(f"uncertainty/{condition_a}_sem")
-        condition_b_sem = _read_arr(f"uncertainty/{condition_b}_sem")
-        difference_sem = _read_arr("uncertainty/difference_sem")
-        difference_ci95_low = _read_arr("uncertainty/difference_ci95_low")
-        difference_ci95_high = _read_arr("uncertainty/difference_ci95_high")
+        condition_a_sem = _read_arr("data/activity/condition_a/sem")
+        condition_b_sem = _read_arr("data/activity/condition_b/sem")
+        difference_sem = _read_arr("data/activity/difference/sem")
+        difference_ci95_low = _read_arr("data/activity/difference/ci95_low")
+        difference_ci95_high = _read_arr("data/activity/difference/ci95_high")
 
         # --- meta ---
         sfreq = float_scalar(
@@ -367,18 +368,18 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
                 else n_perms
             ),
         },
-        t_values=t_values,
-        p_values=p_values,
-        p_values_uncorrected=p_values_uncorrected,
-        significant_mask=significant_mask,
-        condition_a_mean=condition_a_mean,
-        condition_b_mean=condition_b_mean,
-        mean_difference=mean_difference,
-        condition_a_sem=condition_a_sem,
-        condition_b_sem=condition_b_sem,
-        difference_sem=difference_sem,
-        difference_ci95_low=difference_ci95_low,
-        difference_ci95_high=difference_ci95_high,
+        activity=ConditionActivity(
+            condition_a=ActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
+            condition_b=ActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
+        ),
+        epochs=ConditionEpochs(
+            condition_a=condition_a_epochs,
+            condition_b=condition_b_epochs,
+        ),
+        trial_activity_summary_values=ConditionTrialSummaryValues(
+            condition_a=condition_a_trial_activity_summary_values,
+            condition_b=condition_b_trial_activity_summary_values,
+        ),
         time_axis_s=time_axis_s,
         channel_names=channel_names,
         condition_a=condition_a,
@@ -403,14 +404,22 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
         trial_activity_summary_label=trial_activity_summary_label,
         epoch_cleaning_audit=epoch_cleaning_audit,
         stats_valid=stats_valid,
-        condition_a_epochs=condition_a_epochs,
-        condition_b_epochs=condition_b_epochs,
-        condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
-        condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
-        permuted_t_values=permuted_t_values,
-        channel_significant_mask=channel_significant_mask,
         source_ieeg_files=source_ieeg_files,
         source_electrodes_files=source_electrodes_files,
+        difference=DifferenceEstimate(
+            mean=mean_difference,
+            sem=difference_sem,
+            ci95_low=difference_ci95_low,
+            ci95_high=difference_ci95_high,
+        ),
+        contrast=ConditionContrast(
+            t_values=t_values,
+            p_values=p_values,
+            p_values_uncorrected=p_values_uncorrected,
+            significant_mask=significant_mask,
+            permuted_t_values=permuted_t_values,
+            channel_significant_mask=channel_significant_mask,
+        ),
     )
 
 
@@ -425,17 +434,15 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
         mat_int,
         mat_str,
         mat_str_list,
-        matlab_safe_name,
     )
     from scipy.io import loadmat
 
-    mat = loadmat(str(path), squeeze_me=False, struct_as_record=False)
+    mat = loadmat(str(path), squeeze_me=True, struct_as_record=False)
     data = mat["data"]
     meta = data.meta
+    _require_v2_schema_mat(meta, path.name)
     axes = data.axes
-    stats = data.stats
-    means = data.means
-    uncertainty = getattr(data, "uncertainty", None)
+    stats = data.stats.condition_contrast
     prov = getattr(data, "provenance", None)
 
     analysis_level = mat_str(getattr(meta, "analysis_level", None), default="channel")
@@ -451,7 +458,7 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
     _zeros = np.zeros((n_ch, n_t), dtype=np.float64)
 
     # --- condition labels ---
-    labels_raw = getattr(meta, "trial_count_labels", None)
+    labels_raw = getattr(meta, "condition_labels", None)
     if labels_raw is not None:
         labels = mat_str_list(labels_raw)
         condition_a = labels[0] if len(labels) >= 1 else "condition_a"
@@ -494,18 +501,17 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
         significant_mask = np.isfinite(p_values) & (p_values < significance_alpha)
 
     # --- means ---
-    safe_a = matlab_safe_name(condition_a)
-    safe_b = matlab_safe_name(condition_b)
-    condition_a_mean = _mat_arr(means, safe_a)
-    condition_b_mean = _mat_arr(means, safe_b)
-    mean_difference = _mat_arr(means, "difference")
+    activity = data.data.activity
+    condition_a_mean = _mat_arr(activity.condition_a, "mean")
+    condition_b_mean = _mat_arr(activity.condition_b, "mean")
+    mean_difference = _mat_arr(activity.difference, "mean")
 
     # --- uncertainty ---
-    condition_a_sem = _mat_arr(uncertainty, f"{safe_a}_sem")
-    condition_b_sem = _mat_arr(uncertainty, f"{safe_b}_sem")
-    difference_sem = _mat_arr(uncertainty, "difference_sem")
-    difference_ci95_low = _mat_arr(uncertainty, "difference_ci95_low")
-    difference_ci95_high = _mat_arr(uncertainty, "difference_ci95_high")
+    condition_a_sem = _mat_arr(activity.condition_a, "sem")
+    condition_b_sem = _mat_arr(activity.condition_b, "sem")
+    difference_sem = _mat_arr(activity.difference, "sem")
+    difference_ci95_low = _mat_arr(activity.difference, "ci95_low")
+    difference_ci95_high = _mat_arr(activity.difference, "ci95_high")
 
     # --- meta ---
     sfreq = mat_float(getattr(meta, "sampling_frequency_hz", None), default=0.0)
@@ -672,18 +678,18 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
             "epoch_cleaning": epoch_cleaning,
             "epoch_cleaning_audit": epoch_cleaning_audit,
         },
-        t_values=t_values,
-        p_values=p_values,
-        p_values_uncorrected=p_values_uncorrected,
-        significant_mask=significant_mask,
-        condition_a_mean=condition_a_mean,
-        condition_b_mean=condition_b_mean,
-        mean_difference=mean_difference,
-        condition_a_sem=condition_a_sem,
-        condition_b_sem=condition_b_sem,
-        difference_sem=difference_sem,
-        difference_ci95_low=difference_ci95_low,
-        difference_ci95_high=difference_ci95_high,
+        activity=ConditionActivity(
+            condition_a=ActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
+            condition_b=ActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
+        ),
+        epochs=ConditionEpochs(
+            condition_a=np.array([]),
+            condition_b=np.array([]),
+        ),
+        trial_activity_summary_values=ConditionTrialSummaryValues(
+            condition_a=condition_a_trial_activity_summary_values,
+            condition_b=condition_b_trial_activity_summary_values,
+        ),
         time_axis_s=time_axis_s,
         channel_names=channel_names,
         condition_a=condition_a,
@@ -708,13 +714,22 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
         trial_activity_summary_label=trial_activity_summary_label,
         epoch_cleaning_audit=epoch_cleaning_audit,
         stats_valid=stats_valid,
-        condition_a_epochs=np.array([]),
-        condition_b_epochs=np.array([]),
-        condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
-        condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
-        permuted_t_values=None,
         source_ieeg_files=source_ieeg_files,
         source_electrodes_files=source_electrodes_files,
+        difference=DifferenceEstimate(
+            mean=mean_difference,
+            sem=difference_sem,
+            ci95_low=difference_ci95_low,
+            ci95_high=difference_ci95_high,
+        ),
+        contrast=ConditionContrast(
+            t_values=t_values,
+            p_values=p_values,
+            p_values_uncorrected=p_values_uncorrected,
+            significant_mask=significant_mask,
+            permuted_t_values=None,
+            channel_significant_mask=None,
+        ),
     )
 
 
@@ -762,3 +777,23 @@ def _load_json_mapping(raw_value: str) -> dict[str, object]:
     if not isinstance(loaded, dict):
         return {}
     return {str(key): value for key, value in loaded.items()}
+
+
+def _require_v2_schema(fh: h5py.File, path_name: str) -> None:
+    schema_version = str_scalar(dataset_or_none(fh, "meta/schema_version"), default="")
+    if schema_version != "2.0":
+        raise ValueError(
+            f"{path_name}: unsupported trial_stats schema. "
+            "schema_version='2.0' is required; regenerate outputs with the v2 writer."
+        )
+
+
+def _require_v2_schema_mat(meta: object, path_name: str) -> None:
+    from gin_bids_py_analysis.processing.utils.matlab import mat_str
+
+    schema_version = mat_str(getattr(meta, "schema_version", None), default="")
+    if schema_version != "2.0":
+        raise ValueError(
+            f"{path_name}: unsupported trial_stats schema. "
+            "schema_version='2.0' is required; regenerate outputs with the v2 writer."
+        )

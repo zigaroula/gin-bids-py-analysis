@@ -9,12 +9,14 @@ import scipy.io
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.trial_stats import (
+    ActivityEstimate,
     BaseTrialStatsProcessingResult,
     BaseTrialStatsProcessingWriter,
     BaseTrialStatsWriterParams,
+    ConditionActivity,
 )
 from gin_bids_py_analysis.processing.trial_stats.writer import _trial_table_path
-from gin_bids_py_analysis.processing.utils.matlab import make_struct, matlab_safe_name
+from gin_bids_py_analysis.processing.utils.matlab import make_struct
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 
 
@@ -63,10 +65,10 @@ def _make_result(tmp_path: Path) -> BaseTrialStatsProcessingResult:
         condition_b="wait stop",
         condition_a_trial_count=1,
         condition_b_trial_count=1,
-        condition_a_mean=data,
-        condition_b_mean=data + 1.0,
-        condition_a_sem=np.full_like(data, 0.1),
-        condition_b_sem=np.full_like(data, 0.2),
+        activity=ConditionActivity(
+            condition_a=ActivityEstimate(mean=data, sem=np.full_like(data, 0.1)),
+            condition_b=ActivityEstimate(mean=data + 1.0, sem=np.full_like(data, 0.2)),
+        ),
         sfreq=1000.0,
         resolved_trials=[resolved_trial],
         source_ieeg_files=[str(primary.path)],
@@ -141,6 +143,6 @@ def test_base_writer_writes_shared_matlab_with_safe_condition_names(tmp_path: Pa
     )["data"]
 
     assert output_path.suffix == ".mat"
-    assert hasattr(data.means, matlab_safe_name(result.condition_a))
-    assert hasattr(data.means, matlab_safe_name(result.condition_b))
+    assert hasattr(data.data.activity, "condition_a")
+    assert hasattr(data.data.activity, "condition_b")
     assert str(data.provenance.pipeline_name) == "dummy_subject"

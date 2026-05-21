@@ -13,9 +13,13 @@ from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 from gin_bids_py_analysis.processing.trial_stats import (
+    ActivityEstimate,
+    ConditionActivity,
+    ConditionContrast,
     ConditionTestProcessingResult,
     ConditionTestProcessingWriter,
     ConditionTestWriterParams,
+    DifferenceEstimate,
 )
 
 
@@ -58,18 +62,22 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
     result = ConditionTestProcessingResult(
         source_group=BIDSFileGroup(primary=primary),
         output_entities={"subject": "01", "task": "decid"},
-        t_values=np.ones((2, 3), dtype=np.float64),
-        p_values=np.full((2, 3), 0.05, dtype=np.float64),
-        p_values_uncorrected=np.full((2, 3), 0.01, dtype=np.float64),
-        condition_a_mean=np.full((2, 3), 5.0, dtype=np.float64),
-        condition_b_mean=np.full((2, 3), 1.0, dtype=np.float64),
-        mean_difference=np.full((2, 3), 4.0, dtype=np.float64),
-        condition_a_sem=np.full((2, 3), 0.5, dtype=np.float64),
-        condition_b_sem=np.full((2, 3), 0.4, dtype=np.float64),
-        difference_sem=np.full((2, 3), 0.64, dtype=np.float64),
-        difference_ci95_low=np.full((2, 3), 2.7, dtype=np.float64),
-        difference_ci95_high=np.full((2, 3), 5.3, dtype=np.float64),
-        significant_mask=np.ones((2, 3), dtype=bool),
+        activity=ConditionActivity(
+            condition_a=ActivityEstimate(mean=np.full((2, 3), 5.0, dtype=np.float64), sem=np.full((2, 3), 0.5, dtype=np.float64)),
+            condition_b=ActivityEstimate(mean=np.full((2, 3), 1.0, dtype=np.float64), sem=np.full((2, 3), 0.4, dtype=np.float64)),
+        ),
+        difference=DifferenceEstimate(
+            mean=np.full((2, 3), 4.0, dtype=np.float64),
+            sem=np.full((2, 3), 0.64, dtype=np.float64),
+            ci95_low=np.full((2, 3), 2.7, dtype=np.float64),
+            ci95_high=np.full((2, 3), 5.3, dtype=np.float64),
+        ),
+        contrast=ConditionContrast(
+            t_values=np.ones((2, 3), dtype=np.float64),
+            p_values=np.full((2, 3), 0.05, dtype=np.float64),
+            p_values_uncorrected=np.full((2, 3), 0.01, dtype=np.float64),
+            significant_mask=np.ones((2, 3), dtype=bool),
+        ),
         time_axis_s=np.array([0.0, 0.1, 0.2], dtype=np.float64),
         channel_names=["A1", "A2"],
         condition_a="accepted",
@@ -127,15 +135,15 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
     assert "ses-" not in str(output_path.parent)
 
     with h5py.File(output_path, "r") as fh:
-        assert fh["stats"]["t_values"].shape == (2, 3)
-        assert fh["stats"]["p_values_uncorrected"].shape == (2, 3)
-        assert fh["stats"]["significant_mask"].shape == (2, 3)
-        assert fh["means"]["difference"].shape == (2, 3)
-        assert fh["uncertainty"]["accepted_sem"].shape == (2, 3)
-        assert fh["uncertainty"]["rejected_sem"].shape == (2, 3)
-        assert fh["uncertainty"]["difference_sem"].shape == (2, 3)
-        assert fh["uncertainty"]["difference_ci95_low"].shape == (2, 3)
-        assert fh["uncertainty"]["difference_ci95_high"].shape == (2, 3)
+        assert fh["stats"]["condition_contrast"]["t_values"].shape == (2, 3)
+        assert fh["stats"]["condition_contrast"]["p_values_uncorrected"].shape == (2, 3)
+        assert fh["stats"]["condition_contrast"]["significant_mask"].shape == (2, 3)
+        assert fh["data"]["activity"]["difference"]["mean"].shape == (2, 3)
+        assert fh["data"]["activity"]["condition_a"]["sem"].shape == (2, 3)
+        assert fh["data"]["activity"]["condition_b"]["sem"].shape == (2, 3)
+        assert fh["data"]["activity"]["difference"]["sem"].shape == (2, 3)
+        assert fh["data"]["activity"]["difference"]["ci95_low"].shape == (2, 3)
+        assert fh["data"]["activity"]["difference"]["ci95_high"].shape == (2, 3)
         assert list(fh["axes"]["region"].asstr()[:]) == ["A1", "A2"]
         assert "channel" not in fh["axes"]
         assert list(fh["meta"]["trial_counts"][:]) == [4, 4]
@@ -180,18 +188,22 @@ def test_writer_outputs_matlab_and_trial_table() -> None:
         result = ConditionTestProcessingResult(
             source_group=BIDSFileGroup(primary=primary),
             output_entities={"subject": "01", "task": "decid"},
-            t_values=np.ones((2, 3), dtype=np.float64),
-            p_values=np.full((2, 3), 0.04, dtype=np.float64),
-            p_values_uncorrected=np.full((2, 3), 0.01, dtype=np.float64),
-            condition_a_mean=np.full((2, 3), 5.0, dtype=np.float64),
-            condition_b_mean=np.full((2, 3), 1.0, dtype=np.float64),
-            mean_difference=np.full((2, 3), 4.0, dtype=np.float64),
-            condition_a_sem=np.full((2, 3), 0.5, dtype=np.float64),
-            condition_b_sem=np.full((2, 3), 0.4, dtype=np.float64),
-            difference_sem=np.full((2, 3), 0.64, dtype=np.float64),
-            difference_ci95_low=np.full((2, 3), 2.7, dtype=np.float64),
-            difference_ci95_high=np.full((2, 3), 5.3, dtype=np.float64),
-            significant_mask=np.ones((2, 3), dtype=bool),
+            activity=ConditionActivity(
+                condition_a=ActivityEstimate(mean=np.full((2, 3), 5.0, dtype=np.float64), sem=np.full((2, 3), 0.5, dtype=np.float64)),
+                condition_b=ActivityEstimate(mean=np.full((2, 3), 1.0, dtype=np.float64), sem=np.full((2, 3), 0.4, dtype=np.float64)),
+            ),
+            difference=DifferenceEstimate(
+                mean=np.full((2, 3), 4.0, dtype=np.float64),
+                sem=np.full((2, 3), 0.64, dtype=np.float64),
+                ci95_low=np.full((2, 3), 2.7, dtype=np.float64),
+                ci95_high=np.full((2, 3), 5.3, dtype=np.float64),
+            ),
+            contrast=ConditionContrast(
+                t_values=np.ones((2, 3), dtype=np.float64),
+                p_values=np.full((2, 3), 0.04, dtype=np.float64),
+                p_values_uncorrected=np.full((2, 3), 0.01, dtype=np.float64),
+                significant_mask=np.ones((2, 3), dtype=bool),
+            ),
             time_axis_s=np.array([0.0, 0.1, 0.2], dtype=np.float64),
             channel_names=["A1", "A2"],
             condition_a="accepted",
@@ -248,18 +260,18 @@ def test_writer_outputs_matlab_and_trial_table() -> None:
         mat = scipy.io.loadmat(str(output_path), squeeze_me=True, struct_as_record=False)
         data = mat["data"]
         # With squeeze_me=True, shapes are exactly as stored (no singleton dims here)
-        assert data.stats.t_values.shape == (2, 3)
-        assert data.stats.p_values.shape == (2, 3)
-        assert data.stats.p_values_uncorrected.shape == (2, 3)
-        assert data.stats.significant_mask.shape == (2, 3)
-        assert data.means.difference.shape == (2, 3)
-        assert data.means.accepted.shape == (2, 3)
-        assert data.means.rejected.shape == (2, 3)
-        assert data.uncertainty.accepted_sem.shape == (2, 3)
-        assert data.uncertainty.rejected_sem.shape == (2, 3)
-        assert data.uncertainty.difference_sem.shape == (2, 3)
-        assert data.uncertainty.difference_ci95_low.shape == (2, 3)
-        assert data.uncertainty.difference_ci95_high.shape == (2, 3)
+        assert data.stats.condition_contrast.t_values.shape == (2, 3)
+        assert data.stats.condition_contrast.p_values.shape == (2, 3)
+        assert data.stats.condition_contrast.p_values_uncorrected.shape == (2, 3)
+        assert data.stats.condition_contrast.significant_mask.shape == (2, 3)
+        assert data.data.activity.difference.mean.shape == (2, 3)
+        assert data.data.activity.condition_a.mean.shape == (2, 3)
+        assert data.data.activity.condition_b.mean.shape == (2, 3)
+        assert data.data.activity.condition_a.sem.shape == (2, 3)
+        assert data.data.activity.condition_b.sem.shape == (2, 3)
+        assert data.data.activity.difference.sem.shape == (2, 3)
+        assert data.data.activity.difference.ci95_low.shape == (2, 3)
+        assert data.data.activity.difference.ci95_high.shape == (2, 3)
         # channel axis: object array of 2 names
         channel_arr = np.atleast_1d(data.axes.channel)
         assert channel_arr.shape[0] == 2
@@ -294,18 +306,23 @@ def _make_minimal_result(
     return ConditionTestProcessingResult(
         source_group=BIDSFileGroup(primary=primary),
         output_entities={"subject": "01", "task": "t"},
-        t_values=np.ones((2, 3), dtype=np.float64),
-        p_values=np.full((2, 3), 0.04, dtype=np.float64),
-        p_values_uncorrected=np.full((2, 3), 0.01, dtype=np.float64),
-        condition_a_mean=np.full((2, 3), 5.0, dtype=np.float64),
-        condition_b_mean=np.full((2, 3), 1.0, dtype=np.float64),
-        mean_difference=np.full((2, 3), 4.0, dtype=np.float64),
-        condition_a_sem=np.full((2, 3), 0.5, dtype=np.float64),
-        condition_b_sem=np.full((2, 3), 0.4, dtype=np.float64),
-        difference_sem=np.full((2, 3), 0.64, dtype=np.float64),
-        difference_ci95_low=np.full((2, 3), 2.7, dtype=np.float64),
-        difference_ci95_high=np.full((2, 3), 5.3, dtype=np.float64),
-        significant_mask=np.ones((2, 3), dtype=bool),
+        activity=ConditionActivity(
+            condition_a=ActivityEstimate(mean=np.full((2, 3), 5.0, dtype=np.float64), sem=np.full((2, 3), 0.5, dtype=np.float64)),
+            condition_b=ActivityEstimate(mean=np.full((2, 3), 1.0, dtype=np.float64), sem=np.full((2, 3), 0.4, dtype=np.float64)),
+        ),
+        difference=DifferenceEstimate(
+            mean=np.full((2, 3), 4.0, dtype=np.float64),
+            sem=np.full((2, 3), 0.64, dtype=np.float64),
+            ci95_low=np.full((2, 3), 2.7, dtype=np.float64),
+            ci95_high=np.full((2, 3), 5.3, dtype=np.float64),
+        ),
+        contrast=ConditionContrast(
+            t_values=np.ones((2, 3), dtype=np.float64),
+            p_values=np.full((2, 3), 0.04, dtype=np.float64),
+            p_values_uncorrected=np.full((2, 3), 0.01, dtype=np.float64),
+            significant_mask=np.ones((2, 3), dtype=bool),
+            channel_significant_mask=channel_significant_mask,
+        ),
         time_axis_s=np.array([0.0, 0.1, 0.2], dtype=np.float64),
         channel_names=["A1", "A2"],
         condition_a="accepted",
@@ -341,7 +358,6 @@ def _make_minimal_result(
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
         stats_valid=True,
-        channel_significant_mask=channel_significant_mask,
         metadata={
             "channel_significance_mode": "none" if channel_significant_mask is None else "single_bin",
             "channel_significance_duration_threshold_ms": 100.0,
@@ -364,8 +380,8 @@ def test_writer_hdf5_channel_significant_mask_written_and_loaded(
 
     # Verify dataset is in the HDF5 file with correct content
     with h5py.File(output_path, "r") as fh:
-        assert "channel_significant_mask" in fh["stats"]
-        stored = np.asarray(fh["stats"]["channel_significant_mask"][:], dtype=bool)
+        assert "channel_significant_mask" in fh["stats"]["condition_contrast"]
+        stored = np.asarray(fh["stats"]["condition_contrast"]["channel_significant_mask"][:], dtype=bool)
         np.testing.assert_array_equal(stored, mask)
         assert fh["meta"]["channel_significance_mode"].asstr()[()] == "single_bin"
         assert float(fh["meta"]["channel_significance_duration_threshold_ms"][()]) == 100.0
@@ -377,8 +393,8 @@ def test_writer_hdf5_channel_significant_mask_written_and_loaded(
 
     # Round-trip through the loader
     loaded = load_condition_test_result(output_path)
-    assert loaded.channel_significant_mask is not None
-    np.testing.assert_array_equal(loaded.channel_significant_mask, mask)
+    assert loaded.contrast.channel_significant_mask is not None
+    np.testing.assert_array_equal(loaded.contrast.channel_significant_mask, mask)
     assert loaded.activity_zscore == "baseline"
     assert loaded.activity_baseline_tmin_s == pytest.approx(-0.2)
     assert loaded.activity_baseline_tmax_s == pytest.approx(0.0)
@@ -399,10 +415,10 @@ def test_writer_hdf5_channel_significant_mask_absent_when_none(
     output_path = writer.write(result)
 
     with h5py.File(output_path, "r") as fh:
-        assert "channel_significant_mask" not in fh["stats"]
+        assert "channel_significant_mask" not in fh["stats"].get("condition_contrast", {})
 
     loaded = load_condition_test_result(output_path)
-    assert loaded.channel_significant_mask is None
+    assert loaded.contrast.channel_significant_mask is None
 
 
 def test_writer_round_trips_trial_activity_summary_for_condition_test(
@@ -419,11 +435,11 @@ def test_writer_round_trips_trial_activity_summary_for_condition_test(
         "units": "ms",
     }
     result.trial_activity_summary_label = "Mean activity (trigger to response)"
-    result.condition_a_trial_activity_summary_values = np.array(
+    result.trial_activity_summary_values.condition_a = np.array(
         [[2.0, np.nan]],
         dtype=np.float64,
     )
-    result.condition_b_trial_activity_summary_values = np.array(
+    result.trial_activity_summary_values.condition_b = np.array(
         [[3.0, 3.0]],
         dtype=np.float64,
     )
@@ -447,7 +463,7 @@ def test_writer_round_trips_trial_activity_summary_for_condition_test(
         assert fh["meta"]["epoch_cleaning_audit_json"].asstr()[()] != ""
         np.testing.assert_allclose(
             fh["trial_activity_summary"]["condition_a_values"][:],
-            result.condition_a_trial_activity_summary_values,
+            result.trial_activity_summary_values.condition_a,
             equal_nan=True,
         )
         np.testing.assert_allclose(
@@ -460,13 +476,13 @@ def test_writer_round_trips_trial_activity_summary_for_condition_test(
     assert loaded.trial_activity_summary_source["column"] == "rt_ms"
     assert loaded.epoch_cleaning_audit == result.epoch_cleaning_audit
     np.testing.assert_allclose(
-        loaded.condition_a_trial_activity_summary_values,
-        result.condition_a_trial_activity_summary_values,
+        loaded.trial_activity_summary_values.condition_a,
+        result.trial_activity_summary_values.condition_a,
         equal_nan=True,
     )
     np.testing.assert_allclose(
-        loaded.condition_b_trial_activity_summary_values,
-        result.condition_b_trial_activity_summary_values,
+        loaded.trial_activity_summary_values.condition_b,
+        result.trial_activity_summary_values.condition_b,
         equal_nan=True,
     )
 

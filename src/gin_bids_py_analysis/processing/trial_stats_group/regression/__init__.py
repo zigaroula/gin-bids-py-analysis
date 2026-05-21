@@ -2,7 +2,12 @@
 
 from .params import RegressionGroupParams, RegressionGroupWriterParams
 from .processor import RegressionGroupProcessing, build_regression_compatible_groups
-from .result import RegressionGroupProcessingResult
+from .result import (
+    RegressionGroupProcessingResult,
+    RegressionSourceMetricStats,
+    ScatterData,
+    VsZeroStatsPair,
+)
 from .result_loader import load_regression_group_result
 from .writer import RegressionGroupProcessingWriter
 
@@ -10,6 +15,9 @@ __all__ = [
     "RegressionGroupParams",
     "RegressionGroupProcessing",
     "RegressionGroupProcessingResult",
+    "RegressionSourceMetricStats",
+    "ScatterData",
+    "VsZeroStatsPair",
     "RegressionGroupProcessingWriter",
     "RegressionGroupWriterParams",
     "build_regression_compatible_groups",

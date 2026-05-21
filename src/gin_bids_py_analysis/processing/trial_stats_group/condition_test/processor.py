@@ -45,9 +45,16 @@ from ..processor import (
     hash_time_axis,
     validate_group_compatibility,
 )
-from ..result import ROIChannelContribution
+from ..result import (
+    GroupEpochStats,
+    GroupEstimate,
+    GroupEstimatePair,
+    GroupTimecourseStats,
+    IndexedConditionContributions,
+    ROIChannelContribution,
+)
 from .params import ConditionTestGroupParams
-from .result import ConditionTestGroupProcessingResult
+from .result import ConditionTestEpochSummary, ConditionTestGroupProcessingResult
 from gin_bids_py_analysis.processing.utils.cluster_permutation import (
     compute_cluster_null_distribution,
     compute_mne_cluster_permutation,
@@ -410,12 +417,13 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
                 "activity_baseline_tmax_s": first.raw.activity_baseline_tmax_s,
                 "excluded_rois": dict(excluded_rois),
             },
-            activity_t_values=t_values,
-            activity_p_values=p_values,
-            activity_p_values_uncorrected=p_values_uncorrected,
-            activity_significant_mask=significant_mask,
-            metric_mean=metric_mean,
-            metric_sem=metric_sem,
+            activity_stats=GroupTimecourseStats(
+                t_values=t_values,
+                p_values=p_values,
+                p_values_uncorrected=p_values_uncorrected,
+                significant_mask=significant_mask,
+            ),
+            metric=GroupEstimate(mean=metric_mean, sem=metric_sem),
             time_axis_s=first.time_axis_s.astype(np.float64),
             region_names=region_names,
             source_metric=self.params.source_metric,
@@ -424,21 +432,38 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
             significance_alpha=self.params.significance_alpha,
             roi_mode=self.params.roi_mode,
             atlas_name=self.params.atlas_name,
-            epoch_activity_t=self.array_1d(summary_t),
-            epoch_activity_p=self.array_1d(summary_p),
-            epoch_activity_df=self.array_1d(summary_df),
-            epoch_mean_metric_mean=self.array_1d(summary_mean),
-            epoch_mean_metric_sem=self.array_1d(summary_sem),
+            activity_epoch=GroupEpochStats(
+                t=self.array_1d(summary_t),
+                p=self.array_1d(summary_p),
+                df=self.array_1d(summary_df),
+            ),
+            summary_epoch=ConditionTestEpochSummary(
+                t_values=self.array_1d(summary_t),
+                p_values=self.array_1d(summary_p),
+                df=self.array_1d(summary_df),
+                source_metric=GroupEstimate(
+                    mean=self.array_1d(summary_mean),
+                    sem=self.array_1d(summary_sem),
+                ),
+            ),
             roi_channel_counts=np.asarray(roi_channel_counts, dtype=np.int64),
             roi_subject_counts=np.asarray(roi_subject_counts, dtype=np.int64),
             contributions=contributions_out,
-            condition_a_activity_mean=condition_a_activity_mean,
-            condition_a_activity_sem=condition_a_activity_sem,
-            condition_b_activity_mean=condition_b_activity_mean,
-            condition_b_activity_sem=condition_b_activity_sem,
-            condition_a_activity_contributions=cond_a_contribution_samples,
-            condition_b_activity_contributions=cond_b_contribution_samples,
-            contribution_labels=contribution_label_rows,
+            activity=GroupEstimatePair(
+                condition_a=GroupEstimate(
+                    mean=condition_a_activity_mean,
+                    sem=condition_a_activity_sem,
+                ),
+                condition_b=GroupEstimate(
+                    mean=condition_b_activity_mean,
+                    sem=condition_b_activity_sem,
+                ),
+            ),
+            activity_contributions=IndexedConditionContributions(
+                condition_a=cond_a_contribution_samples,
+                condition_b=cond_b_contribution_samples,
+                labels=contribution_label_rows,
+            ),
             source_subject_stats_files=[str(snapshot.stats_file.path) for snapshot in snapshots],
             source_electrodes_files=sorted(used_electrode_paths),
             excluded_rois=excluded_rois,
@@ -645,16 +670,26 @@ def _load_raw_from_hdf5(
         n_ch = len(channels)
         n_t = len(time_axis_s)
         _empty_cond = np.full((n_ch, n_t), np.nan, dtype=np.float64)
-        if "means" in fh and condition_labels[0] in fh["means"]:
-            raw_a = np.asarray(fh["means"][condition_labels[0]][:], dtype=np.float64)
-            condition_a_mean_values = coerce_feature_time(raw_a, n_features=n_ch, n_times=n_t)
-        else:
-            condition_a_mean_values = _empty_cond.copy()
-        if "means" in fh and condition_labels[1] in fh["means"]:
-            raw_b = np.asarray(fh["means"][condition_labels[1]][:], dtype=np.float64)
-            condition_b_mean_values = coerce_feature_time(raw_b, n_features=n_ch, n_times=n_t)
-        else:
-            condition_b_mean_values = _empty_cond.copy()
+        raw_a_ds = dataset_or_none(fh, "data/activity/condition_a/mean")
+        condition_a_mean_values = (
+            coerce_feature_time(
+                np.asarray(raw_a_ds[:], dtype=np.float64),
+                n_features=n_ch,
+                n_times=n_t,
+            )
+            if raw_a_ds is not None
+            else _empty_cond.copy()
+        )
+        raw_b_ds = dataset_or_none(fh, "data/activity/condition_b/mean")
+        condition_b_mean_values = (
+            coerce_feature_time(
+                np.asarray(raw_b_ds[:], dtype=np.float64),
+                n_features=n_ch,
+                n_times=n_t,
+            )
+            if raw_b_ds is not None
+            else _empty_cond.copy()
+        )
         binning_mode = str_scalar(dataset_or_none(fh, "meta/binning_mode"), default="none")
         window_ms = float_scalar(dataset_or_none(fh, "meta/window_ms"), default=0.0)
         n_bins = int_scalar(dataset_or_none(fh, "meta/n_bins"), default=0)
@@ -683,7 +718,7 @@ def _load_raw_from_hdf5(
         source_electrodes_files = decode_str_array(
             np.asarray(fh["provenance"]["source_electrodes_files"][:], dtype=object)
         ) if "provenance" in fh and "source_electrodes_files" in fh["provenance"] else []
-        perm_ds = dataset_or_none(fh, "stats/permuted_t_values")
+        perm_ds = dataset_or_none(fh, "stats/condition_contrast/permuted_t_values")
         permuted_t_values: np.ndarray | None = (
             np.asarray(perm_ds[:], dtype=np.float32) if perm_ds is not None else None
         )
@@ -710,16 +745,11 @@ def _load_raw_from_hdf5(
 
 
 def _read_condition_labels_hdf5(fh: h5py.File) -> tuple[str, str]:
-    labels_dataset = dataset_or_none(fh, "meta/trial_count_labels")
+    labels_dataset = dataset_or_none(fh, "meta/condition_labels")
     if labels_dataset is not None:
         labels = decode_str_array(np.asarray(labels_dataset[:], dtype=object))
         if len(labels) >= 2:
             return labels[0], labels[1]
-
-    means_group = fh["means"]
-    mean_keys = [key for key in means_group.keys() if key != "difference"]
-    if len(mean_keys) >= 2:
-        return mean_keys[0], mean_keys[1]
     return "condition_a", "condition_b"
 
 
@@ -732,24 +762,24 @@ def _load_metric_matrix_hdf5(
     n_times: int,
 ) -> np.ndarray:
     if source_metric == "mean_difference":
-        dataset = dataset_or_none(fh, "means/difference")
+        dataset = dataset_or_none(fh, "data/activity/difference/mean")
         if dataset is None:
-            raise ValueError(f"{fh.filename}: means/difference dataset is required.")
+            raise ValueError(f"{fh.filename}: data/activity/difference/mean dataset is required.")
         raw = np.asarray(dataset[:], dtype=np.float64)
         return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
 
     if source_metric == "t_values":
-        dataset = dataset_or_none(fh, "stats/t_values")
+        dataset = dataset_or_none(fh, "stats/condition_contrast/t_values")
         if dataset is None:
-            raise ValueError(f"{fh.filename}: stats/t_values dataset is required.")
+            raise ValueError(f"{fh.filename}: stats/condition_contrast/t_values dataset is required.")
         raw = np.asarray(dataset[:], dtype=np.float64)
         return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
 
-    metric_name = condition_labels[0] if source_metric == "condition_a_mean" else condition_labels[1]
-    dataset = dataset_or_none(fh, f"means/{metric_name}")
+    metric_name = "condition_a" if source_metric == "condition_a_mean" else "condition_b"
+    dataset = dataset_or_none(fh, f"data/activity/{metric_name}/mean")
     if dataset is None:
         raise ValueError(
-            f"{fh.filename}: means/{metric_name!r} dataset is required "
+            f"{fh.filename}: data/activity/{metric_name}/mean dataset is required "
             f"for source_metric={source_metric!r}."
         )
     raw = np.asarray(dataset[:], dtype=np.float64)

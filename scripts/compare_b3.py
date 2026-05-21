@@ -549,32 +549,32 @@ def replay_regression_from_python_epochs(
 ) -> ComparisonBundle:
     if python_condition_field == "condition_a":
         condition_name = str(python_result.condition_a)
-        epochs = np.asarray(python_result.condition_a_epochs, dtype=np.float64)
+        epochs = np.asarray(python_result.epochs.condition_a, dtype=np.float64)
         predictor_raw = np.asarray(
-            python_result.condition_a_predictor_raw_values,
+            python_result.predictor_values.condition_a.raw_values,
             dtype=np.float64,
         ).ravel()
         predictor_transformed = np.asarray(
-            python_result.condition_a_predictor_transformed_values,
+            python_result.predictor_values.condition_a.transformed_values,
             dtype=np.float64,
         ).ravel()
         predictor_effective = np.asarray(
-            python_result.condition_a_predictor_values,
+            python_result.predictor_values.condition_a.values,
             dtype=np.float64,
         ).ravel()
     elif python_condition_field == "condition_b":
         condition_name = str(python_result.condition_b)
-        epochs = np.asarray(python_result.condition_b_epochs, dtype=np.float64)
+        epochs = np.asarray(python_result.epochs.condition_b, dtype=np.float64)
         predictor_raw = np.asarray(
-            python_result.condition_b_predictor_raw_values,
+            python_result.predictor_values.condition_b.raw_values,
             dtype=np.float64,
         ).ravel()
         predictor_transformed = np.asarray(
-            python_result.condition_b_predictor_transformed_values,
+            python_result.predictor_values.condition_b.transformed_values,
             dtype=np.float64,
         ).ravel()
         predictor_effective = np.asarray(
-            python_result.condition_b_predictor_values,
+            python_result.predictor_values.condition_b.values,
             dtype=np.float64,
         ).ravel()
     else:
@@ -999,9 +999,9 @@ class RegressionComparisonViewer:
 
 def _python_condition_values(result: object, condition_field: str) -> tuple[str, np.ndarray]:
     if condition_field == "condition_a":
-        return str(result.condition_a), np.asarray(result.condition_a_slope, dtype=np.float64)
+        return str(result.condition_a), np.asarray(result.regression.condition_a.slope, dtype=np.float64)
     if condition_field == "condition_b":
-        return str(result.condition_b), np.asarray(result.condition_b_slope, dtype=np.float64)
+        return str(result.condition_b), np.asarray(result.regression.condition_b.slope, dtype=np.float64)
     raise ValueError(f"Unsupported python condition field: {condition_field!r}")
 
 
@@ -1012,14 +1012,14 @@ def _python_condition_predictors(
     if condition_field == "condition_a":
         return (
             str(result.condition_a),
-            np.asarray(result.condition_a_predictor_raw_values, dtype=np.float64).ravel(),
-            np.asarray(result.condition_a_predictor_transformed_values, dtype=np.float64).ravel(),
+            np.asarray(result.predictor_values.condition_a.raw_values, dtype=np.float64).ravel(),
+            np.asarray(result.predictor_values.condition_a.transformed_values, dtype=np.float64).ravel(),
         )
     if condition_field == "condition_b":
         return (
             str(result.condition_b),
-            np.asarray(result.condition_b_predictor_raw_values, dtype=np.float64).ravel(),
-            np.asarray(result.condition_b_predictor_transformed_values, dtype=np.float64).ravel(),
+            np.asarray(result.predictor_values.condition_b.raw_values, dtype=np.float64).ravel(),
+            np.asarray(result.predictor_values.condition_b.transformed_values, dtype=np.float64).ravel(),
         )
     raise ValueError(f"Unsupported python condition field: {condition_field!r}")
 

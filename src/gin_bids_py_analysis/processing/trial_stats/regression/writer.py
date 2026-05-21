@@ -1,14 +1,6 @@
 from __future__ import annotations
 
-import json
-from typing import Any
-
-import h5py
-import numpy as np
-from scipy.io import savemat
-
-from gin_bids_py_analysis.processing.utils.matlab import make_struct, matlab_safe_name
-
+from ..result import _to_float_or_nan
 from ..writer import BaseTrialStatsProcessingWriter
 from .result import RegressionProcessingResult
 
@@ -47,312 +39,25 @@ class RegressionProcessingWriter(BaseTrialStatsProcessingWriter):
             _to_float_or_nan(metadata.get("predictor_transform_offset")),
         ]
 
-    def _write_hdf5_meta_extra(
-        self,
-        meta_grp: h5py.Group,
-        result: RegressionProcessingResult,
-        str_dtype: h5py.DatatypeLike,
-    ) -> None:
-        meta_grp.create_dataset("analysis_type", data="slope_regression", dtype=str_dtype)
-        meta_grp.create_dataset("predictor", data=str(result.predictor), dtype=str_dtype)
-        meta_grp.create_dataset(
-            "predictor_zscore",
-            data=str(result.predictor_zscore),
-            dtype=str_dtype,
-        )
-        meta_grp.create_dataset(
-            "predictor_transform_by_condition_json",
-            data=json.dumps(
-                result.predictor_transform_by_condition,
-                sort_keys=True,
-                ensure_ascii=True,
-            ),
-            dtype=str_dtype,
-        )
-        meta_grp.create_dataset("condition_a_stats_valid", data=bool(result.condition_a_stats_valid))
-        meta_grp.create_dataset("condition_b_stats_valid", data=bool(result.condition_b_stats_valid))
-
-    def _write_hdf5_trial_extra(
-        self,
-        trial_grp: h5py.Group,
-        result: RegressionProcessingResult,
-        str_dtype: h5py.DatatypeLike,
-    ) -> None:
-        trial_grp.create_dataset(
-            "predictor_raw",
-            data=np.array(
-                [str(trial.metadata.get("predictor_raw", "")) for trial in result.resolved_trials],
-                dtype=object,
-            ),
-            dtype=str_dtype,
-        )
-        trial_grp.create_dataset(
-            "predictor_value",
-            data=np.array(
-                [_to_float_or_nan(trial.metadata.get("predictor_value")) for trial in result.resolved_trials],
-                dtype=np.float64,
-            ),
-        )
-        trial_grp.create_dataset(
-            "predictor_raw_value",
-            data=np.array(
-                [_to_float_or_nan(trial.metadata.get("predictor_raw_value")) for trial in result.resolved_trials],
-                dtype=np.float64,
-            ),
-        )
-        trial_grp.create_dataset(
-            "predictor_transformed_value",
-            data=np.array(
-                [
-                    _to_float_or_nan(trial.metadata.get("predictor_transformed_value"))
-                    for trial in result.resolved_trials
-                ],
-                dtype=np.float64,
-            ),
-        )
-        trial_grp.create_dataset(
-            "predictor_transform_scale",
-            data=np.array(
-                [
-                    _to_float_or_nan(trial.metadata.get("predictor_transform_scale"))
-                    for trial in result.resolved_trials
-                ],
-                dtype=np.float64,
-            ),
-        )
-        trial_grp.create_dataset(
-            "predictor_transform_offset",
-            data=np.array(
-                [
-                    _to_float_or_nan(trial.metadata.get("predictor_transform_offset"))
-                    for trial in result.resolved_trials
-                ],
-                dtype=np.float64,
-            ),
-        )
-
-    def _write_hdf5_specific(
-        self,
-        fh: h5py.File,
-        result: RegressionProcessingResult,
-        str_dtype: h5py.DatatypeLike,
-    ) -> None:
-        regression_grp = fh.create_group("regression")
-        _write_condition_regression_hdf5(
-            regression_grp.create_group("condition_a"),
-            slope=result.condition_a_slope,
-            intercept=result.condition_a_intercept,
-            r_value=result.condition_a_r_value,
-            p_value=result.condition_a_p_value,
-            p_value_corrected=result.condition_a_p_value_corrected,
-            significant_mask=result.condition_a_significant_mask,
-            n_trials_used=result.condition_a_trials_used,
-            stats_valid=result.condition_a_stats_valid,
-            permuted_slopes=result.condition_a_permuted_slopes,
-        )
-        _write_condition_regression_hdf5(
-            regression_grp.create_group("condition_b"),
-            slope=result.condition_b_slope,
-            intercept=result.condition_b_intercept,
-            r_value=result.condition_b_r_value,
-            p_value=result.condition_b_p_value,
-            p_value_corrected=result.condition_b_p_value_corrected,
-            significant_mask=result.condition_b_significant_mask,
-            n_trials_used=result.condition_b_trials_used,
-            stats_valid=result.condition_b_stats_valid,
-            permuted_slopes=result.condition_b_permuted_slopes,
-        )
-
-        predictor_grp = fh.create_group("predictor")
-        predictor_grp.create_dataset(
-            "condition_a_raw_values",
-            data=np.asarray(result.condition_a_predictor_raw_values, dtype=np.float64),
-        )
-        predictor_grp.create_dataset(
-            "condition_b_raw_values",
-            data=np.asarray(result.condition_b_predictor_raw_values, dtype=np.float64),
-        )
-        predictor_grp.create_dataset(
-            "condition_a_transformed_values",
-            data=np.asarray(result.condition_a_predictor_transformed_values, dtype=np.float64),
-        )
-        predictor_grp.create_dataset(
-            "condition_b_transformed_values",
-            data=np.asarray(result.condition_b_predictor_transformed_values, dtype=np.float64),
-        )
-        predictor_grp.create_dataset(
-            "condition_a_values",
-            data=np.asarray(result.condition_a_predictor_values, dtype=np.float64),
-        )
-        predictor_grp.create_dataset(
-            "condition_b_values",
-            data=np.asarray(result.condition_b_predictor_values, dtype=np.float64),
-        )
-
-    def _build_matlab_meta_extra(
-        self,
-        result: RegressionProcessingResult,
-    ) -> dict[str, Any]:
-        return {
-            "analysis_type": np.str_("slope_regression"),
-            "predictor": np.str_(result.predictor),
-            "predictor_zscore": np.str_(result.predictor_zscore),
-            "predictor_transform_by_condition_json": np.str_(
-                json.dumps(
-                    result.predictor_transform_by_condition,
-                    sort_keys=True,
-                    ensure_ascii=True,
-                )
-            ),
-            "condition_a_stats_valid": bool(result.condition_a_stats_valid),
-            "condition_b_stats_valid": bool(result.condition_b_stats_valid),
-        }
-
-    def _build_matlab_trial_extra(
-        self,
-        result: RegressionProcessingResult,
-    ) -> dict[str, Any]:
-        return {
-            "predictor_raw": np.array(
-                [str(trial.metadata.get("predictor_raw", "")) for trial in result.resolved_trials],
-                dtype=object,
-            ),
-            "predictor_raw_value": np.array(
-                [_to_float_or_nan(trial.metadata.get("predictor_raw_value")) for trial in result.resolved_trials],
-                dtype=np.float64,
-            ),
-            "predictor_transformed_value": np.array(
-                [
-                    _to_float_or_nan(trial.metadata.get("predictor_transformed_value"))
-                    for trial in result.resolved_trials
-                ],
-                dtype=np.float64,
-            ),
-            "predictor_value": np.array(
-                [_to_float_or_nan(trial.metadata.get("predictor_value")) for trial in result.resolved_trials],
-                dtype=np.float64,
-            ),
-            "predictor_transform_scale": np.array(
-                [
-                    _to_float_or_nan(trial.metadata.get("predictor_transform_scale"))
-                    for trial in result.resolved_trials
-                ],
-                dtype=np.float64,
-            ),
-            "predictor_transform_offset": np.array(
-                [
-                    _to_float_or_nan(trial.metadata.get("predictor_transform_offset"))
-                    for trial in result.resolved_trials
-                ],
-                dtype=np.float64,
-            ),
-        }
-
-    def _build_matlab_specific(
-        self,
-        result: RegressionProcessingResult,
-    ) -> dict[str, Any]:
-        cond_a = matlab_safe_name(result.condition_a)
-        cond_b = matlab_safe_name(result.condition_b)
-
-        return {
-            "regression": make_struct(
-                condition_a=make_struct(
-                    slope=result.condition_a_slope.astype(np.float64),
-                    intercept=result.condition_a_intercept.astype(np.float64),
-                    r_value=result.condition_a_r_value.astype(np.float64),
-                    p_value=result.condition_a_p_value.astype(np.float64),
-                    p_value_corrected=result.condition_a_p_value_corrected.astype(np.float64),
-                    significant_mask=result.condition_a_significant_mask.astype(np.uint8),
-                    n_trials_used=int(result.condition_a_trials_used),
-                    stats_valid=bool(result.condition_a_stats_valid),
-                    **(
-                        {"permuted_slopes": result.condition_a_permuted_slopes.astype(np.float32)}
-                        if result.condition_a_permuted_slopes is not None
-                        else {}
-                    ),
-                ),
-                condition_b=make_struct(
-                    slope=result.condition_b_slope.astype(np.float64),
-                    intercept=result.condition_b_intercept.astype(np.float64),
-                    r_value=result.condition_b_r_value.astype(np.float64),
-                    p_value=result.condition_b_p_value.astype(np.float64),
-                    p_value_corrected=result.condition_b_p_value_corrected.astype(np.float64),
-                    significant_mask=result.condition_b_significant_mask.astype(np.uint8),
-                    n_trials_used=int(result.condition_b_trials_used),
-                    stats_valid=bool(result.condition_b_stats_valid),
-                    **(
-                        {"permuted_slopes": result.condition_b_permuted_slopes.astype(np.float32)}
-                        if result.condition_b_permuted_slopes is not None
-                        else {}
-                    ),
-                ),
-            ),
-            "predictor": make_struct(
-                condition_a_raw_values=np.asarray(result.condition_a_predictor_raw_values, dtype=np.float64),
-                condition_b_raw_values=np.asarray(result.condition_b_predictor_raw_values, dtype=np.float64),
-                condition_a_transformed_values=np.asarray(result.condition_a_predictor_transformed_values, dtype=np.float64),
-                condition_b_transformed_values=np.asarray(result.condition_b_predictor_transformed_values, dtype=np.float64),
-                condition_a_values=np.asarray(result.condition_a_predictor_values, dtype=np.float64),
-                condition_b_values=np.asarray(result.condition_b_predictor_values, dtype=np.float64),
-            ),
-            "means": make_struct(
-                **{
-                    cond_a: result.condition_a_mean.astype(np.float64),
-                    cond_b: result.condition_b_mean.astype(np.float64),
-                }
-            ),
-        }
-
-
-def _write_condition_regression_hdf5(
-    group: h5py.Group,
-    *,
-    slope: np.ndarray,
-    intercept: np.ndarray,
-    r_value: np.ndarray,
-    p_value: np.ndarray,
-    p_value_corrected: np.ndarray,
-    significant_mask: np.ndarray,
-    n_trials_used: int,
-    stats_valid: bool,
-    permuted_slopes: np.ndarray | None = None,
-) -> None:
-    group.create_dataset("slope", data=np.asarray(slope, dtype=np.float64))
-    group.create_dataset("intercept", data=np.asarray(intercept, dtype=np.float64))
-    group.create_dataset("r_value", data=np.asarray(r_value, dtype=np.float64))
-    group.create_dataset("p_value", data=np.asarray(p_value, dtype=np.float64))
-    group.create_dataset("p_value_corrected", data=np.asarray(p_value_corrected, dtype=np.float64))
-    group.create_dataset("significant_mask", data=np.asarray(significant_mask, dtype=bool))
-    group.create_dataset("n_trials_used", data=int(n_trials_used))
-    group.create_dataset("stats_valid", data=bool(stats_valid))
-    if permuted_slopes is not None:
-        group.create_dataset(
-            "permuted_slopes",
-            data=np.asarray(permuted_slopes, dtype=np.float32),
-            compression="gzip",
-            compression_opts=4,
-        )
-
 
 def _validate_shape_consistency(result: RegressionProcessingResult) -> None:
-    expected = result.condition_a_slope.shape
+    expected = result.regression.condition_a.slope.shape
     shapes = {
-        "condition_a_intercept": result.condition_a_intercept.shape,
-        "condition_a_r_value": result.condition_a_r_value.shape,
-        "condition_a_p_value": result.condition_a_p_value.shape,
-        "condition_a_p_value_corrected": result.condition_a_p_value_corrected.shape,
-        "condition_a_significant_mask": result.condition_a_significant_mask.shape,
-        "condition_b_slope": result.condition_b_slope.shape,
-        "condition_b_intercept": result.condition_b_intercept.shape,
-        "condition_b_r_value": result.condition_b_r_value.shape,
-        "condition_b_p_value": result.condition_b_p_value.shape,
-        "condition_b_p_value_corrected": result.condition_b_p_value_corrected.shape,
-        "condition_b_significant_mask": result.condition_b_significant_mask.shape,
-        "condition_a_mean": result.condition_a_mean.shape,
-        "condition_b_mean": result.condition_b_mean.shape,
-        "condition_a_sem": result.condition_a_sem.shape,
-        "condition_b_sem": result.condition_b_sem.shape,
+        "regression.condition_a.intercept": result.regression.condition_a.intercept.shape,
+        "regression.condition_a.r_value": result.regression.condition_a.r_value.shape,
+        "regression.condition_a.p_value": result.regression.condition_a.p_value.shape,
+        "regression.condition_a.p_value_corrected": result.regression.condition_a.p_value_corrected.shape,
+        "regression.condition_a.significant_mask": result.regression.condition_a.significant_mask.shape,
+        "regression.condition_b.slope": result.regression.condition_b.slope.shape,
+        "regression.condition_b.intercept": result.regression.condition_b.intercept.shape,
+        "regression.condition_b.r_value": result.regression.condition_b.r_value.shape,
+        "regression.condition_b.p_value": result.regression.condition_b.p_value.shape,
+        "regression.condition_b.p_value_corrected": result.regression.condition_b.p_value_corrected.shape,
+        "regression.condition_b.significant_mask": result.regression.condition_b.significant_mask.shape,
+        "activity.condition_a.mean": result.activity.condition_a.mean.shape,
+        "activity.condition_b.mean": result.activity.condition_b.mean.shape,
+        "activity.condition_a.sem": result.activity.condition_a.sem.shape,
+        "activity.condition_b.sem": result.activity.condition_b.sem.shape,
     }
     mismatched = [name for name, shape in shapes.items() if shape != expected]
     if mismatched:
@@ -361,13 +66,3 @@ def _validate_shape_consistency(result: RegressionProcessingResult) -> None:
             "All regression and summary arrays must share shape "
             f"{expected!r}; got {details}."
         )
-
-
-def _to_float_or_nan(value: object) -> float:
-    if value is None:
-        return float("nan")
-    try:
-        out = float(value)
-    except (TypeError, ValueError):
-        return float("nan")
-    return out if np.isfinite(out) else float("nan")

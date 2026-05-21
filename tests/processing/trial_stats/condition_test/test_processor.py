@@ -174,7 +174,7 @@ def test_process_group_pools_multiple_ieeg_files_and_sets_shared_output_entities
         "task": "decid",
     }
     assert result.stats_valid is True
-    assert np.all(result.mean_difference > 0)
+    assert np.all(result.difference.mean > 0)
     assert len(result.source_ieeg_files) == 2
 
 
@@ -220,11 +220,11 @@ def test_process_group_exposes_epoch_mean_trial_activity_summary(
     ).process_group(BIDSFileGroup(primary=ieeg_file))
 
     np.testing.assert_allclose(
-        result.condition_a_trial_activity_summary_values,
+        result.trial_activity_summary_values.condition_a,
         np.array([[6.0, 8.0]], dtype=np.float64),
     )
     np.testing.assert_allclose(
-        result.condition_b_trial_activity_summary_values,
+        result.trial_activity_summary_values.condition_b,
         np.array([[1.0, 2.0]], dtype=np.float64),
     )
     assert result.trial_activity_summary_kind == "epoch_mean"
@@ -278,12 +278,12 @@ def test_process_group_applies_notch_filter_and_preserves_original_raw(
         resolver=_AlternatingResolver(),
     ).process_group(group)
 
-    freqs = np.fft.rfftfreq(unfiltered.condition_a_epochs.shape[-1], d=1.0 / sfreq)
+    freqs = np.fft.rfftfreq(unfiltered.epochs.condition_a.shape[-1], d=1.0 / sfreq)
     idx_50hz = int(np.argmin(np.abs(freqs - 50.0)))
     unfiltered_amp = np.abs(
-        np.fft.rfft(unfiltered.condition_a_epochs[0, 0, :])
+        np.fft.rfft(unfiltered.epochs.condition_a[0, 0, :])
     )[idx_50hz]
-    filtered_amp = np.abs(np.fft.rfft(filtered.condition_a_epochs[0, 0, :]))[
+    filtered_amp = np.abs(np.fft.rfft(filtered.epochs.condition_a[0, 0, :]))[
         idx_50hz
     ]
 
@@ -348,12 +348,12 @@ def test_process_group_supports_anchor_to_response_trial_activity_summary_for_co
     ).process_group(BIDSFileGroup(primary=ieeg_file))
 
     np.testing.assert_allclose(
-        result.condition_a_trial_activity_summary_values,
+        result.trial_activity_summary_values.condition_a,
         np.array([[2.0, np.nan]], dtype=np.float64),
         equal_nan=True,
     )
     np.testing.assert_allclose(
-        result.condition_b_trial_activity_summary_values,
+        result.trial_activity_summary_values.condition_b,
         np.array([[3.0, 3.0]], dtype=np.float64),
         equal_nan=True,
     )
@@ -416,8 +416,8 @@ def test_process_group_epoch_cleaning_nan_masks_partial_trial_feature_only(
     assert result.epoch_cleaning_audit["fully_masked_trials_a"] == []
     assert result.epoch_cleaning_audit["fully_masked_trials_b"] == []
     assert all(trial.keep for trial in result.resolved_trials)
-    assert np.all(np.isfinite(result.condition_a_epochs[1, 0, :]))
-    assert np.all(np.isnan(result.condition_a_epochs[1, 1, :]))
+    assert np.all(np.isfinite(result.epochs.condition_a[1, 0, :]))
+    assert np.all(np.isnan(result.epochs.condition_a[1, 1, :]))
 
 
 def test_process_group_aggregates_channels_by_atlas_region(
@@ -484,8 +484,8 @@ def test_process_group_aggregates_channels_by_atlas_region(
     assert result.channel_names == ["R1", "R2"]
     assert result.condition_a_trial_count == 2
     assert result.condition_b_trial_count == 2
-    assert result.mean_difference.shape == (2, 3)
-    assert np.all(result.mean_difference > 0.0)
+    assert result.difference.mean.shape == (2, 3)
+    assert np.all(result.difference.mean > 0.0)
     assert result.source_electrodes_files == [str(electrodes_path)]
     assert result.output_entities == {
         "subject": "01",
@@ -554,8 +554,8 @@ def test_process_group_drops_na_like_regions_when_atlas_regions_not_set(
 
     assert result.analysis_level == "roi"
     assert result.channel_names == ["R1"]
-    assert result.mean_difference.shape == (1, 3)
-    assert np.all(result.mean_difference > 0.0)
+    assert result.difference.mean.shape == (1, 3)
+    assert np.all(result.difference.mean > 0.0)
 
 def test_process_group_window_ms_binning(
     tmp_path: Path,
@@ -603,8 +603,8 @@ def test_process_group_window_ms_binning(
     assert result.window_ms == 200.0
     assert result.n_bins == 0
     assert result.time_axis_s.shape == (3,)
-    assert result.mean_difference.shape == (1, 3)
-    assert np.all(result.mean_difference > 0.0)
+    assert result.difference.mean.shape == (1, 3)
+    assert np.all(result.difference.mean > 0.0)
 
 
 def test_process_group_n_bins_binning(
@@ -653,8 +653,8 @@ def test_process_group_n_bins_binning(
     assert result.window_ms == 0.0
     assert result.n_bins == 2
     assert result.time_axis_s.shape == (2,)
-    assert result.mean_difference.shape == (1, 2)
-    assert np.all(result.mean_difference > 0.0)
+    assert result.difference.mean.shape == (1, 2)
+    assert np.all(result.difference.mean > 0.0)
 
 def test_temporal_bin_epochs_merges_single_sample_tail() -> None:
     epochs = np.array([[[1.0, 2.0, 3.0, 4.0, 5.0]]], dtype=np.float32)
@@ -933,7 +933,7 @@ def test_process_group_channel_significance_mode_none_gives_null_mask(
     )
     result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
 
-    assert result.channel_significant_mask is None
+    assert result.contrast.channel_significant_mask is None
 
 
 def test_process_group_channel_significance_mode_single_bin(
@@ -967,11 +967,11 @@ def test_process_group_channel_significance_mode_single_bin(
     )
     result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
 
-    assert result.channel_significant_mask is not None
-    assert result.channel_significant_mask.shape == (len(ch_names),)
-    assert result.channel_significant_mask.dtype == bool
-    assert result.channel_significant_mask[0] is np.bool_(True)
-    assert result.channel_significant_mask[1] is np.bool_(False)
+    assert result.contrast.channel_significant_mask is not None
+    assert result.contrast.channel_significant_mask.shape == (len(ch_names),)
+    assert result.contrast.channel_significant_mask.dtype == bool
+    assert result.contrast.channel_significant_mask[0] is np.bool_(True)
+    assert result.contrast.channel_significant_mask[1] is np.bool_(False)
 
 
 def test_process_group_channel_significance_mode_duration(
@@ -1008,11 +1008,11 @@ def test_process_group_channel_significance_mode_duration(
     )
     result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
 
-    assert result.channel_significant_mask is not None
-    assert result.channel_significant_mask.shape == (len(ch_names),)
-    assert result.channel_significant_mask.dtype == bool
-    assert result.channel_significant_mask[0] is np.bool_(True)
-    assert result.channel_significant_mask[1] is np.bool_(False)
+    assert result.contrast.channel_significant_mask is not None
+    assert result.contrast.channel_significant_mask.shape == (len(ch_names),)
+    assert result.contrast.channel_significant_mask.dtype == bool
+    assert result.contrast.channel_significant_mask[0] is np.bool_(True)
+    assert result.contrast.channel_significant_mask[1] is np.bool_(False)
 
 
 def test_process_group_experiment_start_code_filters_early_anchors(
@@ -1223,9 +1223,9 @@ def test_process_group_activity_zscore_preserves_ttest_statistics(
         resolver=_AlternatingResolver(),
     ).process_group(group)
 
-    np.testing.assert_allclose(z_result.t_values, raw_result.t_values)
-    np.testing.assert_allclose(z_result.p_values, raw_result.p_values)
-    np.testing.assert_array_equal(z_result.significant_mask, raw_result.significant_mask)
+    np.testing.assert_allclose(z_result.contrast.t_values, raw_result.contrast.t_values)
+    np.testing.assert_allclose(z_result.contrast.p_values, raw_result.contrast.p_values)
+    np.testing.assert_array_equal(z_result.contrast.significant_mask, raw_result.contrast.significant_mask)
     assert z_result.activity_zscore == "baseline"
     assert z_result.metadata["activity_zscore"] == "baseline"
     assert z_result.activity_baseline_tmin_s == pytest.approx(0.0)
@@ -1234,17 +1234,17 @@ def test_process_group_activity_zscore_preserves_ttest_statistics(
     assert z_result.activity_baseline_remove_outlier_trial_means is True
     assert z_result.metadata["activity_baseline_scope"] == "global"
     assert z_result.metadata["activity_baseline_remove_outlier_trial_means"] is True
-    assert not np.allclose(z_result.mean_difference, raw_result.mean_difference)
+    assert not np.allclose(z_result.difference.mean, raw_result.difference.mean)
     baseline_mask = (z_result.time_axis_s >= 0.0) & (z_result.time_axis_s <= 0.1)
     pooled_trial_means = np.concatenate(
         [
             np.nanmean(
-                z_result.condition_a_epochs[:, :, baseline_mask],
+                z_result.epochs.condition_a[:, :, baseline_mask],
                 axis=2,
                 dtype=np.float64,
             ),
             np.nanmean(
-                z_result.condition_b_epochs[:, :, baseline_mask],
+                z_result.epochs.condition_b[:, :, baseline_mask],
                 axis=2,
                 dtype=np.float64,
             ),
@@ -1329,7 +1329,7 @@ def test_process_group_supports_numeric_condition_rules_and_audits_exclusions(
     assert result.condition_a_trial_count == 2
     assert result.condition_b_trial_count == 2
     assert result.stats_valid is True
-    assert np.all(result.mean_difference > 0.0)
+    assert np.all(result.difference.mean > 0.0)
     assert any(trial.exclusion_reason == "no_matching_condition" for trial in result.resolved_trials)
     assert any(
         trial.metadata.get("condition_resolution_reason") == "no_matching_condition"

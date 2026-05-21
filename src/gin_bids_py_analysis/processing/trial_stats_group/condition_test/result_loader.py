@@ -16,8 +16,15 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
     str_scalar,
 )
 
-from ..result import ROIChannelContribution
-from .result import ConditionTestGroupProcessingResult
+from ..result import (
+    GroupEpochStats,
+    GroupEstimate,
+    GroupEstimatePair,
+    GroupTimecourseStats,
+    IndexedConditionContributions,
+    ROIChannelContribution,
+)
+from .result import ConditionTestEpochSummary, ConditionTestGroupProcessingResult
 
 
 def load_condition_test_group_result(
@@ -33,6 +40,7 @@ def load_condition_test_group_result(
 
 def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
     with h5py.File(path, "r") as fh:
+        _require_v2_schema(fh, path.name)
         region_names = decode_str_array(np.asarray(fh["axes"]["region"][:]))
         time_axis_s = np.asarray(fh["axes"]["time_s"][:], dtype=np.float64)
         n_rois = len(region_names)
@@ -56,31 +64,31 @@ def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
                 return np.zeros(n_rois, dtype=np.int64)
             return np.asarray(ds[:], dtype=np.int64).ravel()
 
-        t_values = _read_2d("stats/t_values")
-        p_values = _read_2d("stats/p_values", fill=1.0)
-        p_values_uncorrected = _read_2d("stats/p_values_uncorrected", fill=1.0)
+        t_values = _read_2d("stats/activity/t_values")
+        p_values = _read_2d("stats/activity/p_values", fill=1.0)
+        p_values_uncorrected = _read_2d("stats/activity/p_values_uncorrected", fill=1.0)
         significance_alpha = float_scalar(
             dataset_or_none(fh, "meta/significance_alpha"),
             default=0.05,
         )
-        significant_mask_ds = dataset_or_none(fh, "stats/significant_mask")
+        significant_mask_ds = dataset_or_none(fh, "stats/activity/significant_mask")
         if significant_mask_ds is not None:
             significant_mask = np.asarray(significant_mask_ds[:], dtype=bool)
         else:
             significant_mask = np.isfinite(p_values) & (p_values < significance_alpha)
 
-        metric_mean = _read_2d("means/metric_mean")
-        metric_sem = _read_2d("uncertainty/metric_sem")
-        condition_a_activity_mean = _read_2d("means/condition_a_mean")
-        condition_a_activity_sem = _read_2d("means/condition_a_sem")
-        condition_b_activity_mean = _read_2d("means/condition_b_mean")
-        condition_b_activity_sem = _read_2d("means/condition_b_sem")
+        metric_mean = _read_2d("data/source_metric/mean")
+        metric_sem = _read_2d("data/source_metric/sem")
+        condition_a_activity_mean = _read_2d("data/activity/condition_a/mean")
+        condition_a_activity_sem = _read_2d("data/activity/condition_a/sem")
+        condition_b_activity_mean = _read_2d("data/activity/condition_b/mean")
+        condition_b_activity_sem = _read_2d("data/activity/condition_b/sem")
 
-        epoch_mean_t_values = _read_1d("summary_epoch/t_values")
-        epoch_mean_p_values = _read_1d("summary_epoch/p_values", fill=1.0)
-        epoch_mean_df = _read_1d("summary_epoch/df")
-        epoch_mean_metric_mean = _read_1d("summary_epoch/metric_mean")
-        epoch_mean_metric_sem = _read_1d("summary_epoch/metric_sem")
+        epoch_mean_t_values = _read_1d("data/summary_epoch/t_values")
+        epoch_mean_p_values = _read_1d("data/summary_epoch/p_values", fill=1.0)
+        epoch_mean_df = _read_1d("data/summary_epoch/df")
+        epoch_mean_metric_mean = _read_1d("data/summary_epoch/source_metric_mean")
+        epoch_mean_metric_sem = _read_1d("data/summary_epoch/source_metric_sem")
 
         roi_channel_counts = _read_1d_int("meta/roi_channel_counts")
         roi_subject_counts = _read_1d_int("meta/roi_subject_counts")
@@ -141,8 +149,8 @@ def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
         cluster_p_values: np.ndarray | None = None
         cluster_windows: list[list[tuple[float, float]]] | None = None
         cluster_null_distributions: list[np.ndarray] | None = None
-        if "cluster_stats" in fh:
-            cluster_stats = fh["cluster_stats"]
+        if "stats/cluster" in fh:
+            cluster_stats = fh["stats/cluster"]
             cluster_p_ds = dataset_or_none(cluster_stats, "p_values")
             if cluster_p_ds is not None:
                 cluster_p_values = np.asarray(cluster_p_ds[:], dtype=np.float64)
@@ -179,30 +187,48 @@ def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
             "activity_baseline_tmin_s": activity_baseline_tmin_s,
             "activity_baseline_tmax_s": activity_baseline_tmax_s,
         },
-        activity_t_values=t_values,
-        activity_p_values=p_values,
-        activity_p_values_uncorrected=p_values_uncorrected,
-        activity_significant_mask=significant_mask,
-        metric_mean=metric_mean,
-        metric_sem=metric_sem,
-        epoch_activity_t=epoch_mean_t_values,
-        epoch_activity_p=epoch_mean_p_values,
-        epoch_activity_df=epoch_mean_df,
-        epoch_mean_metric_mean=epoch_mean_metric_mean,
-        epoch_mean_metric_sem=epoch_mean_metric_sem,
+        activity_stats=GroupTimecourseStats(
+            t_values=t_values,
+            p_values=p_values,
+            p_values_uncorrected=p_values_uncorrected,
+            significant_mask=significant_mask,
+        ),
+        metric=GroupEstimate(mean=metric_mean, sem=metric_sem),
+        activity_epoch=GroupEpochStats(
+            t=epoch_mean_t_values,
+            p=epoch_mean_p_values,
+            df=epoch_mean_df,
+        ),
+        summary_epoch=ConditionTestEpochSummary(
+            t_values=epoch_mean_t_values,
+            p_values=epoch_mean_p_values,
+            df=epoch_mean_df,
+            source_metric=GroupEstimate(
+                mean=epoch_mean_metric_mean,
+                sem=epoch_mean_metric_sem,
+            ),
+        ),
         time_axis_s=time_axis_s,
         region_names=region_names,
         condition_labels=condition_labels,
         roi_channel_counts=roi_channel_counts,
         roi_subject_counts=roi_subject_counts,
         contributions=contributions,
-        condition_a_activity_mean=condition_a_activity_mean,
-        condition_a_activity_sem=condition_a_activity_sem,
-        condition_b_activity_mean=condition_b_activity_mean,
-        condition_b_activity_sem=condition_b_activity_sem,
-        condition_a_activity_contributions=condition_a_activity_contributions,
-        condition_b_activity_contributions=condition_b_activity_contributions,
-        contribution_labels=contribution_labels,
+        activity=GroupEstimatePair(
+            condition_a=GroupEstimate(
+                mean=condition_a_activity_mean,
+                sem=condition_a_activity_sem,
+            ),
+            condition_b=GroupEstimate(
+                mean=condition_b_activity_mean,
+                sem=condition_b_activity_sem,
+            ),
+        ),
+        activity_contributions=IndexedConditionContributions(
+            condition_a=condition_a_activity_contributions,
+            condition_b=condition_b_activity_contributions,
+            labels=contribution_labels,
+        ),
         source_metric=source_metric,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,
@@ -243,10 +269,12 @@ def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
             return np.full(n_rois, fill, dtype=dtype)
         return np.asarray(raw, dtype=dtype).ravel()
 
-    stats = data.stats
-    means = data.means
-    summary = getattr(data, "summary_epoch", None)
-    uncertainty = getattr(data, "uncertainty", None)
+    stats_root = data.stats
+    stats = getattr(stats_root, "activity", stats_root)
+    data_root = getattr(data, "data", data)
+    activity = getattr(data_root, "activity", None)
+    source_metric_data = getattr(data_root, "source_metric", None)
+    summary = getattr(data_root, "summary_epoch", getattr(data, "summary_epoch", None))
     meta = data.meta
     provenance = getattr(data, "provenance", None)
 
@@ -260,18 +288,20 @@ def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
     else:
         significant_mask = np.isfinite(p_values) & (p_values < significance_alpha)
 
-    metric_mean = _mat_2d(means, "metric_mean")
-    metric_sem = _mat_2d(uncertainty, "metric_sem")
-    condition_a_activity_mean = _mat_2d(means, "condition_a_mean")
-    condition_a_activity_sem = _mat_2d(means, "condition_a_sem")
-    condition_b_activity_mean = _mat_2d(means, "condition_b_mean")
-    condition_b_activity_sem = _mat_2d(means, "condition_b_sem")
+    metric_mean = _mat_2d(source_metric_data, "mean")
+    metric_sem = _mat_2d(source_metric_data, "sem")
+    condition_a_activity = getattr(activity, "condition_a", None)
+    condition_b_activity = getattr(activity, "condition_b", None)
+    condition_a_activity_mean = _mat_2d(condition_a_activity, "mean")
+    condition_a_activity_sem = _mat_2d(condition_a_activity, "sem")
+    condition_b_activity_mean = _mat_2d(condition_b_activity, "mean")
+    condition_b_activity_sem = _mat_2d(condition_b_activity, "sem")
 
     epoch_mean_t_values = _mat_1d(summary, "t_values")
     epoch_mean_p_values = _mat_1d(summary, "p_values", fill=1.0)
     epoch_mean_df = _mat_1d(summary, "df")
-    epoch_mean_metric_mean = _mat_1d(summary, "metric_mean")
-    epoch_mean_metric_sem = _mat_1d(summary, "metric_sem")
+    epoch_mean_metric_mean = _mat_1d(summary, "source_metric_mean")
+    epoch_mean_metric_sem = _mat_1d(summary, "source_metric_sem")
 
     source_metric = mat_str(getattr(meta, "source_metric", None), default="mean_difference")
     labels = mat_str_list(getattr(meta, "condition_labels", None))
@@ -299,12 +329,17 @@ def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
     roi_channel_counts = _mat_1d(meta, "roi_channel_counts", dtype=np.int64)
     roi_subject_counts = _mat_1d(meta, "roi_subject_counts", dtype=np.int64)
     excluded_rois = _read_excluded_rois_mat(getattr(data, "excluded_rois", None))
-    contributions = _read_contributions_mat(getattr(data, "contributions", None))
+    contributions_root = getattr(data, "contributions", None)
+    contributions = _read_contributions_mat(
+        getattr(contributions_root, "summary", contributions_root)
+    )
     (
         condition_a_activity_contributions,
         condition_b_activity_contributions,
         contribution_labels,
-    ) = _read_activity_contributions_mat(getattr(data, "activity_contributions", None))
+    ) = _read_activity_contributions_mat(
+        getattr(contributions_root, "activity", getattr(data, "activity_contributions", None))
+    )
 
     source_subject_stats_files = (
         mat_str_list(getattr(provenance, "source_subject_stats_files", None))
@@ -320,7 +355,7 @@ def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
     cluster_p_values: np.ndarray | None = None
     cluster_windows: list[list[tuple[float, float]]] | None = None
     cluster_null_distributions: list[np.ndarray] | None = None
-    cluster_stats = getattr(data, "cluster_stats", None)
+    cluster_stats = getattr(stats_root, "cluster", getattr(data, "cluster_stats", None))
     if cluster_stats is not None:
         raw = getattr(cluster_stats, "p_values", None)
         if raw is not None:
@@ -364,30 +399,48 @@ def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
             "activity_baseline_tmin_s": activity_baseline_tmin_s,
             "activity_baseline_tmax_s": activity_baseline_tmax_s,
         },
-        activity_t_values=t_values,
-        activity_p_values=p_values,
-        activity_p_values_uncorrected=p_values_uncorrected,
-        activity_significant_mask=significant_mask,
-        metric_mean=metric_mean,
-        metric_sem=metric_sem,
-        epoch_activity_t=epoch_mean_t_values,
-        epoch_activity_p=epoch_mean_p_values,
-        epoch_activity_df=epoch_mean_df,
-        epoch_mean_metric_mean=epoch_mean_metric_mean,
-        epoch_mean_metric_sem=epoch_mean_metric_sem,
+        activity_stats=GroupTimecourseStats(
+            t_values=t_values,
+            p_values=p_values,
+            p_values_uncorrected=p_values_uncorrected,
+            significant_mask=significant_mask,
+        ),
+        metric=GroupEstimate(mean=metric_mean, sem=metric_sem),
+        activity_epoch=GroupEpochStats(
+            t=epoch_mean_t_values,
+            p=epoch_mean_p_values,
+            df=epoch_mean_df,
+        ),
+        summary_epoch=ConditionTestEpochSummary(
+            t_values=epoch_mean_t_values,
+            p_values=epoch_mean_p_values,
+            df=epoch_mean_df,
+            source_metric=GroupEstimate(
+                mean=epoch_mean_metric_mean,
+                sem=epoch_mean_metric_sem,
+            ),
+        ),
         time_axis_s=time_axis_s,
         region_names=region_names,
         condition_labels=condition_labels,
         roi_channel_counts=roi_channel_counts,
         roi_subject_counts=roi_subject_counts,
         contributions=contributions,
-        condition_a_activity_mean=condition_a_activity_mean,
-        condition_a_activity_sem=condition_a_activity_sem,
-        condition_b_activity_mean=condition_b_activity_mean,
-        condition_b_activity_sem=condition_b_activity_sem,
-        condition_a_activity_contributions=condition_a_activity_contributions,
-        condition_b_activity_contributions=condition_b_activity_contributions,
-        contribution_labels=contribution_labels,
+        activity=GroupEstimatePair(
+            condition_a=GroupEstimate(
+                mean=condition_a_activity_mean,
+                sem=condition_a_activity_sem,
+            ),
+            condition_b=GroupEstimate(
+                mean=condition_b_activity_mean,
+                sem=condition_b_activity_sem,
+            ),
+        ),
+        activity_contributions=IndexedConditionContributions(
+            condition_a=condition_a_activity_contributions,
+            condition_b=condition_b_activity_contributions,
+            labels=contribution_labels,
+        ),
         source_metric=source_metric,
         p_value_correction_method=p_value_correction_method,
         significance_alpha=significance_alpha,
@@ -413,9 +466,9 @@ def _read_excluded_rois_hdf5(fh: h5py.File) -> dict[str, str]:
 
 
 def _read_contributions_hdf5(fh: h5py.File) -> list[ROIChannelContribution]:
-    if "contributions" not in fh:
+    if "contributions/summary" not in fh:
         return []
-    group = fh["contributions"]
+    group = fh["contributions/summary"]
     if not all(key in group for key in ("region", "subject", "channel", "source_stats_file")):
         return []
     regions = decode_str_array(np.asarray(group["region"][:], dtype=object))
@@ -446,12 +499,12 @@ def _read_activity_contributions_hdf5(
     region_names: list[str],
     n_t: int,
 ) -> tuple[list[np.ndarray], list[np.ndarray], list[list[str]]]:
-    if "activity_contributions" not in fh:
+    if "contributions/activity" not in fh:
         return [], [], []
     out_a: list[np.ndarray] = []
     out_b: list[np.ndarray] = []
     out_labels: list[list[str]] = []
-    group = fh["activity_contributions"]
+    group = fh["contributions/activity"]
     for roi_idx in range(len(region_names)):
         roi_key = str(roi_idx)
         if roi_key not in group:
@@ -532,3 +585,12 @@ def _read_activity_contributions_mat(
         for item in np.asarray(labels_raw).ravel():
             labels.append(mat_str_list(item))
     return condition_a, condition_b, labels
+
+
+def _require_v2_schema(fh: h5py.File, path_name: str) -> None:
+    schema_version = str_scalar(dataset_or_none(fh, "meta/schema_version"), default="")
+    if schema_version != "2.0":
+        raise ValueError(
+            f"{path_name}: unsupported trial_stats_group schema. "
+            "schema_version='2.0' is required; regenerate outputs with the v2 writer."
+        )

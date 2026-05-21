@@ -59,7 +59,7 @@ from gin_bids_py_analysis.processing.utils.trial_annotator import (
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from .params import BaseTrialStatsParams
-from .result import BaseTrialStatsProcessingResult
+from .result import BaseTrialStatsProcessingResult, ConditionEpochs, ConditionTrialSummaryValues
 
 
 @dataclass
@@ -1161,19 +1161,23 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
             "trial_activity_summary_source": self._serialize_trial_activity_summary_source(),
             "trial_activity_summary_label": self._trial_activity_summary_label(),
             "epoch_cleaning_audit": dict(context.state.get("epoch_cleaning_audit", {})),
-            "condition_a_epochs": context.epochs_a,
-            "condition_b_epochs": context.epochs_b,
-            "condition_a_trial_activity_summary_values": self._compute_trial_activity_summary_values(
-                epochs=context.epochs_a,
-                time_axis_s=context.time_axis_eval,
-                trials=context.kept_trials_a,
-                n_features=n_features,
+            "epochs": ConditionEpochs(
+                condition_a=context.epochs_a,
+                condition_b=context.epochs_b,
             ),
-            "condition_b_trial_activity_summary_values": self._compute_trial_activity_summary_values(
-                epochs=context.epochs_b,
-                time_axis_s=context.time_axis_eval,
-                trials=context.kept_trials_b,
-                n_features=n_features,
+            "trial_activity_summary_values": ConditionTrialSummaryValues(
+                condition_a=self._compute_trial_activity_summary_values(
+                    epochs=context.epochs_a,
+                    time_axis_s=context.time_axis_eval,
+                    trials=context.kept_trials_a,
+                    n_features=n_features,
+                ),
+                condition_b=self._compute_trial_activity_summary_values(
+                    epochs=context.epochs_b,
+                    time_axis_s=context.time_axis_eval,
+                    trials=context.kept_trials_b,
+                    n_features=n_features,
+                ),
             ),
         }
 

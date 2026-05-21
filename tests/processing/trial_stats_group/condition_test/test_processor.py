@@ -63,24 +63,27 @@ def _write_trial_stats_h5(
 
     with h5py.File(path, "w") as fh:
         stats_grp = fh.create_group("stats")
-        stats_grp.create_dataset("t_values", data=t_values_arr)
-        stats_grp.create_dataset("p_values", data=p_values)
-        stats_grp.create_dataset("p_values_uncorrected", data=p_values)
-        stats_grp.create_dataset("significant_mask", data=np.zeros_like(mean_difference, dtype=bool))
+        contrast_grp = stats_grp.create_group("condition_contrast")
+        contrast_grp.create_dataset("t_values", data=t_values_arr)
+        contrast_grp.create_dataset("p_values", data=p_values)
+        contrast_grp.create_dataset("p_values_uncorrected", data=p_values)
+        contrast_grp.create_dataset("significant_mask", data=np.zeros_like(mean_difference, dtype=bool))
         if permuted_t_values is not None:
-            stats_grp.create_dataset("permuted_t_values", data=permuted_t_values.astype(np.float32))
+            contrast_grp.create_dataset("permuted_t_values", data=permuted_t_values.astype(np.float32))
 
-        means_grp = fh.create_group("means")
-        means_grp.create_dataset(condition_labels[0], data=mean_difference + 1.0)
-        means_grp.create_dataset(condition_labels[1], data=np.ones_like(mean_difference))
-        means_grp.create_dataset("difference", data=mean_difference)
-
-        uncertainty_grp = fh.create_group("uncertainty")
-        uncertainty_grp.create_dataset(condition_labels[0] + "_sem", data=np.full_like(mean_difference, 0.2))
-        uncertainty_grp.create_dataset(condition_labels[1] + "_sem", data=np.full_like(mean_difference, 0.2))
-        uncertainty_grp.create_dataset("difference_sem", data=np.full_like(mean_difference, 0.3))
-        uncertainty_grp.create_dataset("difference_ci95_low", data=mean_difference - 0.5)
-        uncertainty_grp.create_dataset("difference_ci95_high", data=mean_difference + 0.5)
+        data_grp = fh.create_group("data")
+        activity_grp = data_grp.create_group("activity")
+        cond_a_grp = activity_grp.create_group("condition_a")
+        cond_a_grp.create_dataset("mean", data=mean_difference + 1.0)
+        cond_a_grp.create_dataset("sem", data=np.full_like(mean_difference, 0.2))
+        cond_b_grp = activity_grp.create_group("condition_b")
+        cond_b_grp.create_dataset("mean", data=np.ones_like(mean_difference))
+        cond_b_grp.create_dataset("sem", data=np.full_like(mean_difference, 0.2))
+        diff_grp = activity_grp.create_group("difference")
+        diff_grp.create_dataset("mean", data=mean_difference)
+        diff_grp.create_dataset("sem", data=np.full_like(mean_difference, 0.3))
+        diff_grp.create_dataset("ci95_low", data=mean_difference - 0.5)
+        diff_grp.create_dataset("ci95_high", data=mean_difference + 0.5)
 
         axes_grp = fh.create_group("axes")
         axis_name = "region" if analysis_level == "roi" else "channel"
@@ -89,7 +92,7 @@ def _write_trial_stats_h5(
 
         meta_grp = fh.create_group("meta")
         meta_grp.create_dataset("analysis_level", data=analysis_level, dtype=str_dtype)
-        meta_grp.create_dataset("trial_count_labels", data=np.array(condition_labels, dtype=object), dtype=str_dtype)
+        meta_grp.create_dataset("condition_labels", data=np.array(condition_labels, dtype=object), dtype=str_dtype)
         meta_grp.create_dataset("trial_counts", data=np.array([12, 11], dtype=np.int64))
         meta_grp.create_dataset("binning_mode", data="none", dtype=str_dtype)
         meta_grp.create_dataset("window_ms", data=0.0)

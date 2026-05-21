@@ -58,20 +58,20 @@ def _write_hdf5_structure(
     The written schema matches exactly what
     ``ConditionTestGroupProcessing._load_raw_from_hdf5`` reads:
 
-    * ``axes/channel``              — channel name array
-    * ``axes/time_s``               — time axis
-    * ``meta/analysis_level``       — "channel"
-    * ``meta/trial_count_labels``   — [condition_a, condition_b]
-    * ``meta/binning_mode``         — "window_ms" / "n_bins" / "none"
-    * ``meta/window_ms``            — float
-    * ``meta/n_bins``               — int
-    * ``meta/effective_n_bins``     — int (= n_times)
-    * ``stats/t_values``            — (n_channels, n_times) float64
-    * ``means/difference``          — (n_channels, n_times) float64
-    * ``means/{condition_a}``       — (n_channels, n_times) float64
-    * ``means/{condition_b}``       — (n_channels, n_times) float64
-    * ``provenance/source_ieeg_files``    — string array
-    * ``provenance/source_electrodes_files`` — string array
+    * ``axes/channel``                          — channel name array
+    * ``axes/time_s``                           — time axis
+    * ``meta/analysis_level``                   — "channel"
+    * ``meta/condition_labels``                 — [condition_a, condition_b]
+    * ``meta/binning_mode``                     — "window_ms" / "n_bins" / "none"
+    * ``meta/window_ms``                        — float
+    * ``meta/n_bins``                           — int
+    * ``meta/effective_n_bins``                 — int (= n_times)
+    * ``stats/condition_contrast/t_values``     — (n_channels, n_times) float64
+    * ``data/activity/difference/mean``         — (n_channels, n_times) float64
+    * ``data/activity/condition_a/mean``        — (n_channels, n_times) float64
+    * ``data/activity/condition_b/mean``        — (n_channels, n_times) float64
+    * ``provenance/source_ieeg_files``          — string array
+    * ``provenance/source_electrodes_files``    — string array
     """
     str_dt = h5py.string_dtype(encoding="utf-8")
 
@@ -88,7 +88,7 @@ def _write_hdf5_structure(
     meta = fh.create_group("meta")
     meta.create_dataset("analysis_level", data=np.bytes_("channel"))
     meta.create_dataset(
-        "trial_count_labels",
+        "condition_labels",
         data=np.array([result.condition_a, result.condition_b], dtype=object),
         dtype=str_dt,
     )
@@ -113,31 +113,36 @@ def _write_hdf5_structure(
     )
 
     # stats
-    stats = fh.create_group("stats")
-    t = result.t_values
+    stats_grp = fh.create_group("stats")
+    contrast_grp = stats_grp.create_group("condition_contrast")
+    t = result.contrast.t_values
     if t.size == 0:
         t = np.zeros((len(result.channel_names), n_times), dtype=np.float64)
-    stats.create_dataset("t_values", data=t.astype(np.float64))
-    if result.permuted_t_values is not None:
-        stats.create_dataset(
+    contrast_grp.create_dataset("t_values", data=t.astype(np.float64))
+    if result.contrast.permuted_t_values is not None:
+        contrast_grp.create_dataset(
             "permuted_t_values",
-            data=result.permuted_t_values.astype(np.float32),
+            data=result.contrast.permuted_t_values.astype(np.float32),
         )
 
-    # means
-    means = fh.create_group("means")
-    diff = result.mean_difference
+    # data/activity
+    data_grp = fh.create_group("data")
+    activity_grp = data_grp.create_group("activity")
+    diff = result.difference.mean
     if diff.size == 0:
         diff = np.zeros_like(t)
-    means.create_dataset("difference", data=diff.astype(np.float64))
-    cond_a = result.condition_a_mean
-    cond_b = result.condition_b_mean
+    diff_grp = activity_grp.create_group("difference")
+    diff_grp.create_dataset("mean", data=diff.astype(np.float64))
+    cond_a = result.activity.condition_a.mean
+    cond_b = result.activity.condition_b.mean
     if cond_a.size == 0:
         cond_a = np.zeros_like(t)
     if cond_b.size == 0:
         cond_b = np.zeros_like(t)
-    means.create_dataset(result.condition_a, data=cond_a.astype(np.float64))
-    means.create_dataset(result.condition_b, data=cond_b.astype(np.float64))
+    cond_a_grp = activity_grp.create_group("condition_a")
+    cond_a_grp.create_dataset("mean", data=cond_a.astype(np.float64))
+    cond_b_grp = activity_grp.create_group("condition_b")
+    cond_b_grp.create_dataset("mean", data=cond_b.astype(np.float64))
 
     # provenance
     prov = fh.create_group("provenance")

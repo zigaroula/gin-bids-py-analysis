@@ -175,10 +175,10 @@ def test_process_group_computes_condition_slopes(tmp_path: Path) -> None:
 
     result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
 
-    assert result.condition_a_stats_valid is True
-    assert result.condition_b_stats_valid is True
-    np.testing.assert_allclose(result.condition_a_slope, np.full((1, 3), 2.0), atol=1e-8)
-    np.testing.assert_allclose(result.condition_b_slope, np.full((1, 3), -1.0), atol=1e-8)
+    assert result.regression.condition_a.stats_valid is True
+    assert result.regression.condition_b.stats_valid is True
+    np.testing.assert_allclose(result.regression.condition_a.slope, np.full((1, 3), 2.0), atol=1e-8)
+    np.testing.assert_allclose(result.regression.condition_b.slope, np.full((1, 3), -1.0), atol=1e-8)
     assert result.condition_a_trial_count == 3
     assert result.condition_b_trial_count == 3
 
@@ -228,7 +228,7 @@ def test_process_group_excludes_invalid_predictor_trials(tmp_path: Path) -> None
 
     # accepted has one invalid predictor -> 2 usable trials < min_trials=3
     assert result.condition_a_trial_count == 2
-    assert result.condition_a_stats_valid is False
+    assert result.regression.condition_a.stats_valid is False
     assert any(trial.exclusion_reason == "invalid_predictor_value" for trial in result.resolved_trials)
 
 
@@ -325,7 +325,7 @@ def test_process_group_applies_trial_annotators_before_regression(tmp_path: Path
     )
 
     assert result.condition_a_trial_count == 2
-    assert result.condition_a_stats_valid is False
+    assert result.regression.condition_a.stats_valid is False
     assert any(trial.exclusion_reason == "vmPFC_spike_0_3s" for trial in result.resolved_trials)
 
 
@@ -415,7 +415,7 @@ def test_process_group_can_mask_annotated_hfo_spike_channels_only(tmp_path: Path
     ).process_group(BIDSFileGroup(primary=ieeg_file, secondaries=[hfo_spike_file]))
 
     assert result.condition_a_trial_count == 3
-    assert result.condition_a_stats_valid is True
+    assert result.regression.condition_a.stats_valid is True
     assert result.epoch_cleaning_audit["nan_masked_trial_feature_pairs"] == {"A1": [0]}
     assert result.excluded_trial_channel_pairs == {"A1": [0]}
     assert all(trial.keep for trial in result.resolved_trials)
@@ -487,7 +487,7 @@ def test_process_group_experiment_start_code_filters_early_anchors(tmp_path: Pat
     assert all(t.anchor_onset_s > 2.0 for t in result.resolved_trials)
     assert result.condition_a_trial_count == 3
     assert result.condition_b_trial_count == 3
-    assert result.condition_a_stats_valid is True
+    assert result.regression.condition_a.stats_valid is True
     assert result.metadata["experiment_start_event_code"] == "1"
     assert result.metadata["experiment_end_event_code"] is None
 
@@ -556,15 +556,15 @@ def test_process_group_activity_zscore_preserves_regression_significance(
         resolver=_SlopeResolver(labels, predictors),
     ).process_group(group)
 
-    np.testing.assert_allclose(z_result.condition_a_r_value, raw_result.condition_a_r_value)
-    np.testing.assert_allclose(z_result.condition_b_r_value, raw_result.condition_b_r_value)
-    np.testing.assert_allclose(z_result.condition_a_p_value_corrected, raw_result.condition_a_p_value_corrected)
-    np.testing.assert_allclose(z_result.condition_b_p_value_corrected, raw_result.condition_b_p_value_corrected)
+    np.testing.assert_allclose(z_result.regression.condition_a.r_value, raw_result.regression.condition_a.r_value)
+    np.testing.assert_allclose(z_result.regression.condition_b.r_value, raw_result.regression.condition_b.r_value)
+    np.testing.assert_allclose(z_result.regression.condition_a.p_value_corrected, raw_result.regression.condition_a.p_value_corrected)
+    np.testing.assert_allclose(z_result.regression.condition_b.p_value_corrected, raw_result.regression.condition_b.p_value_corrected)
     assert z_result.activity_zscore == "baseline"
     assert z_result.metadata["activity_zscore"] == "baseline"
     assert z_result.activity_baseline_tmin_s == pytest.approx(0.0)
     assert z_result.activity_baseline_tmax_s == pytest.approx(0.1)
-    assert not np.allclose(z_result.condition_a_slope, raw_result.condition_a_slope)
+    assert not np.allclose(z_result.regression.condition_a.slope, raw_result.regression.condition_a.slope)
 
 
 def test_process_group_supports_numeric_condition_rules_with_predictor_extraction(
@@ -652,11 +652,11 @@ def test_process_group_supports_numeric_condition_rules_with_predictor_extractio
 
     assert result.condition_a_trial_count == 3
     assert result.condition_b_trial_count == 3
-    assert result.condition_a_stats_valid is True
-    assert result.condition_b_stats_valid is True
+    assert result.regression.condition_a.stats_valid is True
+    assert result.regression.condition_b.stats_valid is True
     assert any(trial.exclusion_reason == "no_matching_condition" for trial in result.resolved_trials)
-    np.testing.assert_allclose(result.condition_a_slope, np.full((1, 3), 2.0), atol=1e-8)
-    np.testing.assert_allclose(result.condition_b_slope, np.full((1, 3), -1.0), atol=1e-8)
+    np.testing.assert_allclose(result.regression.condition_a.slope, np.full((1, 3), 2.0), atol=1e-8)
+    np.testing.assert_allclose(result.regression.condition_b.slope, np.full((1, 3), -1.0), atol=1e-8)
 
 
 def test_process_group_predictor_zscore_condition_scales_each_condition_independently(
@@ -707,10 +707,10 @@ def test_process_group_predictor_zscore_condition_scales_each_condition_independ
         resolver=_SlopeResolver(labels, predictors),
     ).process_group(BIDSFileGroup(primary=ieeg_file))
 
-    np.testing.assert_allclose(np.nanmean(result.condition_a_predictor_values), 0.0, atol=1e-12)
-    np.testing.assert_allclose(np.nanstd(result.condition_a_predictor_values, ddof=1), 1.0, atol=1e-12)
-    np.testing.assert_allclose(np.nanmean(result.condition_b_predictor_values), 0.0, atol=1e-12)
-    np.testing.assert_allclose(np.nanstd(result.condition_b_predictor_values, ddof=1), 1.0, atol=1e-12)
+    np.testing.assert_allclose(np.nanmean(result.predictor_values.condition_a.values), 0.0, atol=1e-12)
+    np.testing.assert_allclose(np.nanstd(result.predictor_values.condition_a.values, ddof=1), 1.0, atol=1e-12)
+    np.testing.assert_allclose(np.nanmean(result.predictor_values.condition_b.values), 0.0, atol=1e-12)
+    np.testing.assert_allclose(np.nanstd(result.predictor_values.condition_b.values, ddof=1), 1.0, atol=1e-12)
 
 
 def test_process_group_predictor_zscore_global_scales_both_conditions_together(
@@ -762,14 +762,14 @@ def test_process_group_predictor_zscore_global_scales_both_conditions_together(
     ).process_group(BIDSFileGroup(primary=ieeg_file))
 
     pooled = np.concatenate(
-        [result.condition_a_predictor_values, result.condition_b_predictor_values]
+        [result.predictor_values.condition_a.values, result.predictor_values.condition_b.values]
     )
     np.testing.assert_allclose(np.nanmean(pooled), 0.0, atol=1e-12)
     np.testing.assert_allclose(np.nanstd(pooled, ddof=1), 1.0, atol=1e-12)
-    assert not np.isclose(np.nanmean(result.condition_a_predictor_values), 0.0)
-    assert not np.isclose(np.nanmean(result.condition_b_predictor_values), 0.0)
-    assert result.condition_a_stats_valid is True
-    assert result.condition_b_stats_valid is True
+    assert not np.isclose(np.nanmean(result.predictor_values.condition_a.values), 0.0)
+    assert not np.isclose(np.nanmean(result.predictor_values.condition_b.values), 0.0)
+    assert result.regression.condition_a.stats_valid is True
+    assert result.regression.condition_b.stats_valid is True
 
 
 def test_process_group_trial_activity_summary_anchor_to_response_from_table_column(
@@ -836,12 +836,12 @@ def test_process_group_trial_activity_summary_anchor_to_response_from_table_colu
     ).process_group(BIDSFileGroup(primary=ieeg_file))
 
     np.testing.assert_allclose(
-        result.condition_a_trial_activity_summary_values,
+        result.trial_activity_summary_values.condition_a,
         np.array([[2.0, np.nan, 3.0]], dtype=np.float64),
         equal_nan=True,
     )
     np.testing.assert_allclose(
-        result.condition_b_trial_activity_summary_values,
+        result.trial_activity_summary_values.condition_b,
         np.array([[3.0, 2.0, np.nan]], dtype=np.float64),
         equal_nan=True,
     )
@@ -916,12 +916,12 @@ def test_process_group_trial_activity_summary_anchor_to_response_nan_if_missing_
     ).process_group(BIDSFileGroup(primary=ieeg_file))
 
     np.testing.assert_allclose(
-        result.condition_a_trial_activity_summary_values,
+        result.trial_activity_summary_values.condition_a,
         np.array([[2.0, np.nan, np.nan]], dtype=np.float64),
         equal_nan=True,
     )
     np.testing.assert_allclose(
-        result.condition_b_trial_activity_summary_values,
+        result.trial_activity_summary_values.condition_b,
         np.array([[3.0, 2.0, np.nan]], dtype=np.float64),
         equal_nan=True,
     )
@@ -988,15 +988,15 @@ def test_process_group_epoch_cleaning_promotes_fully_masked_trial_to_exclusion(
     assert result.excluded_channels == {}
     assert result.excluded_trial_channel_pairs == {"A1": [1]}
     np.testing.assert_allclose(
-        result.condition_a_predictor_raw_values,
+        result.predictor_values.condition_a.raw_values,
         np.array([1.0, 3.0], dtype=np.float64),
     )
     np.testing.assert_allclose(
-        result.condition_a_predictor_transformed_values,
+        result.predictor_values.condition_a.transformed_values,
         np.array([1.0, 3.0], dtype=np.float64),
     )
     np.testing.assert_allclose(
-        result.condition_a_predictor_values,
+        result.predictor_values.condition_a.values,
         np.array([1.0, 3.0], dtype=np.float64),
     )
     assert any(
@@ -1087,12 +1087,12 @@ def test_process_group_trial_activity_summary_anchor_to_response_from_annotation
     ).process_group(BIDSFileGroup(primary=ieeg_file))
 
     np.testing.assert_allclose(
-        result.condition_a_trial_activity_summary_values,
+        result.trial_activity_summary_values.condition_a,
         np.array([[np.nan, 2.0, np.nan]], dtype=np.float64),
         equal_nan=True,
     )
     np.testing.assert_allclose(
-        result.condition_b_trial_activity_summary_values,
+        result.trial_activity_summary_values.condition_b,
         np.array([[2.0, 1.5, 2.0]], dtype=np.float64),
         equal_nan=True,
     )
@@ -1153,12 +1153,12 @@ def test_process_group_permuted_slopes_populated_when_n_permutations_nonzero(
 
     result = processor.process_group(BIDSFileGroup(primary=ieeg_file))
 
-    assert result.condition_a_permuted_slopes is not None
-    assert result.condition_b_permuted_slopes is not None
-    assert result.condition_a_permuted_slopes.shape == (n_perm, 1, 3)
-    assert result.condition_b_permuted_slopes.shape == (n_perm, 1, 3)
-    assert result.condition_a_permuted_slopes.dtype == np.float32
-    assert result.condition_b_permuted_slopes.dtype == np.float32
+    assert result.regression.condition_a.permuted_slopes is not None
+    assert result.regression.condition_b.permuted_slopes is not None
+    assert result.regression.condition_a.permuted_slopes.shape == (n_perm, 1, 3)
+    assert result.regression.condition_b.permuted_slopes.shape == (n_perm, 1, 3)
+    assert result.regression.condition_a.permuted_slopes.dtype == np.float32
+    assert result.regression.condition_b.permuted_slopes.dtype == np.float32
 
 
 def test_process_group_permuted_slopes_none_when_n_permutations_zero(
@@ -1211,5 +1211,5 @@ def test_process_group_permuted_slopes_none_when_n_permutations_zero(
         resolver=_SlopeResolver(labels, predictors),
     ).process_group(BIDSFileGroup(primary=ieeg_file))
 
-    assert result.condition_a_permuted_slopes is None
-    assert result.condition_b_permuted_slopes is None
+    assert result.regression.condition_a.permuted_slopes is None
+    assert result.regression.condition_b.permuted_slopes is None

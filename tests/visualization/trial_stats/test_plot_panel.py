@@ -149,8 +149,8 @@ class TestPlotPanel:
         epochs_b = np.ones((2, 4, n_t), dtype=np.float64)
         epochs_a[1, 0, :] = np.nan
         epochs_b[0, 0, :] = np.nan
-        synthetic_slope_result.condition_a_epochs = epochs_a
-        synthetic_slope_result.condition_b_epochs = epochs_b
+        synthetic_slope_result.epochs.condition_a = epochs_a
+        synthetic_slope_result.epochs.condition_b = epochs_b
 
         panel = PlotPanel()
         qtbot.addWidget(panel)
@@ -170,8 +170,8 @@ class TestPlotPanel:
         epochs_b = np.ones((1, 4, n_t), dtype=np.float64)
         epochs_a[:, 0, :] = np.nan
         epochs_b[:, 0, :] = np.nan
-        synthetic_slope_result.condition_a_epochs = epochs_a
-        synthetic_slope_result.condition_b_epochs = epochs_b
+        synthetic_slope_result.epochs.condition_a = epochs_a
+        synthetic_slope_result.epochs.condition_b = epochs_b
 
         panel = PlotPanel()
         qtbot.addWidget(panel)
@@ -191,13 +191,13 @@ class TestPlotPanel:
         qtbot,
         synthetic_slope_result,
     ):
-        synthetic_slope_result.condition_a_predictor_values = np.arange(12, dtype=np.float64)
-        synthetic_slope_result.condition_b_predictor_values = np.arange(11, dtype=np.float64)
-        synthetic_slope_result.condition_a_trial_activity_summary_values[0] = np.array(
+        synthetic_slope_result.predictor_values.condition_a.values = np.arange(12, dtype=np.float64)
+        synthetic_slope_result.predictor_values.condition_b.values = np.arange(11, dtype=np.float64)
+        synthetic_slope_result.trial_activity_summary_values.condition_a[0] = np.array(
             [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
             dtype=np.float64,
         )
-        synthetic_slope_result.condition_b_trial_activity_summary_values[0] = np.array(
+        synthetic_slope_result.trial_activity_summary_values.condition_b[0] = np.array(
             [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
             dtype=np.float64,
         )
@@ -215,8 +215,8 @@ class TestPlotPanel:
         qtbot,
         synthetic_slope_result,
     ):
-        synthetic_slope_result.condition_a_trial_activity_summary_values = np.array([])
-        synthetic_slope_result.condition_b_trial_activity_summary_values = np.array([])
+        synthetic_slope_result.trial_activity_summary_values.condition_a = np.array([])
+        synthetic_slope_result.trial_activity_summary_values.condition_b = np.array([])
         panel = PlotPanel()
         qtbot.addWidget(panel)
 
@@ -229,7 +229,7 @@ class TestPlotPanel:
         qtbot,
         synthetic_slope_result,
     ):
-        synthetic_slope_result.condition_b_trial_activity_summary_values = np.ones((4, 10), dtype=np.float64)
+        synthetic_slope_result.trial_activity_summary_values.condition_b = np.ones((4, 10), dtype=np.float64)
         panel = PlotPanel()
         qtbot.addWidget(panel)
 

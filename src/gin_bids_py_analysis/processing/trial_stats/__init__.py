@@ -9,14 +9,22 @@ from .params import (
     TrialActivitySummaryTableColumnSource,
 )
 from .processor import BaseTrialStatsProcessing
-from .result import BaseTrialStatsProcessingResult
+from .result import (
+    ActivityEstimate,
+    BaseTrialStatsProcessingResult,
+    ConditionActivity,
+    ConditionEpochs,
+    ConditionTrialSummaryValues,
+)
 from .writer import BaseTrialStatsProcessingWriter
 from .condition_test import (
+    ConditionContrast,
     ConditionTestParams,
     ConditionTestProcessing,
     ConditionTestProcessingResult,
     ConditionTestProcessingWriter,
     ConditionTestWriterParams,
+    DifferenceEstimate,
     load_condition_test_result,
 )
 from .regression import (
@@ -39,13 +47,19 @@ __all__ = [
     "BaseTrialStatsParams",
     "BaseTrialStatsWriterParams",
     "BaseTrialStatsProcessingResult",
+    "ActivityEstimate",
+    "ConditionActivity",
+    "ConditionEpochs",
+    "ConditionTrialSummaryValues",
     "BaseTrialStatsProcessing",
     "BaseTrialStatsProcessingWriter",
+    "ConditionContrast",
     "ConditionTestParams",
     "ConditionTestProcessing",
     "ConditionTestProcessingResult",
     "ConditionTestProcessingWriter",
     "ConditionTestWriterParams",
+    "DifferenceEstimate",
     "load_condition_test_result",
     "PredictorAffineTransform",
     "TrialActivitySummaryTableColumnSource",

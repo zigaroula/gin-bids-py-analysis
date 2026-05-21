@@ -24,15 +24,15 @@ class TestWriteHdf5Structure:
         assert "axes/channel" in fh
         assert "axes/time_s" in fh
         assert "meta/analysis_level" in fh
-        assert "meta/trial_count_labels" in fh
+        assert "meta/condition_labels" in fh
         assert "meta/binning_mode" in fh
         assert "meta/window_ms" in fh
         assert "meta/n_bins" in fh
         assert "meta/effective_n_bins" in fh
-        assert "stats/t_values" in fh
-        assert "means/difference" in fh
-        assert f"means/{synthetic_result.condition_a}" in fh
-        assert f"means/{synthetic_result.condition_b}" in fh
+        assert "stats/condition_contrast/t_values" in fh
+        assert "data/activity/difference/mean" in fh
+        assert "data/activity/condition_a/mean" in fh
+        assert "data/activity/condition_b/mean" in fh
         assert "provenance/source_ieeg_files" in fh
         assert "provenance/source_electrodes_files" in fh
 
@@ -55,7 +55,7 @@ class TestWriteHdf5Structure:
         _write_hdf5_structure(fh, synthetic_result, "01")
 
         expected_shape = (len(synthetic_result.channel_names), len(synthetic_result.time_axis_s))
-        assert fh["stats/t_values"].shape == expected_shape
+        assert fh["stats/condition_contrast/t_values"].shape == expected_shape
         fh.close()
 
     def test_time_axis_values(self, synthetic_result):

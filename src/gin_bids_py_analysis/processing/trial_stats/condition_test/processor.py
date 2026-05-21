@@ -14,8 +14,9 @@ from gin_bids_py_analysis.processing.utils.trial_annotator import TrialWindowAnn
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from ..processor import BaseTrialStatsProcessing, TrialStatsProcessingContext
+from ..result import ActivityEstimate, ConditionActivity
 from .params import ConditionTestParams
-from .result import ConditionTestProcessingResult
+from .result import ConditionContrast, ConditionTestProcessingResult, DifferenceEstimate
 from .stats import (
     compute_bootstrap_difference_ci95,
     compute_condition_statistics,
@@ -165,19 +166,23 @@ class ConditionTestProcessing(BaseTrialStatsProcessing):
 
         return ConditionTestProcessingResult(
             **self._build_common_result_kwargs(context),
-            t_values=t_values,
-            p_values=p_values,
-            p_values_uncorrected=p_values_raw,
-            condition_a_mean=mean_a,
-            condition_b_mean=mean_b,
-            mean_difference=mean_difference,
-            condition_a_sem=condition_a_sem,
-            condition_b_sem=condition_b_sem,
-            difference_sem=difference_sem,
-            difference_ci95_low=difference_ci95_low,
-            difference_ci95_high=difference_ci95_high,
-            significant_mask=significant_mask,
+            activity=ConditionActivity(
+                condition_a=ActivityEstimate(mean=mean_a, sem=condition_a_sem),
+                condition_b=ActivityEstimate(mean=mean_b, sem=condition_b_sem),
+            ),
             stats_valid=stats_valid,
-            permuted_t_values=permuted_t_values,
-            channel_significant_mask=channel_significant_mask,
+            difference=DifferenceEstimate(
+                mean=mean_difference,
+                sem=difference_sem,
+                ci95_low=difference_ci95_low,
+                ci95_high=difference_ci95_high,
+            ),
+            contrast=ConditionContrast(
+                t_values=t_values,
+                p_values=p_values,
+                p_values_uncorrected=p_values_raw,
+                significant_mask=significant_mask,
+                permuted_t_values=permuted_t_values,
+                channel_significant_mask=channel_significant_mask,
+            ),
         )

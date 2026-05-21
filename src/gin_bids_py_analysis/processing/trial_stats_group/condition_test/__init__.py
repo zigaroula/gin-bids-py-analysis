@@ -5,12 +5,13 @@ from .processor import (
     ConditionTestGroupProcessing,
     build_condition_test_compatible_groups,
 )
-from .result import ConditionTestGroupProcessingResult
+from .result import ConditionTestEpochSummary, ConditionTestGroupProcessingResult
 from .result_loader import load_condition_test_group_result
 from .writer import ConditionTestGroupProcessingWriter
 
 __all__ = [
     "ConditionTestGroupParams",
+    "ConditionTestEpochSummary",
     "ConditionTestGroupProcessing",
     "ConditionTestGroupProcessingResult",
     "ConditionTestGroupProcessingWriter",

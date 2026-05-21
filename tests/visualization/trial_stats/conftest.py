@@ -12,8 +12,20 @@ from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.trial_stats import RegressionParams
 from gin_bids_py_analysis.processing.trial_stats import RegressionProcessingResult
+from gin_bids_py_analysis.processing.trial_stats.regression import (
+    ConditionPredictorValues,
+    ConditionRegressionStats,
+    RegressionPredictor,
+    RegressionStats,
+)
 from gin_bids_py_analysis.processing.trial_stats import ConditionTestParams
 from gin_bids_py_analysis.processing.trial_stats import ConditionTestProcessingResult
+from gin_bids_py_analysis.processing.trial_stats import ConditionContrast, DifferenceEstimate
+from gin_bids_py_analysis.processing.trial_stats import (
+    ActivityEstimate,
+    ConditionActivity,
+    ConditionTrialSummaryValues,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -72,18 +84,28 @@ def synthetic_result(default_params: ConditionTestParams) -> ConditionTestProces
         source_group=group,
         metadata={},
         output_entities=None,
-        t_values=t_vals,
-        p_values=p_corr,
-        p_values_uncorrected=p_raw,
-        significant_mask=sig_mask,
-        condition_a_mean=mean_a,
-        condition_b_mean=mean_b,
-        mean_difference=mean_a - mean_b,
-        condition_a_sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
-        condition_b_sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
-        difference_sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
-        difference_ci95_low=mean_a - mean_b - 0.2,
-        difference_ci95_high=mean_a - mean_b + 0.2,
+        activity=ConditionActivity(
+            condition_a=ActivityEstimate(
+                mean=mean_a,
+                sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
+            ),
+            condition_b=ActivityEstimate(
+                mean=mean_b,
+                sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
+            ),
+        ),
+        difference=DifferenceEstimate(
+            mean=mean_a - mean_b,
+            sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
+            ci95_low=mean_a - mean_b - 0.2,
+            ci95_high=mean_a - mean_b + 0.2,
+        ),
+        contrast=ConditionContrast(
+            t_values=t_vals,
+            p_values=p_corr,
+            p_values_uncorrected=p_raw,
+            significant_mask=sig_mask,
+        ),
         time_axis_s=np.linspace(-1.0, 2.0, n_t),
         channel_names=["A1", "A2", "A3", "A4"],
         condition_a="accepted",
@@ -149,35 +171,53 @@ def synthetic_slope_result(default_slope_params: RegressionParams) -> Regression
         source_group=group,
         metadata={},
         output_entities=None,
-        condition_a_slope=slope_a,
-        condition_a_intercept=rng.standard_normal((n_ch, n_t)),
-        condition_a_r_value=np.clip(rng.standard_normal((n_ch, n_t)) * 0.3, -1, 1),
-        condition_a_p_value=p_a_raw,
-        condition_a_p_value_corrected=p_a,
-        condition_a_significant_mask=sig_a,
-        condition_b_slope=slope_b,
-        condition_b_intercept=rng.standard_normal((n_ch, n_t)),
-        condition_b_r_value=np.clip(rng.standard_normal((n_ch, n_t)) * 0.3, -1, 1),
-        condition_b_p_value=p_b_raw,
-        condition_b_p_value_corrected=p_b,
-        condition_b_significant_mask=sig_b,
-        condition_a_mean=mean_a,
-        condition_b_mean=mean_b,
-        condition_a_sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
-        condition_b_sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
+        regression=RegressionStats(
+            condition_a=ConditionRegressionStats(
+                slope=slope_a,
+                intercept=rng.standard_normal((n_ch, n_t)),
+                r_value=np.clip(rng.standard_normal((n_ch, n_t)) * 0.3, -1, 1),
+                p_value=p_a_raw,
+                p_value_corrected=p_a,
+                significant_mask=sig_a,
+                n_trials_used=12,
+                stats_valid=True,
+            ),
+            condition_b=ConditionRegressionStats(
+                slope=slope_b,
+                intercept=rng.standard_normal((n_ch, n_t)),
+                r_value=np.clip(rng.standard_normal((n_ch, n_t)) * 0.3, -1, 1),
+                p_value=p_b_raw,
+                p_value_corrected=p_b,
+                significant_mask=sig_b,
+                n_trials_used=11,
+                stats_valid=True,
+            ),
+        ),
+        predictor_values=RegressionPredictor(
+            condition_a=ConditionPredictorValues(values=np.linspace(0.0, 1.0, 12)),
+            condition_b=ConditionPredictorValues(values=np.linspace(0.0, 1.0, 11)),
+        ),
+        activity=ConditionActivity(
+            condition_a=ActivityEstimate(
+                mean=mean_a,
+                sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
+            ),
+            condition_b=ActivityEstimate(
+                mean=mean_b,
+                sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
+            ),
+        ),
         time_axis_s=np.linspace(-1.0, 2.0, n_t),
         channel_names=["A1", "A2", "A3", "A4"],
         condition_a="accepted",
         condition_b="rejected",
         condition_a_trial_count=12,
         condition_b_trial_count=11,
-        condition_a_trials_used=12,
-        condition_b_trials_used=11,
         sfreq=20.0,
-        condition_a_predictor_values=np.linspace(0.0, 1.0, 12),
-        condition_b_predictor_values=np.linspace(0.0, 1.0, 11),
-        condition_a_trial_activity_summary_values=epoch_means_a.copy(),
-        condition_b_trial_activity_summary_values=epoch_means_b.copy(),
+        trial_activity_summary_values=ConditionTrialSummaryValues(
+            condition_a=epoch_means_a.copy(),
+            condition_b=epoch_means_b.copy(),
+        ),
         resolved_trials=[],
         source_ieeg_files=[str(mock_file.path)],
         source_table_files=[],
@@ -192,8 +232,6 @@ def synthetic_slope_result(default_slope_params: RegressionParams) -> Regression
         trial_activity_summary_label="Epoch mean activity",
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
-        condition_a_stats_valid=True,
-        condition_b_stats_valid=True,
         stats_valid=True,
     )
 

@@ -124,7 +124,7 @@ class PlotPanel(QWidget):
         t = result.time_axis_s
         ch_label = result.channel_names[ch]
         alpha = result.significance_alpha
-        sig = result.significant_mask[ch].astype(bool)
+        sig = result.contrast.significant_mask[ch].astype(bool)
 
         self._draw_activity_plot(
             t=t,
@@ -133,17 +133,17 @@ class PlotPanel(QWidget):
             condition_b=result.condition_b,
             condition_a_count=result.condition_a_trial_count,
             condition_b_count=result.condition_b_trial_count,
-            mean_a=result.condition_a_mean[ch],
-            mean_b=result.condition_b_mean[ch],
-            sem_a=result.condition_a_sem[ch],
-            sem_b=result.condition_b_sem[ch],
+            mean_a=result.activity.condition_a.mean[ch],
+            mean_b=result.activity.condition_b.mean[ch],
+            sem_a=result.activity.condition_a.sem[ch],
+            sem_b=result.activity.condition_b.sem[ch],
             sig_mask=sig,
             activity_zscore=result.activity_zscore,
         )
 
         ax = self._ax_t
         ax.clear()
-        tv = result.t_values[ch]
+        tv = result.contrast.t_values[ch]
         ax.plot(t, tv, color="darkorange")
         if np.nanmin(tv) < 0 < np.nanmax(tv):
             ax.axhline(0, color="gray", linewidth=0.8, linestyle="--")
@@ -175,12 +175,12 @@ class PlotPanel(QWidget):
 
         ax = self._ax_p
         ax.clear()
-        p = result.p_values[ch]
+        p = result.contrast.p_values[ch]
         method = result.p_value_correction_method
         has_correction = bool(method) and method.lower() not in ("none", "")
         p_unc = (
-            result.p_values_uncorrected[ch]
-            if result.p_values_uncorrected.size > 0 and has_correction
+            result.contrast.p_values_uncorrected[ch]
+            if result.contrast.p_values_uncorrected.size > 0 and has_correction
             else None
         )
         if p_unc is not None:
@@ -239,8 +239,8 @@ class PlotPanel(QWidget):
         t = result.time_axis_s
         ch_label = result.channel_names[ch]
         alpha = result.significance_alpha
-        sig_a = result.condition_a_significant_mask[ch].astype(bool)
-        sig_b = result.condition_b_significant_mask[ch].astype(bool)
+        sig_a = result.regression.condition_a.significant_mask[ch].astype(bool)
+        sig_b = result.regression.condition_b.significant_mask[ch].astype(bool)
         sig_any = sig_a | sig_b
 
         self._draw_activity_plot(
@@ -250,18 +250,18 @@ class PlotPanel(QWidget):
             condition_b=result.condition_b,
             condition_a_count=result.condition_a_trial_count,
             condition_b_count=result.condition_b_trial_count,
-            mean_a=result.condition_a_mean[ch],
-            mean_b=result.condition_b_mean[ch],
-            sem_a=result.condition_a_sem[ch],
-            sem_b=result.condition_b_sem[ch],
+            mean_a=result.activity.condition_a.mean[ch],
+            mean_b=result.activity.condition_b.mean[ch],
+            sem_a=result.activity.condition_a.sem[ch],
+            sem_b=result.activity.condition_b.sem[ch],
             sig_mask=sig_any,
             activity_zscore=result.activity_zscore,
         )
 
         ax = self._ax_t
         ax.clear()
-        slope_a = result.condition_a_slope[ch]
-        slope_b = result.condition_b_slope[ch]
+        slope_a = result.regression.condition_a.slope[ch]
+        slope_b = result.regression.condition_b.slope[ch]
         ax.plot(t, slope_a, color="steelblue", label=f"slope {result.condition_a}")
         ax.plot(t, slope_b, color="tomato", label=f"slope {result.condition_b}")
         if np.nanmin(np.concatenate([slope_a, slope_b])) < 0 < np.nanmax(np.concatenate([slope_a, slope_b])):
@@ -305,10 +305,10 @@ class PlotPanel(QWidget):
 
         ax = self._ax_p
         ax.clear()
-        p_a = result.condition_a_p_value_corrected[ch]
-        p_b = result.condition_b_p_value_corrected[ch]
-        p_a_raw = result.condition_a_p_value[ch]
-        p_b_raw = result.condition_b_p_value[ch]
+        p_a = result.regression.condition_a.p_value_corrected[ch]
+        p_b = result.regression.condition_b.p_value_corrected[ch]
+        p_a_raw = result.regression.condition_a.p_value[ch]
+        p_b_raw = result.regression.condition_b.p_value[ch]
         method = result.p_value_correction_method
         has_correction = bool(method) and method.lower() not in ("none", "")
         if has_correction:
@@ -414,8 +414,8 @@ class PlotPanel(QWidget):
         self._fig_matrix.clear()
         self._ax_matrix = self._fig_matrix.add_subplot(111)
         ax = self._ax_matrix
-        epochs_a = result.condition_a_epochs
-        epochs_b = result.condition_b_epochs
+        epochs_a = result.epochs.condition_a
+        epochs_b = result.epochs.condition_b
         n_a = epochs_a.shape[0] if epochs_a.ndim == 3 else 0
         n_b = epochs_b.shape[0] if epochs_b.ndim == 3 else 0
         shown_a = 0
@@ -497,13 +497,13 @@ class PlotPanel(QWidget):
         ax = self._ax_scatter
 
         pred_a, act_a, invalid_a = self._extract_scatter_series(
-            predictor_values=result.condition_a_predictor_values,
-            summary_values=result.condition_a_trial_activity_summary_values,
+            predictor_values=result.predictor_values.condition_a.values,
+            summary_values=result.trial_activity_summary_values.condition_a,
             channel_idx=channel_idx,
         )
         pred_b, act_b, invalid_b = self._extract_scatter_series(
-            predictor_values=result.condition_b_predictor_values,
-            summary_values=result.condition_b_trial_activity_summary_values,
+            predictor_values=result.predictor_values.condition_b.values,
+            summary_values=result.trial_activity_summary_values.condition_b,
             channel_idx=channel_idx,
         )
 

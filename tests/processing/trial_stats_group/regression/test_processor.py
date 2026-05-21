@@ -75,19 +75,40 @@ def _write_slope_stats_h5(
         condition_b_r_value = np.full((n_ch, n_t), 0.4, dtype=np.float64)
 
     with h5py.File(path, "w") as fh:
-        reg = fh.create_group("regression")
+        stats = fh.create_group("stats")
+        reg = stats.create_group("regression")
         ca = reg.create_group("condition_a")
         ca.create_dataset("slope", data=condition_a_slope.astype(np.float64))
         ca.create_dataset("r_value", data=condition_a_r_value.astype(np.float64))
         ca.create_dataset("p_value", data=np.full((n_ch, n_t), 0.01, dtype=np.float64))
+        ca.create_dataset("p_value_corrected", data=np.full((n_ch, n_t), 0.01, dtype=np.float64))
+        ca.create_dataset("significant_mask", data=np.ones((n_ch, n_t), dtype=bool))
         cb = reg.create_group("condition_b")
         cb.create_dataset("slope", data=condition_b_slope.astype(np.float64))
         cb.create_dataset("r_value", data=condition_b_r_value.astype(np.float64))
         cb.create_dataset("p_value", data=np.full((n_ch, n_t), 0.05, dtype=np.float64))
+        cb.create_dataset("p_value_corrected", data=np.full((n_ch, n_t), 0.05, dtype=np.float64))
+        cb.create_dataset("significant_mask", data=np.zeros((n_ch, n_t), dtype=bool))
 
-        means = fh.create_group("means")
-        means.create_dataset(condition_labels[0], data=condition_a_mean.astype(np.float64))
-        means.create_dataset(condition_labels[1], data=condition_b_mean.astype(np.float64))
+        data = fh.create_group("data")
+        activity = data.create_group("activity")
+        condition_a = activity.create_group("condition_a")
+        condition_a.create_dataset("mean", data=condition_a_mean.astype(np.float64))
+        condition_a.create_dataset("sem", data=np.full((n_ch, n_t), 0.1, dtype=np.float64))
+        condition_b = activity.create_group("condition_b")
+        condition_b.create_dataset("mean", data=condition_b_mean.astype(np.float64))
+        condition_b.create_dataset("sem", data=np.full((n_ch, n_t), 0.1, dtype=np.float64))
+
+        predictor_group = fh.create_group("predictor")
+        for key in (
+            "condition_a_raw_values",
+            "condition_b_raw_values",
+            "condition_a_transformed_values",
+            "condition_b_transformed_values",
+            "condition_a_values",
+            "condition_b_values",
+        ):
+            predictor_group.create_dataset(key, data=np.array([], dtype=np.float64))
 
         axes = fh.create_group("axes")
         axis_name = "region" if analysis_level != "channel" else "channel"
@@ -97,11 +118,7 @@ def _write_slope_stats_h5(
         meta = fh.create_group("meta")
         meta.create_dataset("analysis_type", data="slope_regression", dtype=str_dtype)
         meta.create_dataset("analysis_level", data=analysis_level, dtype=str_dtype)
-        meta.create_dataset(
-            "trial_count_labels",
-            data=np.array(list(condition_labels), dtype=object),
-            dtype=str_dtype,
-        )
+        meta.create_dataset("condition_labels", data=np.array(list(condition_labels), dtype=object), dtype=str_dtype)
         meta.create_dataset("binning_mode", data="none", dtype=str_dtype)
         meta.create_dataset("window_ms", data=0.0)
         meta.create_dataset("n_bins", data=0)
@@ -407,10 +424,10 @@ def test_process_group_cluster_permutation_custom_method() -> None:
             perm_a = rng.standard_normal((n_perm, n_ch, n_t)).astype(np.float32)
             perm_b = rng.standard_normal((n_perm, n_ch, n_t)).astype(np.float32)
             with h5py.File(path, "a") as fh:
-                fh["regression/condition_a"].create_dataset(
+                fh["stats/regression/condition_a"].create_dataset(
                     "permuted_slopes", data=perm_a, compression="gzip"
                 )
-                fh["regression/condition_b"].create_dataset(
+                fh["stats/regression/condition_b"].create_dataset(
                     "permuted_slopes", data=perm_b, compression="gzip"
                 )
             files.append(_make_bids_file(path, {

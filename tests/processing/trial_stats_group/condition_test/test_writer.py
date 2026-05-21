@@ -16,6 +16,15 @@ from gin_bids_py_analysis.processing.trial_stats_group import (
     ConditionTestGroupProcessingWriter,
     ConditionTestGroupWriterParams,
 )
+from gin_bids_py_analysis.processing.trial_stats_group.condition_test.result import (
+    ConditionTestEpochSummary,
+)
+from gin_bids_py_analysis.processing.trial_stats_group.result import (
+    GroupEpochStats,
+    GroupEstimate,
+    GroupEstimatePair,
+    GroupTimecourseStats,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -57,12 +66,16 @@ def test_writer_outputs_expected_hdf5_schema_and_group_path() -> None:
         result = ConditionTestGroupProcessingResult(
             source_group=BIDSFileGroup(primary=primary),
             output_entities={"subject": "group", "task": "decid"},
-            activity_t_values=np.array([[2.0, 3.0]], dtype=np.float64),
-            activity_p_values=np.array([[0.02, 0.03]], dtype=np.float64),
-            activity_p_values_uncorrected=np.array([[0.02, 0.03]], dtype=np.float64),
-            activity_significant_mask=np.array([[True, True]], dtype=bool),
-            metric_mean=np.array([[1.0, 1.5]], dtype=np.float64),
-            metric_sem=np.array([[0.2, 0.3]], dtype=np.float64),
+            activity_stats=GroupTimecourseStats(
+                t_values=np.array([[2.0, 3.0]], dtype=np.float64),
+                p_values=np.array([[0.02, 0.03]], dtype=np.float64),
+                p_values_uncorrected=np.array([[0.02, 0.03]], dtype=np.float64),
+                significant_mask=np.array([[True, True]], dtype=bool),
+            ),
+            metric=GroupEstimate(
+                mean=np.array([[1.0, 1.5]], dtype=np.float64),
+                sem=np.array([[0.2, 0.3]], dtype=np.float64),
+            ),
             time_axis_s=np.array([0.0, 0.1], dtype=np.float64),
             region_names=["ROI_A"],
             source_metric="mean_difference",
@@ -71,11 +84,20 @@ def test_writer_outputs_expected_hdf5_schema_and_group_path() -> None:
             significance_alpha=0.05,
             roi_mode="manual",
             atlas_name=None,
-            epoch_activity_t=np.array([3.4], dtype=np.float64),
-            epoch_activity_p=np.array([0.01], dtype=np.float64),
-            epoch_activity_df=np.array([4.0], dtype=np.float64),
-            epoch_mean_metric_mean=np.array([1.2], dtype=np.float64),
-            epoch_mean_metric_sem=np.array([0.25], dtype=np.float64),
+            activity_epoch=GroupEpochStats(
+                t=np.array([3.4], dtype=np.float64),
+                p=np.array([0.01], dtype=np.float64),
+                df=np.array([4.0], dtype=np.float64),
+            ),
+            summary_epoch=ConditionTestEpochSummary(
+                t_values=np.array([3.4], dtype=np.float64),
+                p_values=np.array([0.01], dtype=np.float64),
+                df=np.array([4.0], dtype=np.float64),
+                source_metric=GroupEstimate(
+                    mean=np.array([1.2], dtype=np.float64),
+                    sem=np.array([0.25], dtype=np.float64),
+                ),
+            ),
             roi_channel_counts=np.array([5], dtype=np.int64),
             roi_subject_counts=np.array([3], dtype=np.int64),
             contributions=[
@@ -86,10 +108,16 @@ def test_writer_outputs_expected_hdf5_schema_and_group_path() -> None:
                     source_stats_file=str(primary.path),
                 )
             ],
-            condition_a_activity_mean=np.array([[2.0, 2.5]], dtype=np.float64),
-            condition_a_activity_sem=np.array([[0.1, 0.2]], dtype=np.float64),
-            condition_b_activity_mean=np.array([[1.0, 1.2]], dtype=np.float64),
-            condition_b_activity_sem=np.array([[0.05, 0.1]], dtype=np.float64),
+            activity=GroupEstimatePair(
+                condition_a=GroupEstimate(
+                    mean=np.array([[2.0, 2.5]], dtype=np.float64),
+                    sem=np.array([[0.1, 0.2]], dtype=np.float64),
+                ),
+                condition_b=GroupEstimate(
+                    mean=np.array([[1.0, 1.2]], dtype=np.float64),
+                    sem=np.array([[0.05, 0.1]], dtype=np.float64),
+                ),
+            ),
             source_subject_stats_files=[str(primary.path)],
             source_electrodes_files=[],
             excluded_rois={"ROI_B": "insufficient_subjects:1<2"},
@@ -106,20 +134,20 @@ def test_writer_outputs_expected_hdf5_schema_and_group_path() -> None:
         assert out_path.name == "sub-group_task-decid_desc-conditiontestgroup_stats.h5"
 
         with h5py.File(out_path, "r") as fh:
-            assert fh["stats"]["t_values"].shape == (1, 2)
-            assert fh["means"]["metric_mean"].shape == (1, 2)
-            assert fh["means"]["condition_a_mean"].shape == (1, 2)
-            assert fh["means"]["condition_a_sem"].shape == (1, 2)
-            assert fh["means"]["condition_b_mean"].shape == (1, 2)
-            assert fh["means"]["condition_b_sem"].shape == (1, 2)
-            assert fh["uncertainty"]["metric_sem"].shape == (1, 2)
-            assert fh["summary_epoch"]["t_values"].shape == (1,)
+            assert fh["stats"]["activity"]["t_values"].shape == (1, 2)
+            assert fh["data"]["source_metric"]["mean"].shape == (1, 2)
+            assert fh["data"]["activity"]["condition_a"]["mean"].shape == (1, 2)
+            assert fh["data"]["activity"]["condition_a"]["sem"].shape == (1, 2)
+            assert fh["data"]["activity"]["condition_b"]["mean"].shape == (1, 2)
+            assert fh["data"]["activity"]["condition_b"]["sem"].shape == (1, 2)
+            assert fh["data"]["source_metric"]["sem"].shape == (1, 2)
+            assert fh["data"]["summary_epoch"]["t_values"].shape == (1,)
             assert list(fh["axes"]["region"].asstr()[:]) == ["ROI_A"]
             assert fh["meta"]["analysis_level"].asstr()[()] == "roi_group"
             assert fh["meta"]["source_metric"].asstr()[()] == "mean_difference"
             assert fh["meta"]["roi_mode"].asstr()[()] == "manual"
             assert list(fh["excluded_rois"]["region"].asstr()[:]) == ["ROI_B"]
-            assert list(fh["contributions"]["channel"].asstr()[:]) == ["A1"]
+            assert list(fh["contributions"]["summary"]["channel"].asstr()[:]) == ["A1"]
             assert list(fh["provenance"]["source_subject_stats_files"].asstr()[:]) == [str(primary.path)]
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
@@ -143,12 +171,16 @@ def test_writer_outputs_matlab_format() -> None:
         result = ConditionTestGroupProcessingResult(
             source_group=BIDSFileGroup(primary=primary),
             output_entities={"subject": "group", "task": "decid"},
-            activity_t_values=np.array([[2.0, 3.0]], dtype=np.float64),
-            activity_p_values=np.array([[0.02, 0.03]], dtype=np.float64),
-            activity_p_values_uncorrected=np.array([[0.02, 0.03]], dtype=np.float64),
-            activity_significant_mask=np.array([[True, True]], dtype=bool),
-            metric_mean=np.array([[1.0, 1.5]], dtype=np.float64),
-            metric_sem=np.array([[0.2, 0.3]], dtype=np.float64),
+            activity_stats=GroupTimecourseStats(
+                t_values=np.array([[2.0, 3.0]], dtype=np.float64),
+                p_values=np.array([[0.02, 0.03]], dtype=np.float64),
+                p_values_uncorrected=np.array([[0.02, 0.03]], dtype=np.float64),
+                significant_mask=np.array([[True, True]], dtype=bool),
+            ),
+            metric=GroupEstimate(
+                mean=np.array([[1.0, 1.5]], dtype=np.float64),
+                sem=np.array([[0.2, 0.3]], dtype=np.float64),
+            ),
             time_axis_s=np.array([0.0, 0.1], dtype=np.float64),
             region_names=["ROI_A"],
             source_metric="mean_difference",
@@ -157,11 +189,20 @@ def test_writer_outputs_matlab_format() -> None:
             significance_alpha=0.05,
             roi_mode="manual",
             atlas_name=None,
-            epoch_activity_t=np.array([3.4], dtype=np.float64),
-            epoch_activity_p=np.array([0.01], dtype=np.float64),
-            epoch_activity_df=np.array([4.0], dtype=np.float64),
-            epoch_mean_metric_mean=np.array([1.2], dtype=np.float64),
-            epoch_mean_metric_sem=np.array([0.25], dtype=np.float64),
+            activity_epoch=GroupEpochStats(
+                t=np.array([3.4], dtype=np.float64),
+                p=np.array([0.01], dtype=np.float64),
+                df=np.array([4.0], dtype=np.float64),
+            ),
+            summary_epoch=ConditionTestEpochSummary(
+                t_values=np.array([3.4], dtype=np.float64),
+                p_values=np.array([0.01], dtype=np.float64),
+                df=np.array([4.0], dtype=np.float64),
+                source_metric=GroupEstimate(
+                    mean=np.array([1.2], dtype=np.float64),
+                    sem=np.array([0.25], dtype=np.float64),
+                ),
+            ),
             roi_channel_counts=np.array([5], dtype=np.int64),
             roi_subject_counts=np.array([3], dtype=np.int64),
             contributions=[
@@ -172,10 +213,16 @@ def test_writer_outputs_matlab_format() -> None:
                     source_stats_file=str(primary.path),
                 )
             ],
-            condition_a_activity_mean=np.array([[2.0, 2.5]], dtype=np.float64),
-            condition_a_activity_sem=np.array([[0.1, 0.2]], dtype=np.float64),
-            condition_b_activity_mean=np.array([[1.0, 1.2]], dtype=np.float64),
-            condition_b_activity_sem=np.array([[0.05, 0.1]], dtype=np.float64),
+            activity=GroupEstimatePair(
+                condition_a=GroupEstimate(
+                    mean=np.array([[2.0, 2.5]], dtype=np.float64),
+                    sem=np.array([[0.1, 0.2]], dtype=np.float64),
+                ),
+                condition_b=GroupEstimate(
+                    mean=np.array([[1.0, 1.2]], dtype=np.float64),
+                    sem=np.array([[0.05, 0.1]], dtype=np.float64),
+                ),
+            ),
             source_subject_stats_files=[str(primary.path)],
             source_electrodes_files=[],
             excluded_rois={"ROI_B": "insufficient_subjects:1<2"},
@@ -198,16 +245,16 @@ def test_writer_outputs_matlab_format() -> None:
         mat = scipy.io.loadmat(str(out_path), squeeze_me=True, struct_as_record=False)
         data = mat["data"]
         # With squeeze_me=True, (1, 2) arrays become (2,) and (1,) become scalars
-        assert np.atleast_1d(data.stats.t_values).shape == (2,)
-        assert np.atleast_1d(data.stats.p_values).shape == (2,)
-        assert np.atleast_1d(data.stats.significant_mask).shape == (2,)
-        assert np.atleast_1d(data.means.metric_mean).shape == (2,)
-        assert np.atleast_1d(data.means.condition_a_mean).shape == (2,)
-        assert np.atleast_1d(data.means.condition_b_mean).shape == (2,)
-        assert np.atleast_1d(data.means.condition_a_sem).shape == (2,)
-        assert np.atleast_1d(data.means.condition_b_sem).shape == (2,)
-        assert np.atleast_1d(data.uncertainty.metric_sem).shape == (2,)
-        assert np.atleast_1d(data.summary_epoch.t_values).shape == (1,)
+        assert np.atleast_1d(data.stats.activity.t_values).shape == (2,)
+        assert np.atleast_1d(data.stats.activity.p_values).shape == (2,)
+        assert np.atleast_1d(data.stats.activity.significant_mask).shape == (2,)
+        assert np.atleast_1d(data.data.source_metric.mean).shape == (2,)
+        assert np.atleast_1d(data.data.activity.condition_a.mean).shape == (2,)
+        assert np.atleast_1d(data.data.activity.condition_b.mean).shape == (2,)
+        assert np.atleast_1d(data.data.activity.condition_a.sem).shape == (2,)
+        assert np.atleast_1d(data.data.activity.condition_b.sem).shape == (2,)
+        assert np.atleast_1d(data.data.source_metric.sem).shape == (2,)
+        assert np.atleast_1d(data.data.summary_epoch.t_values).shape == (1,)
         assert int(np.atleast_1d(data.meta.roi_channel_counts)[0]) == 5
         region_arr = np.atleast_1d(data.axes.region)
         assert list(region_arr) == ["ROI_A"]
@@ -215,7 +262,7 @@ def test_writer_outputs_matlab_format() -> None:
         assert str(data.meta.analysis_level) == "roi_group"
         assert str(data.meta.source_metric) == "mean_difference"
         assert str(data.meta.roi_mode) == "manual"
-        channel_arr = np.atleast_1d(data.contributions.channel)
+        channel_arr = np.atleast_1d(data.contributions.summary.channel)
         assert list(channel_arr) == ["A1"]
         assert str(data.provenance.pipeline_name) == "condition_test_group"
     finally:

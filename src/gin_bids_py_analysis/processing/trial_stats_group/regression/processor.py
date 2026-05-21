@@ -62,9 +62,21 @@ from ..processor import (
     hash_time_axis,
     validate_group_compatibility,
 )
-from ..result import ROIChannelContribution
+from ..result import (
+    GroupEpochStats,
+    GroupEstimate,
+    GroupEstimatePair,
+    GroupTimecourseStats,
+    IndexedConditionContributions,
+    ROIChannelContribution,
+)
 from .params import RegressionGroupParams
-from .result import RegressionGroupProcessingResult
+from .result import (
+    RegressionGroupProcessingResult,
+    RegressionSourceMetricStats,
+    ScatterData,
+    VsZeroStatsPair,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -753,63 +765,104 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                 "trial_activity_summary_label": first.raw.trial_activity_summary_label,
                 "scatter_aggregation": "trial_pool",
             },
-            source_metric_t_values=source_metric_t_values,
-            source_metric_p_values=source_metric_p_values,
-            source_metric_p_values_uncorrected=source_metric_p_values_uncorr,
-            source_metric_significant_mask=source_metric_significant_mask,
-            activity_t_values=t_values_activity,
-            activity_p_values=p_values_activity,
-            activity_p_values_uncorrected=p_values_activity_uncorr,
-            activity_significant_mask=sig_mask_activity,
-            condition_a_source_metric_mean=self.stack_rows(rows_slope_mean_a, n_times),
-            condition_a_source_metric_sem=self.stack_rows(rows_slope_sem_a, n_times),
-            condition_b_source_metric_mean=self.stack_rows(rows_slope_mean_b, n_times),
-            condition_b_source_metric_sem=self.stack_rows(rows_slope_sem_b, n_times),
-            condition_a_activity_mean=self.stack_rows(rows_activity_mean_a, n_times),
-            condition_a_activity_sem=self.stack_rows(rows_activity_sem_a, n_times),
-            condition_b_activity_mean=self.stack_rows(rows_activity_mean_b, n_times),
-            condition_b_activity_sem=self.stack_rows(rows_activity_sem_b, n_times),
-            condition_a_r_value_mean=self.stack_rows(rows_r_value_mean_a, n_times),
-            condition_a_r_value_sem=self.stack_rows(rows_r_value_sem_a, n_times),
-            condition_b_r_value_mean=self.stack_rows(rows_r_value_mean_b, n_times),
-            condition_b_r_value_sem=self.stack_rows(rows_r_value_sem_b, n_times),
-            epoch_source_metric_t=self.array_1d(epoch_slope_t),
-            epoch_source_metric_p=self.array_1d(epoch_slope_p),
-            epoch_source_metric_df=self.array_1d(epoch_slope_df),
-            epoch_activity_t=self.array_1d(epoch_activity_t),
-            epoch_activity_p=self.array_1d(epoch_activity_p),
-            epoch_activity_df=self.array_1d(epoch_activity_df),
+            source_metric_stats=RegressionSourceMetricStats(
+                contrast=GroupTimecourseStats(
+                    t_values=source_metric_t_values,
+                    p_values=source_metric_p_values,
+                    p_values_uncorrected=source_metric_p_values_uncorr,
+                    significant_mask=source_metric_significant_mask,
+                ),
+                epoch_summary=GroupEpochStats(
+                    t=self.array_1d(epoch_slope_t),
+                    p=self.array_1d(epoch_slope_p),
+                    df=self.array_1d(epoch_slope_df),
+                ),
+                vs_zero=VsZeroStatsPair(
+                    condition_a=GroupTimecourseStats(
+                        t_values=vs_zero_t_a,
+                        p_values=vs_zero_p_a,
+                        p_values_uncorrected=vs_zero_p_raw_a,
+                        significant_mask=vs_zero_sig_a,
+                    ),
+                    condition_b=GroupTimecourseStats(
+                        t_values=vs_zero_t_b,
+                        p_values=vs_zero_p_b,
+                        p_values_uncorrected=vs_zero_p_raw_b,
+                        significant_mask=vs_zero_sig_b,
+                    ),
+                    condition_a_cluster_p_values=vs_zero_cluster_p_a_out,
+                    condition_a_cluster_windows_s=vs_zero_cluster_windows_a_out,
+                    condition_a_cluster_null_distributions=vs_zero_cluster_null_dists_a_out,
+                    condition_b_cluster_p_values=vs_zero_cluster_p_b_out,
+                    condition_b_cluster_windows_s=vs_zero_cluster_windows_b_out,
+                    condition_b_cluster_null_distributions=vs_zero_cluster_null_dists_b_out,
+                ),
+            ),
+            activity_stats=GroupTimecourseStats(
+                t_values=t_values_activity,
+                p_values=p_values_activity,
+                p_values_uncorrected=p_values_activity_uncorr,
+                significant_mask=sig_mask_activity,
+            ),
+            source_metric_data=GroupEstimatePair(
+                condition_a=GroupEstimate(
+                    mean=self.stack_rows(rows_slope_mean_a, n_times),
+                    sem=self.stack_rows(rows_slope_sem_a, n_times),
+                ),
+                condition_b=GroupEstimate(
+                    mean=self.stack_rows(rows_slope_mean_b, n_times),
+                    sem=self.stack_rows(rows_slope_sem_b, n_times),
+                ),
+            ),
+            activity=GroupEstimatePair(
+                condition_a=GroupEstimate(
+                    mean=self.stack_rows(rows_activity_mean_a, n_times),
+                    sem=self.stack_rows(rows_activity_sem_a, n_times),
+                ),
+                condition_b=GroupEstimate(
+                    mean=self.stack_rows(rows_activity_mean_b, n_times),
+                    sem=self.stack_rows(rows_activity_sem_b, n_times),
+                ),
+            ),
+            r_values=GroupEstimatePair(
+                condition_a=GroupEstimate(
+                    mean=self.stack_rows(rows_r_value_mean_a, n_times),
+                    sem=self.stack_rows(rows_r_value_sem_a, n_times),
+                ),
+                condition_b=GroupEstimate(
+                    mean=self.stack_rows(rows_r_value_mean_b, n_times),
+                    sem=self.stack_rows(rows_r_value_sem_b, n_times),
+                ),
+            ),
+            activity_epoch=GroupEpochStats(
+                t=self.array_1d(epoch_activity_t),
+                p=self.array_1d(epoch_activity_p),
+                df=self.array_1d(epoch_activity_df),
+            ),
             time_axis_s=first.time_axis_s.copy(),
             region_names=region_names,
             condition_labels=first.condition_labels,
             roi_channel_counts=np.array(roi_channel_counts, dtype=np.int64),
             roi_subject_counts=np.array(roi_subject_counts, dtype=np.int64),
             contributions=contributions_out,
-            condition_a_source_metric_contributions=slope_a_contribution_samples,
-            condition_b_source_metric_contributions=slope_b_contribution_samples,
-            condition_a_activity_contributions=activity_a_contribution_samples,
-            condition_b_activity_contributions=activity_b_contribution_samples,
-            contribution_labels=contribution_label_rows,
-            condition_a_scatter_predictor=scatter_a_predictor,
-            condition_a_scatter_activity=scatter_a_activity,
-            condition_b_scatter_predictor=scatter_b_predictor,
-            condition_b_scatter_activity=scatter_b_activity,
+            source_metric_contributions=IndexedConditionContributions(
+                condition_a=slope_a_contribution_samples,
+                condition_b=slope_b_contribution_samples,
+                labels=contribution_label_rows,
+            ),
+            activity_contributions=IndexedConditionContributions(
+                condition_a=activity_a_contribution_samples,
+                condition_b=activity_b_contribution_samples,
+                labels=contribution_label_rows,
+            ),
+            scatter=ScatterData(
+                condition_a_predictor=scatter_a_predictor,
+                condition_a_activity=scatter_a_activity,
+                condition_b_predictor=scatter_b_predictor,
+                condition_b_activity=scatter_b_activity,
+            ),
             source_metric=self.params.source_metric,
             contrast_mode=self.params.contrast_mode,
-            condition_a_source_metric_vs_zero_t_values=vs_zero_t_a,
-            condition_a_source_metric_vs_zero_p_values_uncorrected=vs_zero_p_raw_a,
-            condition_a_source_metric_vs_zero_p_values=vs_zero_p_a,
-            condition_a_source_metric_vs_zero_significant_mask=vs_zero_sig_a,
-            condition_a_source_metric_vs_zero_cluster_p_values=vs_zero_cluster_p_a_out,
-            condition_a_source_metric_vs_zero_cluster_windows_s=vs_zero_cluster_windows_a_out,
-            condition_a_source_metric_vs_zero_cluster_null_distributions=vs_zero_cluster_null_dists_a_out,
-            condition_b_source_metric_vs_zero_t_values=vs_zero_t_b,
-            condition_b_source_metric_vs_zero_p_values_uncorrected=vs_zero_p_raw_b,
-            condition_b_source_metric_vs_zero_p_values=vs_zero_p_b,
-            condition_b_source_metric_vs_zero_significant_mask=vs_zero_sig_b,
-            condition_b_source_metric_vs_zero_cluster_p_values=vs_zero_cluster_p_b_out,
-            condition_b_source_metric_vs_zero_cluster_windows_s=vs_zero_cluster_windows_b_out,
-            condition_b_source_metric_vs_zero_cluster_null_distributions=vs_zero_cluster_null_dists_b_out,
             p_value_correction_method=method,
             significance_alpha=alpha,
             roi_mode=self.params.roi_mode,
@@ -1103,21 +1156,18 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
                 np.asarray(ds[:], dtype=np.float64), n_features=n_ch, n_times=n_t
             )
 
-        ds_cond_a_slope = dataset_or_none(fh, "regression/condition_a/slope")
-        ds_cond_b_slope = dataset_or_none(fh, "regression/condition_b/slope")
-        ds_cond_a_r = dataset_or_none(fh, "regression/condition_a/r_value")
-        ds_cond_b_r = dataset_or_none(fh, "regression/condition_b/r_value")
+        ds_cond_a_slope = dataset_or_none(fh, "stats/regression/condition_a/slope")
+        ds_cond_b_slope = dataset_or_none(fh, "stats/regression/condition_b/slope")
+        ds_cond_a_r = dataset_or_none(fh, "stats/regression/condition_a/r_value")
+        ds_cond_b_r = dataset_or_none(fh, "stats/regression/condition_b/r_value")
 
-        condition_a_slope = _read_2d("regression/condition_a/slope")
-        condition_b_slope = _read_2d("regression/condition_b/slope")
-        condition_a_r_value = _read_2d("regression/condition_a/r_value")
-        condition_b_r_value = _read_2d("regression/condition_b/r_value")
+        condition_a_slope = _read_2d("stats/regression/condition_a/slope")
+        condition_b_slope = _read_2d("stats/regression/condition_b/slope")
+        condition_a_r_value = _read_2d("stats/regression/condition_a/r_value")
+        condition_b_r_value = _read_2d("stats/regression/condition_b/r_value")
 
-        # Mean activity is stored under means/{condition_name}
-        cond_a_name = condition_labels[0]
-        cond_b_name = condition_labels[1]
-        condition_a_mean = _read_2d(f"means/{cond_a_name}")
-        condition_b_mean = _read_2d(f"means/{cond_b_name}")
+        condition_a_mean = _read_2d("data/activity/condition_a/mean")
+        condition_b_mean = _read_2d("data/activity/condition_b/mean")
 
         binning_mode = str_scalar(dataset_or_none(fh, "meta/binning_mode"), default="none")
         window_ms = float_scalar(dataset_or_none(fh, "meta/window_ms"), default=0.0)
@@ -1239,11 +1289,11 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
                     np.asarray(prov["source_electrodes_files"][:], dtype=object)
                 )
 
-        perm_a_ds = dataset_or_none(fh, "regression/condition_a/permuted_slopes")
+        perm_a_ds = dataset_or_none(fh, "stats/regression/condition_a/permuted_slopes")
         raw_condition_a_permuted_slopes: np.ndarray | None = (
             np.asarray(perm_a_ds[:], dtype=np.float32) if perm_a_ds is not None else None
         )
-        perm_b_ds = dataset_or_none(fh, "regression/condition_b/permuted_slopes")
+        perm_b_ds = dataset_or_none(fh, "stats/regression/condition_b/permuted_slopes")
         raw_condition_b_permuted_slopes: np.ndarray | None = (
             np.asarray(perm_b_ds[:], dtype=np.float32) if perm_b_ds is not None else None
         )
@@ -1581,15 +1631,11 @@ def _read_predictor_values_hdf5(stats_file: BIDSFile, path: str) -> np.ndarray:
 
 
 def _read_condition_labels_hdf5(fh: h5py.File) -> tuple[str, str]:
-    labels_ds = dataset_or_none(fh, "meta/trial_count_labels")
+    labels_ds = dataset_or_none(fh, "meta/condition_labels")
     if labels_ds is not None:
         labels = decode_str_array(np.asarray(labels_ds[:], dtype=object))
         if len(labels) >= 2:
             return labels[0], labels[1]
-    if "means" in fh:
-        mean_keys = [key for key in fh["means"].keys()]
-        if len(mean_keys) >= 2:
-            return mean_keys[0], mean_keys[1]
     return "condition_a", "condition_b"
 
 

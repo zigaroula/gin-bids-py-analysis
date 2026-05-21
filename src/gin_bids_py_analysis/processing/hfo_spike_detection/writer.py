@@ -23,6 +23,7 @@ from gin_bids_py_analysis.processing.base import (
     BaseProcessingResult,
     BaseProcessingWriter,
 )
+from gin_bids_py_analysis.processing.utils.serialization import compressed, write_hdf5_tree
 
 from .result import HfoSpikeDetectorProcessingResult
 
@@ -217,8 +218,6 @@ class HfoSpikeDetectorProcessingWriter(BaseProcessingWriter):
                 "h5py is required for HDF5 output. Install it with: pip install h5py"
             ) from exc
 
-        str_dtype = h5py.string_dtype(encoding="utf-8")
-
         n_samples = result.metadata.get("n_samples", 0)
         duration = n_samples / result.original_fs if result.original_fs > 0 else 0.0
 
@@ -234,66 +233,51 @@ class HfoSpikeDetectorProcessingWriter(BaseProcessingWriter):
         strengths = np.array([e.get("detection_strength", 0) for e in result.markers], dtype=np.float64)
         colors = np.array([e.get("visualization_color", "#808080") for e in result.markers], dtype=object)
 
-        with h5py.File(output_path, "w") as fh:
-
-            # /markers
-            markers_grp = fh.create_group("markers")
-            markers_grp.create_dataset("onset", data=onsets)
-            markers_grp.create_dataset("duration", data=durations)
-            markers_grp.create_dataset("channel", data=channels, dtype=str_dtype)
-            markers_grp.create_dataset("event_type", data=event_types, dtype=str_dtype)
-            markers_grp.create_dataset("peak_frequency", data=peak_freqs)
-            markers_grp.create_dataset("sample_index", data=sample_indices)
-            markers_grp.create_dataset("frequency_index", data=freq_indices)
-            markers_grp.create_dataset("detection_strength", data=strengths)
-            markers_grp.create_dataset("color", data=colors, dtype=str_dtype)
-
-            # /detection_counts
-            counts_grp = fh.create_group("detection_counts")
-            if result.n_spk.size > 0:
-                counts_grp.create_dataset("n_spk", data=result.n_spk.astype(np.int64))
-            if result.n_osc.size > 0:
-                counts_grp.create_dataset("n_osc", data=result.n_osc.astype(np.int64))
-            if result.detection_charac.size > 0:
-                counts_grp.create_dataset(
-                    "detection_charac",
-                    data=result.detection_charac.astype(np.float64),
-                    compression="gzip",
-                    compression_opts=4,
-                )
-
-            # /axes
-            axes_grp = fh.create_group("axes")
-            axes_grp.create_dataset(
-                "channel_names",
-                data=np.array(result.channel_names, dtype=object),
-                dtype=str_dtype,
+        counts: dict[str, object] = {}
+        if result.n_spk.size > 0:
+            counts["n_spk"] = result.n_spk.astype(np.int64)
+        if result.n_osc.size > 0:
+            counts["n_osc"] = result.n_osc.astype(np.int64)
+        if result.detection_charac.size > 0:
+            counts["detection_charac"] = compressed(
+                result.detection_charac.astype(np.float64)
             )
-            if result.freq_band.size > 0:
-                axes_grp.create_dataset(
-                    "freq_band", data=result.freq_band.astype(np.float32)
-                )
 
-            # /meta
-            meta_grp = fh.create_group("meta")
-            meta_grp.create_dataset("original_fs", data=float(result.original_fs))
-            meta_grp.create_dataset(
-                "montage_mode",
-                data=result.metadata.get("montage_mode", ""),
-                dtype=str_dtype,
-            )
-            meta_grp.create_dataset("duration_seconds", data=duration)
-            meta_grp.create_dataset("n_channels", data=np.int64(len(result.channel_names)))
-            meta_grp.create_dataset("n_events", data=np.int64(n_events))
+        axes: dict[str, object] = {
+            "channel_names": np.array(result.channel_names, dtype=object),
+        }
+        if result.freq_band.size > 0:
+            axes["freq_band"] = result.freq_band.astype(np.float32)
 
-            # /provenance
-            prov_grp = fh.create_group("provenance")
-            prov_grp.create_dataset(
-                "raw_bids_path",
-                data=str(result.source_group.primary.path),
-                dtype=str_dtype,
-            )
-            prov_grp.create_dataset("pipeline_name", data="hfo_spike_detection", dtype=str_dtype)
-            prov_grp.create_dataset(
-                "pipeline_version", data=_package_version(), dtype=str_dtype
-            )
+        write_hdf5_tree(
+            output_path,
+            {
+                "events": {
+                    "onset": onsets,
+                    "duration": durations,
+                    "channel": channels,
+                    "event_type": event_types,
+                    "peak_frequency": peak_freqs,
+                    "sample_index": sample_indices,
+                    "frequency_index": freq_indices,
+                    "detection_strength": strengths,
+                    "color": colors,
+                },
+                "counts": counts,
+                "axes": axes,
+                "meta": {
+                    "schema_name": "hfo_spike_detection",
+                    "schema_version": "2.0",
+                    "original_fs": float(result.original_fs),
+                    "montage_mode": str(result.metadata.get("montage_mode", "")),
+                    "duration_seconds": float(duration),
+                    "n_channels": np.int64(len(result.channel_names)),
+                    "n_events": np.int64(n_events),
+                },
+                "provenance": {
+                    "raw_bids_path": str(result.source_group.primary.path),
+                    "pipeline_name": "hfo_spike_detection",
+                    "pipeline_version": _package_version(),
+                },
+            },
+        )

@@ -15,8 +15,15 @@ from gin_bids_py_analysis.processing.utils.trial_annotator import TrialWindowAnn
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from ..processor import BaseTrialStatsProcessing, TrialStatsProcessingContext
+from ..result import ActivityEstimate, ConditionActivity
 from .params import RegressionParams
-from .result import RegressionProcessingResult
+from .result import (
+    ConditionPredictorValues,
+    ConditionRegressionStats,
+    RegressionPredictor,
+    RegressionProcessingResult,
+    RegressionStats,
+)
 from .stats import (
     compute_linear_regression_maps,
     compute_permuted_regression_maps,
@@ -347,30 +354,46 @@ class RegressionProcessing(BaseTrialStatsProcessing):
 
         return RegressionProcessingResult(
             **self._build_common_result_kwargs(context),
-            condition_a_slope=condition_a_slope,
-            condition_a_intercept=condition_a_intercept,
-            condition_a_r_value=condition_a_r_value,
-            condition_a_p_value=condition_a_p_value,
-            condition_a_p_value_corrected=condition_a_p_value_corrected,
-            condition_a_significant_mask=condition_a_significant_mask,
-            condition_b_slope=condition_b_slope,
-            condition_b_intercept=condition_b_intercept,
-            condition_b_r_value=condition_b_r_value,
-            condition_b_p_value=condition_b_p_value,
-            condition_b_p_value_corrected=condition_b_p_value_corrected,
-            condition_b_significant_mask=condition_b_significant_mask,
-            condition_a_mean=condition_a_mean,
-            condition_b_mean=condition_b_mean,
-            condition_a_sem=condition_a_sem,
-            condition_b_sem=condition_b_sem,
-            condition_a_trials_used=int(context.epochs_a.shape[0]),
-            condition_b_trials_used=int(context.epochs_b.shape[0]),
-            condition_a_predictor_raw_values=predictor_a_raw_array,
-            condition_b_predictor_raw_values=predictor_b_raw_array,
-            condition_a_predictor_transformed_values=predictor_a_transformed_array,
-            condition_b_predictor_transformed_values=predictor_b_transformed_array,
-            condition_a_predictor_values=predictor_a_effective_array,
-            condition_b_predictor_values=predictor_b_effective_array,
+            regression=RegressionStats(
+                condition_a=ConditionRegressionStats(
+                    slope=condition_a_slope,
+                    intercept=condition_a_intercept,
+                    r_value=condition_a_r_value,
+                    p_value=condition_a_p_value,
+                    p_value_corrected=condition_a_p_value_corrected,
+                    significant_mask=condition_a_significant_mask,
+                    n_trials_used=int(context.epochs_a.shape[0]),
+                    stats_valid=condition_a_stats_valid,
+                    permuted_slopes=condition_a_permuted_slopes,
+                ),
+                condition_b=ConditionRegressionStats(
+                    slope=condition_b_slope,
+                    intercept=condition_b_intercept,
+                    r_value=condition_b_r_value,
+                    p_value=condition_b_p_value,
+                    p_value_corrected=condition_b_p_value_corrected,
+                    significant_mask=condition_b_significant_mask,
+                    n_trials_used=int(context.epochs_b.shape[0]),
+                    stats_valid=condition_b_stats_valid,
+                    permuted_slopes=condition_b_permuted_slopes,
+                ),
+            ),
+            predictor_values=RegressionPredictor(
+                condition_a=ConditionPredictorValues(
+                    raw_values=predictor_a_raw_array,
+                    transformed_values=predictor_a_transformed_array,
+                    values=predictor_a_effective_array,
+                ),
+                condition_b=ConditionPredictorValues(
+                    raw_values=predictor_b_raw_array,
+                    transformed_values=predictor_b_transformed_array,
+                    values=predictor_b_effective_array,
+                ),
+            ),
+            activity=ConditionActivity(
+                condition_a=ActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
+                condition_b=ActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
+            ),
             analysis_type="slope_regression",
             excluded_channels=dict(context.state["excluded_channels"]),
             excluded_trial_channel_pairs=dict(context.state["excluded_trial_channel_pairs"]),
@@ -383,11 +406,7 @@ class RegressionProcessing(BaseTrialStatsProcessing):
                 }
                 for condition, transform in self.params.predictor_transform_by_condition.items()
             },
-            condition_a_stats_valid=condition_a_stats_valid,
-            condition_b_stats_valid=condition_b_stats_valid,
             stats_valid=bool(condition_a_stats_valid or condition_b_stats_valid),
-            condition_a_permuted_slopes=condition_a_permuted_slopes,
-            condition_b_permuted_slopes=condition_b_permuted_slopes,
         )
 
     def _scale_predictor_values_pair(

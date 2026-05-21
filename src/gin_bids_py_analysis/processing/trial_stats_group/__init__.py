@@ -7,9 +7,17 @@ from .processor import (
     BaseTrialStatsGroupSnapshot,
     BaseTrialStatsGroupSnapshotSignature,
 )
-from .result import BaseTrialStatsGroupProcessingResult
+from .result import (
+    BaseTrialStatsGroupProcessingResult,
+    GroupEpochStats,
+    GroupEstimate,
+    GroupEstimatePair,
+    GroupTimecourseStats,
+    IndexedConditionContributions,
+)
 from .writer import BaseTrialStatsGroupProcessingWriter
 from .condition_test import (
+    ConditionTestEpochSummary,
     ConditionTestGroupParams,
     ConditionTestGroupProcessing,
     ConditionTestGroupProcessingResult,
@@ -24,6 +32,9 @@ from .regression import (
     RegressionGroupProcessingResult,
     RegressionGroupProcessingWriter,
     RegressionGroupWriterParams,
+    RegressionSourceMetricStats,
+    ScatterData,
+    VsZeroStatsPair,
     build_regression_compatible_groups,
     load_regression_group_result,
 )
@@ -37,8 +48,14 @@ __all__ = [
     "BaseTrialStatsGroupSnapshot",
     "BaseTrialStatsGroupContributionRecord",
     "BaseTrialStatsGroupProcessingResult",
+    "GroupEpochStats",
+    "GroupEstimate",
+    "GroupEstimatePair",
+    "GroupTimecourseStats",
+    "IndexedConditionContributions",
     "BaseTrialStatsGroupProcessing",
     "BaseTrialStatsGroupProcessingWriter",
+    "ConditionTestEpochSummary",
     "ConditionTestGroupParams",
     "ConditionTestGroupProcessing",
     "ConditionTestGroupProcessingResult",
@@ -51,6 +68,9 @@ __all__ = [
     "RegressionGroupProcessingResult",
     "RegressionGroupProcessingWriter",
     "RegressionGroupWriterParams",
+    "RegressionSourceMetricStats",
+    "ScatterData",
+    "VsZeroStatsPair",
     "build_regression_compatible_groups",
     "load_regression_group_result",
 ]

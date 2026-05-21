@@ -16,6 +16,7 @@ from gin_bids_py_analysis.processing.base import (
 )
 from gin_bids_py_analysis.processing.utils.events import coerce_annotation_events
 from gin_bids_py_analysis.processing.utils.matlab import matlab_round
+from gin_bids_py_analysis.processing.utils.serialization import compressed, write_hdf5_tree
 
 from .result import HilbertProcessingResult
 
@@ -247,96 +248,45 @@ class HilbertProcessingWriter(BaseProcessingWriter):
         ).astype(np.float32)
 
         n_down = envelope_3d.shape[2]
-        str_dtype = h5py.string_dtype(encoding="utf-8")
+        meta: dict[str, object] = {
+            "schema_name": "hilbert",
+            "schema_version": "2.0",
+            "sampling_frequency_hz": float(result.original_fs),
+            "downsampled_frequency_hz": float(result.downsampled_fs),
+            "montage_mode": str(result.metadata.get("montage_mode", "")),
+            "unit": str(result.metadata.get("unit", "amplitude")),
+            "dimension_order": "smoothing_window x channel x time",
+            "centered": bool(result.metadata.get("centered", False)),
+        }
+        for key in (
+            "events_source_requested",
+            "events_source_resolved",
+            "events_onset_precision",
+            "events_file",
+            "event_sample_shift_samples",
+        ):
+            value = result.metadata.get(key)
+            if value is not None:
+                meta[key] = str(value)
 
-        with h5py.File(output_path, "w") as fh:
-
-            # ------------------------------------------------------------------
-            # /data
-            # ------------------------------------------------------------------
-            data_grp = fh.create_group("data")
-            data_grp.create_dataset(
-                "envelope",
-                data=envelope_3d,
-                compression="gzip",
-                compression_opts=4,
-            )
-
-            # ------------------------------------------------------------------
-            # /axes
-            # ------------------------------------------------------------------
-            axes_grp = fh.create_group("axes")
-
-            axes_grp.create_dataset(
-                "channel",
-                data=np.array(result.channel_names, dtype=object),
-                dtype=str_dtype,
-            )
-            axes_grp.create_dataset(
-                "smoothing_window_ms",
-                data=np.array(sorted_windows, dtype=np.int32),
-            )
-            axes_grp.create_dataset(
-                "band_limits_hz",
-                data=np.array(result.bins, dtype=np.float32),
-            )
-            axes_grp.create_dataset(
-                "time_s",
-                data=np.arange(n_down, dtype=np.float64) / result.downsampled_fs,
-            )
-
-            # ------------------------------------------------------------------
-            # /meta
-            # ------------------------------------------------------------------
-            meta_grp = fh.create_group("meta")
-            meta_grp.create_dataset("sampling_frequency_hz", data=result.original_fs)
-            meta_grp.create_dataset(
-                "downsampled_frequency_hz", data=result.downsampled_fs
-            )
-            meta_grp.create_dataset(
-                "montage_mode",
-                data=result.metadata.get("montage_mode", ""),
-                dtype=str_dtype,
-            )
-            meta_grp.create_dataset(
-                "unit",
-                data=result.metadata.get("unit", "amplitude"),
-                dtype=str_dtype,
-            )
-            meta_grp.create_dataset(
-                "dimension_order",
-                data="smoothing_window \u00d7 channel \u00d7 time",
-                dtype=str_dtype,
-            )
-            meta_grp.create_dataset(
-                "centered",
-                data=bool(result.metadata.get("centered", False)),
-            )
-            for key in (
-                "events_source_requested",
-                "events_source_resolved",
-                "events_onset_precision",
-                "events_file",
-                "event_sample_shift_samples",
-            ):
-                value = result.metadata.get(key)
-                if value is None:
-                    continue
-                meta_grp.create_dataset(key, data=str(value), dtype=str_dtype)
-
-            # ------------------------------------------------------------------
-            # /provenance
-            # ------------------------------------------------------------------
-            prov_grp = fh.create_group("provenance")
-            prov_grp.create_dataset(
-                "raw_bids_path",
-                data=str(result.source_group.primary.path),
-                dtype=str_dtype,
-            )
-            prov_grp.create_dataset("pipeline_name", data="hilbert", dtype=str_dtype)
-            prov_grp.create_dataset(
-                "pipeline_version", data=_package_version(), dtype=str_dtype
-            )
+        write_hdf5_tree(
+            output_path,
+            {
+                "data": {"envelope": compressed(envelope_3d)},
+                "axes": {
+                    "channel": np.array(result.channel_names, dtype=object),
+                    "smoothing_window_ms": np.array(sorted_windows, dtype=np.int32),
+                    "band_limits_hz": np.array(result.bins, dtype=np.float32),
+                    "time_s": np.arange(n_down, dtype=np.float64) / result.downsampled_fs,
+                },
+                "meta": meta,
+                "provenance": {
+                    "raw_bids_path": str(result.source_group.primary.path),
+                    "pipeline_name": "hilbert",
+                    "pipeline_version": _package_version(),
+                },
+            },
+        )
 
     # ------------------------------------------------------------------
     # BrainVision writer
