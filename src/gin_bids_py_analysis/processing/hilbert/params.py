@@ -306,7 +306,11 @@ class HilbertWriterParams(BaseWriterParams):
     output_modality: str = "ieeg"
     output_suffix: str = "ieeg"
     output_description: str = "hilbert"
-    output_format: Literal["hdf5", "brainvision"] = Field(
+    output_format: Literal["hdf5", "brainvision", "matlab"] = Field(
         default="hdf5",
-        description="Output backend: 'hdf5' writes a single .h5 file; 'brainvision' writes a .vhdr/.vmrk/.eeg triplet per smoothing window.",
+        description=(
+            "Output backend: 'hdf5' (default) writes a single .h5 file; "
+            "'brainvision' writes a .vhdr/.vmrk/.eeg triplet per smoothing window; "
+            "'matlab' writes a .mat file readable by MATLAB/scipy."
+        ),
     )

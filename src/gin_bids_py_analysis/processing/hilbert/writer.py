@@ -4,9 +4,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-import h5py
 import mne
-import numpy as np
 
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.bids.helpers import modify_entities
@@ -16,7 +14,7 @@ from gin_bids_py_analysis.processing.base import (
 )
 from gin_bids_py_analysis.processing.utils.events import coerce_annotation_events
 from gin_bids_py_analysis.processing.utils.matlab import matlab_round
-from gin_bids_py_analysis.processing.utils.serialization import compressed, write_hdf5_tree
+from gin_bids_py_analysis.processing.utils.serialization import write_hdf5_tree, write_matlab_tree
 
 from .result import HilbertProcessingResult
 
@@ -197,7 +195,11 @@ class HilbertProcessingWriter(BaseProcessingWriter):
         if self.params.output_format == "brainvision":
             self._write_brainvision_all_windows(result, output_path)
         else:
-            self._write_hdf5(result, output_path)
+            tree = result.to_output_tree(pipeline_version=_package_version())
+            if self.params.output_format == "matlab":
+                write_matlab_tree(output_path, tree)
+            else:
+                write_hdf5_tree(output_path, tree)
 
     def get_output_path(self, group: BIDSFileGroup) -> Path:
         """Override to check per-window BrainVision files when skipping existing output.
@@ -228,65 +230,6 @@ class HilbertProcessingWriter(BaseProcessingWriter):
             )
             return base_path.parent / f"{fname_base}.vhdr"
         return base_path
-
-    # ------------------------------------------------------------------
-    # HDF5 writer
-    # ------------------------------------------------------------------
-
-    def _write_hdf5(self, result: HilbertProcessingResult, output_path: Path) -> None:
-        """Write *result* to an HDF5 file at *output_path*.
-
-        All smoothing windows are stacked into a single 3-D dataset
-        ``/data/envelope`` with shape ``[n_smoothing_windows, n_channels, n_down]``.
-        """
-        # Sort smoothing windows so axis order in the file is deterministic.
-        sorted_windows = sorted(result.smoothed.keys())
-
-        # Stack into a single 3-D array: [n_smoothing_windows, n_channels, n_down]
-        envelope_3d = np.stack(
-            [result.smoothed[w] for w in sorted_windows], axis=0
-        ).astype(np.float32)
-
-        n_down = envelope_3d.shape[2]
-        meta: dict[str, object] = {
-            "schema_name": "hilbert",
-            "schema_version": "2.0",
-            "sampling_frequency_hz": float(result.original_fs),
-            "downsampled_frequency_hz": float(result.downsampled_fs),
-            "montage_mode": str(result.metadata.get("montage_mode", "")),
-            "unit": str(result.metadata.get("unit", "amplitude")),
-            "dimension_order": "smoothing_window x channel x time",
-            "centered": bool(result.metadata.get("centered", False)),
-        }
-        for key in (
-            "events_source_requested",
-            "events_source_resolved",
-            "events_onset_precision",
-            "events_file",
-            "event_sample_shift_samples",
-        ):
-            value = result.metadata.get(key)
-            if value is not None:
-                meta[key] = str(value)
-
-        write_hdf5_tree(
-            output_path,
-            {
-                "data": {"envelope": compressed(envelope_3d)},
-                "axes": {
-                    "channel": np.array(result.channel_names, dtype=object),
-                    "smoothing_window_ms": np.array(sorted_windows, dtype=np.int32),
-                    "band_limits_hz": np.array(result.bins, dtype=np.float32),
-                    "time_s": np.arange(n_down, dtype=np.float64) / result.downsampled_fs,
-                },
-                "meta": meta,
-                "provenance": {
-                    "raw_bids_path": str(result.source_group.primary.path),
-                    "pipeline_name": "hilbert",
-                    "pipeline_version": _package_version(),
-                },
-            },
-        )
 
     # ------------------------------------------------------------------
     # BrainVision writer

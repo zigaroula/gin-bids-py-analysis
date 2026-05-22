@@ -43,7 +43,7 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, 
 # Trial slope recipe parameters  (edit these)
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
+BIDS_ROOT = Path(r"C:\GRE\data\clarissa_bids")
 
 # Set to a BIDS subject id to restrict the full pipeline, or None for all subjects.
 SUBJECT: str | None = None
@@ -155,7 +155,7 @@ HILBERT_CHANNELS_TO_EXCLUDE_FOR_MONTAGE = (
 
 USE_MATLAB_ZSCORES: bool = True
 
-MATLAB_ZSCORES_PATH = Path(r"D:\Boulot\clarissa_raw\subjects.mat")
+MATLAB_ZSCORES_PATH = Path(r"D:\data_clarissa\subjects.mat")
 MATLAB_ZSCORE_COLUMN_INDEX = 6  # 0-based index for column 7 in trial_characteristics1
 
 # ---------------------------------------------------------------------------
@@ -233,10 +233,127 @@ TRIAL_SLOPE_ACTIVITY_SUMMARY = {
     "kind": "anchor_to_response_mean",
     "response": {"source": "table_column", "column": "RT", "units": "s"},
 }
-TRIAL_SLOPE_N_PERMUTATIONS = 500
+TRIAL_SLOPE_N_PERMUTATIONS = 0
+
+_PARTICIPANTS_SOURCE_SUBJECT_COLUMNS = (
+    "source_subject_id",
+    "original_subject_id",
+    "original_id",
+    "source_id",
+)
 
 
-def event_sample_shift_for_subject(subject_id: str) -> int:
+def _normalize_external_subject_value(subject: object) -> str:
+    label = str(subject).strip().replace("_", "")
+    return normalize_subject_value(label)
+
+
+def _subject_lookup_key(subject: object) -> str:
+    return _normalize_external_subject_value(subject).casefold()
+
+
+def load_source_to_bids_subject_map(bids_root: Path = BIDS_ROOT) -> dict[str, str]:
+    """Load original subject IDs mapped to BIDS subject labels."""
+    participants_path = Path(bids_root) / "participants.tsv"
+    if not participants_path.exists():
+        return {}
+
+    with participants_path.open("r", encoding="utf-8-sig", newline="") as tsv_file:
+        reader = csv.DictReader(tsv_file, delimiter="\t")
+        if not reader.fieldnames or "participant_id" not in reader.fieldnames:
+            return {}
+
+        source_col = next(
+            (
+                column
+                for column in _PARTICIPANTS_SOURCE_SUBJECT_COLUMNS
+                if column in reader.fieldnames
+            ),
+            None,
+        )
+        if source_col is None:
+            return {}
+
+        source_to_bids: dict[str, str] = {}
+        for row in reader:
+            bids_subject = normalize_subject_value(row.get("participant_id", ""))
+            source_subject = _normalize_external_subject_value(row.get(source_col, ""))
+            if not bids_subject or not source_subject:
+                continue
+            source_to_bids[_subject_lookup_key(source_subject)] = bids_subject
+
+        return source_to_bids
+
+
+def map_source_subject_to_bids(
+    subject: object,
+    *,
+    bids_root: Path = BIDS_ROOT,
+    source_to_bids: dict[str, str] | None = None,
+) -> str:
+    """Return the BIDS subject label for a source/original subject identifier."""
+    normalized = _normalize_external_subject_value(subject)
+    mapping = (
+        load_source_to_bids_subject_map(bids_root)
+        if source_to_bids is None
+        else source_to_bids
+    )
+    return mapping.get(_subject_lookup_key(normalized), normalized)
+
+
+def load_bids_to_source_subject_map(bids_root: Path = BIDS_ROOT) -> dict[str, str]:
+    participants_path = Path(bids_root) / "participants.tsv"
+    if not participants_path.exists():
+        return {}
+
+    with participants_path.open("r", encoding="utf-8-sig", newline="") as tsv_file:
+        reader = csv.DictReader(tsv_file, delimiter="\t")
+        if not reader.fieldnames or "participant_id" not in reader.fieldnames:
+            return {}
+
+        source_col = next(
+            (
+                column
+                for column in _PARTICIPANTS_SOURCE_SUBJECT_COLUMNS
+                if column in reader.fieldnames
+            ),
+            None,
+        )
+        if source_col is None:
+            return {}
+
+        bids_to_source: dict[str, str] = {}
+        for row in reader:
+            bids_subject = normalize_subject_value(row.get("participant_id", ""))
+            source_subject = _normalize_external_subject_value(row.get(source_col, ""))
+            if not bids_subject or not source_subject:
+                continue
+            bids_to_source[bids_subject] = source_subject
+
+        return bids_to_source
+
+
+def map_bids_subject_to_source(
+    subject: object,
+    *,
+    bids_root: Path = BIDS_ROOT,
+    bids_to_source: dict[str, str] | None = None,
+) -> str:
+    """Return the source/original subject label for a BIDS subject label."""
+    normalized = normalize_subject_value(str(subject).strip())
+    mapping = (
+        load_bids_to_source_subject_map(bids_root)
+        if bids_to_source is None
+        else bids_to_source
+    )
+    return mapping.get(normalized, _normalize_external_subject_value(normalized))
+
+
+def event_sample_shift_for_subject(
+    subject_id: str,
+    *,
+    bids_root: Path = BIDS_ROOT,
+) -> int:
     """Return the event_sample_shift_samples value for a given BIDS subject.
 
     gin2bids is configured with different ``event_sample_offset_samples`` per
@@ -254,10 +371,11 @@ def event_sample_shift_for_subject(subject_id: str) -> int:
     Parameters
     ----------
     subject_id : str
-        BIDS subject identifier (e.g. ``"PRA2021AAAb"`` or ``"GRE2022BRUp"``).
-        Underscores are stripped automatically.
+        BIDS subject identifier (e.g. ``"01"``).  If ``participants.tsv``
+        contains a source subject column, the original identifier is used for
+        the Prague/Grenoble format check.
     """
-    normalized = subject_id.replace("_", "").upper()
+    normalized = map_bids_subject_to_source(subject_id, bids_root=bids_root).upper()
     if normalized.startswith("PRA"):
         return 0
     return -1
@@ -275,6 +393,7 @@ GROUP_KEEP_COMBINED_SOURCE_ROIS = True
 
 GROUP_PARAM_KWARGS = {
     "p_value_correction_method": "cluster_permutation",
+    "cluster_permutation_method": "mne",
     "significance_alpha": 0.05,
     "roi_mode": "manual",
     "n_clusters_to_keep": 3,
@@ -482,7 +601,10 @@ class TrialSlopeRecipe:
             # sample index) for all formats (Micromed offset=0, Prague offset=1).
             # The required shift is format-dependent; see event_sample_shift_for_subject.
             events_source=TRIAL_SLOPE_EVENTS_SOURCE,
-            event_sample_shift_samples=event_sample_shift_for_subject(subject_id),
+            event_sample_shift_samples=event_sample_shift_for_subject(
+                subject_id,
+                bids_root=self.bids_root,
+            ),
             experiment_start_event_code=self.experiment_start_event_code,
             experiment_end_event_code=self.experiment_end_event_code,
             tmin_s=self.epoch_tmin_s,
@@ -527,7 +649,7 @@ class TrialSlopeRecipe:
         channels_by_roi = (
             manual_region_channels
             if manual_region_channels is not None
-            else load_roi_channels_from_csv(self.roi_csv_files)
+            else load_roi_channels_from_csv(self.roi_csv_files, bids_root=self.bids_root)
         )
         channels_by_roi = combine_manual_region_channels(
             channels_by_roi,
@@ -579,7 +701,12 @@ class TrialSlopeRecipe:
         annotators: list[Any] = []
 
         if self.use_matlab_zscores:
-            annotators.append(MatlabZscorePredictorAnnotator(self.matlab_zscores_path))
+            annotators.append(
+                MatlabZscorePredictorAnnotator(
+                    self.matlab_zscores_path,
+                    bids_root=self.bids_root,
+                )
+            )
 
         annotators.extend([
             # Behavioral validity is deferred to mirror MATLAB b2 ordering:
@@ -750,9 +877,12 @@ def _is_nan_like(value: object) -> bool:
     return str(value).strip().casefold() in _NA_LIKE_TOKENS
 
 
-def _normalize_subject_from_csv(raw_subject: object) -> str:
-    subject = str(raw_subject).strip().replace("_", "")
-    return normalize_subject_value(subject)
+def _normalize_subject_from_csv(
+    raw_subject: object,
+    *,
+    source_to_bids: dict[str, str],
+) -> str:
+    return map_source_subject_to_bids(raw_subject, source_to_bids=source_to_bids)
 
 
 def _extract_first_bipolar_contact(raw_channel: object) -> str:
@@ -774,8 +904,11 @@ def _row_contains_nan(row: dict[str, object]) -> bool:
 
 def load_roi_channels_from_csv(
     csv_paths_by_roi: dict[str, Path] = ROI_CSV_FILES,
+    *,
+    bids_root: Path = BIDS_ROOT,
 ) -> dict[str, dict[str, list[str]]]:
     manual_region_channels: dict[str, dict[str, list[str]]] = {}
+    source_to_bids = load_source_to_bids_subject_map(bids_root)
 
     for roi_name, csv_path in csv_paths_by_roi.items():
         if not csv_path.exists():
@@ -796,7 +929,10 @@ def load_roi_channels_from_csv(
                 if _row_contains_nan(row):
                     continue
 
-                subject = _normalize_subject_from_csv(row.get(subject_col, ""))
+                subject = _normalize_subject_from_csv(
+                    row.get(subject_col, ""),
+                    source_to_bids=source_to_bids,
+                )
                 channel = _extract_first_bipolar_contact(row.get(channel_col, ""))
                 if not subject or not channel:
                     continue
@@ -976,7 +1112,11 @@ def build_vmPFC_spike_filter(
     return build_roi_spike_filter(vm_pfc_channels_by_subject)
 
 
-def load_matlab_zscores(mat_path: Path) -> dict[str, np.ndarray]:
+def load_matlab_zscores(
+    mat_path: Path,
+    *,
+    bids_root: Path = BIDS_ROOT,
+) -> dict[str, np.ndarray]:
     """Load z-scored predictor values from MATLAB subjects.mat file.
 
     Parameters
@@ -987,8 +1127,9 @@ def load_matlab_zscores(mat_path: Path) -> dict[str, np.ndarray]:
     Returns
     -------
     dict[str, np.ndarray]
-        Dictionary mapping normalized BIDS subject IDs to z-score arrays.
-        Subject names are normalized (underscores removed) to match BIDS format.
+        Dictionary mapping BIDS subject IDs to z-score arrays.  If
+        ``participants.tsv`` contains source/original subject IDs, MATLAB names
+        are translated through that table.
 
     Raises
     ------
@@ -1026,6 +1167,7 @@ def load_matlab_zscores(mat_path: Path) -> dict[str, np.ndarray]:
     if not hasattr(subjects_data, "__iter__"):
         subjects_data = [subjects_data]
 
+    source_to_bids = load_source_to_bids_subject_map(bids_root)
     zscores_by_subject: dict[str, np.ndarray] = {}
 
     for subject_obj in subjects_data:
@@ -1036,8 +1178,10 @@ def load_matlab_zscores(mat_path: Path) -> dict[str, np.ndarray]:
         if not raw_name:
             continue
 
-        # Normalize subject name: remove underscores to match BIDS format
-        normalized_name = normalize_subject_value(raw_name.replace("_", ""))
+        bids_subject = map_source_subject_to_bids(
+            raw_name,
+            source_to_bids=source_to_bids,
+        )
 
         if not hasattr(subject_obj, "trial_characteristics1"):
             raise ValueError(
@@ -1060,7 +1204,7 @@ def load_matlab_zscores(mat_path: Path) -> dict[str, np.ndarray]:
             )
 
         zscores = tc[:, MATLAB_ZSCORE_COLUMN_INDEX].astype(np.float64)
-        zscores_by_subject[normalized_name] = zscores
+        zscores_by_subject[bids_subject] = zscores
 
     if not zscores_by_subject:
         raise ValueError(f"No valid subjects found in MATLAB file {mat_path}.")
@@ -1099,8 +1243,8 @@ class MatlabZscorePredictorAnnotator:
     - Does not modify ``trial.keep`` or ``trial.exclusion_reason``.
     """
 
-    def __init__(self, mat_path: Path) -> None:
-        self.zscores_by_subject = load_matlab_zscores(mat_path)
+    def __init__(self, mat_path: Path, *, bids_root: Path = BIDS_ROOT) -> None:
+        self.zscores_by_subject = load_matlab_zscores(mat_path, bids_root=bids_root)
 
     def annotate_trials(
         self,
@@ -1138,7 +1282,7 @@ class MatlabZscorePredictorAnnotator:
                 trial.metadata["matlab_zscore"] = np.nan
             return
 
-        zscores = self.zscores_by_subject.get(subject_id)
+        zscores = self.zscores_by_subject.get(normalize_subject_value(subject_id))
         if zscores is None:
             # Subject not found in MATLAB file; mark all trials with NaN
             for trial in trials:

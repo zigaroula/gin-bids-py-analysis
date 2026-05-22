@@ -17,13 +17,11 @@ from collections import defaultdict
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-import numpy as np
-
 from gin_bids_py_analysis.processing.base import (
     BaseProcessingResult,
     BaseProcessingWriter,
 )
-from gin_bids_py_analysis.processing.utils.serialization import compressed, write_hdf5_tree
+from gin_bids_py_analysis.processing.utils.serialization import write_hdf5_tree, write_matlab_tree
 
 from .result import HfoSpikeDetectorProcessingResult
 
@@ -116,7 +114,11 @@ class HfoSpikeDetectorProcessingWriter(BaseProcessingWriter):
             self._write_events_tsv(result, output_path)
             self._write_rates_tsv(result, output_path)
         else:
-            self._write_hdf5(result, output_path)
+            tree = result.to_output_tree(pipeline_version=_package_version())
+            if self.params.output_format == "matlab":
+                write_matlab_tree(output_path, tree)
+            else:
+                write_hdf5_tree(output_path, tree)
 
     # ------------------------------------------------------------------
     # TSV writers
@@ -197,87 +199,3 @@ class HfoSpikeDetectorProcessingWriter(BaseProcessingWriter):
                     row.append(count / duration if duration > 0 else 0.0)
                 writer.writerow(row)
 
-    # ------------------------------------------------------------------
-    # HDF5 writer
-    # ------------------------------------------------------------------
-
-    def _write_hdf5(self, result: HfoSpikeDetectorProcessingResult, output_path: Path) -> None:
-        """Write *result* to a structured HDF5 file at *output_path*.
-
-        See the :class:`HfoSpikeDetectorProcessingWriter` class docstring for the full
-        file schema.
-
-        Args:
-            result: Detection result to serialise.
-            output_path: Destination ``.h5`` path.
-        """
-        try:
-            import h5py
-        except ImportError as exc:
-            raise ImportError(
-                "h5py is required for HDF5 output. Install it with: pip install h5py"
-            ) from exc
-
-        n_samples = result.metadata.get("n_samples", 0)
-        duration = n_samples / result.original_fs if result.original_fs > 0 else 0.0
-
-        # Pre-extract marker columns for efficient array creation.
-        n_events = len(result.markers)
-        onsets = np.array([e.get("onset_time_seconds", 0) for e in result.markers], dtype=np.float64)
-        durations = np.array([e.get("duration", 0) for e in result.markers], dtype=np.float64)
-        channels = np.array([e.get("channel_label", "") for e in result.markers], dtype=object)
-        event_types = np.array([e.get("event_type", "") for e in result.markers], dtype=object)
-        peak_freqs = np.array([e.get("peak_frequency_hz", 0) for e in result.markers], dtype=np.float64)
-        sample_indices = np.array([e.get("sample_index", 0) for e in result.markers], dtype=np.int64)
-        freq_indices = np.array([e.get("frequency_index", 0) for e in result.markers], dtype=np.int64)
-        strengths = np.array([e.get("detection_strength", 0) for e in result.markers], dtype=np.float64)
-        colors = np.array([e.get("visualization_color", "#808080") for e in result.markers], dtype=object)
-
-        counts: dict[str, object] = {}
-        if result.n_spk.size > 0:
-            counts["n_spk"] = result.n_spk.astype(np.int64)
-        if result.n_osc.size > 0:
-            counts["n_osc"] = result.n_osc.astype(np.int64)
-        if result.detection_charac.size > 0:
-            counts["detection_charac"] = compressed(
-                result.detection_charac.astype(np.float64)
-            )
-
-        axes: dict[str, object] = {
-            "channel_names": np.array(result.channel_names, dtype=object),
-        }
-        if result.freq_band.size > 0:
-            axes["freq_band"] = result.freq_band.astype(np.float32)
-
-        write_hdf5_tree(
-            output_path,
-            {
-                "events": {
-                    "onset": onsets,
-                    "duration": durations,
-                    "channel": channels,
-                    "event_type": event_types,
-                    "peak_frequency": peak_freqs,
-                    "sample_index": sample_indices,
-                    "frequency_index": freq_indices,
-                    "detection_strength": strengths,
-                    "color": colors,
-                },
-                "counts": counts,
-                "axes": axes,
-                "meta": {
-                    "schema_name": "hfo_spike_detection",
-                    "schema_version": "2.0",
-                    "original_fs": float(result.original_fs),
-                    "montage_mode": str(result.metadata.get("montage_mode", "")),
-                    "duration_seconds": float(duration),
-                    "n_channels": np.int64(len(result.channel_names)),
-                    "n_events": np.int64(n_events),
-                },
-                "provenance": {
-                    "raw_bids_path": str(result.source_group.primary.path),
-                    "pipeline_name": "hfo_spike_detection",
-                    "pipeline_version": _package_version(),
-                },
-            },
-        )

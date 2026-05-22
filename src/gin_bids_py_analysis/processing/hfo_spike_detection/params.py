@@ -201,7 +201,11 @@ class HfoSpikeDetectorWriterParams(BaseWriterParams):
     output_modality: str = Field(default="ieeg")
     output_description: str = Field(default="hfospikes")
     output_suffix: str = Field(default="events")
-    output_format: Literal["hdf5", "tsv"] = Field(
+    output_format: Literal["hdf5", "tsv", "matlab"] = Field(
         default="hdf5",
-        description="Output backend: 'hdf5' writes a structured .h5 file; 'tsv' writes a BIDS-compatible events file.",
+        description=(
+            "Output backend: 'hdf5' (default) writes a structured .h5 file; "
+            "'tsv' writes BIDS-compatible events and rates TSV files; "
+            "'matlab' writes a .mat file readable by MATLAB/scipy."
+        ),
     )

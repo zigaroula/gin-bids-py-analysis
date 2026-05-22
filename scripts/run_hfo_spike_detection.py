@@ -70,15 +70,66 @@ N_JOBS = 1  # parallelism across files; set to -1 to use all available CPUs
 _NA_LIKE_TOKENS = frozenset({"nan", "na", "n/a", "none", "null"})
 _FIRST_CONTACT_PATTERN = re.compile(r"^([A-Za-z]+[0-9]+)")
 _CONTACT_TOKEN_PATTERN = re.compile(r"[A-Za-z']+[0-9]+")
+_PARTICIPANTS_SOURCE_SUBJECT_COLUMNS = (
+    "source_subject_id",
+    "original_subject_id",
+    "original_id",
+    "source_id",
+)
 
 
 def _is_nan_like(value: object) -> bool:
     return str(value).strip().casefold() in _NA_LIKE_TOKENS
 
 
-def _normalize_subject_from_csv(raw_subject: object) -> str:
-    subject = str(raw_subject).strip().replace("_", "")
-    return normalize_subject_value(subject)
+def _normalize_external_subject_value(subject: object) -> str:
+    label = str(subject).strip().replace("_", "")
+    return normalize_subject_value(label)
+
+
+def _subject_lookup_key(subject: object) -> str:
+    return _normalize_external_subject_value(subject).casefold()
+
+
+def _load_source_to_bids_subject_map(bids_root: Path) -> dict[str, str]:
+    participants_path = Path(bids_root) / "participants.tsv"
+    if not participants_path.exists():
+        return {}
+
+    with participants_path.open("r", encoding="utf-8-sig", newline="") as tsv_file:
+        reader = csv.DictReader(tsv_file, delimiter="\t")
+        if not reader.fieldnames or "participant_id" not in reader.fieldnames:
+            return {}
+
+        source_col = next(
+            (
+                column
+                for column in _PARTICIPANTS_SOURCE_SUBJECT_COLUMNS
+                if column in reader.fieldnames
+            ),
+            None,
+        )
+        if source_col is None:
+            return {}
+
+        source_to_bids: dict[str, str] = {}
+        for row in reader:
+            bids_subject = normalize_subject_value(row.get("participant_id", ""))
+            source_subject = _normalize_external_subject_value(row.get(source_col, ""))
+            if not bids_subject or not source_subject:
+                continue
+            source_to_bids[_subject_lookup_key(source_subject)] = bids_subject
+
+        return source_to_bids
+
+
+def _normalize_subject_from_csv(
+    raw_subject: object,
+    *,
+    source_to_bids: dict[str, str],
+) -> str:
+    normalized = _normalize_external_subject_value(raw_subject)
+    return source_to_bids.get(_subject_lookup_key(normalized), normalized)
 
 
 def _extract_first_bipolar_contact(raw_channel: object) -> str:
@@ -116,7 +167,11 @@ def _extract_second_bipolar_contact(raw_channel: object) -> str:
     return ""
 
 
-def _load_subject_channels_from_csv(csv_path: Path) -> dict[str, list[str]]:
+def _load_subject_channels_from_csv(
+    csv_path: Path,
+    *,
+    source_to_bids: dict[str, str],
+) -> dict[str, list[str]]:
     """Load a subject → channel-list mapping from a two-column CSV.
 
     For each row the first column is treated as the subject ID and the second
@@ -157,7 +212,10 @@ def _load_subject_channels_from_csv(csv_path: Path) -> dict[str, list[str]]:
             if _is_nan_like(raw_subject) or _is_nan_like(raw_channel_value):
                 continue
 
-            subject = _normalize_subject_from_csv(raw_subject)
+            subject = _normalize_subject_from_csv(
+                raw_subject,
+                source_to_bids=source_to_bids,
+            )
             raw_channel = str(raw_channel_value).strip()
             if not subject or not raw_channel:
                 continue
@@ -202,9 +260,13 @@ def _merge_subject_channels(
     """
     merged: dict[str, list[str]] = {}
     seen: dict[str, set[str]] = {}
+    source_to_bids = _load_source_to_bids_subject_map(BIDS_ROOT)
 
     for label, csv_path in csv_paths_by_roi.items():
-        per_file = _load_subject_channels_from_csv(csv_path)
+        per_file = _load_subject_channels_from_csv(
+            csv_path,
+            source_to_bids=source_to_bids,
+        )
         for subject, channels in per_file.items():
             subject_seen = seen.setdefault(subject, set())
             for channel in channels:
