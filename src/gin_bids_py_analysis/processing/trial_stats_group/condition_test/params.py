@@ -37,15 +37,6 @@ class ConditionTestGroupParams(BaseTrialStatsGroupParams):
         ),
     )
 
-    @field_validator("cluster_permutation_method", mode="before")
-    @classmethod
-    def _validate_cluster_method_rename(cls, value: object) -> object:
-        if value in {"hierarchical", "sign_flip"}:
-            raise ValueError(
-                "cluster_permutation_method values 'hierarchical' and 'sign_flip' were "
-                "renamed to 'custom' and 'mne'."
-            )
-        return value
 
 
 class ConditionTestGroupWriterParams(BaseTrialStatsGroupWriterParams):

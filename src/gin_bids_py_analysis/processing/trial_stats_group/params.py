@@ -78,13 +78,17 @@ class BaseTrialStatsGroupParams(BaseProcessingParams):
             "distribution. None selects a non-reproducible seed."
         ),
     )
-    cluster_permutation_method: Literal["custom", "mne"] = Field(
+    cluster_permutation_method: Literal["custom", "sign_flip"] = Field(
         default="custom",
         description=(
             "Strategy for building the group-level cluster null distribution when "
-            "p_value_correction_method='cluster_permutation'. 'custom' samples from "
-            "stored per-channel permuted value pools. 'mne' runs "
-            "mne.stats.permutation_cluster_1samp_test directly on contribution timecourses."
+            "p_value_correction_method='cluster_permutation'. "
+            "'custom' draws from pre-computed per-channel permuted value pools produced "
+            "by within-subject label-shuffling (requires subject-level files computed "
+            "with n_permutations > 0). "
+            "'sign_flip' stacks each channel's observed timecourse into a "
+            "(n_channels, n_times) matrix and applies a sign-flip permutation test "
+            "(MNE one-sample test). No pre-computed permutations required."
         ),
     )
     n_clusters_to_keep: int = Field(

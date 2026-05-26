@@ -256,16 +256,26 @@ def compute_mne_cluster_permutation(
     seed: int | None = None,
     n_clusters_to_keep: int = 1,
 ) -> tuple[float, list[tuple[int, int]], list[float], np.ndarray]:
-    """Run MNE one-sample temporal cluster permutation and return best-cluster stats.
+    """Run MNE one-sample sign-flip cluster permutation and return best-cluster stats.
+
+    Wraps ``mne.stats.permutation_cluster_1samp_test`` with a two-tailed t-threshold
+    derived from *cluster_threshold_alpha*.  MNE builds its null distribution by
+    randomly flipping the sign of each row in *samples_observed*, so the rows are
+    treated as exchangeable observations.
+
+    In the ``sign_flip`` pipeline method, each row of *samples_observed* is one
+    channel's observed timecourse for the ROI.
 
     Parameters
     ----------
-    samples_observed : float64 array, shape ``(n_samples, n_times)``
-        Per-contribution observed timecourses to test against zero.
+    samples_observed : float64 array, shape ``(n_observations, n_times)``
+        Per-observation timecourses to test against zero.  For the ``sign_flip``
+        method, each row is one channel's timecourse for the ROI.
     cluster_threshold_alpha : float
         Two-tailed alpha used to derive the t-threshold for cluster detection.
+        The threshold is ``t_dist.ppf(1 − alpha/2, df=n_observations − 1)``.
     n_group_perm : int
-        Number of permutation iterations passed to MNE.
+        Number of sign-flip permutation iterations passed to MNE.
     seed : int or None
         Random seed forwarded to MNE.
     n_clusters_to_keep : int
@@ -284,7 +294,8 @@ def compute_mne_cluster_permutation(
     top_p_values : list of float
         MNE p-values corresponding to each entry in *top_windows*.
     null_distribution : float64 array, shape ``(n_group_perm,)``
-        Maximum cluster statistic from MNE's permutation distribution (``h0``).
+        Maximum cluster statistic from MNE's sign-flip permutation distribution
+        (``h0``).
     """
     samples = np.asarray(samples_observed, dtype=np.float64)
     if samples.ndim != 2:
@@ -311,6 +322,7 @@ def compute_mne_cluster_permutation(
     )
     t_values = np.asarray(t_obs, dtype=np.float64).ravel()
     null_distribution = np.asarray(h0, dtype=np.float64).ravel()
+
     if not clusters:
         return 1.0, [], [], null_distribution
 
@@ -319,8 +331,16 @@ def compute_mne_cluster_permutation(
     # Collect (|t_sum|, p_value, window) for every valid cluster.
     all_cluster_info: list[tuple[float, float, tuple[int, int]]] = []
     for idx, cluster_mask in enumerate(clusters):
-        mask = np.asarray(cluster_mask, dtype=bool).ravel()
-        if mask.size != n_times or not mask.any():
+        cluster_def = cluster_mask
+        if isinstance(cluster_def, (tuple, list)) and len(cluster_def) == 1:
+            cluster_def = cluster_def[0]
+        if not isinstance(cluster_def, slice):
+            continue
+
+        mask = np.zeros(n_times, dtype=bool)
+        mask[cluster_def] = True
+
+        if not mask.any():
             continue
         tsum = float(np.sum(t_values[mask]))
         indices = np.where(mask)[0]

@@ -262,7 +262,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
         # Per-ROI permuted slope lists for cluster permutation (custom method)
         perm_slope_a_collection: list[list[np.ndarray] | None] = []
         perm_slope_b_collection: list[list[np.ndarray] | None] = []
-        # Per-ROI observed samples for cluster permutation (mne method)
+        # Per-ROI observed samples for cluster permutation (sign_flip method)
         cluster_observed_collection: list[np.ndarray | None] = []
         rows_slope_mean_a: list[np.ndarray] = []
         rows_slope_sem_a: list[np.ndarray] = []
@@ -405,7 +405,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                         if r.perm_slope_b_values is not None
                     ] or None
                     observed_s: np.ndarray | None = None
-                else:
+                else:  # sign_flip
                     perm_a_list = None
                     perm_b_list = None
                     observed_s = samples_metric_a - samples_metric_b
@@ -548,7 +548,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                 roi_p_raw = rows_slope_p_uncorr[roi_idx]
                 h_mask = roi_p_raw < self.params.cluster_threshold_alpha
                 observed_clusters = find_temporal_clusters(h_mask, roi_t)
-                if self.params.cluster_permutation_method == "mne":
+                if self.params.cluster_permutation_method == "sign_flip":
                     obs_samples = cluster_observed_collection[roi_idx]
                     if obs_samples is None:
                         cluster_p_values_list.append(1.0)
@@ -652,7 +652,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                 h_mask_b = roi_p_b < self.params.cluster_threshold_alpha
                 obs_clusters_b = find_temporal_clusters(h_mask_b, roi_t_b)
 
-                if self.params.cluster_permutation_method == "mne":
+                if self.params.cluster_permutation_method == "sign_flip":
                     obs_a = slope_a_contribution_samples[roi_idx]
                     obs_b = slope_b_contribution_samples[roi_idx]
                     for obs, obs_clusters, cp_list, cw_list, cn_list in [

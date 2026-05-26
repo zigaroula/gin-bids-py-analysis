@@ -249,7 +249,7 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
                         if r.permuted_t_values is not None
                     ]
                     observed_samples: np.ndarray | None = None
-                else:
+                else:  # sign_flip
                     perm_t_list = None
                     observed_samples = np.asarray(samples, dtype=np.float64)
             else:
@@ -328,7 +328,7 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
                 observed_clusters = find_temporal_clusters(h_mask, roi_t)
                 perm_t_roi = cluster_perm_t_collection[roi_idx]
                 if not perm_t_roi:
-                    if self.params.cluster_permutation_method == "mne":
+                    if self.params.cluster_permutation_method == "sign_flip":
                         obs_samples = cluster_observed_collection[roi_idx]
                         if obs_samples is None:
                             cluster_p_values_list.append(1.0)

@@ -233,7 +233,7 @@ TRIAL_SLOPE_ACTIVITY_SUMMARY = {
     "kind": "anchor_to_response_mean",
     "response": {"source": "table_column", "column": "RT", "units": "s"},
 }
-TRIAL_SLOPE_N_PERMUTATIONS = 0
+TRIAL_SLOPE_N_PERMUTATIONS = 500
 
 _PARTICIPANTS_SOURCE_SUBJECT_COLUMNS = (
     "source_subject_id",
@@ -393,7 +393,7 @@ GROUP_KEEP_COMBINED_SOURCE_ROIS = True
 
 GROUP_PARAM_KWARGS = {
     "p_value_correction_method": "cluster_permutation",
-    "cluster_permutation_method": "mne",
+    "cluster_permutation_method": "sign_flip",
     "significance_alpha": 0.05,
     "roi_mode": "manual",
     "n_clusters_to_keep": 3,
