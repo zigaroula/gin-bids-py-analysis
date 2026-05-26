@@ -13,6 +13,7 @@ from .params import (
 )
 from .processor import HilbertProcessing
 from .result import HilbertProcessingResult
+from .result_loader import load_hilbert_result
 from .writer import HilbertProcessingWriter
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "HilbertProcessingResult",
     "HilbertProcessingWriter",
     "HilbertWriterParams",
+    "load_hilbert_result",
     "MontageMode",
     "NormalizationMode",
     "ProcessingMethod",

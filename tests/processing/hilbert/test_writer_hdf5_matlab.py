@@ -25,6 +25,7 @@ from gin_bids_py_analysis.processing.hilbert.params import (
     HilbertWriterParams,
     NormalizationMode,
 )
+from gin_bids_py_analysis.processing.hilbert.result_loader import load_hilbert_result
 from gin_bids_py_analysis.processing.hilbert.result import HilbertProcessingResult
 from gin_bids_py_analysis.processing.hilbert.writer import HilbertProcessingWriter
 
@@ -262,6 +263,31 @@ class TestHdf5Writer:
                 name = name.decode()
             assert name == "hilbert"
 
+    def test_hdf5_roundtrip_via_loader(self, tmp_path: Path) -> None:
+        result = _make_result(
+            str(tmp_path / "dummy.vhdr"),
+            windows=[250, 0],
+            events=[
+                {
+                    "onset": 10,
+                    "duration": 2,
+                    "type": "Stimulus",
+                    "description": "S  1",
+                }
+            ],
+        )
+        out = HilbertProcessingWriter(HilbertWriterParams(bids_root=tmp_path)).write(result)
+
+        loaded = load_hilbert_result(out)
+
+        assert loaded.channel_names == result.channel_names
+        assert loaded.bins == result.bins
+        assert loaded.downsampled_fs == result.downsampled_fs
+        assert loaded.original_fs == result.original_fs
+        assert sorted(loaded.smoothed) == [0, 250]
+        np.testing.assert_allclose(loaded.smoothed[0], result.smoothed[0])
+        assert loaded.events == result.events
+
 
 # ---------------------------------------------------------------------------
 # MATLAB writer tests
@@ -299,6 +325,17 @@ class TestMatlabWriter:
         # envelope lives at data.data.envelope
         envelope = mat["data"]["data"][0, 0]["envelope"][0, 0]
         assert envelope.shape == (2, n_ch, n_samp)
+
+    def test_mat_roundtrip_via_loader(self, tmp_path: Path) -> None:
+        result = _make_result(str(tmp_path / "dummy.vhdr"), windows=[0, 250])
+        out = self._matlab_writer(tmp_path).write(result)
+
+        loaded = load_hilbert_result(out)
+
+        assert loaded.channel_names == result.channel_names
+        assert loaded.bins == result.bins
+        assert sorted(loaded.smoothed) == [0, 250]
+        np.testing.assert_allclose(loaded.smoothed[250], result.smoothed[250])
 
 
 

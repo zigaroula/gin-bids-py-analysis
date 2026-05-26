@@ -29,6 +29,9 @@ from gin_bids_py_analysis.processing.hfo_spike_detection.params import (
 from gin_bids_py_analysis.processing.hfo_spike_detection.result import (
     HfoSpikeDetectorProcessingResult,
 )
+from gin_bids_py_analysis.processing.hfo_spike_detection.result_loader import (
+    load_hfo_spike_detection_result,
+)
 from gin_bids_py_analysis.processing.hfo_spike_detection.writer import (
     HfoSpikeDetectorProcessingWriter,
 )
@@ -230,6 +233,18 @@ class TestHdf5Writer:
             assert "n_spk" not in counts_grp
             assert "n_osc" not in counts_grp
 
+    def test_hdf5_roundtrip_via_loader(self, tmp_path: Path) -> None:
+        result = _make_result(str(tmp_path / "dummy.vhdr"), n_events=3)
+        out = _hdf5_writer(tmp_path).write(result)
+
+        loaded = load_hfo_spike_detection_result(out)
+
+        assert loaded.channel_names == result.channel_names
+        assert loaded.original_fs == result.original_fs
+        np.testing.assert_array_equal(loaded.freq_band, result.freq_band)
+        np.testing.assert_array_equal(loaded.n_spk, result.n_spk.astype(np.int64))
+        assert loaded.markers == result.markers
+
 
 # ---------------------------------------------------------------------------
 # MATLAB writer tests
@@ -258,6 +273,15 @@ class TestMatlabWriter:
         onset = mat["data"]["events"][0, 0]["onset"][0, 0]
         assert onset.size == n
 
+    def test_mat_roundtrip_via_loader(self, tmp_path: Path) -> None:
+        result = _make_result(str(tmp_path / "dummy.vhdr"), n_events=2)
+        out = _matlab_writer(tmp_path).write(result)
+
+        loaded = load_hfo_spike_detection_result(out)
+
+        assert loaded.channel_names == result.channel_names
+        assert loaded.markers == result.markers
+
 
 # ---------------------------------------------------------------------------
 # TSV writer tests (unchanged paths should still work)
@@ -278,6 +302,15 @@ class TestTsvWriter:
         names = {f.name for f in tsv_files}
         assert any("events" in n for n in names)
         assert any("rates" in n for n in names)
+
+    def test_tsv_roundtrip_via_loader(self, tmp_path: Path) -> None:
+        result = _make_result(str(tmp_path / "dummy.vhdr"), n_events=2)
+        out = _tsv_writer(tmp_path).write(result)
+
+        loaded = load_hfo_spike_detection_result(out)
+
+        assert loaded.channel_names == result.channel_names[:2]
+        assert loaded.markers == result.markers
 
 
 

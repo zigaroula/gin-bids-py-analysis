@@ -21,6 +21,7 @@ from gin_bids_py_analysis.processing.utils.channels import (
 from .params import HfoSpikeDetectorParams, HfoSpikeDetectorWriterParams
 from .processor import HfoSpikeDetectorProcessing
 from .result import HfoSpikeDetectorProcessingResult
+from .result_loader import load_hfo_spike_detection_result
 from .writer import HfoSpikeDetectorProcessingWriter
 
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
     "HfoSpikeDetectorProcessingResult",
     "HfoSpikeDetectorProcessingWriter",
     "HfoSpikeDetectorWriterParams",
+    "load_hfo_spike_detection_result",
     "MontageMode",
 ]
