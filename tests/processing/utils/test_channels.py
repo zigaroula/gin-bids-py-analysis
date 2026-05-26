@@ -168,3 +168,6 @@ class TestExcludeSelector:
             match="No channels remain after applying channels_for_montage",
         ):
             select_channels_for_montage(DATA, NAMES, r"A[12]", ["A1", "A2"])
+
+
+

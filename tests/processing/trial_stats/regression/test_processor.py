@@ -1213,3 +1213,6 @@ def test_process_group_permuted_slopes_none_when_n_permutations_zero(
 
     assert result.regression.condition_a.permuted_slopes is None
     assert result.regression.condition_b.permuted_slopes is None
+
+
+

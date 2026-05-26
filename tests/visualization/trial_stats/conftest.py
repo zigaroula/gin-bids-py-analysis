@@ -22,8 +22,8 @@ from gin_bids_py_analysis.processing.trial_stats import ConditionTestParams
 from gin_bids_py_analysis.processing.trial_stats import ConditionTestProcessingResult
 from gin_bids_py_analysis.processing.trial_stats import ConditionContrast, DifferenceEstimate
 from gin_bids_py_analysis.processing.trial_stats import (
-    ActivityEstimate,
-    ConditionActivity,
+    SignalActivityEstimate,
+    ConditionSignalActivity,
     ConditionTrialSummaryValues,
 )
 
@@ -84,12 +84,12 @@ def synthetic_result(default_params: ConditionTestParams) -> ConditionTestProces
         source_group=group,
         metadata={},
         output_entities=None,
-        activity=ConditionActivity(
-            condition_a=ActivityEstimate(
+        signal_activity=ConditionSignalActivity(
+            condition_a=SignalActivityEstimate(
                 mean=mean_a,
                 sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
             ),
-            condition_b=ActivityEstimate(
+            condition_b=SignalActivityEstimate(
                 mean=mean_b,
                 sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
             ),
@@ -197,12 +197,12 @@ def synthetic_slope_result(default_slope_params: RegressionParams) -> Regression
             condition_a=ConditionPredictorValues(values=np.linspace(0.0, 1.0, 12)),
             condition_b=ConditionPredictorValues(values=np.linspace(0.0, 1.0, 11)),
         ),
-        activity=ConditionActivity(
-            condition_a=ActivityEstimate(
+        signal_activity=ConditionSignalActivity(
+            condition_a=SignalActivityEstimate(
                 mean=mean_a,
                 sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
             ),
-            condition_b=ActivityEstimate(
+            condition_b=SignalActivityEstimate(
                 mean=mean_b,
                 sem=np.abs(rng.standard_normal((n_ch, n_t))) * 0.1,
             ),
@@ -234,5 +234,8 @@ def synthetic_slope_result(default_slope_params: RegressionParams) -> Regression
         significance_alpha=0.05,
         stats_valid=True,
     )
+
+
+
 
 

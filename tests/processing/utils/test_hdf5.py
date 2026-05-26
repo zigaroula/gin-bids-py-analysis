@@ -67,3 +67,6 @@ def test_coerce_feature_time_handles_transposed_and_flat_inputs() -> None:
 def test_coerce_feature_time_rejects_non_1d_2d() -> None:
     with pytest.raises(ValueError, match="unsupported shape"):
         coerce_feature_time(np.zeros((2, 2, 2), dtype=np.float64), n_features=2, n_times=2)
+
+
+

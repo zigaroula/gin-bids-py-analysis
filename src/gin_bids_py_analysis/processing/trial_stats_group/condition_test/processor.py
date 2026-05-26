@@ -119,14 +119,14 @@ class _ContributionRecord(BaseTrialStatsGroupContributionRecord):
 def build_condition_test_compatible_groups(
     stats_files: Sequence[BIDSFile],
     *,
-    source_metric: str,
+    primary_condition_metric: str,
 ) -> list[BIDSFileGroup]:
     """Group subject-level condition_test files by compatibility."""
     return build_compatible_groups(
         stats_files,
         read_signature=lambda file: _read_snapshot_signature(
             file,
-            source_metric=source_metric,
+            source_metric=primary_condition_metric,
         ),
     )
 
@@ -150,7 +150,10 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
             )
 
         snapshots = [
-            _load_trial_stats_snapshot(file, source_metric=self.params.source_metric)
+            _load_trial_stats_snapshot(
+                file,
+                source_metric=self.params.primary_condition_metric,
+            )
             for file in files
         ]
         _validate_group_compatibility(snapshots)
@@ -395,7 +398,7 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
         return ConditionTestGroupProcessingResult(
             source_group=group,
             metadata={
-                "source_metric": self.params.source_metric,
+                "primary_condition_metric": self.params.primary_condition_metric,
                 "roi_mode": self.params.roi_mode,
                 "atlas_name": self.params.atlas_name,
                 "min_channels_per_roi": self.params.min_channels_per_roi,
@@ -417,22 +420,22 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
                 "activity_baseline_tmax_s": first.raw.activity_baseline_tmax_s,
                 "excluded_rois": dict(excluded_rois),
             },
-            activity_stats=GroupTimecourseStats(
+            signal_activity_stats=GroupTimecourseStats(
                 t_values=t_values,
                 p_values=p_values,
                 p_values_uncorrected=p_values_uncorrected,
                 significant_mask=significant_mask,
             ),
-            metric=GroupEstimate(mean=metric_mean, sem=metric_sem),
+            condition_difference=GroupEstimate(mean=metric_mean, sem=metric_sem),
             time_axis_s=first.time_axis_s.astype(np.float64),
             region_names=region_names,
-            source_metric=self.params.source_metric,
+            primary_condition_metric=self.params.primary_condition_metric,
             condition_labels=first.condition_labels,
             p_value_correction_method=self.params.p_value_correction_method,
             significance_alpha=self.params.significance_alpha,
             roi_mode=self.params.roi_mode,
             atlas_name=self.params.atlas_name,
-            activity_epoch=GroupEpochStats(
+            signal_activity_epoch=GroupEpochStats(
                 t=self.array_1d(summary_t),
                 p=self.array_1d(summary_p),
                 df=self.array_1d(summary_df),
@@ -441,7 +444,7 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
                 t_values=self.array_1d(summary_t),
                 p_values=self.array_1d(summary_p),
                 df=self.array_1d(summary_df),
-                source_metric=GroupEstimate(
+                condition_difference=GroupEstimate(
                     mean=self.array_1d(summary_mean),
                     sem=self.array_1d(summary_sem),
                 ),
@@ -449,7 +452,7 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
             roi_channel_counts=np.asarray(roi_channel_counts, dtype=np.int64),
             roi_subject_counts=np.asarray(roi_subject_counts, dtype=np.int64),
             contributions=contributions_out,
-            activity=GroupEstimatePair(
+            signal_activity=GroupEstimatePair(
                 condition_a=GroupEstimate(
                     mean=condition_a_activity_mean,
                     sem=condition_a_activity_sem,
@@ -459,7 +462,7 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
                     sem=condition_b_activity_sem,
                 ),
             ),
-            activity_contributions=IndexedConditionContributions(
+            signal_activity_contributions=IndexedConditionContributions(
                 condition_a=cond_a_contribution_samples,
                 condition_b=cond_b_contribution_samples,
                 labels=contribution_label_rows,
@@ -670,7 +673,7 @@ def _load_raw_from_hdf5(
         n_ch = len(channels)
         n_t = len(time_axis_s)
         _empty_cond = np.full((n_ch, n_t), np.nan, dtype=np.float64)
-        raw_a_ds = dataset_or_none(fh, "data/activity/condition_a/mean")
+        raw_a_ds = dataset_or_none(fh, "data/signal_activity/condition_a/mean")
         condition_a_mean_values = (
             coerce_feature_time(
                 np.asarray(raw_a_ds[:], dtype=np.float64),
@@ -680,7 +683,7 @@ def _load_raw_from_hdf5(
             if raw_a_ds is not None
             else _empty_cond.copy()
         )
-        raw_b_ds = dataset_or_none(fh, "data/activity/condition_b/mean")
+        raw_b_ds = dataset_or_none(fh, "data/signal_activity/condition_b/mean")
         condition_b_mean_values = (
             coerce_feature_time(
                 np.asarray(raw_b_ds[:], dtype=np.float64),
@@ -762,9 +765,9 @@ def _load_metric_matrix_hdf5(
     n_times: int,
 ) -> np.ndarray:
     if source_metric == "mean_difference":
-        dataset = dataset_or_none(fh, "data/activity/difference/mean")
+        dataset = dataset_or_none(fh, "data/signal_activity/difference/mean")
         if dataset is None:
-            raise ValueError(f"{fh.filename}: data/activity/difference/mean dataset is required.")
+            raise ValueError(f"{fh.filename}: data/signal_activity/difference/mean dataset is required.")
         raw = np.asarray(dataset[:], dtype=np.float64)
         return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
 
@@ -776,10 +779,10 @@ def _load_metric_matrix_hdf5(
         return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
 
     metric_name = "condition_a" if source_metric == "condition_a_mean" else "condition_b"
-    dataset = dataset_or_none(fh, f"data/activity/{metric_name}/mean")
+    dataset = dataset_or_none(fh, f"data/signal_activity/{metric_name}/mean")
     if dataset is None:
         raise ValueError(
-            f"{fh.filename}: data/activity/{metric_name}/mean dataset is required "
+            f"{fh.filename}: data/signal_activity/{metric_name}/mean dataset is required "
             f"for source_metric={source_metric!r}."
         )
     raw = np.asarray(dataset[:], dtype=np.float64)
@@ -921,5 +924,8 @@ def _load_metric_matrix_mat(
         )
     raw = np.asarray(metric_array, dtype=np.float64)
     return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
+
+
+
 
 

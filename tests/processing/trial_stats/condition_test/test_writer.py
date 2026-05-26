@@ -13,8 +13,8 @@ from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 from gin_bids_py_analysis.processing.trial_stats import (
-    ActivityEstimate,
-    ConditionActivity,
+    SignalActivityEstimate,
+    ConditionSignalActivity,
     ConditionContrast,
     ConditionTestProcessingResult,
     ConditionTestProcessingWriter,
@@ -62,9 +62,9 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
     result = ConditionTestProcessingResult(
         source_group=BIDSFileGroup(primary=primary),
         output_entities={"subject": "01", "task": "decid"},
-        activity=ConditionActivity(
-            condition_a=ActivityEstimate(mean=np.full((2, 3), 5.0, dtype=np.float64), sem=np.full((2, 3), 0.5, dtype=np.float64)),
-            condition_b=ActivityEstimate(mean=np.full((2, 3), 1.0, dtype=np.float64), sem=np.full((2, 3), 0.4, dtype=np.float64)),
+        signal_activity=ConditionSignalActivity(
+            condition_a=SignalActivityEstimate(mean=np.full((2, 3), 5.0, dtype=np.float64), sem=np.full((2, 3), 0.5, dtype=np.float64)),
+            condition_b=SignalActivityEstimate(mean=np.full((2, 3), 1.0, dtype=np.float64), sem=np.full((2, 3), 0.4, dtype=np.float64)),
         ),
         difference=DifferenceEstimate(
             mean=np.full((2, 3), 4.0, dtype=np.float64),
@@ -138,12 +138,12 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         assert fh["stats"]["condition_contrast"]["t_values"].shape == (2, 3)
         assert fh["stats"]["condition_contrast"]["p_values_uncorrected"].shape == (2, 3)
         assert fh["stats"]["condition_contrast"]["significant_mask"].shape == (2, 3)
-        assert fh["data"]["activity"]["difference"]["mean"].shape == (2, 3)
-        assert fh["data"]["activity"]["condition_a"]["sem"].shape == (2, 3)
-        assert fh["data"]["activity"]["condition_b"]["sem"].shape == (2, 3)
-        assert fh["data"]["activity"]["difference"]["sem"].shape == (2, 3)
-        assert fh["data"]["activity"]["difference"]["ci95_low"].shape == (2, 3)
-        assert fh["data"]["activity"]["difference"]["ci95_high"].shape == (2, 3)
+        assert fh["data"]["signal_activity"]["difference"]["mean"].shape == (2, 3)
+        assert fh["data"]["signal_activity"]["condition_a"]["sem"].shape == (2, 3)
+        assert fh["data"]["signal_activity"]["condition_b"]["sem"].shape == (2, 3)
+        assert fh["data"]["signal_activity"]["difference"]["sem"].shape == (2, 3)
+        assert fh["data"]["signal_activity"]["difference"]["ci95_low"].shape == (2, 3)
+        assert fh["data"]["signal_activity"]["difference"]["ci95_high"].shape == (2, 3)
         assert list(fh["axes"]["region"].asstr()[:]) == ["A1", "A2"]
         assert "channel" not in fh["axes"]
         assert list(fh["meta"]["trial_counts"][:]) == [4, 4]
@@ -188,9 +188,9 @@ def test_writer_outputs_matlab_and_trial_table() -> None:
         result = ConditionTestProcessingResult(
             source_group=BIDSFileGroup(primary=primary),
             output_entities={"subject": "01", "task": "decid"},
-            activity=ConditionActivity(
-                condition_a=ActivityEstimate(mean=np.full((2, 3), 5.0, dtype=np.float64), sem=np.full((2, 3), 0.5, dtype=np.float64)),
-                condition_b=ActivityEstimate(mean=np.full((2, 3), 1.0, dtype=np.float64), sem=np.full((2, 3), 0.4, dtype=np.float64)),
+            signal_activity=ConditionSignalActivity(
+                condition_a=SignalActivityEstimate(mean=np.full((2, 3), 5.0, dtype=np.float64), sem=np.full((2, 3), 0.5, dtype=np.float64)),
+                condition_b=SignalActivityEstimate(mean=np.full((2, 3), 1.0, dtype=np.float64), sem=np.full((2, 3), 0.4, dtype=np.float64)),
             ),
             difference=DifferenceEstimate(
                 mean=np.full((2, 3), 4.0, dtype=np.float64),
@@ -264,14 +264,14 @@ def test_writer_outputs_matlab_and_trial_table() -> None:
         assert data.stats.condition_contrast.p_values.shape == (2, 3)
         assert data.stats.condition_contrast.p_values_uncorrected.shape == (2, 3)
         assert data.stats.condition_contrast.significant_mask.shape == (2, 3)
-        assert data.data.activity.difference.mean.shape == (2, 3)
-        assert data.data.activity.condition_a.mean.shape == (2, 3)
-        assert data.data.activity.condition_b.mean.shape == (2, 3)
-        assert data.data.activity.condition_a.sem.shape == (2, 3)
-        assert data.data.activity.condition_b.sem.shape == (2, 3)
-        assert data.data.activity.difference.sem.shape == (2, 3)
-        assert data.data.activity.difference.ci95_low.shape == (2, 3)
-        assert data.data.activity.difference.ci95_high.shape == (2, 3)
+        assert data.data.signal_activity.difference.mean.shape == (2, 3)
+        assert data.data.signal_activity.condition_a.mean.shape == (2, 3)
+        assert data.data.signal_activity.condition_b.mean.shape == (2, 3)
+        assert data.data.signal_activity.condition_a.sem.shape == (2, 3)
+        assert data.data.signal_activity.condition_b.sem.shape == (2, 3)
+        assert data.data.signal_activity.difference.sem.shape == (2, 3)
+        assert data.data.signal_activity.difference.ci95_low.shape == (2, 3)
+        assert data.data.signal_activity.difference.ci95_high.shape == (2, 3)
         # channel axis: object array of 2 names
         channel_arr = np.atleast_1d(data.axes.channel)
         assert channel_arr.shape[0] == 2
@@ -306,9 +306,9 @@ def _make_minimal_result(
     return ConditionTestProcessingResult(
         source_group=BIDSFileGroup(primary=primary),
         output_entities={"subject": "01", "task": "t"},
-        activity=ConditionActivity(
-            condition_a=ActivityEstimate(mean=np.full((2, 3), 5.0, dtype=np.float64), sem=np.full((2, 3), 0.5, dtype=np.float64)),
-            condition_b=ActivityEstimate(mean=np.full((2, 3), 1.0, dtype=np.float64), sem=np.full((2, 3), 0.4, dtype=np.float64)),
+        signal_activity=ConditionSignalActivity(
+            condition_a=SignalActivityEstimate(mean=np.full((2, 3), 5.0, dtype=np.float64), sem=np.full((2, 3), 0.5, dtype=np.float64)),
+            condition_b=SignalActivityEstimate(mean=np.full((2, 3), 1.0, dtype=np.float64), sem=np.full((2, 3), 0.4, dtype=np.float64)),
         ),
         difference=DifferenceEstimate(
             mean=np.full((2, 3), 4.0, dtype=np.float64),
@@ -485,4 +485,7 @@ def test_writer_round_trips_trial_activity_summary_for_condition_test(
         result.trial_activity_summary_values.condition_b,
         equal_nan=True,
     )
+
+
+
 

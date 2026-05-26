@@ -250,3 +250,6 @@ class TestPlotPanel:
         panel.update_plots(synthetic_slope_result, channel_idx=0)
 
         assert panel._ax_scatter.get_ylabel() == "Mean activity (trigger to response)"
+
+
+

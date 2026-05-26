@@ -239,3 +239,5 @@ def launch_group_precomputed(
     )
     window.show()
     app.exec()
+
+

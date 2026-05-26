@@ -309,3 +309,6 @@ class TestPickleSafety:
 
         assert roundtripped.path == mock_bids_file.path
         assert roundtripped.entities == mock_bids_file.entities
+
+
+

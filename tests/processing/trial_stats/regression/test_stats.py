@@ -204,3 +204,6 @@ def test_compute_permuted_regression_maps_nan_for_too_few_trials() -> None:
     assert np.all(np.isnan(result))
 
 
+
+
+

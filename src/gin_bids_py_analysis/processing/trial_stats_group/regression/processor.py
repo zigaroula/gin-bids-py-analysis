@@ -72,8 +72,8 @@ from ..result import (
 )
 from .params import RegressionGroupParams
 from .result import (
+    RegressionMetricStats,
     RegressionGroupProcessingResult,
-    RegressionSourceMetricStats,
     ScatterData,
     VsZeroStatsPair,
 )
@@ -219,7 +219,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
         _validate_group_compatibility(snapshots)
         _validate_source_metric_availability(
             snapshots,
-            source_metric=self.params.source_metric,
+            primary_regression_metric=self.params.primary_regression_metric,
         )
 
         first = snapshots[0]
@@ -293,6 +293,8 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
         contributions_out: list[ROIChannelContribution] = []
         slope_a_contribution_samples: list[np.ndarray] = []
         slope_b_contribution_samples: list[np.ndarray] = []
+        r_value_a_contribution_samples: list[np.ndarray] = []
+        r_value_b_contribution_samples: list[np.ndarray] = []
         activity_a_contribution_samples: list[np.ndarray] = []
         activity_b_contribution_samples: list[np.ndarray] = []
         contribution_label_rows: list[list[str]] = []
@@ -328,7 +330,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                 [
                     _metric_values_for_record(
                         r,
-                        source_metric=self.params.source_metric,
+                        primary_regression_metric=self.params.primary_regression_metric,
                         condition="a",
                     )
                     for r in records
@@ -339,11 +341,19 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                 [
                     _metric_values_for_record(
                         r,
-                        source_metric=self.params.source_metric,
+                        primary_regression_metric=self.params.primary_regression_metric,
                         condition="b",
                     )
                     for r in records
                 ],
+                axis=0,
+            ).astype(np.float64)
+            samples_slope_a = np.stack(
+                [r.slope_a_values for r in records],
+                axis=0,
+            ).astype(np.float64)
+            samples_slope_b = np.stack(
+                [r.slope_b_values for r in records],
                 axis=0,
             ).astype(np.float64)
             samples_mean_a = np.stack(
@@ -406,8 +416,8 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             perm_slope_a_collection.append(perm_a_list)
             perm_slope_b_collection.append(perm_b_list)
             cluster_observed_collection.append(observed_s)
-            slope_mean_a, slope_sem_a = compute_condition_group_stats(samples_metric_a)
-            slope_mean_b, slope_sem_b = compute_condition_group_stats(samples_metric_b)
+            slope_mean_a, slope_sem_a = compute_condition_group_stats(samples_slope_a)
+            slope_mean_b, slope_sem_b = compute_condition_group_stats(samples_slope_b)
 
             vz_t_a, vz_p_a, _, _ = compute_one_sample_timecourse(samples_metric_a)
             vz_t_b, vz_p_b, _, _ = compute_one_sample_timecourse(samples_metric_b)
@@ -445,8 +455,10 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             epoch_activity_df.append(ep_act_df)
             roi_channel_counts.append(channel_count)
             roi_subject_counts.append(subject_count)
-            slope_a_contribution_samples.append(samples_metric_a)
-            slope_b_contribution_samples.append(samples_metric_b)
+            slope_a_contribution_samples.append(samples_slope_a)
+            slope_b_contribution_samples.append(samples_slope_b)
+            r_value_a_contribution_samples.append(samples_r_a)
+            r_value_b_contribution_samples.append(samples_r_b)
             activity_a_contribution_samples.append(samples_mean_a)
             activity_b_contribution_samples.append(samples_mean_b)
             contribution_label_rows.append([f"{r.subject}/{r.channel}" for r in records])
@@ -735,7 +747,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             metadata={
                 "p_value_correction_method": method,
                 "significance_alpha": alpha,
-                "source_metric": self.params.source_metric,
+                "primary_regression_metric": self.params.primary_regression_metric,
                 "contrast_mode": self.params.contrast_mode,
                 "roi_mode": self.params.roi_mode,
                 "atlas_name": self.params.atlas_name,
@@ -765,7 +777,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                 "trial_activity_summary_label": first.raw.trial_activity_summary_label,
                 "scatter_aggregation": "trial_pool",
             },
-            source_metric_stats=RegressionSourceMetricStats(
+            regression_stats=RegressionMetricStats(
                 contrast=GroupTimecourseStats(
                     t_values=source_metric_t_values,
                     p_values=source_metric_p_values,
@@ -798,13 +810,13 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                     condition_b_cluster_null_distributions=vs_zero_cluster_null_dists_b_out,
                 ),
             ),
-            activity_stats=GroupTimecourseStats(
+            signal_activity_stats=GroupTimecourseStats(
                 t_values=t_values_activity,
                 p_values=p_values_activity,
                 p_values_uncorrected=p_values_activity_uncorr,
                 significant_mask=sig_mask_activity,
             ),
-            source_metric_data=GroupEstimatePair(
+            slope=GroupEstimatePair(
                 condition_a=GroupEstimate(
                     mean=self.stack_rows(rows_slope_mean_a, n_times),
                     sem=self.stack_rows(rows_slope_sem_a, n_times),
@@ -814,7 +826,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                     sem=self.stack_rows(rows_slope_sem_b, n_times),
                 ),
             ),
-            activity=GroupEstimatePair(
+            signal_activity=GroupEstimatePair(
                 condition_a=GroupEstimate(
                     mean=self.stack_rows(rows_activity_mean_a, n_times),
                     sem=self.stack_rows(rows_activity_sem_a, n_times),
@@ -824,7 +836,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                     sem=self.stack_rows(rows_activity_sem_b, n_times),
                 ),
             ),
-            r_values=GroupEstimatePair(
+            r_value=GroupEstimatePair(
                 condition_a=GroupEstimate(
                     mean=self.stack_rows(rows_r_value_mean_a, n_times),
                     sem=self.stack_rows(rows_r_value_sem_a, n_times),
@@ -834,7 +846,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                     sem=self.stack_rows(rows_r_value_sem_b, n_times),
                 ),
             ),
-            activity_epoch=GroupEpochStats(
+            signal_activity_epoch=GroupEpochStats(
                 t=self.array_1d(epoch_activity_t),
                 p=self.array_1d(epoch_activity_p),
                 df=self.array_1d(epoch_activity_df),
@@ -845,23 +857,28 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             roi_channel_counts=np.array(roi_channel_counts, dtype=np.int64),
             roi_subject_counts=np.array(roi_subject_counts, dtype=np.int64),
             contributions=contributions_out,
-            source_metric_contributions=IndexedConditionContributions(
+            slope_contributions=IndexedConditionContributions(
                 condition_a=slope_a_contribution_samples,
                 condition_b=slope_b_contribution_samples,
                 labels=contribution_label_rows,
             ),
-            activity_contributions=IndexedConditionContributions(
+            r_value_contributions=IndexedConditionContributions(
+                condition_a=r_value_a_contribution_samples,
+                condition_b=r_value_b_contribution_samples,
+                labels=contribution_label_rows,
+            ),
+            signal_activity_contributions=IndexedConditionContributions(
                 condition_a=activity_a_contribution_samples,
                 condition_b=activity_b_contribution_samples,
                 labels=contribution_label_rows,
             ),
             scatter=ScatterData(
                 condition_a_predictor=scatter_a_predictor,
-                condition_a_activity=scatter_a_activity,
+                condition_a_signal_activity_summary=scatter_a_activity,
                 condition_b_predictor=scatter_b_predictor,
-                condition_b_activity=scatter_b_activity,
+                condition_b_signal_activity_summary=scatter_b_activity,
             ),
-            source_metric=self.params.source_metric,
+            primary_regression_metric=self.params.primary_regression_metric,
             contrast_mode=self.params.contrast_mode,
             p_value_correction_method=method,
             significance_alpha=alpha,
@@ -898,18 +915,18 @@ def _apply_correction_2d(
 def _metric_values_for_record(
     record: _ContributionRecord,
     *,
-    source_metric: str,
+    primary_regression_metric: str,
     condition: str,
 ) -> np.ndarray:
     if condition not in {"a", "b"}:
         raise ValueError(f"Unsupported condition key {condition!r}.")
 
     suffix = "a" if condition == "a" else "b"
-    if source_metric == "slope":
+    if primary_regression_metric == "slope":
         return np.asarray(getattr(record, f"slope_{suffix}_values"), dtype=np.float64)
-    if source_metric == "r_value":
+    if primary_regression_metric == "r_value":
         return np.asarray(getattr(record, f"r_value_{suffix}_values"), dtype=np.float64)
-    raise ValueError(f"Unsupported source_metric={source_metric!r}.")
+    raise ValueError(f"Unsupported primary_regression_metric={primary_regression_metric!r}.")
 
 
 # ---------------------------------------------------------------------------
@@ -1019,17 +1036,17 @@ def _validate_group_compatibility(snapshots: Sequence[_RegressionStatsSnapshot])
 def _validate_source_metric_availability(
     snapshots: Sequence[_RegressionStatsSnapshot],
     *,
-    source_metric: str,
+    primary_regression_metric: str,
 ) -> None:
     missing = [
         snapshot.stats_file.path.name
         for snapshot in snapshots
-        if source_metric not in snapshot.raw.available_metrics
+        if primary_regression_metric not in snapshot.raw.available_metrics
     ]
     if missing:
         joined = ", ".join(missing)
         raise ValueError(
-            f"source_metric={source_metric!r} is not available in these regression "
+            f"primary_regression_metric={primary_regression_metric!r} is not available in these regression "
             f"files: {joined}."
         )
 
@@ -1166,8 +1183,8 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
         condition_a_r_value = _read_2d("stats/regression/condition_a/r_value")
         condition_b_r_value = _read_2d("stats/regression/condition_b/r_value")
 
-        condition_a_mean = _read_2d("data/activity/condition_a/mean")
-        condition_b_mean = _read_2d("data/activity/condition_b/mean")
+        condition_a_mean = _read_2d("data/signal_activity/condition_a/mean")
+        condition_b_mean = _read_2d("data/signal_activity/condition_b/mean")
 
         binning_mode = str_scalar(dataset_or_none(fh, "meta/binning_mode"), default="none")
         window_ms = float_scalar(dataset_or_none(fh, "meta/window_ms"), default=0.0)
@@ -1644,4 +1661,6 @@ def _mat_condition_labels(meta: Any) -> tuple[str, str]:
     if len(labels) >= 2:
         return labels[0], labels[1]
     return "condition_a", "condition_b"
+
+
 

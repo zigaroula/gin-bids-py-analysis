@@ -11,12 +11,12 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
 
 
 # ---------------------------------------------------------------------------
-# Shared activity dataclasses
+# Shared signal-activity dataclasses
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class ActivityEstimate:
+class SignalActivityEstimate:
     """Per-condition mean and SEM for a single condition."""
 
     mean: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -24,11 +24,11 @@ class ActivityEstimate:
 
 
 @dataclass
-class ConditionActivity:
-    """Paired mean/SEM activity for both conditions."""
+class ConditionSignalActivity:
+    """Paired mean/SEM signal activity for both conditions."""
 
-    condition_a: ActivityEstimate = field(default_factory=ActivityEstimate)
-    condition_b: ActivityEstimate = field(default_factory=ActivityEstimate)
+    condition_a: SignalActivityEstimate = field(default_factory=SignalActivityEstimate)
+    condition_b: SignalActivityEstimate = field(default_factory=SignalActivityEstimate)
 
 
 @dataclass
@@ -93,7 +93,7 @@ class BaseTrialStatsProcessingResult(BaseProcessingResult):
     condition_b: str = "condition_b"
     condition_a_trial_count: int = 0
     condition_b_trial_count: int = 0
-    activity: ConditionActivity = field(default_factory=ConditionActivity)
+    signal_activity: ConditionSignalActivity = field(default_factory=ConditionSignalActivity)
     sfreq: float = 0.0
     resolved_trials: list[ResolvedTrial] = field(default_factory=list)
     source_ieeg_files: list[str] = field(default_factory=list)
@@ -156,14 +156,14 @@ class BaseTrialStatsProcessingResult(BaseProcessingResult):
 
         tree: dict[str, object] = {
             "data": {
-                "activity": {
+                "signal_activity": {
                     "condition_a": {
-                        "mean": np.asarray(self.activity.condition_a.mean, dtype=np.float64),
-                        "sem": np.asarray(self.activity.condition_a.sem, dtype=np.float64),
+                        "mean": np.asarray(self.signal_activity.condition_a.mean, dtype=np.float64),
+                        "sem": np.asarray(self.signal_activity.condition_a.sem, dtype=np.float64),
                     },
                     "condition_b": {
-                        "mean": np.asarray(self.activity.condition_b.mean, dtype=np.float64),
-                        "sem": np.asarray(self.activity.condition_b.sem, dtype=np.float64),
+                        "mean": np.asarray(self.signal_activity.condition_b.mean, dtype=np.float64),
+                        "sem": np.asarray(self.signal_activity.condition_b.sem, dtype=np.float64),
                     },
                 },
             },
@@ -225,7 +225,7 @@ class BaseTrialStatsProcessingResult(BaseProcessingResult):
     ) -> dict[str, object]:
         return {
             "schema_name": "trial_stats_subject",
-            "schema_version": "2.0",
+            "schema_version": "3.0",
             "condition_labels": np.array(
                 [self.condition_a, self.condition_b], dtype=object
             ),

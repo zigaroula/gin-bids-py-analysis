@@ -112,3 +112,4 @@ MATLAB_BSL_INFO_PATH: Path = (
     MATLAB_ROOT / "b2_BPF_apply_options"
     / f"ed{SUBJECT}_MD_CHOICE_Partie1_BPF_f50f150_sf100_sm250_bsl_info.mat"
 )
+

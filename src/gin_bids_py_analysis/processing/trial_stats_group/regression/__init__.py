@@ -4,7 +4,7 @@ from .params import RegressionGroupParams, RegressionGroupWriterParams
 from .processor import RegressionGroupProcessing, build_regression_compatible_groups
 from .result import (
     RegressionGroupProcessingResult,
-    RegressionSourceMetricStats,
+    RegressionMetricStats,
     ScatterData,
     VsZeroStatsPair,
 )
@@ -15,7 +15,7 @@ __all__ = [
     "RegressionGroupParams",
     "RegressionGroupProcessing",
     "RegressionGroupProcessingResult",
-    "RegressionSourceMetricStats",
+    "RegressionMetricStats",
     "ScatterData",
     "VsZeroStatsPair",
     "RegressionGroupProcessingWriter",
@@ -23,3 +23,4 @@ __all__ = [
     "build_regression_compatible_groups",
     "load_regression_group_result",
 ]
+

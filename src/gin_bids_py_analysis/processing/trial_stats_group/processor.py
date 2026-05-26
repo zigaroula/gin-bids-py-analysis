@@ -20,7 +20,7 @@ from gin_bids_py_analysis.processing.utils.hdf5 import dataset_or_none, decode_s
 from gin_bids_py_analysis.processing.utils.matlab import mat_str_list
 from gin_bids_py_analysis.processing.utils.tables import select_column
 
-from .params import BaseTrialStatsGroupParams
+from .params import BaseTrialStatsGroupParams, sanitize_roi_name, validate_roi_name
 
 
 @dataclass(frozen=True)
@@ -265,7 +265,19 @@ def collect_atlas_roi_records(
                 if idx is None:
                     continue
                 records.append(create_record(roi, snapshot.subject, snapshot, idx))
-    return roi_records, used_electrode_paths
+
+    sanitized_records: dict[str, list[ContributionT]] = {}
+    for roi_name, records in roi_records.items():
+        sanitized = sanitize_roi_name(roi_name)
+        validate_roi_name(roi_name, sanitized)
+        if sanitized in sanitized_records:
+            raise ValueError(
+                f"Atlas ROI name {roi_name!r} maps to {sanitized!r} after sanitization, "
+                "but that name is already used by another ROI. "
+                "Please use unique names."
+            )
+        sanitized_records[sanitized] = records
+    return sanitized_records, used_electrode_paths
 
 
 def resolve_snapshot_atlas_regions(

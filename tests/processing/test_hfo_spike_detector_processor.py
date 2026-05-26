@@ -82,3 +82,6 @@ def test_hfo_spike_detector_processor_uses_threads_budget_for_pyfftw(
     assert isinstance(result, HfoSpikeDetectorProcessingResult)
     assert fake_pyfftw.config.NUM_THREADS == 4
     assert result.channel_names == ["X02"]
+
+
+

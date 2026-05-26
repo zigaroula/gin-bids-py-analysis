@@ -17,7 +17,7 @@ from gin_bids_py_analysis.processing.trial_stats_group import (
     load_regression_group_result,
 )
 from gin_bids_py_analysis.processing.trial_stats_group.regression.result import (
-    RegressionSourceMetricStats,
+    RegressionMetricStats,
     ScatterData,
     VsZeroStatsPair,
 )
@@ -67,7 +67,7 @@ def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> Regression
             "effective_n_bins": n_t,
             "activity_zscore": "none",
         },
-        source_metric_stats=RegressionSourceMetricStats(
+        regression_stats=RegressionMetricStats(
             contrast=GroupTimecourseStats(
                 t_values=np.full(shape, 2.0, dtype=np.float64),
                 p_values=np.full(shape, 0.02, dtype=np.float64),
@@ -94,18 +94,18 @@ def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> Regression
                 ),
             ),
         ),
-        activity_stats=GroupTimecourseStats(
+        signal_activity_stats=GroupTimecourseStats(
             t_values=np.full(shape, 1.5, dtype=np.float64),
             p_values=np.full(shape, 0.05, dtype=np.float64),
             p_values_uncorrected=np.full(shape, 0.05, dtype=np.float64),
             significant_mask=np.zeros(shape, dtype=bool),
         ),
-        activity_epoch=GroupEpochStats(
+        signal_activity_epoch=GroupEpochStats(
             t=np.full(n_rois, 1.2, dtype=np.float64),
             p=np.full(n_rois, 0.1, dtype=np.float64),
             df=np.full(n_rois, 3.0, dtype=np.float64),
         ),
-        source_metric_data=GroupEstimatePair(
+        slope=GroupEstimatePair(
             condition_a=GroupEstimate(
                 mean=np.full(shape, 1.5, dtype=np.float64),
                 sem=np.full(shape, 0.3, dtype=np.float64),
@@ -115,7 +115,7 @@ def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> Regression
                 sem=np.full(shape, 0.3, dtype=np.float64),
             ),
         ),
-        activity=GroupEstimatePair(
+        signal_activity=GroupEstimatePair(
             condition_a=GroupEstimate(
                 mean=np.full(shape, 2.0, dtype=np.float64),
                 sem=np.full(shape, 0.2, dtype=np.float64),
@@ -125,7 +125,7 @@ def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> Regression
                 sem=np.full(shape, 0.15, dtype=np.float64),
             ),
         ),
-        r_values=GroupEstimatePair(
+        r_value=GroupEstimatePair(
             condition_a=GroupEstimate(
                 mean=np.full(shape, 0.6, dtype=np.float64),
                 sem=np.full(shape, 0.05, dtype=np.float64),
@@ -144,7 +144,7 @@ def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> Regression
             ROIChannelContribution(roi="ROI_0", subject="01", channel="A1", source_stats_file=str(primary.path)),
             ROIChannelContribution(roi="ROI_0", subject="02", channel="A1", source_stats_file=str(primary.path)),
         ],
-        source_metric_contributions=IndexedConditionContributions(
+        slope_contributions=IndexedConditionContributions(
             condition_a=[
                 np.ones((2, n_t), dtype=np.float64) * 1.5 for _ in range(n_rois)
             ],
@@ -153,14 +153,14 @@ def _make_result(primary: BIDSFile, n_rois: int = 1, n_t: int = 2) -> Regression
             ],
             labels=[["01/A1", "02/A1"] for _ in range(n_rois)],
         ),
-        activity_contributions=IndexedConditionContributions(
+        signal_activity_contributions=IndexedConditionContributions(
             condition_a=[
                 np.ones((2, n_t), dtype=np.float64) * 2.0 for _ in range(n_rois)
             ],
             condition_b=[np.ones((2, n_t), dtype=np.float64) for _ in range(n_rois)],
             labels=[["01/A1", "02/A1"] for _ in range(n_rois)],
         ),
-        source_metric="slope",
+        primary_regression_metric="slope",
         contrast_mode="paired",
         p_value_correction_method="none",
         significance_alpha=0.05,
@@ -192,33 +192,34 @@ def test_writer_hdf5_schema_and_path() -> None:
         assert out_path.suffix == ".h5"
 
         with h5py.File(out_path, "r") as fh:
-            assert "source_metric" in fh["stats"]
-            assert "t_values" in fh["stats"]["source_metric"]
-            assert "p_values" in fh["stats"]["source_metric"]
-            assert "significant_mask" in fh["stats"]["source_metric"]
-            assert "condition_a" in fh["data"]["source_metric"]
-            assert "epoch_summary" in fh["stats"]["source_metric"]
-            assert "activity" in fh["stats"]
-            assert "t_values" in fh["stats"]["activity"]
-            assert "p_values" in fh["stats"]["activity"]
-            assert "epoch_summary" in fh["stats"]["activity"]
-            assert "activity" in fh["data"]
-            assert "condition_a" in fh["data"]["activity"]
-            assert "condition_b" in fh["data"]["activity"]
-            assert "r_values" in fh["data"]
-            assert "condition_a" in fh["data"]["r_values"]
+            assert "regression" in fh["stats"]
+            assert "condition_contrast" in fh["stats"]["regression"]
+            assert "t_values" in fh["stats"]["regression"]["condition_contrast"]
+            assert "p_values" in fh["stats"]["regression"]["condition_contrast"]
+            assert "significant_mask" in fh["stats"]["regression"]["condition_contrast"]
+            assert "condition_a" in fh["data"]["regression"]
+            assert "slope" in fh["data"]["regression"]["condition_a"]
+            assert "r_value" in fh["data"]["regression"]["condition_a"]
+            assert "epoch_summary" in fh["stats"]["regression"]["condition_contrast"]
+            assert "signal_activity" in fh["stats"]
+            assert "t_values" in fh["stats"]["signal_activity"]
+            assert "p_values" in fh["stats"]["signal_activity"]
+            assert "epoch_summary" in fh["stats"]["signal_activity"]
+            assert "signal_activity" in fh["data"]
+            assert "condition_a" in fh["data"]["signal_activity"]
+            assert "condition_b" in fh["data"]["signal_activity"]
             assert "axes" in fh
             assert "region" in fh["axes"]
             assert "time_s" in fh["axes"]
             assert "meta" in fh
             assert "contributions" in fh
             assert "summary" in fh["contributions"]
-            assert "activity" in fh["contributions"]
-            assert "source_metric" in fh["contributions"]
+            assert "signal_activity" in fh["contributions"]
+            assert "regression" in fh["contributions"]
             assert "provenance" in fh
 
-            assert fh["stats"]["source_metric"]["t_values"].shape == (1, 2)
-            assert fh["stats"]["source_metric"]["epoch_summary"]["t"].shape == (1,)
+            assert fh["stats"]["regression"]["condition_contrast"]["t_values"].shape == (1, 2)
+            assert fh["stats"]["regression"]["condition_contrast"]["epoch_summary"]["t"].shape == (1,)
             assert list(fh["axes"]["region"].asstr()[:]) == ["ROI_0"]
             assert fh["meta"]["roi_mode"].asstr()[()] == "manual"
             assert list(fh["excluded_rois"]["region"].asstr()[:]) == ["ROI_BAD"]
@@ -243,15 +244,23 @@ def test_writer_hdf5_roundtrip_via_loader() -> None:
 
         assert loaded.region_names == result.region_names
         assert len(loaded.time_axis_s) == 3
-        np.testing.assert_allclose(loaded.source_metric_t_values, result.source_metric_t_values)
-        np.testing.assert_allclose(loaded.activity_t_values, result.activity_t_values)
-        np.testing.assert_allclose(loaded.condition_a_activity_mean, result.condition_a_activity_mean)
-        np.testing.assert_allclose(loaded.condition_b_r_value_mean, result.condition_b_r_value_mean)
+        np.testing.assert_allclose(loaded.regression_stats.contrast.t_values, result.regression_stats.contrast.t_values)
+        np.testing.assert_allclose(
+            loaded.signal_activity_stats.t_values,
+            result.signal_activity_stats.t_values,
+        )
+        np.testing.assert_allclose(loaded.signal_activity.condition_a.mean, result.signal_activity.condition_a.mean)
+        np.testing.assert_allclose(loaded.r_value.condition_b.mean, result.r_value.condition_b.mean)
         assert loaded.p_value_correction_method == "none"
         assert loaded.roi_mode == "manual"
         assert loaded.excluded_rois == {"ROI_BAD": "no_channels"}
         assert len(loaded.contributions) == 2
-        assert len(loaded.condition_a_source_metric_contributions) == 2
-        assert loaded.condition_a_source_metric_contributions[0].shape == (2, 3)
+        assert len(loaded.slope_contributions.condition_a) == 2
+        assert loaded.slope_contributions.condition_a[0].shape == (2, 3)
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
+
+
+
+
+

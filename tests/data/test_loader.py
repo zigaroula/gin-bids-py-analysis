@@ -131,3 +131,6 @@ class TestLoadJson:
         from gin_bids_py_analysis.data import load_json as _load_json  # noqa: PLC0415
 
         assert callable(_load_json)
+
+
+

@@ -95,7 +95,7 @@ class ConditionTestProcessingResult(BaseTrialStatsProcessingResult):
             tree,
             {
                 "data": {
-                    "activity": {
+                    "signal_activity": {
                         "difference": {
                             "mean": self.difference.mean.astype(np.float64),
                             "sem": self.difference.sem.astype(np.float64),

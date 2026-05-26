@@ -1,11 +1,38 @@
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
 from gin_bids_py_analysis.bids.helpers import normalize_subject_value
 from gin_bids_py_analysis.processing.base import BaseProcessingParams, BaseWriterParams
+
+_VALID_ROI_CHARS_RE = re.compile(r"[^a-zA-Z0-9_]")
+
+
+def sanitize_roi_name(name: str) -> str:
+    """Replace characters forbidden in MATLAB struct field names and HDF5 group keys with underscores."""
+    return _VALID_ROI_CHARS_RE.sub("_", name)
+
+
+def validate_roi_name(original: str, sanitized: str) -> None:
+    """Raise ValueError if *sanitized* is not a valid MATLAB identifier.
+
+    Rules enforced:
+    - Must not start with a digit.
+    - Must not exceed 63 characters (MATLAB namelengthmax).
+    """
+    if sanitized[0].isdigit():
+        raise ValueError(
+            f"ROI name {original!r} starts with a digit after sanitization: {sanitized!r}. "
+            "Please rename it to start with a letter or underscore."
+        )
+    if len(sanitized) > 63:
+        raise ValueError(
+            f"ROI name {original!r} has {len(sanitized)} characters after sanitization "
+            "(MATLAB namelengthmax is 63). Please use a shorter name."
+        )
 
 
 class BaseTrialStatsGroupParams(BaseProcessingParams):
@@ -105,9 +132,10 @@ class BaseTrialStatsGroupParams(BaseProcessingParams):
 
         cleaned: dict[str, dict[str, list[str]]] = {}
         for raw_roi, raw_subject_map in value.items():
-            roi = str(raw_roi).strip()
-            if not roi:
+            roi = sanitize_roi_name(str(raw_roi).strip())
+            if not roi or set(roi) == {"_"}:
                 continue
+            validate_roi_name(str(raw_roi).strip(), roi)
             if not isinstance(raw_subject_map, dict):
                 raise ValueError(
                     f"manual_region_channels[{raw_roi!r}] must be a mapping of subjects."
@@ -136,6 +164,12 @@ class BaseTrialStatsGroupParams(BaseProcessingParams):
                 if unique_channels:
                     subject_map[subject] = unique_channels
             if subject_map:
+                if roi in cleaned:
+                    raise ValueError(
+                        f"ROI name {raw_roi!r} maps to {roi!r} after sanitization, "
+                        "but that name is already used by another ROI. "
+                        "Please use unique names."
+                    )
                 cleaned[roi] = subject_map
         return cleaned
 

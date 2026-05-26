@@ -524,3 +524,6 @@ def test_compute_duration_channel_significance_single_time_bin_returns_all_false
     assert result.shape == (3,)
     assert not result.any()
 
+
+
+

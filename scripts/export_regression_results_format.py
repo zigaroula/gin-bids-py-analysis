@@ -130,7 +130,7 @@ def _classify_regression_file(path: Path) -> str | None:
         with h5py.File(path, "r") as fh:
             if "regression" in fh and _h5_string(fh, "meta/analysis_type") == "slope_regression":
                 return "subject"
-            if "source_metric" in fh and _h5_string(fh, "meta/analysis_level") == "roi_group":
+            if "stats/regression" in fh and _h5_string(fh, "meta/analysis_type") == "regression_group":
                 return "group"
     except OSError:
         return None
@@ -195,3 +195,4 @@ def _h5_string(fh: h5py.File, key: str) -> str:
 
 if __name__ == "__main__":
     main()
+

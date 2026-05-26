@@ -530,3 +530,6 @@ def test_table_trial_resolver_marks_cast_errors_when_numeric_rule_cannot_parse_v
     assert resolved[0].keep is False
     assert resolved[0].exclusion_reason == "condition_value_cast_error"
     assert resolved[0].metadata["condition_resolution_reason"] == "condition_value_cast_error"
+
+
+

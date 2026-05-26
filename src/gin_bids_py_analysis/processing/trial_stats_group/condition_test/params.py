@@ -10,7 +10,7 @@ from ..params import BaseTrialStatsGroupParams, BaseTrialStatsGroupWriterParams
 class ConditionTestGroupParams(BaseTrialStatsGroupParams):
     """Parameters for group-level ROI one-sample statistics on condition_test outputs."""
 
-    source_metric: Literal[
+    primary_condition_metric: Literal[
         "mean_difference",
         "t_values",
         "condition_a_mean",

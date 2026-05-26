@@ -144,3 +144,5 @@ class SubjectChannelPanel(QWidget):
         """Name of the currently selected channel, or ``None`` if the list is empty."""
         item = self._channel_list.currentItem()
         return item.text() if item is not None else None
+
+

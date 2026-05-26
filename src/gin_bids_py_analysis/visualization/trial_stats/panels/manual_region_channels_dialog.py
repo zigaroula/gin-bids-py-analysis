@@ -277,3 +277,5 @@ class ManualRegionChannelsDialog(QDialog):
             if subj_map
         }
         self.accept()
+
+

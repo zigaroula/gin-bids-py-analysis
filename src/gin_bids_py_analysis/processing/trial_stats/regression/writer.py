@@ -54,10 +54,10 @@ def _validate_shape_consistency(result: RegressionProcessingResult) -> None:
         "regression.condition_b.p_value": result.regression.condition_b.p_value.shape,
         "regression.condition_b.p_value_corrected": result.regression.condition_b.p_value_corrected.shape,
         "regression.condition_b.significant_mask": result.regression.condition_b.significant_mask.shape,
-        "activity.condition_a.mean": result.activity.condition_a.mean.shape,
-        "activity.condition_b.mean": result.activity.condition_b.mean.shape,
-        "activity.condition_a.sem": result.activity.condition_a.sem.shape,
-        "activity.condition_b.sem": result.activity.condition_b.sem.shape,
+        "signal_activity.condition_a.mean": result.signal_activity.condition_a.mean.shape,
+        "signal_activity.condition_b.mean": result.signal_activity.condition_b.mean.shape,
+        "signal_activity.condition_a.sem": result.signal_activity.condition_a.sem.shape,
+        "signal_activity.condition_b.sem": result.signal_activity.condition_b.sem.shape,
     }
     mismatched = [name for name, shape in shapes.items() if shape != expected]
     if mismatched:

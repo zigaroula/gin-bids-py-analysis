@@ -30,9 +30,9 @@ class TestWriteHdf5Structure:
         assert "meta/n_bins" in fh
         assert "meta/effective_n_bins" in fh
         assert "stats/condition_contrast/t_values" in fh
-        assert "data/activity/difference/mean" in fh
-        assert "data/activity/condition_a/mean" in fh
-        assert "data/activity/condition_b/mean" in fh
+        assert "data/signal_activity/difference/mean" in fh
+        assert "data/signal_activity/condition_a/mean" in fh
+        assert "data/signal_activity/condition_b/mean" in fh
         assert "provenance/source_ieeg_files" in fh
         assert "provenance/source_electrodes_files" in fh
 
@@ -100,17 +100,20 @@ class TestBuildGroupFileGroupFromResults:
             "01": synthetic_result,
             "02": synthetic_result,
         }
-        group = build_group_file_group_from_results(results, source_metric="t_values")
+        group = build_group_file_group_from_results(results, primary_condition_metric="t_values")
         subject_ids = {f.get("subject") for f in group.all_files}
         assert "01" in subject_ids
         assert "02" in subject_ids
 
     def test_raises_on_empty_results(self):
         with pytest.raises(ValueError, match="at least one result"):
-            build_group_file_group_from_results({}, source_metric="t_values")
+            build_group_file_group_from_results({}, primary_condition_metric="t_values")
 
     def test_single_subject(self, synthetic_result):
         group = build_group_file_group_from_results(
-            {"01": synthetic_result}, source_metric="t_values"
+            {"01": synthetic_result}, primary_condition_metric="t_values"
         )
         assert len(group.all_files) == 1
+
+
+

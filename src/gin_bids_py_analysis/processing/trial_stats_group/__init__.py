@@ -32,7 +32,7 @@ from .regression import (
     RegressionGroupProcessingResult,
     RegressionGroupProcessingWriter,
     RegressionGroupWriterParams,
-    RegressionSourceMetricStats,
+    RegressionMetricStats,
     ScatterData,
     VsZeroStatsPair,
     build_regression_compatible_groups,
@@ -68,9 +68,10 @@ __all__ = [
     "RegressionGroupProcessingResult",
     "RegressionGroupProcessingWriter",
     "RegressionGroupWriterParams",
-    "RegressionSourceMetricStats",
+    "RegressionMetricStats",
     "ScatterData",
     "VsZeroStatsPair",
     "build_regression_compatible_groups",
     "load_regression_group_result",
 ]
+

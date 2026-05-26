@@ -25,7 +25,12 @@ from gin_bids_py_analysis.processing.utils.matlab import (
 )
 
 from ..params import normalize_trial_activity_summary_missing_response_policy
-from ..result import ActivityEstimate, ConditionActivity, ConditionEpochs, ConditionTrialSummaryValues
+from ..result import (
+    ConditionEpochs,
+    ConditionSignalActivity,
+    ConditionTrialSummaryValues,
+    SignalActivityEstimate,
+)
 from .result import (
     ConditionPredictorValues,
     ConditionRegressionStats,
@@ -137,10 +142,10 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
             np.asarray(perm_b_ds[:], dtype=np.float32) if perm_b_ds is not None else None
         )
 
-        condition_a_mean = _read_2d("data/activity/condition_a/mean")
-        condition_b_mean = _read_2d("data/activity/condition_b/mean")
-        condition_a_sem = _read_2d("data/activity/condition_a/sem")
-        condition_b_sem = _read_2d("data/activity/condition_b/sem")
+        condition_a_mean = _read_2d("data/signal_activity/condition_a/mean")
+        condition_b_mean = _read_2d("data/signal_activity/condition_b/mean")
+        condition_a_sem = _read_2d("data/signal_activity/condition_a/sem")
+        condition_b_sem = _read_2d("data/signal_activity/condition_b/sem")
 
         predictor_a_raw_ds = dataset_or_none(fh, "predictor/condition_a/raw_values") or dataset_or_none(fh, "predictor/condition_a_raw_values")
         predictor_b_raw_ds = dataset_or_none(fh, "predictor/condition_b/raw_values") or dataset_or_none(fh, "predictor/condition_b_raw_values")
@@ -395,9 +400,9 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
                 values=condition_b_predictor_values,
             ),
         ),
-        activity=ConditionActivity(
-            condition_a=ActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
-            condition_b=ActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
+        signal_activity=ConditionSignalActivity(
+            condition_a=SignalActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
+            condition_b=SignalActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
         ),
         epochs=ConditionEpochs(
             condition_a=condition_a_epochs,
@@ -450,7 +455,7 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
     data = mat["data"]
     _require_v2_schema_mat(data.meta, path.name)
     regression = data.stats.regression
-    activity = data.data.activity
+    activity = data.data.signal_activity
     uncertainty = getattr(data, "uncertainty", None)
     predictor = getattr(data, "predictor", None)
     axes = data.axes
@@ -783,9 +788,9 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
                 values=condition_b_predictor_values,
             ),
         ),
-        activity=ConditionActivity(
-            condition_a=ActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
-            condition_b=ActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
+        signal_activity=ConditionSignalActivity(
+            condition_a=SignalActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
+            condition_b=SignalActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
         ),
         epochs=ConditionEpochs(
             condition_a=np.array([]),
@@ -894,17 +899,18 @@ def _load_json_mapping(raw_value: str) -> dict[str, object]:
 
 def _require_v2_schema(fh: h5py.File, path_name: str) -> None:
     schema_version = str_scalar(dataset_or_none(fh, "meta/schema_version"), default="")
-    if schema_version != "2.0":
+    if schema_version != "3.0":
         raise ValueError(
             f"{path_name}: unsupported trial_stats schema. "
-            "schema_version='2.0' is required; regenerate outputs with the v2 writer."
+            "schema_version='3.0' is required; regenerate outputs with the v3 writer."
         )
 
 
 def _require_v2_schema_mat(meta: object, path_name: str) -> None:
     schema_version = mat_str(getattr(meta, "schema_version", None), default="")
-    if schema_version != "2.0":
+    if schema_version != "3.0":
         raise ValueError(
             f"{path_name}: unsupported trial_stats schema. "
-            "schema_version='2.0' is required; regenerate outputs with the v2 writer."
+            "schema_version='3.0' is required; regenerate outputs with the v3 writer."
         )
+

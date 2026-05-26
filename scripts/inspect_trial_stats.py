@@ -581,7 +581,7 @@ def _load_snapshot(stats_path: Path) -> TrialStatsSnapshot:
         n_bins=n_bins,
         effective_n_bins=effective_n_bins,
         binning_mode=binning_mode,
-        source_metric=source_metric,
+        primary_condition_metric=source_metric,
         roi_mode=roi_mode,
         pipeline_name=pipeline_name,
         roi_channel_counts=roi_channel_counts,
@@ -1135,8 +1135,8 @@ def _write_summary_figure(
     ]
     if snapshot.pipeline_name:
         params_lines.append(f"pipeline: {snapshot.pipeline_name}")
-    if snapshot.source_metric:
-        params_lines.append(f"source_metric: {snapshot.source_metric}")
+    if snapshot.primary_condition_metric:
+        params_lines.append(f"source_metric: {snapshot.primary_condition_metric}")
     if snapshot.roi_mode:
         params_lines.append(f"roi_mode: {snapshot.roi_mode}")
     if (
@@ -1308,3 +1308,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

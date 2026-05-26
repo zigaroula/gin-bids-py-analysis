@@ -56,3 +56,41 @@ def test_params_reject_legacy_cluster_method_names(legacy_name: str) -> None:
             manual_region_channels={"ROI": {"01": ["A1"]}},
             cluster_permutation_method=legacy_name,  # type: ignore[arg-type]
         )
+
+
+def test_params_roi_name_forbidden_chars_are_replaced() -> None:
+    params = ConditionTestGroupParams(
+        roi_mode="manual",
+        manual_region_channels={"my roi/left": {"01": ["A1"]}},
+    )
+    assert "my_roi_left" in params.manual_region_channels
+
+
+def test_params_roi_name_starting_with_digit_is_rejected() -> None:
+    with pytest.raises(ValueError, match="starts with a digit"):
+        ConditionTestGroupParams(
+            roi_mode="manual",
+            manual_region_channels={"1_bad_roi": {"01": ["A1"]}},
+        )
+
+
+def test_params_roi_name_exceeding_63_chars_is_rejected() -> None:
+    long_name = "a" * 64
+    with pytest.raises(ValueError, match="63"):
+        ConditionTestGroupParams(
+            roi_mode="manual",
+            manual_region_channels={long_name: {"01": ["A1"]}},
+        )
+
+
+def test_params_roi_names_collision_after_sanitization_is_rejected() -> None:
+    with pytest.raises(ValueError, match="already used by another ROI"):
+        ConditionTestGroupParams(
+            roi_mode="manual",
+            manual_region_channels={
+                "my roi": {"01": ["A1"]},
+                "my-roi": {"02": ["B1"]},
+            },
+        )
+
+

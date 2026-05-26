@@ -91,3 +91,6 @@ def mock_bids_file(tmp_path: Path) -> BIDSFile:
         },
     )
     return BIDSFile(mock)
+
+
+

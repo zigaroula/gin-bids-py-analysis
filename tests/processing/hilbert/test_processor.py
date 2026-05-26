@@ -544,3 +544,6 @@ class TestNormalizationModes:
         sm0 = result[0]
         # Raw amplitude from broadband noise at unit variance is small, not ~100
         assert float(np.mean(sm0)) < 10.0
+
+
+

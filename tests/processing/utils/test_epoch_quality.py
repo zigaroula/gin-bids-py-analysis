@@ -254,3 +254,6 @@ def test_level_a_nan_then_level_b_nan_ratio() -> None:
 
     assert not rejection[0], "Channel 0 has no NaN trials."
     assert rejection[1], "Channel 1 has 50 % NaN trials and should be excluded."
+
+
+

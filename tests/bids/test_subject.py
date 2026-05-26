@@ -52,3 +52,6 @@ def test_files_property_returns_copy() -> None:
     copy = subj.files
     copy.clear()
     assert len(subj.files) == 1
+
+
+

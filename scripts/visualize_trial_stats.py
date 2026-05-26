@@ -71,7 +71,7 @@ RESOLVER = TableTrialResolver(
 # When set, a "Group" tab appears after all subjects have been computed.
 # Set to None to disable the Group tab.
 GROUP_PARAMS = ConditionTestGroupParams(
-    source_metric="t_values",
+    primary_condition_metric="t_values",
     p_value_correction_method="none",
     significance_alpha=0.05,
     # roi_mode="atlas",
@@ -121,4 +121,5 @@ if __name__ == "__main__":
     subject_groups = _build_subject_groups(ds)
     print(f"Found {len(subject_groups)} subject(s).")
     launch(subject_groups, PARAMS, RESOLVER, group_params=GROUP_PARAMS, bids_root=BIDS_ROOT)
+
 

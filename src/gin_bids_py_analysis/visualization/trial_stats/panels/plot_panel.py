@@ -133,10 +133,10 @@ class PlotPanel(QWidget):
             condition_b=result.condition_b,
             condition_a_count=result.condition_a_trial_count,
             condition_b_count=result.condition_b_trial_count,
-            mean_a=result.activity.condition_a.mean[ch],
-            mean_b=result.activity.condition_b.mean[ch],
-            sem_a=result.activity.condition_a.sem[ch],
-            sem_b=result.activity.condition_b.sem[ch],
+            mean_a=result.signal_activity.condition_a.mean[ch],
+            mean_b=result.signal_activity.condition_b.mean[ch],
+            sem_a=result.signal_activity.condition_a.sem[ch],
+            sem_b=result.signal_activity.condition_b.sem[ch],
             sig_mask=sig,
             activity_zscore=result.activity_zscore,
         )
@@ -250,10 +250,10 @@ class PlotPanel(QWidget):
             condition_b=result.condition_b,
             condition_a_count=result.condition_a_trial_count,
             condition_b_count=result.condition_b_trial_count,
-            mean_a=result.activity.condition_a.mean[ch],
-            mean_b=result.activity.condition_b.mean[ch],
-            sem_a=result.activity.condition_a.sem[ch],
-            sem_b=result.activity.condition_b.sem[ch],
+            mean_a=result.signal_activity.condition_a.mean[ch],
+            mean_b=result.signal_activity.condition_b.mean[ch],
+            sem_a=result.signal_activity.condition_a.sem[ch],
+            sem_b=result.signal_activity.condition_b.sem[ch],
             sig_mask=sig_any,
             activity_zscore=result.activity_zscore,
         )
@@ -883,3 +883,5 @@ def _fit_scatter_regression(
         intercept=float(fit.intercept),
         p_value=float(fit.pvalue),
     )
+
+

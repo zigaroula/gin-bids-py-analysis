@@ -67,9 +67,9 @@ def _write_hdf5_structure(
     * ``meta/n_bins``                           — int
     * ``meta/effective_n_bins``                 — int (= n_times)
     * ``stats/condition_contrast/t_values``     — (n_channels, n_times) float64
-    * ``data/activity/difference/mean``         — (n_channels, n_times) float64
-    * ``data/activity/condition_a/mean``        — (n_channels, n_times) float64
-    * ``data/activity/condition_b/mean``        — (n_channels, n_times) float64
+    * ``data/signal_activity/difference/mean``         — (n_channels, n_times) float64
+    * ``data/signal_activity/condition_a/mean``        — (n_channels, n_times) float64
+    * ``data/signal_activity/condition_b/mean``        — (n_channels, n_times) float64
     * ``provenance/source_ieeg_files``          — string array
     * ``provenance/source_electrodes_files``    — string array
     """
@@ -86,6 +86,7 @@ def _write_hdf5_structure(
 
     # meta
     meta = fh.create_group("meta")
+    meta.create_dataset("schema_version", data=np.bytes_("3.0"))
     meta.create_dataset("analysis_level", data=np.bytes_("channel"))
     meta.create_dataset(
         "condition_labels",
@@ -125,16 +126,16 @@ def _write_hdf5_structure(
             data=result.contrast.permuted_t_values.astype(np.float32),
         )
 
-    # data/activity
+    # data/signal_activity
     data_grp = fh.create_group("data")
-    activity_grp = data_grp.create_group("activity")
+    activity_grp = data_grp.create_group("signal_activity")
     diff = result.difference.mean
     if diff.size == 0:
         diff = np.zeros_like(t)
     diff_grp = activity_grp.create_group("difference")
     diff_grp.create_dataset("mean", data=diff.astype(np.float64))
-    cond_a = result.activity.condition_a.mean
-    cond_b = result.activity.condition_b.mean
+    cond_a = result.signal_activity.condition_a.mean
+    cond_b = result.signal_activity.condition_b.mean
     if cond_a.size == 0:
         cond_a = np.zeros_like(t)
     if cond_b.size == 0:
@@ -220,7 +221,7 @@ def build_in_memory_bids_file(
 @contextmanager
 def group_file_group_context(
     results: dict[str, "ConditionTestProcessingResult"],
-    source_metric: str,
+    primary_condition_metric: str,
 ) -> Generator["BIDSFileGroup", None, None]:
     """Context manager that builds a ``BIDSFileGroup`` from in-memory results
     and guarantees that every h5py handle is closed on exit.
@@ -233,7 +234,7 @@ def group_file_group_context(
     ----------
     results:
         In-memory subject results produced by ``ConditionTestProcessing``.
-    source_metric:
+    primary_condition_metric:
         The metric that ``ConditionTestGroupProcessing`` will read.
 
     Yields
@@ -257,7 +258,10 @@ def group_file_group_context(
             handles.append(fh)
             bids_files.append(bids_file)
 
-        groups = build_condition_test_compatible_groups(bids_files, source_metric=source_metric)
+        groups = build_condition_test_compatible_groups(
+            bids_files,
+            primary_condition_metric=primary_condition_metric,
+        )
         if not groups:
             raise ValueError(
                 "build_condition_test_compatible_groups returned no groups for the provided results."
@@ -274,7 +278,7 @@ def group_file_group_context(
 
 def build_group_file_group_from_results(
     results: dict[str, "ConditionTestProcessingResult"],
-    source_metric: str,
+    primary_condition_metric: str,
 ) -> "BIDSFileGroup":
     """Build a ``BIDSFileGroup`` from a mapping of *subject_id → result*.
 
@@ -288,7 +292,7 @@ def build_group_file_group_from_results(
     ----------
     results:
         In-memory subject results produced by `ConditionTestProcessing`.
-    source_metric:
+    primary_condition_metric:
         The metric that ``ConditionTestGroupProcessing`` will read (e.g.
         ``"t_values"``, ``"mean_difference"``).
 
@@ -310,9 +314,14 @@ def build_group_file_group_from_results(
         for subject_id, result in sorted(results.items())
     ]
 
-    groups = build_condition_test_compatible_groups(bids_files, source_metric=source_metric)
+    groups = build_condition_test_compatible_groups(
+        bids_files,
+        primary_condition_metric=primary_condition_metric,
+    )
     if not groups:
         raise ValueError(
             "build_condition_test_compatible_groups returned no groups for the provided results."
         )
     return max(groups, key=lambda g: len(g.all_files))
+
+

@@ -26,7 +26,12 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
 )
 
 from ..params import normalize_trial_activity_summary_missing_response_policy
-from ..result import ActivityEstimate, ConditionActivity, ConditionEpochs, ConditionTrialSummaryValues
+from ..result import (
+    ConditionEpochs,
+    ConditionSignalActivity,
+    ConditionTrialSummaryValues,
+    SignalActivityEstimate,
+)
 from .result import ConditionContrast, ConditionTestProcessingResult, DifferenceEstimate
 
 _VALID_BASELINE_SCOPES = frozenset({"trial", "condition", "global"})
@@ -157,16 +162,16 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
             ds = dataset_or_none(fh, key)
             return np.asarray(ds[:], dtype=np.float64) if ds is not None else _zeros.copy()
 
-        condition_a_mean = _read_arr("data/activity/condition_a/mean")
-        condition_b_mean = _read_arr("data/activity/condition_b/mean")
-        mean_difference = _read_arr("data/activity/difference/mean")
+        condition_a_mean = _read_arr("data/signal_activity/condition_a/mean")
+        condition_b_mean = _read_arr("data/signal_activity/condition_b/mean")
+        mean_difference = _read_arr("data/signal_activity/difference/mean")
 
         # --- uncertainty ---
-        condition_a_sem = _read_arr("data/activity/condition_a/sem")
-        condition_b_sem = _read_arr("data/activity/condition_b/sem")
-        difference_sem = _read_arr("data/activity/difference/sem")
-        difference_ci95_low = _read_arr("data/activity/difference/ci95_low")
-        difference_ci95_high = _read_arr("data/activity/difference/ci95_high")
+        condition_a_sem = _read_arr("data/signal_activity/condition_a/sem")
+        condition_b_sem = _read_arr("data/signal_activity/condition_b/sem")
+        difference_sem = _read_arr("data/signal_activity/difference/sem")
+        difference_ci95_low = _read_arr("data/signal_activity/difference/ci95_low")
+        difference_ci95_high = _read_arr("data/signal_activity/difference/ci95_high")
 
         # --- meta ---
         sfreq = float_scalar(
@@ -368,9 +373,9 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
                 else n_perms
             ),
         },
-        activity=ConditionActivity(
-            condition_a=ActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
-            condition_b=ActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
+        signal_activity=ConditionSignalActivity(
+            condition_a=SignalActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
+            condition_b=SignalActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
         ),
         epochs=ConditionEpochs(
             condition_a=condition_a_epochs,
@@ -501,17 +506,17 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
         significant_mask = np.isfinite(p_values) & (p_values < significance_alpha)
 
     # --- means ---
-    activity = data.data.activity
-    condition_a_mean = _mat_arr(activity.condition_a, "mean")
-    condition_b_mean = _mat_arr(activity.condition_b, "mean")
-    mean_difference = _mat_arr(activity.difference, "mean")
+    signal_activity = data.data.signal_activity
+    condition_a_mean = _mat_arr(signal_activity.condition_a, "mean")
+    condition_b_mean = _mat_arr(signal_activity.condition_b, "mean")
+    mean_difference = _mat_arr(signal_activity.difference, "mean")
 
     # --- uncertainty ---
-    condition_a_sem = _mat_arr(activity.condition_a, "sem")
-    condition_b_sem = _mat_arr(activity.condition_b, "sem")
-    difference_sem = _mat_arr(activity.difference, "sem")
-    difference_ci95_low = _mat_arr(activity.difference, "ci95_low")
-    difference_ci95_high = _mat_arr(activity.difference, "ci95_high")
+    condition_a_sem = _mat_arr(signal_activity.condition_a, "sem")
+    condition_b_sem = _mat_arr(signal_activity.condition_b, "sem")
+    difference_sem = _mat_arr(signal_activity.difference, "sem")
+    difference_ci95_low = _mat_arr(signal_activity.difference, "ci95_low")
+    difference_ci95_high = _mat_arr(signal_activity.difference, "ci95_high")
 
     # --- meta ---
     sfreq = mat_float(getattr(meta, "sampling_frequency_hz", None), default=0.0)
@@ -678,9 +683,9 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
             "epoch_cleaning": epoch_cleaning,
             "epoch_cleaning_audit": epoch_cleaning_audit,
         },
-        activity=ConditionActivity(
-            condition_a=ActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
-            condition_b=ActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
+        signal_activity=ConditionSignalActivity(
+            condition_a=SignalActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
+            condition_b=SignalActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
         ),
         epochs=ConditionEpochs(
             condition_a=np.array([]),
@@ -781,10 +786,10 @@ def _load_json_mapping(raw_value: str) -> dict[str, object]:
 
 def _require_v2_schema(fh: h5py.File, path_name: str) -> None:
     schema_version = str_scalar(dataset_or_none(fh, "meta/schema_version"), default="")
-    if schema_version != "2.0":
+    if schema_version != "3.0":
         raise ValueError(
             f"{path_name}: unsupported trial_stats schema. "
-            "schema_version='2.0' is required; regenerate outputs with the v2 writer."
+            "schema_version='3.0' is required; regenerate outputs with the v3 writer."
         )
 
 
@@ -792,8 +797,8 @@ def _require_v2_schema_mat(meta: object, path_name: str) -> None:
     from gin_bids_py_analysis.processing.utils.matlab import mat_str
 
     schema_version = mat_str(getattr(meta, "schema_version", None), default="")
-    if schema_version != "2.0":
+    if schema_version != "3.0":
         raise ValueError(
             f"{path_name}: unsupported trial_stats schema. "
-            "schema_version='2.0' is required; regenerate outputs with the v2 writer."
+            "schema_version='3.0' is required; regenerate outputs with the v3 writer."
         )

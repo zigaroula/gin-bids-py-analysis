@@ -132,7 +132,7 @@ class TestGroupComputeWorker:
         from unittest.mock import patch
 
         group_params = MagicMock()
-        group_params.source_metric = "t_values"
+        group_params.primary_condition_metric = "t_values"
         all_results = {"01": synthetic_result}
 
         worker = GroupComputeWorker(all_results, group_params)
@@ -173,8 +173,11 @@ class TestLoadGroupResultAuto:
     def test_detects_condition_test_group_hdf5_layout(self, tmp_path) -> None:
         file_path = tmp_path / "group_stats.h5"
         with h5py.File(file_path, "w") as fh:
+            meta = fh.create_group("meta")
+            meta.create_dataset("analysis_type", data=b"condition_test_group")
             stats = fh.create_group("stats")
-            stats.create_dataset("t_values", data=[[1.0]])
+            signal_activity = stats.create_group("signal_activity")
+            signal_activity.create_dataset("t_values", data=[[1.0]])
 
         load_ttest = MagicMock(return_value="ttest_result")
         load_slope = MagicMock(return_value="slope_result")
@@ -192,8 +195,12 @@ class TestLoadGroupResultAuto:
     def test_detects_regression_group_hdf5_layout(self, tmp_path) -> None:
         file_path = tmp_path / "group_slope_stats.h5"
         with h5py.File(file_path, "w") as fh:
-            source_metric = fh.create_group("source_metric")
-            source_metric.create_dataset("t_values", data=[[0.1]])
+            meta = fh.create_group("meta")
+            meta.create_dataset("analysis_type", data=b"regression_group")
+            stats = fh.create_group("stats")
+            regression = stats.create_group("regression")
+            condition_contrast = regression.create_group("condition_contrast")
+            condition_contrast.create_dataset("t_values", data=[[0.1]])
 
         load_ttest = MagicMock(return_value="ttest_result")
         load_slope = MagicMock(return_value="slope_result")
@@ -207,3 +214,6 @@ class TestLoadGroupResultAuto:
         assert result == "slope_result"
         load_slope.assert_called_once_with(file_path)
         load_ttest.assert_not_called()
+
+
+

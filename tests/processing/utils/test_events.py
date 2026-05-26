@@ -30,3 +30,6 @@ def test_coerce_annotation_events_normalizes_annotations() -> None:
     assert events[0].duration_s == 0.1
     assert events[1].event_type == "Comment"
     assert events[1].description == "my note"
+
+
+

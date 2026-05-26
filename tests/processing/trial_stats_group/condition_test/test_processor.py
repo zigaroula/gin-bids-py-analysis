@@ -72,7 +72,7 @@ def _write_trial_stats_h5(
             contrast_grp.create_dataset("permuted_t_values", data=permuted_t_values.astype(np.float32))
 
         data_grp = fh.create_group("data")
-        activity_grp = data_grp.create_group("activity")
+        activity_grp = data_grp.create_group("signal_activity")
         cond_a_grp = activity_grp.create_group("condition_a")
         cond_a_grp.create_dataset("mean", data=mean_difference + 1.0)
         cond_a_grp.create_dataset("sem", data=np.full_like(mean_difference, 0.2))
@@ -91,6 +91,7 @@ def _write_trial_stats_h5(
         axes_grp.create_dataset("time_s", data=time_s)
 
         meta_grp = fh.create_group("meta")
+        meta_grp.create_dataset("schema_version", data="3.0", dtype=str_dtype)
         meta_grp.create_dataset("analysis_level", data=analysis_level, dtype=str_dtype)
         meta_grp.create_dataset("condition_labels", data=np.array(condition_labels, dtype=object), dtype=str_dtype)
         meta_grp.create_dataset("trial_counts", data=np.array([12, 11], dtype=np.int64))
@@ -135,7 +136,7 @@ def test_build_condition_test_compatible_groups_splits_heterogeneous_inputs() ->
             _make_bids_file(path_c, {"subject": "03", "task": "other", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
         ]
 
-        groups = build_condition_test_compatible_groups(files, source_metric="mean_difference")
+        groups = build_condition_test_compatible_groups(files, primary_condition_metric="mean_difference")
         assert len(groups) == 2
         assert sorted(len(group.all_files) for group in groups) == [1, 2]
     finally:
@@ -164,7 +165,7 @@ def test_build_condition_test_compatible_groups_splits_activity_zscore_inputs() 
             _make_bids_file(path_b, {"subject": "02", "task": "decid", "desc": "conditiontest", "suffix": "stats", "extension": ".h5", "datatype": "ieeg"}),
         ]
 
-        groups = build_condition_test_compatible_groups(files, source_metric="mean_difference")
+        groups = build_condition_test_compatible_groups(files, primary_condition_metric="mean_difference")
         assert len(groups) == 2
         assert all(len(group.all_files) == 1 for group in groups)
     finally:
@@ -245,14 +246,14 @@ def test_process_group_manual_mode_and_thresholds() -> None:
 
         assert result.region_names == ["ROI_POS", "ROI_NEG"]
         assert result.output_entities is None
-        assert result.activity_t_values.shape == (2, 3)
-        assert np.all(result.metric_mean[0] > 0.0)
-        assert np.all(result.metric_mean[1] < 0.0)
+        assert result.signal_activity_stats.t_values.shape == (2, 3)
+        assert np.all(result.condition_difference.mean[0] > 0.0)
+        assert np.all(result.condition_difference.mean[1] < 0.0)
         assert "ROI_DROP" in result.excluded_rois
-        assert result.condition_a_activity_mean.shape == (2, 3)
-        assert result.condition_b_activity_mean.shape == (2, 3)
-        assert result.condition_a_activity_sem.shape == (2, 3)
-        assert result.condition_b_activity_sem.shape == (2, 3)
+        assert result.signal_activity.condition_a.mean.shape == (2, 3)
+        assert result.signal_activity.condition_b.mean.shape == (2, 3)
+        assert result.signal_activity.condition_a.sem.shape == (2, 3)
+        assert result.signal_activity.condition_b.sem.shape == (2, 3)
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -418,8 +419,8 @@ def test_process_group_cluster_permutation_custom_mode() -> None:
         assert isinstance(result.cluster_windows_s[0], list)
         assert result.cluster_null_distributions is not None
         assert result.cluster_null_distributions[0].shape == (40,)
-        assert result.activity_p_values.shape == (1, len(time_s))
-        assert result.activity_significant_mask.shape == (1, len(time_s))
+        assert result.signal_activity_stats.p_values.shape == (1, len(time_s))
+        assert result.signal_activity_stats.significant_mask.shape == (1, len(time_s))
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -471,8 +472,8 @@ def test_process_group_cluster_permutation_mne_mode() -> None:
         assert isinstance(result.cluster_windows_s[0], list)
         assert result.cluster_null_distributions is not None
         assert result.cluster_null_distributions[0].ndim == 1
-        assert result.activity_p_values.shape == (1, len(time_s))
-        assert result.activity_significant_mask.shape == (1, len(time_s))
+        assert result.signal_activity_stats.p_values.shape == (1, len(time_s))
+        assert result.signal_activity_stats.significant_mask.shape == (1, len(time_s))
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -605,12 +606,12 @@ def test_process_group_manual_mode_mat_input() -> None:
 
         assert result.region_names == ["ROI_POS", "ROI_NEG"]
         assert result.output_entities is None
-        assert result.activity_t_values.shape == (2, 3)
-        assert np.all(result.metric_mean[0] > 0.0)
-        assert np.all(result.metric_mean[1] < 0.0)
+        assert result.signal_activity_stats.t_values.shape == (2, 3)
+        assert np.all(result.condition_difference.mean[0] > 0.0)
+        assert np.all(result.condition_difference.mean[1] < 0.0)
         assert "ROI_DROP" in result.excluded_rois
-        assert result.condition_a_activity_mean.shape == (2, 3)
-        assert result.condition_b_activity_mean.shape == (2, 3)
+        assert result.signal_activity.condition_a.mean.shape == (2, 3)
+        assert result.signal_activity.condition_b.mean.shape == (2, 3)
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -636,8 +637,14 @@ def test_build_compatible_groups_mat_files() -> None:
             _make_bids_file(path_c, {"subject": "03", "task": "other", "desc": "conditiontest", "suffix": "stats", "extension": ".mat", "datatype": "ieeg"}),
         ]
 
-        groups = build_condition_test_compatible_groups(files, source_metric="mean_difference")
+        groups = build_condition_test_compatible_groups(files, primary_condition_metric="mean_difference")
         assert len(groups) == 2
         assert sorted(len(group.all_files) for group in groups) == [1, 2]
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
+
+
+
+
+
+

@@ -10,11 +10,11 @@ from .params import (
 )
 from .processor import BaseTrialStatsProcessing
 from .result import (
-    ActivityEstimate,
     BaseTrialStatsProcessingResult,
-    ConditionActivity,
     ConditionEpochs,
+    ConditionSignalActivity,
     ConditionTrialSummaryValues,
+    SignalActivityEstimate,
 )
 from .writer import BaseTrialStatsProcessingWriter
 from .condition_test import (
@@ -47,10 +47,10 @@ __all__ = [
     "BaseTrialStatsParams",
     "BaseTrialStatsWriterParams",
     "BaseTrialStatsProcessingResult",
-    "ActivityEstimate",
-    "ConditionActivity",
     "ConditionEpochs",
+    "ConditionSignalActivity",
     "ConditionTrialSummaryValues",
+    "SignalActivityEstimate",
     "BaseTrialStatsProcessing",
     "BaseTrialStatsProcessingWriter",
     "ConditionContrast",

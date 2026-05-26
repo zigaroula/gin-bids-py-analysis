@@ -55,7 +55,8 @@ def _write_hdf5_structure(
     )
     axes.create_dataset("time_s", data=result.time_axis_s.astype(np.float64))
 
-    regression = fh.create_group("regression")
+    stats = fh.create_group("stats")
+    regression = stats.create_group("regression")
     cond_a = regression.create_group("condition_a")
     cond_b = regression.create_group("condition_b")
     cond_a.create_dataset("slope", data=np.asarray(result.regression.condition_a.slope, dtype=np.float64))
@@ -63,15 +64,23 @@ def _write_hdf5_structure(
     cond_a.create_dataset("r_value", data=np.asarray(result.regression.condition_a.r_value, dtype=np.float64))
     cond_b.create_dataset("r_value", data=np.asarray(result.regression.condition_b.r_value, dtype=np.float64))
 
-    means = fh.create_group("means")
-    means.create_dataset(result.condition_a, data=np.asarray(result.activity.condition_a.mean, dtype=np.float64))
-    means.create_dataset(result.condition_b, data=np.asarray(result.activity.condition_b.mean, dtype=np.float64))
+    data = fh.create_group("data")
+    signal_activity = data.create_group("signal_activity")
+    signal_activity.create_group("condition_a").create_dataset(
+        "mean",
+        data=np.asarray(result.signal_activity.condition_a.mean, dtype=np.float64),
+    )
+    signal_activity.create_group("condition_b").create_dataset(
+        "mean",
+        data=np.asarray(result.signal_activity.condition_b.mean, dtype=np.float64),
+    )
 
     meta = fh.create_group("meta")
+    meta.create_dataset("schema_version", data=np.bytes_("3.0"))
     meta.create_dataset("analysis_type", data=np.bytes_(str(result.analysis_type)))
     meta.create_dataset("analysis_level", data=np.bytes_(str(result.analysis_level)))
     meta.create_dataset(
-        "trial_count_labels",
+        "condition_labels",
         data=np.array([result.condition_a, result.condition_b], dtype=object),
         dtype=str_dt,
     )
@@ -248,3 +257,5 @@ def group_file_group_context_slope(
                     fh.close()
             except Exception:  # noqa: BLE001
                 pass
+
+

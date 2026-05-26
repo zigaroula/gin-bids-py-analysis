@@ -10,7 +10,7 @@ from ..params import BaseTrialStatsGroupParams, BaseTrialStatsGroupWriterParams
 class RegressionGroupParams(BaseTrialStatsGroupParams):
     """Parameters for group-level ROI statistics on regression outputs."""
 
-    source_metric: Literal["slope", "r_value"] = Field(
+    primary_regression_metric: Literal["slope", "r_value"] = Field(
         default="slope",
         description=(
             "Channel-level metric read from each subject regression file and used in "

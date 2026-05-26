@@ -43,3 +43,6 @@ def test_apply_notch_filter_rejects_freq_at_or_above_nyquist() -> None:
 
     with pytest.raises(ValueError, match="Nyquist"):
         apply_notch_filter(raw, [50.0])
+
+
+

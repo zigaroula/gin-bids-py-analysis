@@ -131,3 +131,5 @@ class SaveTrialStatsDialog(QDialog):
             "output_format": self._format_combo.currentText(),
             "include_epochs": self._include_epochs.isChecked(),
         }
+
+

@@ -10,8 +10,8 @@ import scipy.io
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.processing.trial_stats import (
-    ActivityEstimate,
-    ConditionActivity,
+    SignalActivityEstimate,
+    ConditionSignalActivity,
     ConditionTrialSummaryValues,
     RegressionProcessingResult,
     RegressionProcessingWriter,
@@ -88,12 +88,12 @@ def _make_result(tmp_path: Path) -> RegressionProcessingResult:
                 values=np.array([1.0, 2.0, 3.0], dtype=np.float64),
             ),
         ),
-        activity=ConditionActivity(
-            condition_a=ActivityEstimate(
+        signal_activity=ConditionSignalActivity(
+            condition_a=SignalActivityEstimate(
                 mean=np.full(shape, 4.0, dtype=np.float64),
                 sem=np.full(shape, 0.4, dtype=np.float64),
             ),
-            condition_b=ActivityEstimate(
+            condition_b=SignalActivityEstimate(
                 mean=np.full(shape, 5.0, dtype=np.float64),
                 sem=np.full(shape, 0.5, dtype=np.float64),
             ),
@@ -287,5 +287,8 @@ def test_loader_rejects_legacy_within_condition_predictor_zscore(tmp_path: Path)
 
     with pytest.raises(ValueError, match="within_condition"):
         load_regression_result(output_path)
+
+
+
 
 

@@ -153,13 +153,14 @@ def _draw_mean_slope_figure(result: object, roi_idx: int) -> plt.Figure:
     time_axis = np.asarray(result.time_axis_s, dtype=np.float64)
     roi_label = str(result.region_names[roi_idx])
     condition_a_label, condition_b_label = _condition_labels(result)
-    metric_label = _source_metric_label(result)
+    metric_label = _regression_metric_label(result)
+    metric_estimates = _regression_metric_estimates(result)
 
     fig, ax = plt.subplots(figsize=FIGSIZE_INCHES, tight_layout=True)
 
     has_slope_mean = (
-        np.asarray(result.condition_a_source_metric_mean).size > 0
-        and np.asarray(result.condition_b_source_metric_mean).size > 0
+        np.asarray(metric_estimates.condition_a.mean).size > 0
+        and np.asarray(metric_estimates.condition_b.mean).size > 0
     )
     if not has_slope_mean:
         ax.text(
@@ -173,10 +174,10 @@ def _draw_mean_slope_figure(result: object, roi_idx: int) -> plt.Figure:
             color="gray",
         )
     else:
-        slope_mean_a = np.asarray(result.condition_a_source_metric_mean[roi_idx], dtype=np.float64)
-        slope_sem_a = np.asarray(result.condition_a_source_metric_sem[roi_idx], dtype=np.float64)
-        slope_mean_b = np.asarray(result.condition_b_source_metric_mean[roi_idx], dtype=np.float64)
-        slope_sem_b = np.asarray(result.condition_b_source_metric_sem[roi_idx], dtype=np.float64)
+        slope_mean_a = np.asarray(metric_estimates.condition_a.mean[roi_idx], dtype=np.float64)
+        slope_sem_a = np.asarray(metric_estimates.condition_a.sem[roi_idx], dtype=np.float64)
+        slope_mean_b = np.asarray(metric_estimates.condition_b.mean[roi_idx], dtype=np.float64)
+        slope_sem_b = np.asarray(metric_estimates.condition_b.sem[roi_idx], dtype=np.float64)
 
         ax.plot(time_axis, slope_mean_a, color=CONDITION_A_COLOR, label=condition_a_label)
         ax.fill_between(
@@ -197,12 +198,12 @@ def _draw_mean_slope_figure(result: object, roi_idx: int) -> plt.Figure:
 
         if SHOW_VS_ZERO_BOLD_SEGMENTS:
             sig_a_vz = _roi_bool_mask(
-                result.condition_a_source_metric_vs_zero_significant_mask,
+                result.regression_stats.vs_zero.condition_a.significant_mask,
                 roi_idx,
                 len(time_axis),
             )
             sig_b_vz = _roi_bool_mask(
-                result.condition_b_source_metric_vs_zero_significant_mask,
+                result.regression_stats.vs_zero.condition_b.significant_mask,
                 roi_idx,
                 len(time_axis),
             )
@@ -231,7 +232,11 @@ def _draw_mean_slope_figure(result: object, roi_idx: int) -> plt.Figure:
     ax.set_title(f"{_title_base(result, roi_idx)} - {metric_label} mean", fontsize=9)
 
     if SHOW_CONTRAST_SIGNIFICANCE_BAR:
-        sig_slope = _roi_bool_mask(result.source_metric_significant_mask, roi_idx, len(time_axis))
+        sig_slope = _roi_bool_mask(
+            result.regression_stats.contrast.significant_mask,
+            roi_idx,
+            len(time_axis),
+        )
         if sig_slope.any():
             ax.fill_between(
                 time_axis,
@@ -281,11 +286,16 @@ def _condition_labels(result: object) -> tuple[str, str]:
     return condition_a, condition_b
 
 
-def _source_metric_label(result: object) -> str:
-    metric = str(getattr(result, "source_metric", "slope")).strip().lower()
+def _regression_metric_label(result: object) -> str:
+    metric = str(getattr(result, "primary_regression_metric", "slope")).strip().lower()
     if metric == "r_value":
         return "r"
     return "slope"
+
+
+def _regression_metric_estimates(result: object) -> object:
+    metric = str(getattr(result, "primary_regression_metric", "slope")).strip().lower()
+    return getattr(result, "r_value") if metric == "r_value" else getattr(result, "slope")
 
 
 def _set_symmetric_ylim(ax: plt.Axes) -> None:
@@ -316,3 +326,4 @@ def _safe_filename_part(value: object) -> str:
 
 if __name__ == "__main__":
     main()
+

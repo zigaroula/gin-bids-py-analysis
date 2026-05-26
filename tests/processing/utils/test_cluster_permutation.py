@@ -176,3 +176,6 @@ def test_compute_cluster_permutation_pvalue_max_is_one_when_all_null_exceed() ->
     null = np.full(100, 10.0, dtype=np.float64)
     p = compute_cluster_permutation_pvalue(1.0, null)
     np.testing.assert_allclose(p, 1.0)
+
+
+

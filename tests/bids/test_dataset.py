@@ -46,3 +46,6 @@ def test_get_subject_by_id(bids_root: Path) -> None:
 def test_root_property(bids_root: Path) -> None:
     ds = BIDSDataset(bids_root, derivatives=False)
     assert ds.root == Path(bids_root)
+
+
+

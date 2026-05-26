@@ -335,3 +335,4 @@ if __name__ == "__main__":
     out_paths = processor.run(files, writer, n_jobs=N_JOBS, skip_existing=True)
     for p in out_paths:
         print(f"Wrote {p}")
+

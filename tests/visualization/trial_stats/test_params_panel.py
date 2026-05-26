@@ -350,3 +350,6 @@ class TestParamsPanelRoundTrip:
         assert panel._trial_activity_summary_response_event_code.isHidden() is False
 
 
+
+
+

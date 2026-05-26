@@ -112,16 +112,33 @@ class IndexedConditionContributions:
     labels: list[list[str]] = field(default_factory=list)
 
     def to_output_dict(self, *, region_names: list[str]) -> dict[str, object]:
-        entries: dict[str, object] = {
-            "region_names": np.array(region_names, dtype=object),
-        }
+        entries: dict[str, object] = {}
         for idx, roi_name in enumerate(region_names):
             if idx >= len(self.condition_a) or idx >= len(self.condition_b):
                 continue
-            entries[str(idx)] = {
-                "region": str(roi_name),
+            entries[roi_name] = {
                 "condition_a": np.asarray(self.condition_a[idx], dtype=np.float64),
                 "condition_b": np.asarray(self.condition_b[idx], dtype=np.float64),
+                "labels": np.array(
+                    self.labels[idx] if idx < len(self.labels) else [],
+                    dtype=object,
+                ),
+            }
+        return entries
+
+    def condition_to_output_dict(
+        self,
+        condition: str,
+        *,
+        region_names: list[str],
+    ) -> dict[str, object]:
+        values = self.condition_a if condition == "condition_a" else self.condition_b
+        entries: dict[str, object] = {}
+        for idx, roi_name in enumerate(region_names):
+            if idx >= len(values):
+                continue
+            entries[roi_name] = {
+                condition: np.asarray(values[idx], dtype=np.float64),
                 "labels": np.array(
                     self.labels[idx] if idx < len(self.labels) else [],
                     dtype=object,
@@ -182,21 +199,19 @@ class BaseTrialStatsGroupProcessingResult(BaseProcessingResult):
     contributions: list[ROIChannelContribution] = field(default_factory=list)
     """Flat list of every (roi, subject, channel) triple that contributed to the group stats."""
 
-    # --- Output-shaped activity data and stats ---
-    activity: GroupEstimatePair = field(default_factory=GroupEstimatePair)
-    """Per-condition broadband activity means and SEMs."""
-    activity_stats: GroupTimecourseStats = field(default_factory=GroupTimecourseStats)
-    """Group-level activity contrast statistics."""
-    activity_epoch: GroupEpochStats = field(default_factory=GroupEpochStats)
-    """Epoch-level activity contrast summary."""
-    activity_contributions: IndexedConditionContributions = field(
+    # --- Output-shaped signal-activity data and stats ---
+    signal_activity: GroupEstimatePair = field(default_factory=GroupEstimatePair)
+    """Per-condition signal-activity means and SEMs."""
+    signal_activity_stats: GroupTimecourseStats = field(default_factory=GroupTimecourseStats)
+    """Group-level signal-activity contrast statistics."""
+    signal_activity_epoch: GroupEpochStats = field(default_factory=GroupEpochStats)
+    """Epoch-level signal-activity contrast summary."""
+    signal_activity_contributions: IndexedConditionContributions = field(
         default_factory=IndexedConditionContributions
     )
-    """Per-ROI activity contribution matrices."""
+    """Per-ROI signal-activity contribution matrices."""
 
     # --- Configuration and provenance ---
-    source_metric: str = ""
-    """Name of the scalar metric extracted from subject-level stats files (e.g. 'mean_difference', 'slope')."""
     p_value_correction_method: str = "none"
     """Multiple-comparison correction applied to p-values ('none', 'fdr_bh', 'bonferroni', 'cluster_permutation')."""
     significance_alpha: float = 0.05
@@ -225,11 +240,11 @@ class BaseTrialStatsGroupProcessingResult(BaseProcessingResult):
                 "time_s": np.asarray(self.time_axis_s, dtype=np.float64),
             },
             "data": {
-                "activity": self.activity.to_output_dict(),
+                "signal_activity": self.signal_activity.to_output_dict(),
             },
             "stats": {
-                "activity": self.activity_stats.to_output_dict(
-                    epoch_summary=self.activity_epoch
+                "signal_activity": self.signal_activity_stats.to_output_dict(
+                    epoch_summary=self.signal_activity_epoch
                 ),
             },
             "meta": self._build_meta_tree(),
@@ -256,7 +271,7 @@ class BaseTrialStatsGroupProcessingResult(BaseProcessingResult):
                         dtype=object,
                     ),
                 },
-                "activity": self.activity_contributions.to_output_dict(
+                "signal_activity": self.signal_activity_contributions.to_output_dict(
                     region_names=self.region_names,
                 ),
             },
@@ -278,10 +293,9 @@ class BaseTrialStatsGroupProcessingResult(BaseProcessingResult):
     def _build_meta_tree(self) -> dict[str, object]:
         out: dict[str, object] = {
             "schema_name": "trial_stats_group",
-            "schema_version": "2.0",
+            "schema_version": "3.0",
             "analysis_level": "roi_group",
             "condition_labels": np.array(list(self.condition_labels), dtype=object),
-            "source_metric": str(self.source_metric),
             "p_value_correction_method": str(self.p_value_correction_method),
             "significance_alpha": float(self.significance_alpha),
             "roi_mode": str(self.roi_mode),
@@ -305,60 +319,3 @@ class BaseTrialStatsGroupProcessingResult(BaseProcessingResult):
                 out[key] = str(value) if isinstance(value, str) else value
         return out
 
-    # Temporary read-only compatibility aliases for existing visualization
-    # callers. Writers, loaders, and processors use the structured fields above.
-    @property
-    def condition_a_activity_mean(self) -> np.ndarray:
-        return self.activity.condition_a.mean
-
-    @property
-    def condition_a_activity_sem(self) -> np.ndarray:
-        return self.activity.condition_a.sem
-
-    @property
-    def condition_b_activity_mean(self) -> np.ndarray:
-        return self.activity.condition_b.mean
-
-    @property
-    def condition_b_activity_sem(self) -> np.ndarray:
-        return self.activity.condition_b.sem
-
-    @property
-    def condition_a_activity_contributions(self) -> list[np.ndarray]:
-        return self.activity_contributions.condition_a
-
-    @property
-    def condition_b_activity_contributions(self) -> list[np.ndarray]:
-        return self.activity_contributions.condition_b
-
-    @property
-    def contribution_labels(self) -> list[list[str]]:
-        return self.activity_contributions.labels
-
-    @property
-    def activity_t_values(self) -> np.ndarray:
-        return self.activity_stats.t_values
-
-    @property
-    def activity_p_values(self) -> np.ndarray:
-        return self.activity_stats.p_values
-
-    @property
-    def activity_p_values_uncorrected(self) -> np.ndarray:
-        return self.activity_stats.p_values_uncorrected
-
-    @property
-    def activity_significant_mask(self) -> np.ndarray:
-        return self.activity_stats.significant_mask
-
-    @property
-    def epoch_activity_t(self) -> np.ndarray:
-        return self.activity_epoch.t
-
-    @property
-    def epoch_activity_p(self) -> np.ndarray:
-        return self.activity_epoch.p
-
-    @property
-    def epoch_activity_df(self) -> np.ndarray:
-        return self.activity_epoch.df

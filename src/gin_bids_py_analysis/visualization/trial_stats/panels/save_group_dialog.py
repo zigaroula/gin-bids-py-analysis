@@ -120,3 +120,5 @@ class SaveTrialStatsGroupDialog(QDialog):
     def get_writer_params(self) -> ConditionTestGroupWriterParams:
         """Build a :class:`ConditionTestGroupWriterParams` from the current dialog values."""
         return ConditionTestGroupWriterParams(**self.get_common_writer_kwargs())
+
+

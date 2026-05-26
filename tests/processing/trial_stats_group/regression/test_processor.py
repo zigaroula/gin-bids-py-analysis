@@ -266,11 +266,11 @@ def test_process_group_manual_mode_shapes_and_values() -> None:
         assert result.region_names == ["ROI_POS", "ROI_MIX"]
         n_rois = 2
         n_t = 3
-        assert result.source_metric_t_values.shape == (n_rois, n_t)
-        assert result.source_metric_p_values.shape == (n_rois, n_t)
-        assert result.activity_t_values.shape == (n_rois, n_t)
-        assert result.condition_a_activity_mean.shape == (n_rois, n_t)
-        assert result.condition_a_r_value_mean.shape == (n_rois, n_t)
+        assert result.regression_stats.contrast.t_values.shape == (n_rois, n_t)
+        assert result.regression_stats.contrast.p_values.shape == (n_rois, n_t)
+        assert result.signal_activity_stats.t_values.shape == (n_rois, n_t)
+        assert result.signal_activity.condition_a.mean.shape == (n_rois, n_t)
+        assert result.r_value.condition_a.mean.shape == (n_rois, n_t)
         assert result.roi_channel_counts.shape == (n_rois,)
         assert result.roi_subject_counts.shape == (n_rois,)
         # ROI_POS has 3 contributions (A1 from 01, A2 from 01, A1 from 02)
@@ -394,9 +394,9 @@ def test_process_group_contribution_samples_shape() -> None:
         )
         result = processor.process_group(BIDSFileGroup(primary=file_01))
 
-        assert len(result.condition_a_source_metric_contributions) == 1
-        assert result.condition_a_source_metric_contributions[0].shape == (2, 3)
-        assert len(result.contribution_labels) == 1
+        assert len(result.slope_contributions.condition_a) == 1
+        assert result.slope_contributions.condition_a[0].shape == (2, 3)
+        assert len(result.slope_contributions.labels) == 1
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -473,8 +473,8 @@ def test_regression_group_params_raises_for_cluster_permutation_unpaired() -> No
         )
 
 
-def test_process_group_uses_source_metric_contract_for_r_value() -> None:
-    case_dir = _make_case_dir("source_metric_r_value")
+def test_process_group_uses_primary_regression_metric_contract_for_r_value() -> None:
+    case_dir = _make_case_dir("primary_regression_metric_r_value")
     try:
         time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
         slope = np.array([[1.0, 1.0, 1.0]], dtype=np.float64)
@@ -506,21 +506,27 @@ def test_process_group_uses_source_metric_contract_for_r_value() -> None:
             RegressionGroupParams(
                 roi_mode="manual",
                 manual_region_channels={"ROI_A": {"01": ["A1"], "02": ["A1"]}},
-                source_metric="r_value",
+                primary_regression_metric="r_value",
             )
         )
         result = processor.process_group(BIDSFileGroup(primary=file_01, secondaries=[file_02]))
 
-        assert result.source_metric == "r_value"
-        assert result.source_metric_t_values.shape == (1, 3)
-        assert result.condition_a_source_metric_mean.shape == (1, 3)
+        assert result.primary_regression_metric == "r_value"
+        assert result.regression_stats.contrast.t_values.shape == (1, 3)
+        assert result.slope.condition_a.mean.shape == (1, 3)
         np.testing.assert_allclose(
-            result.condition_a_source_metric_mean[0],
+            result.r_value.condition_a.mean[0],
             np.array([0.85, 0.75, 0.65], dtype=np.float64),
         )
         np.testing.assert_allclose(
-            result.condition_b_source_metric_mean[0],
+            result.r_value.condition_b.mean[0],
             np.array([0.15, 0.05, -0.05], dtype=np.float64),
         )
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
+
+
+
+
+
+

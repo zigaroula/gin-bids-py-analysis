@@ -243,3 +243,6 @@ def test_event_sample_shift_offsets_returned_anchor_samples_only() -> None:
 
     assert [e.onset_s for e in events] == pytest.approx([1.0, 2.0, 3.0])
     assert samples.tolist() == [9, 19, 29]
+
+
+

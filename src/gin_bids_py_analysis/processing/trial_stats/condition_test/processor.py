@@ -14,7 +14,7 @@ from gin_bids_py_analysis.processing.utils.trial_annotator import TrialWindowAnn
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from ..processor import BaseTrialStatsProcessing, TrialStatsProcessingContext
-from ..result import ActivityEstimate, ConditionActivity
+from ..result import ConditionSignalActivity, SignalActivityEstimate
 from .params import ConditionTestParams
 from .result import ConditionContrast, ConditionTestProcessingResult, DifferenceEstimate
 from .stats import (
@@ -166,9 +166,9 @@ class ConditionTestProcessing(BaseTrialStatsProcessing):
 
         return ConditionTestProcessingResult(
             **self._build_common_result_kwargs(context),
-            activity=ConditionActivity(
-                condition_a=ActivityEstimate(mean=mean_a, sem=condition_a_sem),
-                condition_b=ActivityEstimate(mean=mean_b, sem=condition_b_sem),
+            signal_activity=ConditionSignalActivity(
+                condition_a=SignalActivityEstimate(mean=mean_a, sem=condition_a_sem),
+                condition_b=SignalActivityEstimate(mean=mean_b, sem=condition_b_sem),
             ),
             stats_valid=stats_valid,
             difference=DifferenceEstimate(

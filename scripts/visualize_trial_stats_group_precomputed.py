@@ -24,7 +24,7 @@ BIDS_ROOT = Path(r"E:\CBT\bids")
 # Optional: pre-populate the GroupParamsPanel with the parameters that were
 # used to produce the group file.  Set to None to leave the panel at defaults.
 GROUP_PARAMS = ConditionTestGroupParams(
-    source_metric="t_values",
+    primary_condition_metric="t_values",
     p_value_correction_method="cluster_permutation",
     cluster_permutation_method="mne",
     significance_alpha=0.05,
@@ -84,3 +84,4 @@ if __name__ == "__main__":
         group_stats_file,
         group_params=GROUP_PARAMS,
     )
+

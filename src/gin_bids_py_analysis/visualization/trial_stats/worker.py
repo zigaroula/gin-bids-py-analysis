@@ -236,7 +236,7 @@ class GroupComputeWorker(QThread):
                 processor = ConditionTestGroupProcessing(self._group_params)
                 with group_file_group_context(
                     self._all_results,
-                    source_metric=self._group_params.source_metric,
+                    primary_condition_metric=self._group_params.primary_condition_metric,
                 ) as group:
                     result = processor.process_group(group)
             self.result_ready.emit(result)
@@ -479,10 +479,16 @@ def _load_group_result_auto(
             import h5py
 
             with h5py.File(path, "r") as fh:
-                if "source_metric" in fh and "t_values" in fh["source_metric"]:
+                analysis_type = ""
+                if "meta" in fh and "analysis_type" in fh["meta"]:
+                    try:
+                        analysis_type = str(fh["meta"]["analysis_type"].asstr()[()]).strip()
+                    except Exception:
+                        analysis_type = ""
+                if analysis_type == "regression_group" or "regression" in fh.get("stats", {}):
                     return load_regression_group_result(path)
 
-                if "stats" in fh and "t_values" in fh["stats"]:
+                if analysis_type == "condition_test_group" or "signal_activity" in fh.get("stats", {}):
                     return load_condition_test_group_result(path)
         except Exception:
             pass
@@ -499,3 +505,5 @@ def _is_slope_group_params(group_params: object) -> bool:
     )
 
     return isinstance(group_params, RegressionGroupParams)
+
+

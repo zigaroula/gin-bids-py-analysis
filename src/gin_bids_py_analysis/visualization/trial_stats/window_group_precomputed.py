@@ -149,3 +149,5 @@ class TrialStatsGroupPrecomputedWindow(QMainWindow):
             "Re-computation requires per-subject results. "
             "Use 'visualize_trial_stats_precomputed.py' instead."
         )
+
+

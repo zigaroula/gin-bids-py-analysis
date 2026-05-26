@@ -90,7 +90,7 @@ class GroupParamsPanel(QWidget):
         form.setContentsMargins(8, 8, 8, 8)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
 
-        # source_metric
+        # Primary group metric
         self._source_metric = QComboBox()
         for m in (
             "mean_difference",
@@ -101,7 +101,7 @@ class GroupParamsPanel(QWidget):
             "r_value",
         ):
             self._source_metric.addItem(m)
-        self._source_metric_label = QLabel("Source metric")
+        self._source_metric_label = QLabel("Primary metric")
         form.addRow(self._source_metric_label, self._source_metric)
 
         self._contrast_mode = QComboBox()
@@ -226,7 +226,7 @@ class GroupParamsPanel(QWidget):
                 )
                 params = _merge_model_params(
                     base_params,
-                    source_metric=self._source_metric.currentText(),
+                    primary_regression_metric=self._source_metric.currentText(),
                     contrast_mode=self._contrast_mode.currentText(),
                     p_value_correction_method=self._correction.currentText(),
                     significance_alpha=self._alpha.value(),
@@ -245,7 +245,7 @@ class GroupParamsPanel(QWidget):
             )
             params = _merge_model_params(
                 base_params,
-                source_metric=self._source_metric.currentText(),
+                primary_condition_metric=self._source_metric.currentText(),
                 p_value_correction_method=self._correction.currentText(),
                 cluster_permutation_method=self._cluster_method.currentText(),
                 significance_alpha=self._alpha.value(),
@@ -268,8 +268,11 @@ class GroupParamsPanel(QWidget):
             self._slope_params = params
         else:
             self._ttest_params = params
-        source_metric = getattr(params, "source_metric", "t_values")
-        _set_combo(self._source_metric, source_metric)
+        if isinstance(params, RegressionGroupParams):
+            primary_metric = getattr(params, "primary_regression_metric", "slope")
+        else:
+            primary_metric = getattr(params, "primary_condition_metric", "mean_difference")
+        _set_combo(self._source_metric, primary_metric)
         _set_combo(self._contrast_mode, getattr(params, "contrast_mode", "paired"))
         _set_combo(self._correction, params.p_value_correction_method)
         _set_combo(self._cluster_method, getattr(params, "cluster_permutation_method", "custom"))
@@ -357,6 +360,9 @@ class GroupParamsPanel(QWidget):
         is_ttest = self._analysis_mode == "ttest"
         self._source_metric_label.setVisible(True)
         self._source_metric.setVisible(True)
+        self._source_metric_label.setText(
+            "Primary condition metric" if is_ttest else "Regression metric"
+        )
         self._contrast_mode_label.setVisible(not is_ttest)
         self._contrast_mode.setVisible(not is_ttest)
         self._cluster_method_label.setVisible(is_ttest)
@@ -392,3 +398,5 @@ def _set_combo(combo: QComboBox, value: str) -> None:
     idx = combo.findText(value)
     if idx >= 0:
         combo.setCurrentIndex(idx)
+
+

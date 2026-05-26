@@ -1405,3 +1405,4 @@ def print_subject_trial_exclusion_summary(
     result: BaseTrialStatsProcessingResult,
 ) -> None:
     print(format_subject_trial_exclusion_summary(subject_id, result))
+

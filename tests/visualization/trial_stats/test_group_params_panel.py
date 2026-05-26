@@ -13,7 +13,7 @@ from gin_bids_py_analysis.visualization.trial_stats.panels.group_params_panel im
 @pytest.fixture()
 def default_group_params() -> ConditionTestGroupParams:
     return ConditionTestGroupParams(
-        source_metric="t_values",
+        primary_condition_metric="t_values",
         p_value_correction_method="fdr_bh",
         cluster_permutation_method="custom",
         significance_alpha=0.05,
@@ -33,7 +33,7 @@ class TestGroupParamsPanelRoundTrip:
 
         recovered = panel.get_params()
 
-        assert recovered.source_metric == default_group_params.source_metric
+        assert recovered.primary_condition_metric == default_group_params.primary_condition_metric
         assert recovered.p_value_correction_method == default_group_params.p_value_correction_method
         assert recovered.cluster_permutation_method == default_group_params.cluster_permutation_method
         assert recovered.significance_alpha == pytest.approx(default_group_params.significance_alpha)
@@ -47,7 +47,7 @@ class TestGroupParamsPanelRoundTrip:
         qtbot.addWidget(panel)
 
         new_params = ConditionTestGroupParams(
-            source_metric="mean_difference",
+            primary_condition_metric="mean_difference",
             p_value_correction_method="bonferroni",
             cluster_permutation_method="mne",
             significance_alpha=0.01,
@@ -59,7 +59,7 @@ class TestGroupParamsPanelRoundTrip:
         panel.set_params(new_params)
         recovered = panel.get_params()
 
-        assert recovered.source_metric == "mean_difference"
+        assert recovered.primary_condition_metric == "mean_difference"
         assert recovered.p_value_correction_method == "bonferroni"
         assert recovered.cluster_permutation_method == "mne"
         assert recovered.significance_alpha == pytest.approx(0.01)
@@ -121,3 +121,6 @@ class TestGroupParamsPanelRoundTrip:
 
         with qtbot.waitSignal(panel.compute_requested, timeout=1000):
             panel._compute_btn.click()
+
+
+

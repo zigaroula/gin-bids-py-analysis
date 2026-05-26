@@ -99,3 +99,6 @@ def test_matches_condition_expr_returns_false_on_no_match() -> None:
 def test_matches_condition_expr_returns_false_on_missing_column() -> None:
     expr = ConditionExpr(column="event_type", op="==", value="Spk")
     assert matches_condition_expr(expr, {}) is False
+
+
+

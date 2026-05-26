@@ -11,6 +11,14 @@ from gin_bids_py_analysis.processing.trial_stats_group import (
 )
 from gin_bids_py_analysis.processing.trial_stats_group import (
     ConditionTestGroupProcessingResult,
+    ConditionTestEpochSummary,
+    GroupEpochStats,
+    GroupEstimate,
+    GroupEstimatePair,
+    GroupTimecourseStats,
+    IndexedConditionContributions,
+    RegressionMetricStats,
+    VsZeroStatsPair,
 )
 from gin_bids_py_analysis.visualization.trial_stats.panels.group_plot_panel import (
     GroupPlotPanel,
@@ -41,31 +49,40 @@ def synthetic_group_result(synthetic_result) -> ConditionTestGroupProcessingResu
         source_group=BIDSFileGroup(primary=synthetic_result.source_group.primary),
         metadata={},
         output_entities=None,
-        activity_t_values=t_vals,
-        activity_p_values=p_corr,
-        activity_p_values_uncorrected=p_values,
-        activity_significant_mask=sig_mask,
-        metric_mean=metric_mean,
-        metric_sem=metric_sem,
+        signal_activity_stats=GroupTimecourseStats(
+            t_values=t_vals,
+            p_values=p_corr,
+            p_values_uncorrected=p_values,
+            significant_mask=sig_mask,
+        ),
+        condition_difference=GroupEstimate(mean=metric_mean, sem=metric_sem),
         time_axis_s=time_axis,
         region_names=["regionA", "regionB", "regionC"],
-        source_metric="t_values",
+        primary_condition_metric="t_values",
         condition_labels=("accepted", "rejected"),
         p_value_correction_method="fdr_bh",
         significance_alpha=0.05,
         roi_mode="manual",
-        epoch_activity_t=epoch_t,
-        epoch_activity_p=epoch_p,
-        epoch_activity_df=epoch_df,
-        epoch_mean_metric_mean=epoch_mean,
-        epoch_mean_metric_sem=epoch_sem,
+        signal_activity_epoch=GroupEpochStats(t=epoch_t, p=epoch_p, df=epoch_df),
+        summary_epoch=ConditionTestEpochSummary(
+            t_values=epoch_t,
+            p_values=epoch_p,
+            df=epoch_df,
+            condition_difference=GroupEstimate(mean=epoch_mean, sem=epoch_sem),
+        ),
         roi_channel_counts=np.array([2, 3, 1]),
         roi_subject_counts=np.array([2, 2, 1]),
         contributions=[],
-        condition_a_activity_mean=np.full((n_roi, n_t), 1.0, dtype=np.float64),
-        condition_a_activity_sem=np.full((n_roi, n_t), 0.2, dtype=np.float64),
-        condition_b_activity_mean=np.full((n_roi, n_t), 0.7, dtype=np.float64),
-        condition_b_activity_sem=np.full((n_roi, n_t), 0.15, dtype=np.float64),
+        signal_activity=GroupEstimatePair(
+            condition_a=GroupEstimate(
+                mean=np.full((n_roi, n_t), 1.0, dtype=np.float64),
+                sem=np.full((n_roi, n_t), 0.2, dtype=np.float64),
+            ),
+            condition_b=GroupEstimate(
+                mean=np.full((n_roi, n_t), 0.7, dtype=np.float64),
+                sem=np.full((n_roi, n_t), 0.15, dtype=np.float64),
+            ),
+        ),
         source_subject_stats_files=[],
         source_electrodes_files=[],
         excluded_rois={},
@@ -161,60 +178,104 @@ def synthetic_slope_group_result(synthetic_result) -> RegressionGroupProcessingR
         source_group=BIDSFileGroup(primary=synthetic_result.source_group.primary),
         metadata={},
         output_entities=None,
-        source_metric_t_values=np.full(shape, 2.0, dtype=np.float64),
-        source_metric_p_values=np.full(shape, 0.02, dtype=np.float64),
-        source_metric_p_values_uncorrected=np.full(shape, 0.03, dtype=np.float64),
-        source_metric_significant_mask=np.ones(shape, dtype=bool),
-        activity_t_values=np.full(shape, -1.5, dtype=np.float64),
-        activity_p_values=np.full(shape, 0.04, dtype=np.float64),
-        activity_p_values_uncorrected=np.full(shape, 0.05, dtype=np.float64),
-        activity_significant_mask=np.zeros(shape, dtype=bool),
-        condition_a_source_metric_mean=np.full(shape, 0.8, dtype=np.float64),
-        condition_a_source_metric_sem=np.full(shape, 0.1, dtype=np.float64),
-        condition_b_source_metric_mean=np.full(shape, -0.6, dtype=np.float64),
-        condition_b_source_metric_sem=np.full(shape, 0.1, dtype=np.float64),
-        condition_a_activity_mean=np.full(shape, 1.0, dtype=np.float64),
-        condition_a_activity_sem=np.full(shape, 0.2, dtype=np.float64),
-        condition_b_activity_mean=np.full(shape, 0.8, dtype=np.float64),
-        condition_b_activity_sem=np.full(shape, 0.2, dtype=np.float64),
-        condition_a_r_value_mean=np.full(shape, 0.2, dtype=np.float64),
-        condition_a_r_value_sem=np.full(shape, 0.05, dtype=np.float64),
-        condition_b_r_value_mean=np.full(shape, -0.1, dtype=np.float64),
-        condition_b_r_value_sem=np.full(shape, 0.05, dtype=np.float64),
-        epoch_source_metric_t=np.full(n_roi, 2.0, dtype=np.float64),
-        epoch_source_metric_p=np.full(n_roi, 0.02, dtype=np.float64),
-        epoch_source_metric_df=np.full(n_roi, 10.0, dtype=np.float64),
-        epoch_activity_t=np.full(n_roi, -1.5, dtype=np.float64),
-        epoch_activity_p=np.full(n_roi, 0.04, dtype=np.float64),
-        epoch_activity_df=np.full(n_roi, 10.0, dtype=np.float64),
+        regression_stats=RegressionMetricStats(
+            contrast=GroupTimecourseStats(
+                t_values=np.full(shape, 2.0, dtype=np.float64),
+                p_values=np.full(shape, 0.02, dtype=np.float64),
+                p_values_uncorrected=np.full(shape, 0.03, dtype=np.float64),
+                significant_mask=np.ones(shape, dtype=bool),
+            ),
+            epoch_summary=GroupEpochStats(
+                t=np.full(n_roi, 2.0, dtype=np.float64),
+                p=np.full(n_roi, 0.02, dtype=np.float64),
+                df=np.full(n_roi, 10.0, dtype=np.float64),
+            ),
+            vs_zero=VsZeroStatsPair(
+                condition_a=GroupTimecourseStats(
+                    significant_mask=np.ones(shape, dtype=bool),
+                ),
+                condition_b=GroupTimecourseStats(
+                    significant_mask=np.ones(shape, dtype=bool),
+                ),
+            ),
+        ),
+        signal_activity_stats=GroupTimecourseStats(
+            t_values=np.full(shape, -1.5, dtype=np.float64),
+            p_values=np.full(shape, 0.04, dtype=np.float64),
+            p_values_uncorrected=np.full(shape, 0.05, dtype=np.float64),
+            significant_mask=np.zeros(shape, dtype=bool),
+        ),
+        signal_activity_epoch=GroupEpochStats(
+            t=np.full(n_roi, -1.5, dtype=np.float64),
+            p=np.full(n_roi, 0.04, dtype=np.float64),
+            df=np.full(n_roi, 10.0, dtype=np.float64),
+        ),
+        slope=GroupEstimatePair(
+            condition_a=GroupEstimate(
+                mean=np.full(shape, 0.8, dtype=np.float64),
+                sem=np.full(shape, 0.1, dtype=np.float64),
+            ),
+            condition_b=GroupEstimate(
+                mean=np.full(shape, -0.6, dtype=np.float64),
+                sem=np.full(shape, 0.1, dtype=np.float64),
+            ),
+        ),
+        signal_activity=GroupEstimatePair(
+            condition_a=GroupEstimate(
+                mean=np.full(shape, 1.0, dtype=np.float64),
+                sem=np.full(shape, 0.2, dtype=np.float64),
+            ),
+            condition_b=GroupEstimate(
+                mean=np.full(shape, 0.8, dtype=np.float64),
+                sem=np.full(shape, 0.2, dtype=np.float64),
+            ),
+        ),
+        r_value=GroupEstimatePair(
+            condition_a=GroupEstimate(
+                mean=np.full(shape, 0.2, dtype=np.float64),
+                sem=np.full(shape, 0.05, dtype=np.float64),
+            ),
+            condition_b=GroupEstimate(
+                mean=np.full(shape, -0.1, dtype=np.float64),
+                sem=np.full(shape, 0.05, dtype=np.float64),
+            ),
+        ),
         time_axis_s=time_axis,
         region_names=["slope_roi_a", "slope_roi_b"],
         condition_labels=cond_labels,
-        source_metric="slope",
+        primary_regression_metric="slope",
         contrast_mode="paired",
         roi_channel_counts=np.array([4, 3], dtype=np.int64),
         roi_subject_counts=np.array([2, 2], dtype=np.int64),
         contributions=[],
-        condition_a_source_metric_contributions=[
-            np.ones((3, n_t), dtype=np.float64),
-            np.ones((2, n_t), dtype=np.float64),
-        ],
-        condition_b_source_metric_contributions=[
-            -np.ones((3, n_t), dtype=np.float64),
-            -np.ones((2, n_t), dtype=np.float64),
-        ],
-        condition_a_activity_contributions=[
-            np.full((3, n_t), 1.0, dtype=np.float64),
-            np.full((2, n_t), 0.9, dtype=np.float64),
-        ],
-        condition_b_activity_contributions=[
-            np.full((3, n_t), 0.8, dtype=np.float64),
-            np.full((2, n_t), 0.7, dtype=np.float64),
-        ],
-        contribution_labels=[
-            ["01/A1", "01/A2", "02/A1"],
-            ["01/B1", "02/B1"],
-        ],
+        slope_contributions=IndexedConditionContributions(
+            condition_a=[
+                np.ones((3, n_t), dtype=np.float64),
+                np.ones((2, n_t), dtype=np.float64),
+            ],
+            condition_b=[
+                -np.ones((3, n_t), dtype=np.float64),
+                -np.ones((2, n_t), dtype=np.float64),
+            ],
+            labels=[
+                ["01/A1", "01/A2", "02/A1"],
+                ["01/B1", "02/B1"],
+            ],
+        ),
+        signal_activity_contributions=IndexedConditionContributions(
+            condition_a=[
+                np.full((3, n_t), 1.0, dtype=np.float64),
+                np.full((2, n_t), 0.9, dtype=np.float64),
+            ],
+            condition_b=[
+                np.full((3, n_t), 0.8, dtype=np.float64),
+                np.full((2, n_t), 0.7, dtype=np.float64),
+            ],
+            labels=[
+                ["01/A1", "01/A2", "02/A1"],
+                ["01/B1", "02/B1"],
+            ],
+        ),
         p_value_correction_method="none",
         significance_alpha=0.05,
         roi_mode="manual",
@@ -357,8 +418,8 @@ class TestGroupPlotPanelSlopeUpdate:
         qtbot,
         synthetic_slope_group_result,
     ):
-        synthetic_slope_group_result.condition_a_source_metric_contributions[0][1, :] = np.nan
-        synthetic_slope_group_result.condition_b_source_metric_contributions[0][0, :] = np.nan
+        synthetic_slope_group_result.slope_contributions.condition_a[0][1, :] = np.nan
+        synthetic_slope_group_result.slope_contributions.condition_b[0][0, :] = np.nan
         panel = GroupPlotPanel()
         qtbot.addWidget(panel)
 
@@ -372,3 +433,6 @@ class TestGroupPlotPanelSlopeUpdate:
             "unpleasant: sub-01 / A2",
             "unpleasant: sub-02 / A1",
         ]
+
+
+

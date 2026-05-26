@@ -638,3 +638,6 @@ class TestProcessChannelSpm2env:
         # but not identical, since the FIR designs are different.
         assert not np.allclose(out_loc[0], out_spm[0], rtol=1e-5)
         np.testing.assert_allclose(out_loc[0], out_spm[0], rtol=0.05)
+
+
+

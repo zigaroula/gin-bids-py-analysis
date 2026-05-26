@@ -731,3 +731,5 @@ def _group_result_log_message(
     if not missing_manual_channels:
         return ""
     return format_manual_roi_missing_channels_message(missing_manual_channels)
+
+

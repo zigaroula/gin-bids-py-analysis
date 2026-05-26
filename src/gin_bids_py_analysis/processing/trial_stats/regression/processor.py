@@ -15,7 +15,7 @@ from gin_bids_py_analysis.processing.utils.trial_annotator import TrialWindowAnn
 from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
 
 from ..processor import BaseTrialStatsProcessing, TrialStatsProcessingContext
-from ..result import ActivityEstimate, ConditionActivity
+from ..result import ConditionSignalActivity, SignalActivityEstimate
 from .params import RegressionParams
 from .result import (
     ConditionPredictorValues,
@@ -390,9 +390,9 @@ class RegressionProcessing(BaseTrialStatsProcessing):
                     values=predictor_b_effective_array,
                 ),
             ),
-            activity=ConditionActivity(
-                condition_a=ActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
-                condition_b=ActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
+            signal_activity=ConditionSignalActivity(
+                condition_a=SignalActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),
+                condition_b=SignalActivityEstimate(mean=condition_b_mean, sem=condition_b_sem),
             ),
             analysis_type="slope_regression",
             excluded_channels=dict(context.state["excluded_channels"]),

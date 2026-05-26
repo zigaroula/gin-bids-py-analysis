@@ -31,7 +31,7 @@ TRIAL_STATS_FILTERS = {
 }
 
 PARAMS = ConditionTestGroupParams(
-    source_metric="t_values",
+    primary_condition_metric="t_values",
     p_value_correction_method="none",
     cluster_permutation_method="mne",
     significance_alpha=0.05,
@@ -82,7 +82,7 @@ def _load_trial_stats_files(dataset: BIDSDataset) -> list[BIDSFile]:
 def _build_groups(files: list[BIDSFile], params: ConditionTestGroupParams) -> list[BIDSFileGroup]:
     return build_condition_test_compatible_groups(
         files,
-        source_metric=params.source_metric,
+        primary_condition_metric=params.primary_condition_metric,
     )
 
 
@@ -108,3 +108,4 @@ def main() -> list[Path]:
 
 if __name__ == "__main__":
     main()
+
