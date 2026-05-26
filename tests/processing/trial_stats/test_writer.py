@@ -143,8 +143,8 @@ def test_base_writer_writes_shared_matlab_with_safe_condition_names(tmp_path: Pa
     )["data"]
 
     assert output_path.suffix == ".mat"
-    assert hasattr(data.data.signal_activity, "condition_a")
-    assert hasattr(data.data.signal_activity, "condition_b")
+    assert hasattr(data.data.signal_activity, "go_no_go")
+    assert hasattr(data.data.signal_activity, "wait_stop")
     assert str(data.provenance.pipeline_name) == "dummy_subject"
 
 

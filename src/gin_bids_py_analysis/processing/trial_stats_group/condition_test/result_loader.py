@@ -77,12 +77,18 @@ def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
         else:
             significant_mask = np.isfinite(p_values) & (p_values < significance_alpha)
 
+        _early_labels = decode_str_array(
+            np.asarray(fh["meta"]["condition_labels"][:], dtype=object)
+        )
+        label_a = _early_labels[0] if len(_early_labels) >= 1 else "condition_a"
+        label_b = _early_labels[1] if len(_early_labels) >= 2 else "condition_b"
+
         metric_mean = _read_2d("data/condition_difference/mean")
         metric_sem = _read_2d("data/condition_difference/sem")
-        condition_a_activity_mean = _read_2d("data/signal_activity/condition_a/mean")
-        condition_a_activity_sem = _read_2d("data/signal_activity/condition_a/sem")
-        condition_b_activity_mean = _read_2d("data/signal_activity/condition_b/mean")
-        condition_b_activity_sem = _read_2d("data/signal_activity/condition_b/sem")
+        condition_a_activity_mean = _read_2d(f"data/signal_activity/{label_a}/mean")
+        condition_a_activity_sem = _read_2d(f"data/signal_activity/{label_a}/sem")
+        condition_b_activity_mean = _read_2d(f"data/signal_activity/{label_b}/mean")
+        condition_b_activity_sem = _read_2d(f"data/signal_activity/{label_b}/sem")
 
         epoch_mean_t_values = _read_1d("data/summary_epoch/t_values")
         epoch_mean_p_values = _read_1d("data/summary_epoch/p_values", fill=1.0)
@@ -288,10 +294,14 @@ def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
     else:
         significant_mask = np.isfinite(p_values) & (p_values < significance_alpha)
 
+    _early_labels = mat_str_list(getattr(meta, "condition_labels", None))
+    label_a = _early_labels[0] if len(_early_labels) >= 1 else "condition_a"
+    label_b = _early_labels[1] if len(_early_labels) >= 2 else "condition_b"
+
     metric_mean = _mat_2d(condition_difference_data, "mean")
     metric_sem = _mat_2d(condition_difference_data, "sem")
-    condition_a_activity = getattr(signal_activity, "condition_a", None)
-    condition_b_activity = getattr(signal_activity, "condition_b", None)
+    condition_a_activity = getattr(signal_activity, label_a, None)
+    condition_b_activity = getattr(signal_activity, label_b, None)
     condition_a_activity_mean = _mat_2d(condition_a_activity, "mean")
     condition_a_activity_sem = _mat_2d(condition_a_activity, "sem")
     condition_b_activity_mean = _mat_2d(condition_b_activity, "mean")

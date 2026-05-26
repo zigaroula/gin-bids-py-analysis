@@ -1,38 +1,22 @@
 from __future__ import annotations
 
-import re
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
 from gin_bids_py_analysis.bids.helpers import normalize_subject_value
 from gin_bids_py_analysis.processing.base import BaseProcessingParams, BaseWriterParams
-
-_VALID_ROI_CHARS_RE = re.compile(r"[^a-zA-Z0-9_]")
+from gin_bids_py_analysis.processing.utils.field_names import sanitize_field_name, validate_field_name
 
 
 def sanitize_roi_name(name: str) -> str:
-    """Replace characters forbidden in MATLAB struct field names and HDF5 group keys with underscores."""
-    return _VALID_ROI_CHARS_RE.sub("_", name)
+    """Sanitize a ROI name for use as an HDF5 group key or MATLAB struct field name."""
+    return sanitize_field_name(name)
 
 
 def validate_roi_name(original: str, sanitized: str) -> None:
-    """Raise ValueError if *sanitized* is not a valid MATLAB identifier.
-
-    Rules enforced:
-    - Must not start with a digit.
-    - Must not exceed 63 characters (MATLAB namelengthmax).
-    """
-    if sanitized[0].isdigit():
-        raise ValueError(
-            f"ROI name {original!r} starts with a digit after sanitization: {sanitized!r}. "
-            "Please rename it to start with a letter or underscore."
-        )
-    if len(sanitized) > 63:
-        raise ValueError(
-            f"ROI name {original!r} has {len(sanitized)} characters after sanitization "
-            "(MATLAB namelengthmax is 63). Please use a shorter name."
-        )
+    """Validate a sanitized ROI name; raises ValueError if invalid."""
+    validate_field_name(original, sanitized, context="ROI name")
 
 
 class BaseTrialStatsGroupParams(BaseProcessingParams):

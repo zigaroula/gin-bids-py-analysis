@@ -162,13 +162,13 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
             ds = dataset_or_none(fh, key)
             return np.asarray(ds[:], dtype=np.float64) if ds is not None else _zeros.copy()
 
-        condition_a_mean = _read_arr("data/signal_activity/condition_a/mean")
-        condition_b_mean = _read_arr("data/signal_activity/condition_b/mean")
+        condition_a_mean = _read_arr(f"data/signal_activity/{condition_a}/mean")
+        condition_b_mean = _read_arr(f"data/signal_activity/{condition_b}/mean")
         mean_difference = _read_arr("data/signal_activity/difference/mean")
 
         # --- uncertainty ---
-        condition_a_sem = _read_arr("data/signal_activity/condition_a/sem")
-        condition_b_sem = _read_arr("data/signal_activity/condition_b/sem")
+        condition_a_sem = _read_arr(f"data/signal_activity/{condition_a}/sem")
+        condition_b_sem = _read_arr(f"data/signal_activity/{condition_b}/sem")
         difference_sem = _read_arr("data/signal_activity/difference/sem")
         difference_ci95_low = _read_arr("data/signal_activity/difference/ci95_low")
         difference_ci95_high = _read_arr("data/signal_activity/difference/ci95_high")
@@ -277,13 +277,13 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
         if "trial_activity_summary" in fh:
             summary_grp = fh["trial_activity_summary"]
             condition_a_trial_activity_summary_values = (
-                np.asarray(summary_grp["condition_a_values"][:], dtype=np.float64)
-                if "condition_a_values" in summary_grp
-                else np.empty((n_ch, 0), dtype=np.float64)
+                np.asarray(summary_grp[f"{condition_a}_values"][:], dtype=np.float64)
+                if f"{condition_a}_values" in summary_grp
+                else np.empty((0, 0), dtype=np.float64)
             )
             condition_b_trial_activity_summary_values = (
-                np.asarray(summary_grp["condition_b_values"][:], dtype=np.float64)
-                if "condition_b_values" in summary_grp
+                np.asarray(summary_grp[f"{condition_b}_values"][:], dtype=np.float64)
+                if f"{condition_b}_values" in summary_grp
                 else np.empty((n_ch, 0), dtype=np.float64)
             )
             trial_activity_summary_kind = _validated_trial_activity_summary_kind(
@@ -507,13 +507,13 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
 
     # --- means ---
     signal_activity = data.data.signal_activity
-    condition_a_mean = _mat_arr(signal_activity.condition_a, "mean")
-    condition_b_mean = _mat_arr(signal_activity.condition_b, "mean")
+    condition_a_mean = _mat_arr(getattr(signal_activity, condition_a, None), "mean")
+    condition_b_mean = _mat_arr(getattr(signal_activity, condition_b, None), "mean")
     mean_difference = _mat_arr(signal_activity.difference, "mean")
 
     # --- uncertainty ---
-    condition_a_sem = _mat_arr(signal_activity.condition_a, "sem")
-    condition_b_sem = _mat_arr(signal_activity.condition_b, "sem")
+    condition_a_sem = _mat_arr(getattr(signal_activity, condition_a, None), "sem")
+    condition_b_sem = _mat_arr(getattr(signal_activity, condition_b, None), "sem")
     difference_sem = _mat_arr(signal_activity.difference, "sem")
     difference_ci95_low = _mat_arr(signal_activity.difference, "ci95_low")
     difference_ci95_high = _mat_arr(signal_activity.difference, "ci95_high")

@@ -139,8 +139,8 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         assert fh["stats"]["condition_contrast"]["p_values_uncorrected"].shape == (2, 3)
         assert fh["stats"]["condition_contrast"]["significant_mask"].shape == (2, 3)
         assert fh["data"]["signal_activity"]["difference"]["mean"].shape == (2, 3)
-        assert fh["data"]["signal_activity"]["condition_a"]["sem"].shape == (2, 3)
-        assert fh["data"]["signal_activity"]["condition_b"]["sem"].shape == (2, 3)
+        assert fh["data"]["signal_activity"]["accepted"]["sem"].shape == (2, 3)
+        assert fh["data"]["signal_activity"]["rejected"]["sem"].shape == (2, 3)
         assert fh["data"]["signal_activity"]["difference"]["sem"].shape == (2, 3)
         assert fh["data"]["signal_activity"]["difference"]["ci95_low"].shape == (2, 3)
         assert fh["data"]["signal_activity"]["difference"]["ci95_high"].shape == (2, 3)
@@ -265,10 +265,10 @@ def test_writer_outputs_matlab_and_trial_table() -> None:
         assert data.stats.condition_contrast.p_values_uncorrected.shape == (2, 3)
         assert data.stats.condition_contrast.significant_mask.shape == (2, 3)
         assert data.data.signal_activity.difference.mean.shape == (2, 3)
-        assert data.data.signal_activity.condition_a.mean.shape == (2, 3)
-        assert data.data.signal_activity.condition_b.mean.shape == (2, 3)
-        assert data.data.signal_activity.condition_a.sem.shape == (2, 3)
-        assert data.data.signal_activity.condition_b.sem.shape == (2, 3)
+        assert data.data.signal_activity.accepted.mean.shape == (2, 3)
+        assert data.data.signal_activity.rejected.mean.shape == (2, 3)
+        assert data.data.signal_activity.accepted.sem.shape == (2, 3)
+        assert data.data.signal_activity.rejected.sem.shape == (2, 3)
         assert data.data.signal_activity.difference.sem.shape == (2, 3)
         assert data.data.signal_activity.difference.ci95_low.shape == (2, 3)
         assert data.data.signal_activity.difference.ci95_high.shape == (2, 3)
@@ -462,7 +462,7 @@ def test_writer_round_trips_trial_activity_summary_for_condition_test(
         assert fh["trial_activity_summary"]["label"].asstr()[()] == "Mean activity (trigger to response)"
         assert fh["meta"]["epoch_cleaning_audit_json"].asstr()[()] != ""
         np.testing.assert_allclose(
-            fh["trial_activity_summary"]["condition_a_values"][:],
+            fh["trial_activity_summary"]["accepted_values"][:],
             result.trial_activity_summary_values.condition_a,
             equal_nan=True,
         )

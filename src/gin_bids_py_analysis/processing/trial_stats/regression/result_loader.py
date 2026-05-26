@@ -98,14 +98,14 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
             ds = dataset_or_none(fh, path_key)
             return np.asarray(ds[:], dtype=np.float64) if ds is not None else empty.copy()
 
-        condition_a_slope = _read_2d("stats/regression/condition_a/slope")
-        condition_a_intercept = _read_2d("stats/regression/condition_a/intercept")
-        condition_a_r_value = _read_2d("stats/regression/condition_a/r_value")
-        condition_a_p_value = _read_2d("stats/regression/condition_a/p_value")
-        condition_a_p_value_corrected = _read_2d("stats/regression/condition_a/p_value_corrected")
+        condition_a_slope = _read_2d(f"stats/regression/{condition_a}/slope")
+        condition_a_intercept = _read_2d(f"stats/regression/{condition_a}/intercept")
+        condition_a_r_value = _read_2d(f"stats/regression/{condition_a}/r_value")
+        condition_a_p_value = _read_2d(f"stats/regression/{condition_a}/p_value")
+        condition_a_p_value_corrected = _read_2d(f"stats/regression/{condition_a}/p_value_corrected")
         condition_a_significant_mask_ds = dataset_or_none(
             fh,
-            "stats/regression/condition_a/significant_mask",
+            f"stats/regression/{condition_a}/significant_mask",
         )
         condition_a_significant_mask = (
             np.asarray(condition_a_significant_mask_ds[:], dtype=bool)
@@ -113,14 +113,14 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
             else (np.isfinite(condition_a_p_value_corrected) & (condition_a_p_value_corrected < 0.05))
         )
 
-        condition_b_slope = _read_2d("stats/regression/condition_b/slope")
-        condition_b_intercept = _read_2d("stats/regression/condition_b/intercept")
-        condition_b_r_value = _read_2d("stats/regression/condition_b/r_value")
-        condition_b_p_value = _read_2d("stats/regression/condition_b/p_value")
-        condition_b_p_value_corrected = _read_2d("stats/regression/condition_b/p_value_corrected")
+        condition_b_slope = _read_2d(f"stats/regression/{condition_b}/slope")
+        condition_b_intercept = _read_2d(f"stats/regression/{condition_b}/intercept")
+        condition_b_r_value = _read_2d(f"stats/regression/{condition_b}/r_value")
+        condition_b_p_value = _read_2d(f"stats/regression/{condition_b}/p_value")
+        condition_b_p_value_corrected = _read_2d(f"stats/regression/{condition_b}/p_value_corrected")
         condition_b_significant_mask_ds = dataset_or_none(
             fh,
-            "stats/regression/condition_b/significant_mask",
+            f"stats/regression/{condition_b}/significant_mask",
         )
         condition_b_significant_mask = (
             np.asarray(condition_b_significant_mask_ds[:], dtype=bool)
@@ -128,27 +128,27 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
             else (np.isfinite(condition_b_p_value_corrected) & (condition_b_p_value_corrected < 0.05))
         )
 
-        condition_a_trials_used = int_scalar(dataset_or_none(fh, "stats/regression/condition_a/n_trials_used"), default=0)
-        condition_b_trials_used = int_scalar(dataset_or_none(fh, "stats/regression/condition_b/n_trials_used"), default=0)
-        condition_a_stats_valid = bool(dataset_or_none(fh, "stats/regression/condition_a/stats_valid")[()]) if dataset_or_none(fh, "stats/regression/condition_a/stats_valid") is not None else False
-        condition_b_stats_valid = bool(dataset_or_none(fh, "stats/regression/condition_b/stats_valid")[()]) if dataset_or_none(fh, "stats/regression/condition_b/stats_valid") is not None else False
+        condition_a_trials_used = int_scalar(dataset_or_none(fh, f"stats/regression/{condition_a}/n_trials_used"), default=0)
+        condition_b_trials_used = int_scalar(dataset_or_none(fh, f"stats/regression/{condition_b}/n_trials_used"), default=0)
+        condition_a_stats_valid = bool(dataset_or_none(fh, f"stats/regression/{condition_a}/stats_valid")[()]) if dataset_or_none(fh, f"stats/regression/{condition_a}/stats_valid") is not None else False
+        condition_b_stats_valid = bool(dataset_or_none(fh, f"stats/regression/{condition_b}/stats_valid")[()]) if dataset_or_none(fh, f"stats/regression/{condition_b}/stats_valid") is not None else False
 
-        perm_a_ds = dataset_or_none(fh, "stats/regression/condition_a/permuted_slopes")
+        perm_a_ds = dataset_or_none(fh, f"stats/regression/{condition_a}/permuted_slopes")
         condition_a_permuted_slopes = (
             np.asarray(perm_a_ds[:], dtype=np.float32) if perm_a_ds is not None else None
         )
-        perm_b_ds = dataset_or_none(fh, "stats/regression/condition_b/permuted_slopes")
+        perm_b_ds = dataset_or_none(fh, f"stats/regression/{condition_b}/permuted_slopes")
         condition_b_permuted_slopes = (
             np.asarray(perm_b_ds[:], dtype=np.float32) if perm_b_ds is not None else None
         )
 
-        condition_a_mean = _read_2d("data/signal_activity/condition_a/mean")
-        condition_b_mean = _read_2d("data/signal_activity/condition_b/mean")
-        condition_a_sem = _read_2d("data/signal_activity/condition_a/sem")
-        condition_b_sem = _read_2d("data/signal_activity/condition_b/sem")
+        condition_a_mean = _read_2d(f"data/signal_activity/{condition_a}/mean")
+        condition_b_mean = _read_2d(f"data/signal_activity/{condition_b}/mean")
+        condition_a_sem = _read_2d(f"data/signal_activity/{condition_a}/sem")
+        condition_b_sem = _read_2d(f"data/signal_activity/{condition_b}/sem")
 
-        predictor_a_raw_ds = dataset_or_none(fh, "predictor/condition_a/raw_values") or dataset_or_none(fh, "predictor/condition_a_raw_values")
-        predictor_b_raw_ds = dataset_or_none(fh, "predictor/condition_b/raw_values") or dataset_or_none(fh, "predictor/condition_b_raw_values")
+        predictor_a_raw_ds = dataset_or_none(fh, f"predictor/{condition_a}/raw_values") or dataset_or_none(fh, f"predictor/{condition_a}_raw_values")
+        predictor_b_raw_ds = dataset_or_none(fh, f"predictor/{condition_b}/raw_values") or dataset_or_none(fh, f"predictor/{condition_b}_raw_values")
         condition_a_predictor_raw_values = (
             np.asarray(predictor_a_raw_ds[:], dtype=np.float64)
             if predictor_a_raw_ds is not None
@@ -159,8 +159,8 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
             if predictor_b_raw_ds is not None
             else np.array([], dtype=np.float64)
         )
-        predictor_a_transformed_ds = dataset_or_none(fh, "predictor/condition_a/transformed_values") or dataset_or_none(fh, "predictor/condition_a_transformed_values")
-        predictor_b_transformed_ds = dataset_or_none(fh, "predictor/condition_b/transformed_values") or dataset_or_none(fh, "predictor/condition_b_transformed_values")
+        predictor_a_transformed_ds = dataset_or_none(fh, f"predictor/{condition_a}/transformed_values") or dataset_or_none(fh, f"predictor/{condition_a}_transformed_values")
+        predictor_b_transformed_ds = dataset_or_none(fh, f"predictor/{condition_b}/transformed_values") or dataset_or_none(fh, f"predictor/{condition_b}_transformed_values")
         condition_a_predictor_transformed_values = (
             np.asarray(predictor_a_transformed_ds[:], dtype=np.float64)
             if predictor_a_transformed_ds is not None
@@ -171,8 +171,8 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
             if predictor_b_transformed_ds is not None
             else np.array([], dtype=np.float64)
         )
-        predictor_a_ds = dataset_or_none(fh, "predictor/condition_a/values") or dataset_or_none(fh, "predictor/condition_a_values")
-        predictor_b_ds = dataset_or_none(fh, "predictor/condition_b/values") or dataset_or_none(fh, "predictor/condition_b_values")
+        predictor_a_ds = dataset_or_none(fh, f"predictor/{condition_a}/values") or dataset_or_none(fh, f"predictor/{condition_a}_values")
+        predictor_b_ds = dataset_or_none(fh, f"predictor/{condition_b}/values") or dataset_or_none(fh, f"predictor/{condition_b}_values")
         condition_a_predictor_values = (
             np.asarray(predictor_a_ds[:], dtype=np.float64) if predictor_a_ds is not None else np.array([], dtype=np.float64)
         )
@@ -289,13 +289,13 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
         if "trial_activity_summary" in fh:
             tg = fh["trial_activity_summary"]
             condition_a_trial_activity_summary_values = (
-                np.asarray(tg["condition_a_values"][:], dtype=np.float64)
-                if "condition_a_values" in tg
-                else np.empty((n_features, 0), dtype=np.float64)
+                np.asarray(tg[f"{condition_a}_values"][:], dtype=np.float64)
+                if f"{condition_a}_values" in tg
+                else np.empty((0, 0), dtype=np.float64)
             )
             condition_b_trial_activity_summary_values = (
-                np.asarray(tg["condition_b_values"][:], dtype=np.float64)
-                if "condition_b_values" in tg
+                np.asarray(tg[f"{condition_b}_values"][:], dtype=np.float64)
+                if f"{condition_b}_values" in tg
                 else np.empty((n_features, 0), dtype=np.float64)
             )
             trial_activity_summary_kind = _validated_trial_activity_summary_kind(
@@ -505,8 +505,8 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
             return arr.reshape(1, -1)
         return np.empty((0, 0), dtype=np.float64)
 
-    reg_a = getattr(regression, "condition_a", None)
-    reg_b = getattr(regression, "condition_b", None)
+    reg_a = getattr(regression, condition_a, None)
+    reg_b = getattr(regression, condition_b, None)
 
     condition_a_slope = _mat_2d(reg_a, "slope")
     condition_a_intercept = _mat_2d(reg_a, "intercept")
@@ -546,45 +546,45 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
         np.asarray(_perm_b_raw, dtype=np.float32) if _perm_b_raw is not None and np.asarray(_perm_b_raw).size > 0 else None
     )
 
-    condition_a_mean = _mat_2d(activity.condition_a, "mean")
-    condition_b_mean = _mat_2d(activity.condition_b, "mean")
-    condition_a_sem = _mat_2d(activity.condition_a, "sem")
-    condition_b_sem = _mat_2d(activity.condition_b, "sem")
+    condition_a_mean = _mat_2d(getattr(activity, condition_a, None), "mean")
+    condition_b_mean = _mat_2d(getattr(activity, condition_b, None), "mean")
+    condition_a_sem = _mat_2d(getattr(activity, condition_a, None), "sem")
+    condition_b_sem = _mat_2d(getattr(activity, condition_b, None), "sem")
 
     condition_a_predictor_raw_values = np.asarray(
-        getattr(getattr(predictor, "condition_a", None), "raw_values", None)
-        if getattr(predictor, "condition_a", None) is not None
-        else getattr(predictor, "condition_a_raw_values", np.array([], dtype=np.float64)),
+        getattr(getattr(predictor, condition_a, None), "raw_values", None)
+        if getattr(predictor, condition_a, None) is not None
+        else getattr(predictor, f"{condition_a}_raw_values", np.array([], dtype=np.float64)),
         dtype=np.float64,
     ).ravel()
     condition_b_predictor_raw_values = np.asarray(
-        getattr(getattr(predictor, "condition_b", None), "raw_values", None)
-        if getattr(predictor, "condition_b", None) is not None
-        else getattr(predictor, "condition_b_raw_values", np.array([], dtype=np.float64)),
+        getattr(getattr(predictor, condition_b, None), "raw_values", None)
+        if getattr(predictor, condition_b, None) is not None
+        else getattr(predictor, f"{condition_b}_raw_values", np.array([], dtype=np.float64)),
         dtype=np.float64,
     ).ravel()
     condition_a_predictor_transformed_values = np.asarray(
-        getattr(getattr(predictor, "condition_a", None), "transformed_values", None)
-        if getattr(predictor, "condition_a", None) is not None
-        else getattr(predictor, "condition_a_transformed_values", np.array([], dtype=np.float64)),
+        getattr(getattr(predictor, condition_a, None), "transformed_values", None)
+        if getattr(predictor, condition_a, None) is not None
+        else getattr(predictor, f"{condition_a}_transformed_values", np.array([], dtype=np.float64)),
         dtype=np.float64,
     ).ravel()
     condition_b_predictor_transformed_values = np.asarray(
-        getattr(getattr(predictor, "condition_b", None), "transformed_values", None)
-        if getattr(predictor, "condition_b", None) is not None
-        else getattr(predictor, "condition_b_transformed_values", np.array([], dtype=np.float64)),
+        getattr(getattr(predictor, condition_b, None), "transformed_values", None)
+        if getattr(predictor, condition_b, None) is not None
+        else getattr(predictor, f"{condition_b}_transformed_values", np.array([], dtype=np.float64)),
         dtype=np.float64,
     ).ravel()
     condition_a_predictor_values = np.asarray(
-        getattr(getattr(predictor, "condition_a", None), "values", None)
-        if getattr(predictor, "condition_a", None) is not None
-        else getattr(predictor, "condition_a_values", np.array([], dtype=np.float64)),
+        getattr(getattr(predictor, condition_a, None), "values", None)
+        if getattr(predictor, condition_a, None) is not None
+        else getattr(predictor, f"{condition_a}_values", np.array([], dtype=np.float64)),
         dtype=np.float64,
     ).ravel()
     condition_b_predictor_values = np.asarray(
-        getattr(getattr(predictor, "condition_b", None), "values", None)
-        if getattr(predictor, "condition_b", None) is not None
-        else getattr(predictor, "condition_b_values", np.array([], dtype=np.float64)),
+        getattr(getattr(predictor, condition_b, None), "values", None)
+        if getattr(predictor, condition_b, None) is not None
+        else getattr(predictor, f"{condition_b}_values", np.array([], dtype=np.float64)),
         dtype=np.float64,
     ).ravel()
     trial_activity_summary_kind = "epoch_mean"
@@ -595,11 +595,11 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
     if trial_activity_summary is not None:
         condition_a_trial_activity_summary_values = _mat_feature_trial_2d(
             trial_activity_summary,
-            "condition_a_values",
+            f"{condition_a}_values",
         )
         condition_b_trial_activity_summary_values = _mat_feature_trial_2d(
             trial_activity_summary,
-            "condition_b_values",
+            f"{condition_b}_values",
         )
         trial_activity_summary_kind = _validated_trial_activity_summary_kind(
             mat_str(

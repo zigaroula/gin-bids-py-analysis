@@ -20,7 +20,9 @@ from gin_bids_py_analysis.processing.utils.hdf5 import dataset_or_none, decode_s
 from gin_bids_py_analysis.processing.utils.matlab import mat_str_list
 from gin_bids_py_analysis.processing.utils.tables import select_column
 
-from .params import BaseTrialStatsGroupParams, sanitize_roi_name, validate_roi_name
+from gin_bids_py_analysis.processing.utils.field_names import sanitize_field_name, validate_field_name
+
+from .params import BaseTrialStatsGroupParams
 
 
 @dataclass(frozen=True)
@@ -268,8 +270,8 @@ def collect_atlas_roi_records(
 
     sanitized_records: dict[str, list[ContributionT]] = {}
     for roi_name, records in roi_records.items():
-        sanitized = sanitize_roi_name(roi_name)
-        validate_roi_name(roi_name, sanitized)
+        sanitized = sanitize_field_name(roi_name)
+        validate_field_name(roi_name, sanitized, context="ROI name")
         if sanitized in sanitized_records:
             raise ValueError(
                 f"Atlas ROI name {roi_name!r} maps to {sanitized!r} after sanitization, "

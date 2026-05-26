@@ -74,16 +74,18 @@ def _write_slope_stats_h5(
     if condition_b_r_value is None:
         condition_b_r_value = np.full((n_ch, n_t), 0.4, dtype=np.float64)
 
+    label_a, label_b = condition_labels
+
     with h5py.File(path, "w") as fh:
         stats = fh.create_group("stats")
         reg = stats.create_group("regression")
-        ca = reg.create_group("condition_a")
+        ca = reg.create_group(label_a)
         ca.create_dataset("slope", data=condition_a_slope.astype(np.float64))
         ca.create_dataset("r_value", data=condition_a_r_value.astype(np.float64))
         ca.create_dataset("p_value", data=np.full((n_ch, n_t), 0.01, dtype=np.float64))
         ca.create_dataset("p_value_corrected", data=np.full((n_ch, n_t), 0.01, dtype=np.float64))
         ca.create_dataset("significant_mask", data=np.ones((n_ch, n_t), dtype=bool))
-        cb = reg.create_group("condition_b")
+        cb = reg.create_group(label_b)
         cb.create_dataset("slope", data=condition_b_slope.astype(np.float64))
         cb.create_dataset("r_value", data=condition_b_r_value.astype(np.float64))
         cb.create_dataset("p_value", data=np.full((n_ch, n_t), 0.05, dtype=np.float64))
@@ -91,24 +93,20 @@ def _write_slope_stats_h5(
         cb.create_dataset("significant_mask", data=np.zeros((n_ch, n_t), dtype=bool))
 
         data = fh.create_group("data")
-        activity = data.create_group("activity")
-        condition_a = activity.create_group("condition_a")
-        condition_a.create_dataset("mean", data=condition_a_mean.astype(np.float64))
-        condition_a.create_dataset("sem", data=np.full((n_ch, n_t), 0.1, dtype=np.float64))
-        condition_b = activity.create_group("condition_b")
-        condition_b.create_dataset("mean", data=condition_b_mean.astype(np.float64))
-        condition_b.create_dataset("sem", data=np.full((n_ch, n_t), 0.1, dtype=np.float64))
+        signal_activity = data.create_group("signal_activity")
+        sa_a = signal_activity.create_group(label_a)
+        sa_a.create_dataset("mean", data=condition_a_mean.astype(np.float64))
+        sa_a.create_dataset("sem", data=np.full((n_ch, n_t), 0.1, dtype=np.float64))
+        sa_b = signal_activity.create_group(label_b)
+        sa_b.create_dataset("mean", data=condition_b_mean.astype(np.float64))
+        sa_b.create_dataset("sem", data=np.full((n_ch, n_t), 0.1, dtype=np.float64))
 
         predictor_group = fh.create_group("predictor")
-        for key in (
-            "condition_a_raw_values",
-            "condition_b_raw_values",
-            "condition_a_transformed_values",
-            "condition_b_transformed_values",
-            "condition_a_values",
-            "condition_b_values",
-        ):
-            predictor_group.create_dataset(key, data=np.array([], dtype=np.float64))
+        for label in (label_a, label_b):
+            pred_cond = predictor_group.create_group(label)
+            pred_cond.create_dataset("raw_values", data=np.array([], dtype=np.float64))
+            pred_cond.create_dataset("transformed_values", data=np.array([], dtype=np.float64))
+            pred_cond.create_dataset("values", data=np.array([], dtype=np.float64))
 
         axes = fh.create_group("axes")
         axis_name = "region" if analysis_level != "channel" else "channel"
@@ -424,10 +422,10 @@ def test_process_group_cluster_permutation_custom_method() -> None:
             perm_a = rng.standard_normal((n_perm, n_ch, n_t)).astype(np.float32)
             perm_b = rng.standard_normal((n_perm, n_ch, n_t)).astype(np.float32)
             with h5py.File(path, "a") as fh:
-                fh["stats/regression/condition_a"].create_dataset(
+                fh["stats/regression/accepted"].create_dataset(
                     "permuted_slopes", data=perm_a, compression="gzip"
                 )
-                fh["stats/regression/condition_b"].create_dataset(
+                fh["stats/regression/rejected"].create_dataset(
                     "permuted_slopes", data=perm_b, compression="gzip"
                 )
             files.append(_make_bids_file(path, {

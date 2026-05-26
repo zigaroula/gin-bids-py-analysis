@@ -1160,6 +1160,7 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
         channels = decode_str_array(np.asarray(fh["axes"][axis_name][:]))
         time_axis_s = np.asarray(fh["axes"]["time_s"][:], dtype=np.float64)
         condition_labels = _read_condition_labels_hdf5(fh)
+        label_a, label_b = condition_labels
 
         n_ch = len(channels)
         n_t = len(time_axis_s)
@@ -1173,18 +1174,18 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
                 np.asarray(ds[:], dtype=np.float64), n_features=n_ch, n_times=n_t
             )
 
-        ds_cond_a_slope = dataset_or_none(fh, "stats/regression/condition_a/slope")
-        ds_cond_b_slope = dataset_or_none(fh, "stats/regression/condition_b/slope")
-        ds_cond_a_r = dataset_or_none(fh, "stats/regression/condition_a/r_value")
-        ds_cond_b_r = dataset_or_none(fh, "stats/regression/condition_b/r_value")
+        ds_cond_a_slope = dataset_or_none(fh, f"stats/regression/{label_a}/slope")
+        ds_cond_b_slope = dataset_or_none(fh, f"stats/regression/{label_b}/slope")
+        ds_cond_a_r = dataset_or_none(fh, f"stats/regression/{label_a}/r_value")
+        ds_cond_b_r = dataset_or_none(fh, f"stats/regression/{label_b}/r_value")
 
-        condition_a_slope = _read_2d("stats/regression/condition_a/slope")
-        condition_b_slope = _read_2d("stats/regression/condition_b/slope")
-        condition_a_r_value = _read_2d("stats/regression/condition_a/r_value")
-        condition_b_r_value = _read_2d("stats/regression/condition_b/r_value")
+        condition_a_slope = _read_2d(f"stats/regression/{label_a}/slope")
+        condition_b_slope = _read_2d(f"stats/regression/{label_b}/slope")
+        condition_a_r_value = _read_2d(f"stats/regression/{label_a}/r_value")
+        condition_b_r_value = _read_2d(f"stats/regression/{label_b}/r_value")
 
-        condition_a_mean = _read_2d("data/signal_activity/condition_a/mean")
-        condition_b_mean = _read_2d("data/signal_activity/condition_b/mean")
+        condition_a_mean = _read_2d(f"data/signal_activity/{label_a}/mean")
+        condition_b_mean = _read_2d(f"data/signal_activity/{label_b}/mean")
 
         binning_mode = str_scalar(dataset_or_none(fh, "meta/binning_mode"), default="none")
         window_ms = float_scalar(dataset_or_none(fh, "meta/window_ms"), default=0.0)
@@ -1244,13 +1245,13 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
         if "trial_activity_summary" in fh:
             tg = fh["trial_activity_summary"]
             condition_a_trial_activity_summary_values = (
-                np.asarray(tg["condition_a_values"][:], dtype=np.float64)
-                if "condition_a_values" in tg
+                np.asarray(tg[f"{label_a}_values"][:], dtype=np.float64)
+                if f"{label_a}_values" in tg
                 else np.empty((n_ch, 0), dtype=np.float64)
             )
             condition_b_trial_activity_summary_values = (
-                np.asarray(tg["condition_b_values"][:], dtype=np.float64)
-                if "condition_b_values" in tg
+                np.asarray(tg[f"{label_b}_values"][:], dtype=np.float64)
+                if f"{label_b}_values" in tg
                 else np.empty((n_ch, 0), dtype=np.float64)
             )
             trial_activity_summary_kind = str_scalar(
@@ -1306,11 +1307,11 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
                     np.asarray(prov["source_electrodes_files"][:], dtype=object)
                 )
 
-        perm_a_ds = dataset_or_none(fh, "stats/regression/condition_a/permuted_slopes")
+        perm_a_ds = dataset_or_none(fh, f"stats/regression/{label_a}/permuted_slopes")
         raw_condition_a_permuted_slopes: np.ndarray | None = (
             np.asarray(perm_a_ds[:], dtype=np.float32) if perm_a_ds is not None else None
         )
-        perm_b_ds = dataset_or_none(fh, "stats/regression/condition_b/permuted_slopes")
+        perm_b_ds = dataset_or_none(fh, f"stats/regression/{label_b}/permuted_slopes")
         raw_condition_b_permuted_slopes: np.ndarray | None = (
             np.asarray(perm_b_ds[:], dtype=np.float32) if perm_b_ds is not None else None
         )
@@ -1336,22 +1337,22 @@ def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
         condition_b_r_value=condition_b_r_value,
         condition_a_predictor_raw_values=_read_predictor_values_hdf5(
             stats_file,
-            "predictor/condition_a_raw_values",
+            f"predictor/{label_a}/raw_values",
         ),
         condition_b_predictor_raw_values=_read_predictor_values_hdf5(
             stats_file,
-            "predictor/condition_b_raw_values",
+            f"predictor/{label_b}/raw_values",
         ),
         condition_a_predictor_transformed_values=_read_predictor_values_hdf5(
             stats_file,
-            "predictor/condition_a_transformed_values",
+            f"predictor/{label_a}/transformed_values",
         ),
         condition_b_predictor_transformed_values=_read_predictor_values_hdf5(
             stats_file,
-            "predictor/condition_b_transformed_values",
+            f"predictor/{label_b}/transformed_values",
         ),
-        condition_a_predictor_values=_read_predictor_values_hdf5(stats_file, "predictor/condition_a_values"),
-        condition_b_predictor_values=_read_predictor_values_hdf5(stats_file, "predictor/condition_b_values"),
+        condition_a_predictor_values=_read_predictor_values_hdf5(stats_file, f"predictor/{label_a}/values"),
+        condition_b_predictor_values=_read_predictor_values_hdf5(stats_file, f"predictor/{label_b}/values"),
         condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
         condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
         condition_a_permuted_slopes=raw_condition_a_permuted_slopes,
@@ -1426,8 +1427,10 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
             return out.reshape(n_ch, -1)
 
         regression = getattr(data, "regression", None)
-        cond_a_reg = getattr(regression, "condition_a", None) if regression is not None else None
-        cond_b_reg = getattr(regression, "condition_b", None) if regression is not None else None
+        safe_a = matlab_safe_name(condition_labels[0])
+        safe_b = matlab_safe_name(condition_labels[1])
+        cond_a_reg = getattr(regression, safe_a, None) if regression is not None else None
+        cond_b_reg = getattr(regression, safe_b, None) if regression is not None else None
 
         condition_a_slope = _read_mat_2d(cond_a_reg, "slope") if cond_a_reg is not None else _empty.copy()
         condition_b_slope = _read_mat_2d(cond_b_reg, "slope") if cond_b_reg is not None else _empty.copy()
@@ -1435,8 +1438,6 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
         condition_b_r_value = _read_mat_2d(cond_b_reg, "r_value") if cond_b_reg is not None else _empty.copy()
 
         means = getattr(data, "means", None)
-        safe_a = matlab_safe_name(condition_labels[0])
-        safe_b = matlab_safe_name(condition_labels[1])
         condition_a_mean = _read_mat_2d(means, safe_a) if means is not None else _empty.copy()
         condition_b_mean = _read_mat_2d(means, safe_b) if means is not None else _empty.copy()
 
@@ -1501,12 +1502,14 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
         condition_a_predictor_values: np.ndarray
         condition_b_predictor_values: np.ndarray
         if predictor_raw is not None:
-            raw_raw_a = getattr(predictor_raw, "condition_a_raw_values", None)
-            raw_raw_b = getattr(predictor_raw, "condition_b_raw_values", None)
-            raw_trans_a = getattr(predictor_raw, "condition_a_transformed_values", None)
-            raw_trans_b = getattr(predictor_raw, "condition_b_transformed_values", None)
-            raw_a = getattr(predictor_raw, "condition_a_values", None)
-            raw_b = getattr(predictor_raw, "condition_b_values", None)
+            cond_a_pred = getattr(predictor_raw, safe_a, None)
+            cond_b_pred = getattr(predictor_raw, safe_b, None)
+            raw_raw_a = getattr(cond_a_pred, "raw_values", None) if cond_a_pred is not None else None
+            raw_raw_b = getattr(cond_b_pred, "raw_values", None) if cond_b_pred is not None else None
+            raw_trans_a = getattr(cond_a_pred, "transformed_values", None) if cond_a_pred is not None else None
+            raw_trans_b = getattr(cond_b_pred, "transformed_values", None) if cond_b_pred is not None else None
+            raw_a = getattr(cond_a_pred, "values", None) if cond_a_pred is not None else None
+            raw_b = getattr(cond_b_pred, "values", None) if cond_b_pred is not None else None
             condition_a_predictor_raw_values = np.asarray(raw_raw_a, dtype=np.float64).ravel() if raw_raw_a is not None else np.empty(0, dtype=np.float64)
             condition_b_predictor_raw_values = np.asarray(raw_raw_b, dtype=np.float64).ravel() if raw_raw_b is not None else np.empty(0, dtype=np.float64)
             condition_a_predictor_transformed_values = np.asarray(raw_trans_a, dtype=np.float64).ravel() if raw_trans_a is not None else np.empty(0, dtype=np.float64)
@@ -1529,11 +1532,11 @@ def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
         if trial_activity_summary is not None:
             condition_a_trial_activity_summary_values = _read_feature_trial_2d(
                 trial_activity_summary,
-                "condition_a_values",
+                f"{safe_a}_values",
             )
             condition_b_trial_activity_summary_values = _read_feature_trial_2d(
                 trial_activity_summary,
-                "condition_b_values",
+                f"{safe_b}_values",
             )
             trial_activity_summary_kind = mat_str(
                 getattr(trial_activity_summary, "kind", None),

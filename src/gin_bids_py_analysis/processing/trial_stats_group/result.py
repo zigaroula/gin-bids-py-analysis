@@ -52,10 +52,15 @@ class GroupEstimatePair:
     condition_a: GroupEstimate = field(default_factory=GroupEstimate)
     condition_b: GroupEstimate = field(default_factory=GroupEstimate)
 
-    def to_output_dict(self) -> dict[str, object]:
+    def to_output_dict(
+        self,
+        *,
+        label_a: str = "condition_a",
+        label_b: str = "condition_b",
+    ) -> dict[str, object]:
         return {
-            "condition_a": self.condition_a.to_output_dict(),
-            "condition_b": self.condition_b.to_output_dict(),
+            label_a: self.condition_a.to_output_dict(),
+            label_b: self.condition_b.to_output_dict(),
         }
 
 
@@ -111,14 +116,20 @@ class IndexedConditionContributions:
     condition_b: list[np.ndarray] = field(default_factory=list)
     labels: list[list[str]] = field(default_factory=list)
 
-    def to_output_dict(self, *, region_names: list[str]) -> dict[str, object]:
+    def to_output_dict(
+        self,
+        *,
+        region_names: list[str],
+        label_a: str = "condition_a",
+        label_b: str = "condition_b",
+    ) -> dict[str, object]:
         entries: dict[str, object] = {}
         for idx, roi_name in enumerate(region_names):
             if idx >= len(self.condition_a) or idx >= len(self.condition_b):
                 continue
             entries[roi_name] = {
-                "condition_a": np.asarray(self.condition_a[idx], dtype=np.float64),
-                "condition_b": np.asarray(self.condition_b[idx], dtype=np.float64),
+                label_a: np.asarray(self.condition_a[idx], dtype=np.float64),
+                label_b: np.asarray(self.condition_b[idx], dtype=np.float64),
                 "labels": np.array(
                     self.labels[idx] if idx < len(self.labels) else [],
                     dtype=object,
@@ -234,13 +245,17 @@ class BaseTrialStatsGroupProcessingResult(BaseProcessingResult):
         pipeline_version: str = "unknown",
     ) -> OutputTree:
         """Return the common output tree for group-level trial statistics."""
+        label_a, label_b = self.condition_labels
         tree: dict[str, object] = {
             "axes": {
                 "region": np.array(self.region_names, dtype=object),
                 "time_s": np.asarray(self.time_axis_s, dtype=np.float64),
             },
             "data": {
-                "signal_activity": self.signal_activity.to_output_dict(),
+                "signal_activity": self.signal_activity.to_output_dict(
+                    label_a=label_a,
+                    label_b=label_b,
+                ),
             },
             "stats": {
                 "signal_activity": self.signal_activity_stats.to_output_dict(
@@ -273,6 +288,8 @@ class BaseTrialStatsGroupProcessingResult(BaseProcessingResult):
                 },
                 "signal_activity": self.signal_activity_contributions.to_output_dict(
                     region_names=self.region_names,
+                    label_a=label_a,
+                    label_b=label_b,
                 ),
             },
             "provenance": {

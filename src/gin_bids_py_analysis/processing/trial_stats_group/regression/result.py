@@ -61,15 +61,20 @@ class RegressionMetricStats:
     epoch_summary: GroupEpochStats = field(default_factory=GroupEpochStats)
     vs_zero: VsZeroStatsPair = field(default_factory=VsZeroStatsPair)
 
-    def to_output_dict(self) -> dict[str, object]:
+    def to_output_dict(
+        self,
+        *,
+        label_a: str = "condition_a",
+        label_b: str = "condition_b",
+    ) -> dict[str, object]:
         return {
             "condition_contrast": self.contrast.to_output_dict(
                 epoch_summary=self.epoch_summary
             ),
-            "condition_a_vs_zero": self.vs_zero.condition_to_output_dict(
+            f"{label_a}_vs_zero": self.vs_zero.condition_to_output_dict(
                 "condition_a"
             ),
-            "condition_b_vs_zero": self.vs_zero.condition_to_output_dict(
+            f"{label_b}_vs_zero": self.vs_zero.condition_to_output_dict(
                 "condition_b"
             ),
         }
@@ -84,18 +89,24 @@ class ScatterData:
     condition_b_predictor: list[np.ndarray] = field(default_factory=list)
     condition_b_signal_activity_summary: list[np.ndarray] = field(default_factory=list)
 
-    def to_output_dict(self, *, region_names: list[str]) -> dict[str, object]:
+    def to_output_dict(
+        self,
+        *,
+        region_names: list[str],
+        label_a: str = "condition_a",
+        label_b: str = "condition_b",
+    ) -> dict[str, object]:
         out: dict[str, object] = {}
         for idx, roi_name in enumerate(region_names):
             out[roi_name] = {
-                "condition_a": {
+                label_a: {
                     "predictor": np.asarray(self.condition_a_predictor[idx], dtype=np.float64),
                     "signal_activity_summary": np.asarray(
                         self.condition_a_signal_activity_summary[idx],
                         dtype=np.float64,
                     ),
                 },
-                "condition_b": {
+                label_b: {
                     "predictor": np.asarray(self.condition_b_predictor[idx], dtype=np.float64),
                     "signal_activity_summary": np.asarray(
                         self.condition_b_signal_activity_summary[idx],
@@ -155,19 +166,23 @@ class RegressionGroupProcessingResult(BaseTrialStatsGroupProcessingResult):
             pipeline_name=pipeline_name,
             pipeline_version=pipeline_version,
         )
+        label_a, label_b = self.condition_labels
         _deep_merge(
             tree,
             {
                 "stats": {
-                    "regression": self.regression_stats.to_output_dict(),
+                    "regression": self.regression_stats.to_output_dict(
+                        label_a=label_a,
+                        label_b=label_b,
+                    ),
                 },
                 "data": {
                     "regression": {
-                        "condition_a": {
+                        label_a: {
                             "slope": self.slope.condition_a.to_output_dict(),
                             "r_value": self.r_value.condition_a.to_output_dict(),
                         },
-                        "condition_b": {
+                        label_b: {
                             "slope": self.slope.condition_b.to_output_dict(),
                             "r_value": self.r_value.condition_b.to_output_dict(),
                         },
@@ -196,9 +211,13 @@ class RegressionGroupProcessingResult(BaseTrialStatsGroupProcessingResult):
                     "regression": {
                         "slope": self.slope_contributions.to_output_dict(
                             region_names=self.region_names,
+                            label_a=label_a,
+                            label_b=label_b,
                         ),
                         "r_value": self.r_value_contributions.to_output_dict(
                             region_names=self.region_names,
+                            label_a=label_a,
+                            label_b=label_b,
                         ),
                     },
                 },
@@ -207,6 +226,8 @@ class RegressionGroupProcessingResult(BaseTrialStatsGroupProcessingResult):
         if self.scatter.condition_a_predictor:
             tree["scatter"] = self.scatter.to_output_dict(
                 region_names=self.region_names,
+                label_a=label_a,
+                label_b=label_b,
             )
         if self.cluster_p_values is not None:
             tree["stats"]["regression"]["condition_contrast"]["cluster"] = _cluster_stats_tree(

@@ -157,11 +157,11 @@ class BaseTrialStatsProcessingResult(BaseProcessingResult):
         tree: dict[str, object] = {
             "data": {
                 "signal_activity": {
-                    "condition_a": {
+                    self.condition_a: {
                         "mean": np.asarray(self.signal_activity.condition_a.mean, dtype=np.float64),
                         "sem": np.asarray(self.signal_activity.condition_a.sem, dtype=np.float64),
                     },
-                    "condition_b": {
+                    self.condition_b: {
                         "mean": np.asarray(self.signal_activity.condition_b.mean, dtype=np.float64),
                         "sem": np.asarray(self.signal_activity.condition_b.sem, dtype=np.float64),
                     },
@@ -190,8 +190,8 @@ class BaseTrialStatsProcessingResult(BaseProcessingResult):
 
         if include_epochs and self.epochs.condition_a.ndim == 3:
             tree["epochs"] = {
-                "condition_a": np.asarray(self.epochs.condition_a, dtype=np.float64),
-                "condition_b": np.asarray(self.epochs.condition_b, dtype=np.float64),
+                self.condition_a: np.asarray(self.epochs.condition_a, dtype=np.float64),
+                self.condition_b: np.asarray(self.epochs.condition_b, dtype=np.float64),
                 "channel": np.array(self.channel_names, dtype=object),
                 "time_s": np.asarray(self.time_axis_s, dtype=np.float64),
             }
@@ -200,8 +200,8 @@ class BaseTrialStatsProcessingResult(BaseProcessingResult):
         summary_b = np.asarray(self.trial_activity_summary_values.condition_b, dtype=np.float64)
         if summary_a.ndim == 2 and summary_b.ndim == 2:
             tree["trial_activity_summary"] = {
-                "condition_a_values": summary_a,
-                "condition_b_values": summary_b,
+                f"{self.condition_a}_values": summary_a,
+                f"{self.condition_b}_values": summary_b,
                 "kind": str(self.trial_activity_summary_kind),
                 "missing_response_policy": str(
                     self.trial_activity_summary_missing_response_policy

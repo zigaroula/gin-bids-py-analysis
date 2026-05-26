@@ -107,13 +107,13 @@ class RegressionProcessingResult(BaseTrialStatsProcessingResult):
             {
                 "stats": {
                     "regression": {
-                        "condition_a": self.regression.condition_a.to_output_dict(),
-                        "condition_b": self.regression.condition_b.to_output_dict(),
+                        self.condition_a: self.regression.condition_a.to_output_dict(),
+                        self.condition_b: self.regression.condition_b.to_output_dict(),
                     }
                 },
                 "predictor": {
-                    "condition_a": self.predictor_values.condition_a.to_output_dict(),
-                    "condition_b": self.predictor_values.condition_b.to_output_dict(),
+                    self.condition_a: self.predictor_values.condition_a.to_output_dict(),
+                    self.condition_b: self.predictor_values.condition_b.to_output_dict(),
                 },
                 "meta": {
                     "analysis_type": "slope_regression",
@@ -124,8 +124,8 @@ class RegressionProcessingResult(BaseTrialStatsProcessingResult):
                         sort_keys=True,
                         ensure_ascii=True,
                     ),
-                    "condition_a_stats_valid": bool(self.regression.condition_a.stats_valid),
-                    "condition_b_stats_valid": bool(self.regression.condition_b.stats_valid),
+                    f"{self.condition_a}_stats_valid": bool(self.regression.condition_a.stats_valid),
+                    f"{self.condition_b}_stats_valid": bool(self.regression.condition_b.stats_valid),
                 },
             },
         )

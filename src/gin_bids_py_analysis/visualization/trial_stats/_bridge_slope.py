@@ -55,10 +55,13 @@ def _write_hdf5_structure(
     )
     axes.create_dataset("time_s", data=result.time_axis_s.astype(np.float64))
 
+    label_a = result.condition_a
+    label_b = result.condition_b
+
     stats = fh.create_group("stats")
     regression = stats.create_group("regression")
-    cond_a = regression.create_group("condition_a")
-    cond_b = regression.create_group("condition_b")
+    cond_a = regression.create_group(label_a)
+    cond_b = regression.create_group(label_b)
     cond_a.create_dataset("slope", data=np.asarray(result.regression.condition_a.slope, dtype=np.float64))
     cond_b.create_dataset("slope", data=np.asarray(result.regression.condition_b.slope, dtype=np.float64))
     cond_a.create_dataset("r_value", data=np.asarray(result.regression.condition_a.r_value, dtype=np.float64))
@@ -66,11 +69,11 @@ def _write_hdf5_structure(
 
     data = fh.create_group("data")
     signal_activity = data.create_group("signal_activity")
-    signal_activity.create_group("condition_a").create_dataset(
+    signal_activity.create_group(label_a).create_dataset(
         "mean",
         data=np.asarray(result.signal_activity.condition_a.mean, dtype=np.float64),
     )
-    signal_activity.create_group("condition_b").create_dataset(
+    signal_activity.create_group(label_b).create_dataset(
         "mean",
         data=np.asarray(result.signal_activity.condition_b.mean, dtype=np.float64),
     )
@@ -158,37 +161,30 @@ def _write_hdf5_structure(
 
     # predictor values (required for scatter)
     pred_grp = fh.create_group("predictor")
-    pred_grp.create_dataset(
-        "condition_a_raw_values",
-        data=np.asarray(result.predictor_values.condition_a.raw_values, dtype=np.float64),
-    )
-    pred_grp.create_dataset(
-        "condition_b_raw_values",
-        data=np.asarray(result.predictor_values.condition_b.raw_values, dtype=np.float64),
-    )
-    pred_grp.create_dataset(
-        "condition_a_transformed_values",
-        data=np.asarray(result.predictor_values.condition_a.transformed_values, dtype=np.float64),
-    )
-    pred_grp.create_dataset(
-        "condition_b_transformed_values",
-        data=np.asarray(result.predictor_values.condition_b.transformed_values, dtype=np.float64),
-    )
-    pred_grp.create_dataset(
-        "condition_a_values",
-        data=np.asarray(result.predictor_values.condition_a.values, dtype=np.float64),
-    )
-    pred_grp.create_dataset(
-        "condition_b_values",
-        data=np.asarray(result.predictor_values.condition_b.values, dtype=np.float64),
-    )
+    for pred_label, pred_vals in (
+        (label_a, result.predictor_values.condition_a),
+        (label_b, result.predictor_values.condition_b),
+    ):
+        pred_cond = pred_grp.create_group(pred_label)
+        pred_cond.create_dataset(
+            "raw_values",
+            data=np.asarray(pred_vals.raw_values, dtype=np.float64),
+        )
+        pred_cond.create_dataset(
+            "transformed_values",
+            data=np.asarray(pred_vals.transformed_values, dtype=np.float64),
+        )
+        pred_cond.create_dataset(
+            "values",
+            data=np.asarray(pred_vals.values, dtype=np.float64),
+        )
 
     summary_a = np.asarray(result.trial_activity_summary_values.condition_a, dtype=np.float64)
     summary_b = np.asarray(result.trial_activity_summary_values.condition_b, dtype=np.float64)
     if summary_a.ndim == 2 and summary_b.ndim == 2:
         summary_grp = fh.create_group("trial_activity_summary")
-        summary_grp.create_dataset("condition_a_values", data=summary_a)
-        summary_grp.create_dataset("condition_b_values", data=summary_b)
+        summary_grp.create_dataset(f"{label_a}_values", data=summary_a)
+        summary_grp.create_dataset(f"{label_b}_values", data=summary_b)
         summary_grp.create_dataset("kind", data=np.bytes_(str(result.trial_activity_summary_kind)))
         summary_grp.create_dataset(
             "missing_response_policy",

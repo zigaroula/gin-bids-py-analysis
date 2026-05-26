@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from gin_bids_py_analysis.processing.base import BaseProcessingParams, BaseWriterParams
+from gin_bids_py_analysis.processing.utils.field_names import sanitize_field_name, validate_field_name
 from gin_bids_py_analysis.processing.utils.input_events import EventSource
 
 
@@ -473,6 +474,11 @@ class BaseTrialStatsParams(BaseProcessingParams):
             raise ValueError("anchor_event_codes must contain at least one event code.")
         if self.tmax_s <= self.tmin_s:
             raise ValueError("tmax_s must be greater than tmin_s.")
+        original_a, original_b = self.condition_a, self.condition_b
+        self.condition_a = sanitize_field_name(original_a)
+        validate_field_name(original_a, self.condition_a, context="condition_a")
+        self.condition_b = sanitize_field_name(original_b)
+        validate_field_name(original_b, self.condition_b, context="condition_b")
         if self.condition_a == self.condition_b:
             raise ValueError("condition_a and condition_b must be different.")
         if self.atlas_name is not None:

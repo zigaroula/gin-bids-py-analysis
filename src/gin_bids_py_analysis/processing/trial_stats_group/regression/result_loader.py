@@ -77,6 +77,12 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
             default=0.05,
         )
 
+        _early_labels = decode_str_array(
+            np.asarray(fh["meta"]["condition_labels"][:], dtype=object)
+        )
+        label_a = _early_labels[0] if len(_early_labels) >= 1 else "condition_a"
+        label_b = _early_labels[1] if len(_early_labels) >= 2 else "condition_b"
+
         source_metric_t_values = _read_2d("stats/regression/condition_contrast/t_values")
         source_metric_p_values = _read_2d("stats/regression/condition_contrast/p_values", fill=1.0)
         source_metric_p_values_uncorrected = _read_2d(
@@ -91,20 +97,20 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
                 np.isfinite(source_metric_p_values)
                 & (source_metric_p_values < significance_alpha)
             )
-        condition_a_source_metric_mean = _read_2d("data/regression/condition_a/slope/mean")
-        condition_a_source_metric_sem = _read_2d("data/regression/condition_a/slope/sem")
-        condition_b_source_metric_mean = _read_2d("data/regression/condition_b/slope/mean")
-        condition_b_source_metric_sem = _read_2d("data/regression/condition_b/slope/sem")
+        condition_a_source_metric_mean = _read_2d(f"data/regression/{label_a}/slope/mean")
+        condition_a_source_metric_sem = _read_2d(f"data/regression/{label_a}/slope/sem")
+        condition_b_source_metric_mean = _read_2d(f"data/regression/{label_b}/slope/mean")
+        condition_b_source_metric_sem = _read_2d(f"data/regression/{label_b}/slope/sem")
         epoch_source_metric_t = _read_1d("stats/regression/condition_contrast/epoch_summary/t")
         epoch_source_metric_p = _read_1d("stats/regression/condition_contrast/epoch_summary/p", fill=1.0)
         epoch_source_metric_df = _read_1d("stats/regression/condition_contrast/epoch_summary/df")
 
         # Per-condition vs-zero — graceful fallback for old files
-        condition_a_vs_zero_t = _read_2d("stats/regression/condition_a_vs_zero/t_values")
+        condition_a_vs_zero_t = _read_2d(f"stats/regression/{label_a}_vs_zero/t_values")
         # p_values is the corrected p (new files); fall back to p_values for old files that only
         # had one p dataset (which was uncorrected in the original impl).
         condition_a_vs_zero_p_uncorr_ds = dataset_or_none(
-            fh, "stats/regression/condition_a_vs_zero/p_values_uncorrected"
+            fh, f"stats/regression/{label_a}_vs_zero/p_values_uncorrected"
         )
         if condition_a_vs_zero_p_uncorr_ds is not None:
             condition_a_vs_zero_p_uncorr = np.asarray(
@@ -112,10 +118,10 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
             ).reshape(n_rois, n_t)
         else:
             condition_a_vs_zero_p_uncorr = _read_2d(
-                "stats/regression/condition_a_vs_zero/p_values", fill=1.0
+                f"stats/regression/{label_a}_vs_zero/p_values", fill=1.0
             )
-        condition_a_vs_zero_p = _read_2d("stats/regression/condition_a_vs_zero/p_values", fill=1.0)
-        sig_a_vz_ds = dataset_or_none(fh, "stats/regression/condition_a_vs_zero/significant_mask")
+        condition_a_vs_zero_p = _read_2d(f"stats/regression/{label_a}_vs_zero/p_values", fill=1.0)
+        sig_a_vz_ds = dataset_or_none(fh, f"stats/regression/{label_a}_vs_zero/significant_mask")
         if sig_a_vz_ds is not None:
             condition_a_vs_zero_sig = np.asarray(sig_a_vz_ds[:], dtype=bool).reshape(n_rois, n_t)
         else:
@@ -124,8 +130,8 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
         vz_a_cluster_p: np.ndarray | None = None
         vz_a_cluster_windows: list[list[tuple[float, float]]] | None = None
         vz_a_cluster_null_dists: list[np.ndarray] | None = None
-        if "stats/regression/condition_a_vs_zero/cluster" in fh:
-            cs_a = fh["stats/regression/condition_a_vs_zero/cluster"]
+        if f"stats/regression/{label_a}_vs_zero/cluster" in fh:
+            cs_a = fh[f"stats/regression/{label_a}_vs_zero/cluster"]
             vz_a_cluster_p = np.asarray(cs_a["p_values"][:], dtype=np.float64)
             starts_a = np.asarray(cs_a["cluster_starts_s"][:], dtype=np.float64)
             ends_a = np.asarray(cs_a["cluster_ends_s"][:], dtype=np.float64)
@@ -152,9 +158,9 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
                     in_window = (time_axis_s >= t_start_s) & (time_axis_s <= t_end_s)
                     condition_a_vs_zero_sig[roi_idx, in_window] = True
 
-        condition_b_vs_zero_t = _read_2d("stats/regression/condition_b_vs_zero/t_values")
+        condition_b_vs_zero_t = _read_2d(f"stats/regression/{label_b}_vs_zero/t_values")
         condition_b_vs_zero_p_uncorr_ds = dataset_or_none(
-            fh, "stats/regression/condition_b_vs_zero/p_values_uncorrected"
+            fh, f"stats/regression/{label_b}_vs_zero/p_values_uncorrected"
         )
         if condition_b_vs_zero_p_uncorr_ds is not None:
             condition_b_vs_zero_p_uncorr = np.asarray(
@@ -162,10 +168,10 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
             ).reshape(n_rois, n_t)
         else:
             condition_b_vs_zero_p_uncorr = _read_2d(
-                "stats/regression/condition_b_vs_zero/p_values", fill=1.0
+                f"stats/regression/{label_b}_vs_zero/p_values", fill=1.0
             )
-        condition_b_vs_zero_p = _read_2d("stats/regression/condition_b_vs_zero/p_values", fill=1.0)
-        sig_b_vz_ds = dataset_or_none(fh, "stats/regression/condition_b_vs_zero/significant_mask")
+        condition_b_vs_zero_p = _read_2d(f"stats/regression/{label_b}_vs_zero/p_values", fill=1.0)
+        sig_b_vz_ds = dataset_or_none(fh, f"stats/regression/{label_b}_vs_zero/significant_mask")
         if sig_b_vz_ds is not None:
             condition_b_vs_zero_sig = np.asarray(sig_b_vz_ds[:], dtype=bool).reshape(n_rois, n_t)
         else:
@@ -174,8 +180,8 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
         vz_b_cluster_p: np.ndarray | None = None
         vz_b_cluster_windows: list[list[tuple[float, float]]] | None = None
         vz_b_cluster_null_dists: list[np.ndarray] | None = None
-        if "stats/regression/condition_b_vs_zero/cluster" in fh:
-            cs_b = fh["stats/regression/condition_b_vs_zero/cluster"]
+        if f"stats/regression/{label_b}_vs_zero/cluster" in fh:
+            cs_b = fh[f"stats/regression/{label_b}_vs_zero/cluster"]
             vz_b_cluster_p = np.asarray(cs_b["p_values"][:], dtype=np.float64)
             starts_b = np.asarray(cs_b["cluster_starts_s"][:], dtype=np.float64)
             ends_b = np.asarray(cs_b["cluster_ends_s"][:], dtype=np.float64)
@@ -219,15 +225,15 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
         epoch_activity_p = _read_1d("stats/signal_activity/epoch_summary/p", fill=1.0)
         epoch_activity_df = _read_1d("stats/signal_activity/epoch_summary/df")
 
-        condition_a_signal_activity_summary_mean = _read_2d("data/signal_activity/condition_a/mean")
-        condition_a_signal_activity_summary_sem = _read_2d("data/signal_activity/condition_a/sem")
-        condition_b_signal_activity_summary_mean = _read_2d("data/signal_activity/condition_b/mean")
-        condition_b_signal_activity_summary_sem = _read_2d("data/signal_activity/condition_b/sem")
+        condition_a_signal_activity_summary_mean = _read_2d(f"data/signal_activity/{label_a}/mean")
+        condition_a_signal_activity_summary_sem = _read_2d(f"data/signal_activity/{label_a}/sem")
+        condition_b_signal_activity_summary_mean = _read_2d(f"data/signal_activity/{label_b}/mean")
+        condition_b_signal_activity_summary_sem = _read_2d(f"data/signal_activity/{label_b}/sem")
 
-        condition_a_r_value_mean = _read_2d("data/regression/condition_a/r_value/mean")
-        condition_a_r_value_sem = _read_2d("data/regression/condition_a/r_value/sem")
-        condition_b_r_value_mean = _read_2d("data/regression/condition_b/r_value/mean")
-        condition_b_r_value_sem = _read_2d("data/regression/condition_b/r_value/sem")
+        condition_a_r_value_mean = _read_2d(f"data/regression/{label_a}/r_value/mean")
+        condition_a_r_value_sem = _read_2d(f"data/regression/{label_a}/r_value/sem")
+        condition_b_r_value_mean = _read_2d(f"data/regression/{label_b}/r_value/mean")
+        condition_b_r_value_sem = _read_2d(f"data/regression/{label_b}/r_value/sem")
 
         roi_channel_counts = _read_1d_int("meta/roi_channel_counts")
         roi_subject_counts = _read_1d_int("meta/roi_subject_counts")
@@ -334,6 +340,8 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
             group_name="signal_activity",
             region_names=region_names,
             n_t=n_t,
+            label_a=label_a,
+            label_b=label_b,
         )
         (
             condition_a_source_metric_contributions,
@@ -344,13 +352,15 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
             group_name="regression/slope",
             region_names=region_names,
             n_t=n_t,
+            label_a=label_a,
+            label_b=label_b,
         )
         (
             condition_a_scatter_predictor,
             condition_a_scatter_activity,
             condition_b_scatter_predictor,
             condition_b_scatter_activity,
-        ) = _read_scatter_hdf5(fh, region_names=region_names)
+        ) = _read_scatter_hdf5(fh, region_names=region_names, label_a=label_a, label_b=label_b)
 
         source_subject_stats_files: list[str] = []
         source_electrodes_files: list[str] = []
@@ -546,6 +556,10 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
         )
     significance_alpha = mat_float(getattr(meta, "significance_alpha", None), default=0.05)
 
+    _early_labels = mat_str_list(getattr(meta, "condition_labels", None))
+    label_a = _early_labels[0] if len(_early_labels) >= 1 else "condition_a"
+    label_b = _early_labels[1] if len(_early_labels) >= 2 else "condition_b"
+
     stats_root = data.stats
     data_root = getattr(data, "data", data)
     regression_stats = getattr(stats_root, "regression")
@@ -569,7 +583,7 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
         )
 
     # Per-condition vs-zero for the primary regression metric.
-    vz_a_raw = getattr(regression_stats, "condition_a_vs_zero", None)
+    vz_a_raw = getattr(regression_stats, f"{label_a}_vs_zero", None)
     condition_a_vs_zero_t = _mat_2d(vz_a_raw, "t_values")
     # p_values_uncorrected: new field; fall back to p_values for old files
     vz_a_p_uncorr_raw = getattr(vz_a_raw, "p_values_uncorrected", None) if vz_a_raw is not None else None
@@ -638,7 +652,7 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
                     in_window = (time_axis_s >= t_start_s) & (time_axis_s <= t_end_s)
                     condition_a_vs_zero_sig[roi_idx, in_window] = True
 
-    vz_b_raw = getattr(regression_stats, "condition_b_vs_zero", None)
+    vz_b_raw = getattr(regression_stats, f"{label_b}_vs_zero", None)
     condition_b_vs_zero_t = _mat_2d(vz_b_raw, "t_values")
     vz_b_p_uncorr_raw = getattr(vz_b_raw, "p_values_uncorrected", None) if vz_b_raw is not None else None
     if vz_b_p_uncorr_raw is not None:
@@ -706,8 +720,8 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
                     in_window = (time_axis_s >= t_start_s) & (time_axis_s <= t_end_s)
                     condition_b_vs_zero_sig[roi_idx, in_window] = True
     regression_data = getattr(data_root, "regression", None)
-    condition_a_regression_data = getattr(regression_data, "condition_a", None)
-    condition_b_regression_data = getattr(regression_data, "condition_b", None)
+    condition_a_regression_data = getattr(regression_data, label_a, None)
+    condition_b_regression_data = getattr(regression_data, label_b, None)
     condition_a_source_metric_data = getattr(condition_a_regression_data, "slope", None)
     condition_b_source_metric_data = getattr(condition_b_regression_data, "slope", None)
     condition_a_source_metric_mean = _mat_2d(condition_a_source_metric_data, "mean")
@@ -743,8 +757,8 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
     epoch_activity_df = _mat_1d(epoch_activity, "df")
 
     activity_data = getattr(data_root, "signal_activity", None)
-    condition_a_signal_activity_summary_data = getattr(activity_data, "condition_a", None)
-    condition_b_signal_activity_summary_data = getattr(activity_data, "condition_b", None)
+    condition_a_signal_activity_summary_data = getattr(activity_data, label_a, None)
+    condition_b_signal_activity_summary_data = getattr(activity_data, label_b, None)
     condition_a_signal_activity_summary_mean = _mat_2d(condition_a_signal_activity_summary_data, "mean")
     condition_a_signal_activity_summary_sem = _mat_2d(condition_a_signal_activity_summary_data, "sem")
     condition_b_signal_activity_summary_mean = _mat_2d(condition_b_signal_activity_summary_data, "mean")
@@ -1070,6 +1084,8 @@ def _read_indexed_condition_contributions_hdf5(
     group_name: str,
     region_names: list[str],
     n_t: int,
+    label_a: str = "condition_a",
+    label_b: str = "condition_b",
 ) -> tuple[list[np.ndarray], list[np.ndarray], list[list[str]]]:
     full_group_name = f"contributions/{group_name}"
     if full_group_name not in fh:
@@ -1085,8 +1101,8 @@ def _read_indexed_condition_contributions_hdf5(
             out_labels.append([])
             continue
         roi_group = group[roi_key]
-        out_a.append(np.asarray(roi_group["condition_a"][:], dtype=np.float64))
-        out_b.append(np.asarray(roi_group["condition_b"][:], dtype=np.float64))
+        out_a.append(np.asarray(roi_group[label_a][:], dtype=np.float64))
+        out_b.append(np.asarray(roi_group[label_b][:], dtype=np.float64))
         out_labels.append(
             decode_str_array(np.asarray(roi_group["labels"][:], dtype=object))
             if "labels" in roi_group
@@ -1099,6 +1115,8 @@ def _read_scatter_hdf5(
     fh: h5py.File,
     *,
     region_names: list[str],
+    label_a: str = "condition_a",
+    label_b: str = "condition_b",
 ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
     if "scatter" not in fh:
         return [], [], [], []
@@ -1115,26 +1133,26 @@ def _read_scatter_hdf5(
             out_act_b.append(np.empty(0, dtype=np.float64))
             continue
         roi_group = group[roi_key]
-        if "condition_a" in roi_group:
-            out_pred_a.append(np.asarray(roi_group["condition_a"]["predictor"][:], dtype=np.float64))
+        if label_a in roi_group:
+            out_pred_a.append(np.asarray(roi_group[label_a]["predictor"][:], dtype=np.float64))
             out_act_a.append(
                 np.asarray(
-                    roi_group["condition_a"]["signal_activity_summary"][:],
+                    roi_group[label_a]["signal_activity_summary"][:],
                     dtype=np.float64,
                 )
             )
-            out_pred_b.append(np.asarray(roi_group["condition_b"]["predictor"][:], dtype=np.float64))
+            out_pred_b.append(np.asarray(roi_group[label_b]["predictor"][:], dtype=np.float64))
             out_act_b.append(
                 np.asarray(
-                    roi_group["condition_b"]["signal_activity_summary"][:],
+                    roi_group[label_b]["signal_activity_summary"][:],
                     dtype=np.float64,
                 )
             )
         else:
-            out_pred_a.append(np.asarray(roi_group["condition_a_predictor"][:], dtype=np.float64))
-            out_act_a.append(np.asarray(roi_group["condition_a_signal_activity_summary"][:], dtype=np.float64))
-            out_pred_b.append(np.asarray(roi_group["condition_b_predictor"][:], dtype=np.float64))
-            out_act_b.append(np.asarray(roi_group["condition_b_signal_activity_summary"][:], dtype=np.float64))
+            out_pred_a.append(np.asarray(roi_group[f"{label_a}_predictor"][:], dtype=np.float64))
+            out_act_a.append(np.asarray(roi_group[f"{label_a}_signal_activity_summary"][:], dtype=np.float64))
+            out_pred_b.append(np.asarray(roi_group[f"{label_b}_predictor"][:], dtype=np.float64))
+            out_act_b.append(np.asarray(roi_group[f"{label_b}_signal_activity_summary"][:], dtype=np.float64))
     return out_pred_a, out_act_a, out_pred_b, out_act_b
 
 

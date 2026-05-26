@@ -179,16 +179,16 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
         assert float(fh["meta"]["activity_baseline_tmax_s"][()]) == pytest.approx(0.0)
         assert fh["meta"]["activity_baseline_scope"].asstr()[()] == "global"
         assert bool(fh["meta"]["activity_baseline_remove_outlier_trial_means"][()]) is True
-        assert fh["stats"]["regression"]["condition_a"]["slope"].shape == (2, 3)
-        assert fh["stats"]["regression"]["condition_b"]["p_value_corrected"].shape == (2, 3)
-        assert fh["predictor"]["condition_a"]["values"].shape == (3,)
-        assert fh["predictor"]["condition_b"]["values"].shape == (3,)
+        assert fh["stats"]["regression"]["accepted"]["slope"].shape == (2, 3)
+        assert fh["stats"]["regression"]["rejected"]["p_value_corrected"].shape == (2, 3)
+        assert fh["predictor"]["accepted"]["values"].shape == (3,)
+        assert fh["predictor"]["rejected"]["values"].shape == (3,)
         np.testing.assert_allclose(
-            fh["trial_activity_summary"]["condition_a_values"][:],
+            fh["trial_activity_summary"]["accepted_values"][:],
             result.trial_activity_summary_values.condition_a,
         )
         np.testing.assert_allclose(
-            fh["trial_activity_summary"]["condition_b_values"][:],
+            fh["trial_activity_summary"]["rejected_values"][:],
             result.trial_activity_summary_values.condition_b,
         )
         assert fh["trial_activity_summary"]["kind"].asstr()[()] == "anchor_to_response_mean"
@@ -230,7 +230,7 @@ def test_writer_outputs_matlab(tmp_path: Path) -> None:
     mat = scipy.io.loadmat(str(output_path), squeeze_me=True, struct_as_record=False)
     data = mat["data"]
     assert str(data.meta.analysis_type) == "slope_regression"
-    assert data.stats.regression.condition_a.slope.shape == (2, 3)
+    assert data.stats.regression.accepted.slope.shape == (2, 3)
     assert str(data.trial_activity_summary.kind) == "anchor_to_response_mean"
     loaded = load_regression_result(output_path)
     np.testing.assert_allclose(
