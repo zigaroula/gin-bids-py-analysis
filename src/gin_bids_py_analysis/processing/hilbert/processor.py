@@ -17,6 +17,7 @@ from .dsp import process_all_channels
 from .params import HilbertParams
 from .result import HilbertProcessingResult
 from ..utils.channels import select_channels_for_montage
+from ..utils.events import downsample_events
 from ..utils.filters import apply_notch_filter
 from ..utils.input_events import resolve_input_events
 from ..utils.multithreading import get_threads_for_worker
@@ -100,6 +101,13 @@ class HilbertProcessing(BaseProcessing):
         )
 
         downsampled_fs = self.params.downsampled_frequency_hz if self.params.downsampled_frequency_hz is not None else fs
+        events = downsample_events(
+            resolved_events.events,
+            downsampled_fs,
+            original_fs=fs,
+            event_sample_shift_samples=self.params.event_sample_shift_samples,
+            event_onset_precision=resolved_events.onset_precision,
+        )
 
         return HilbertProcessingResult(
             source_group=group,
@@ -121,4 +129,5 @@ class HilbertProcessing(BaseProcessing):
                 **resolved_events.metadata(),
             },
             original_events=resolved_events.events,
+            events=events,
         )

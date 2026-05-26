@@ -26,8 +26,10 @@ class HilbertProcessingResult(BaseProcessingResult):
                          60-70 Hz were processed.
         downsampled_fs:  Effective sampling rate of the envelope output in Hz.
         original_fs:     Sampling rate of the raw input signal in Hz.
-        original_events: Source annotations carried forward for optional
-                         BrainVision marker export.
+        original_events: Source annotations carried forward for provenance and
+                         backwards compatibility.
+        events:          Source events projected to ``downsampled_fs`` sample
+                         indices, used by all output formats.
     """
 
     smoothed: dict[int, np.ndarray] = field(default_factory=dict)
@@ -36,6 +38,7 @@ class HilbertProcessingResult(BaseProcessingResult):
     downsampled_fs: float = 0.0
     original_fs: float = 0.0
     original_events: Annotations | Any = field(default=None)
+    events: list[dict] | None = field(default=None)
 
     def to_output_tree(self, *, pipeline_version: str = "unknown") -> OutputTree:
         """Return the canonical serialisable output tree for this result.
@@ -78,7 +81,7 @@ class HilbertProcessingResult(BaseProcessingResult):
             if value is not None:
                 meta[key] = str(value)
 
-        return {
+        tree: dict[str, Any] = {
             "data": {"envelope": compressed(envelope_3d)},
             "axes": {
                 "channel": np.array(self.channel_names, dtype=object),
@@ -93,3 +96,25 @@ class HilbertProcessingResult(BaseProcessingResult):
                 "pipeline_version": pipeline_version,
             },
         }
+
+        if self.events:
+            tree["events"] = {
+                "onset": np.array(
+                    [event["onset"] for event in self.events],
+                    dtype=np.int64,
+                ),
+                "duration": np.array(
+                    [event["duration"] for event in self.events],
+                    dtype=np.int64,
+                ),
+                "type": np.array(
+                    [str(event["type"]) for event in self.events],
+                    dtype=object,
+                ),
+                "description": np.array(
+                    [str(event["description"]) for event in self.events],
+                    dtype=object,
+                ),
+            }
+
+        return tree

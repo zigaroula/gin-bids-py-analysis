@@ -283,6 +283,8 @@ class TestHilbertProcessingChannelSelection:
         )
 
         assert result.original_events[0]["onset"] == pytest.approx(152.13746632495895)
+        assert result.events is not None
+        assert result.events[0]["onset"] == 15214
         assert result.metadata["events_source_resolved"] == "events_tsv"
         assert result.metadata["events_onset_precision"] == "exact_time"
 

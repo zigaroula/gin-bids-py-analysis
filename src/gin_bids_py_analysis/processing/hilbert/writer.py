@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any
-
-import mne
 
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.bids.helpers import modify_entities
@@ -12,117 +9,19 @@ from gin_bids_py_analysis.processing.base import (
     BaseProcessingResult,
     BaseProcessingWriter,
 )
-from gin_bids_py_analysis.processing.utils.events import coerce_annotation_events
-from gin_bids_py_analysis.processing.utils.matlab import matlab_round
+from gin_bids_py_analysis.processing.utils.events import downsample_events
 from gin_bids_py_analysis.processing.utils.serialization import write_hdf5_tree, write_matlab_tree
 
 from .result import HilbertProcessingResult
+
+_downsample_events = downsample_events
+
 
 def _package_version() -> str:
     try:
         return version("gin-bids-py-analysis")
     except PackageNotFoundError:
         return "unknown"
-
-
-def _downsample_events(
-    original_events: mne.Annotations | Any,
-    downsampled_fs: float,
-    *,
-    original_fs: float | None = None,
-    event_sample_shift_samples: int = 0,
-    event_onset_precision: str = "sample_quantized",
-) -> list[dict] | None:
-    """Convert source annotations to sample indices at the envelope rate.
-
-    Args:
-        original_events: MNE Annotations object or any list of dicts with keys
-                         "onset" (in seconds) and "duration" (in seconds).
-        downsampled_fs: Sampling frequency of the exported envelope signal.
-        original_fs: Source sampling frequency, required when applying a source
-                     sample offset before projection to ``downsampled_fs``.
-        event_sample_shift_samples: Offset to apply in source samples before
-                                    converting events to the envelope rate.
-        event_onset_precision: ``"sample_quantized"`` preserves the historical
-                               annotation path by snapping to a source sample
-                               before downsampling. ``"exact_time"`` keeps
-                               exact TSV onsets in seconds and applies the
-                               sample shift as a time offset.
-                               ``"spm_continuous_sample"`` reproduces SPM's
-                               continuous-file event-to-sample conversion after
-                               downsampling: source samples are treated as
-                               MATLAB/SPM 1-based samples, then converted to
-                               BrainVision zero-based marker onsets.
-
-    Returns:
-        List of dicts with keys "onset" (in samples), "duration" (in samples),
-        "type", and "description", or ``None`` if no events are present.
-    """
-    if not original_events:
-        return None
-
-    if event_sample_shift_samples and original_fs is None:
-        raise ValueError(
-            "original_fs is required when event_sample_shift_samples is non-zero."
-        )
-    if event_onset_precision not in {
-        "sample_quantized",
-        "exact_time",
-        "spm_continuous_sample",
-    }:
-        raise ValueError(
-            "event_onset_precision must be 'sample_quantized', 'exact_time', "
-            "or 'spm_continuous_sample'."
-        )
-
-    downsampled_events = []
-    for ann in coerce_annotation_events(original_events):
-        description: int | str
-        ann_type = ann.event_type
-        if ann_type in ("Stimulus", "Response") and ann.code is not None:
-            description = int(ann.code)
-        else:
-            if ann_type in ("Stimulus", "Response"):
-                ann_type = "Comment"
-            description = ann.description
-
-        if event_onset_precision == "spm_continuous_sample":
-            if original_fs is None:
-                raise ValueError(
-                    "original_fs is required for event_onset_precision="
-                    "'spm_continuous_sample'."
-                )
-            shifted_onset_s = ann.onset_s + (
-                (event_sample_shift_samples + 1) / float(original_fs)
-            )
-            onset_samples = matlab_round(shifted_onset_s * downsampled_fs + 1) - 1
-        elif event_onset_precision == "exact_time":
-            shifted_onset_s = ann.onset_s
-            if event_sample_shift_samples:
-                shifted_onset_s += event_sample_shift_samples / float(original_fs)
-            onset_samples = matlab_round(shifted_onset_s * downsampled_fs)
-        elif event_sample_shift_samples:
-            source_onset_sample = (
-                matlab_round(ann.onset_s * float(original_fs))
-                + event_sample_shift_samples
-            )
-            onset_samples = matlab_round(
-                source_onset_sample * downsampled_fs / float(original_fs)
-            )
-        else:
-            onset_samples = matlab_round(ann.onset_s * downsampled_fs)
-        duration_samples = matlab_round(ann.duration_s * downsampled_fs)
-
-        downsampled_events.append(
-            {
-                "onset": onset_samples,
-                "duration": duration_samples,
-                "type": ann_type,
-                "description": description,
-            }
-        )
-
-    return downsampled_events if downsampled_events else None
 
 
 class HilbertProcessingWriter(BaseProcessingWriter):
@@ -137,8 +36,8 @@ class HilbertProcessingWriter(BaseProcessingWriter):
     * **BrainVision** (``"brainvision"``) — one file triplet
       (``.vhdr`` / ``.vmrk`` / ``.eeg``) is written per smoothing window using
       a per-window ``desc-<output_description>sm{N}`` entity in the filename.
-      Annotations are taken from ``result.original_events`` and remapped to the
-      envelope sampling rate.
+      Events are taken from ``result.events``, already projected to the envelope
+      sampling rate by the processor.
 
     Pass a :class:`~gin_bids_py_analysis.processing.hilbert.HilbertWriterParams`
     instance to the constructor — only ``bids_root`` is required.
@@ -246,8 +145,8 @@ class HilbertProcessingWriter(BaseProcessingWriter):
         * ``…desc-<output_description>sm{N}_….vmrk`` — marker file
         * ``…desc-<output_description>sm{N}_….eeg``  — binary float32 data
 
-        Annotations are taken from ``result.original_events`` and remapped to
-        the envelope sampling rate via :func:`_downsample_events`.
+        Events are taken from ``result.events``, already projected to the
+        envelope sampling rate by the processor.
 
         Args:
             result: A :class:`HilbertProcessingResult` to serialise.
@@ -270,19 +169,19 @@ class HilbertProcessingWriter(BaseProcessingWriter):
                 "pybv is required for BrainVision output. Install it with: pip install pybv"
             ) from exc
 
-        event_sample_shift_samples = int(
-            result.metadata.get("event_sample_shift_samples", 0)
-        )
-        event_onset_precision = str(
-            result.metadata.get("events_onset_precision", "sample_quantized")
-        )
-        events = _downsample_events(
-            result.original_events,
-            result.downsampled_fs,
-            original_fs=result.original_fs,
-            event_sample_shift_samples=event_sample_shift_samples,
-            event_onset_precision=event_onset_precision,
-        )
+        events = result.events
+        if events is None and result.original_events is not None:
+            events = downsample_events(
+                result.original_events,
+                result.downsampled_fs,
+                original_fs=result.original_fs,
+                event_sample_shift_samples=int(
+                    result.metadata.get("event_sample_shift_samples", 0)
+                ),
+                event_onset_precision=str(
+                    result.metadata.get("events_onset_precision", "sample_quantized")
+                ),
+            )
 
         unit = result.metadata.get("unit", "µV")
         scale_factor = result.metadata.get("scale_factor", 1e-6)

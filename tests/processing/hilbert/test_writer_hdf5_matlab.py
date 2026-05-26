@@ -63,6 +63,7 @@ def _make_result(
     n_samples: int = 100,
     windows: list[int] | None = None,
     extra_metadata: dict | None = None,
+    events: list[dict] | None = None,
 ) -> HilbertProcessingResult:
     if windows is None:
         windows = [0, 250]
@@ -88,6 +89,7 @@ def _make_result(
         downsampled_fs=64.0,
         original_fs=1000.0,
         metadata=meta,
+        events=events,
     )
 
 
@@ -101,6 +103,28 @@ class TestToOutputTree:
         result = _make_result("dummy.vhdr", windows=[0])
         tree = result.to_output_tree()
         assert set(tree.keys()) == {"data", "axes", "meta", "provenance"}
+
+    def test_events_are_serialized_when_present(self) -> None:
+        result = _make_result(
+            "dummy.vhdr",
+            windows=[0],
+            events=[
+                {
+                    "onset": 15214,
+                    "duration": 0,
+                    "type": "Stimulus",
+                    "description": 11,
+                }
+            ],
+        )
+        tree = result.to_output_tree()
+
+        assert "events" in tree
+        events = tree["events"]  # type: ignore[index]
+        assert list(events["onset"]) == [15214]
+        assert list(events["duration"]) == [0]
+        assert list(events["type"]) == ["Stimulus"]
+        assert list(events["description"]) == ["11"]
 
     def test_data_envelope_shape(self) -> None:
         n_ch, n_samp = 4, 80
