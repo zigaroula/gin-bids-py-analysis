@@ -9,6 +9,9 @@ from mne.io import RawArray
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
+from gin_bids_py_analysis.processing.hilbert.params import HilbertWriterParams
+from gin_bids_py_analysis.processing.hilbert.result import HilbertProcessingResult
+from gin_bids_py_analysis.processing.hilbert.writer import HilbertProcessingWriter
 from gin_bids_py_analysis.processing.trial_stats import (
     TableTrialResolver,
     ConditionTestParams,
@@ -43,6 +46,64 @@ def _make_raw(
     raw = RawArray(np.asarray(data, dtype=np.float64), info, verbose="ERROR")
     raw.set_annotations(annotations)
     return raw
+
+
+def _write_hilbert_ieeg_file(
+    tmp_path: Path,
+    *,
+    output_format: str = "hdf5",
+    windows: dict[int, np.ndarray],
+    sfreq: float = 10.0,
+    events: list[dict] | None = None,
+) -> BIDSFile:
+    source_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    result = HilbertProcessingResult(
+        source_group=BIDSFileGroup(primary=source_file),
+        metadata={"unit": "amplitude", "montage_mode": "mono", "centered": False},
+        smoothed={key: np.asarray(value, dtype=np.float32) for key, value in windows.items()},
+        channel_names=[f"A{idx + 1}" for idx in range(next(iter(windows.values())).shape[0])],
+        bins=[50.0, 60.0],
+        downsampled_fs=sfreq,
+        original_fs=1000.0,
+        events=events,
+    )
+    out = HilbertProcessingWriter(
+        HilbertWriterParams(bids_root=tmp_path, output_format=output_format)
+    ).write(result)
+    return _make_bids_file(
+        out,
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": out.suffix,
+            "datatype": "ieeg",
+            "desc": "hilbert",
+        },
+    )
+
+
+def _hilbert_anchor_events(onsets_s: list[float], sfreq: float = 10.0) -> list[dict]:
+    return [
+        {
+            "onset": int(round(onset_s * sfreq)),
+            "duration": 0,
+            "type": "Stimulus",
+            "description": "10",
+        }
+        for onset_s in onsets_s
+    ]
 
 
 class _FixedResolver:
@@ -231,66 +292,130 @@ def test_process_group_exposes_epoch_mean_trial_activity_summary(
     assert result.trial_activity_summary_label == "Epoch mean activity"
 
 
-def test_process_group_applies_notch_filter_and_preserves_original_raw(
-    tmp_path: Path,
-) -> None:
-    ieeg_file = _make_bids_file(
-        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
-        {
-            "subject": "01",
-            "task": "decid",
-            "run": "1",
-            "suffix": "ieeg",
-            "extension": ".vhdr",
-            "datatype": "ieeg",
-        },
+def test_process_group_accepts_hilbert_hdf5_input(tmp_path: Path) -> None:
+    sfreq = 10.0
+    data = np.zeros((1, 60), dtype=np.float32)
+    data[:, 10:13] = 6.0
+    data[:, 20:23] = 1.0
+    data[:, 30:33] = 8.0
+    data[:, 40:43] = 2.0
+    hilbert_file = _write_hilbert_ieeg_file(
+        tmp_path,
+        windows={0: data},
+        sfreq=sfreq,
+        events=_hilbert_anchor_events([1.0, 2.0, 3.0, 4.0], sfreq),
     )
 
-    sfreq = 1000.0
-    duration_s = 8.0
-    times = np.arange(0.0, duration_s, 1.0 / sfreq)
-    data = np.sin(2.0 * np.pi * 50.0 * times)[None, :].astype(np.float64)
-    original_data = data.copy()
-    annotations = Annotations(
-        onset=[1.0, 3.0, 5.0, 7.0],
-        duration=[0.0] * 4,
-        description=["Stimulus/S  10"] * 4,
-    )
-    raw = _make_raw(data, ["A1"], sfreq, annotations)
-    ieeg_file.attach_data(raw)
-    group = BIDSFileGroup(primary=ieeg_file)
-    base_params = dict(
-        anchor_event_codes=["10"],
-        tmin_s=-0.2,
-        tmax_s=0.2,
-        condition_a="accepted",
-        condition_b="rejected",
-        min_trials_per_condition=2,
-        p_value_correction_method="none",
-    )
-
-    unfiltered = ConditionTestProcessing(
-        ConditionTestParams(**base_params),
+    result = ConditionTestProcessing(
+        ConditionTestParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            p_value_correction_method="none",
+        ),
         resolver=_AlternatingResolver(),
-    ).process_group(group)
-    filtered = ConditionTestProcessing(
-        ConditionTestParams(**base_params, notch_filter_freqs=[50.0]),
+    ).process_group(BIDSFileGroup(primary=hilbert_file))
+
+    assert result.condition_a_trial_count == 2
+    assert result.condition_b_trial_count == 2
+    assert result.channel_names == ["A1"]
+    assert result.metadata["signal_input_types"] == ["hilbert"]
+    assert result.metadata["hilbert_smoothing_window_ms"] == 0
+    np.testing.assert_allclose(result.difference.mean, np.full((1, 3), 5.5))
+
+
+def test_process_group_accepts_hilbert_matlab_input(tmp_path: Path) -> None:
+    sfreq = 10.0
+    data = np.zeros((1, 60), dtype=np.float32)
+    data[:, 10:13] = 6.0
+    data[:, 20:23] = 1.0
+    data[:, 30:33] = 8.0
+    data[:, 40:43] = 2.0
+    hilbert_file = _write_hilbert_ieeg_file(
+        tmp_path,
+        output_format="matlab",
+        windows={0: data},
+        sfreq=sfreq,
+        events=_hilbert_anchor_events([1.0, 2.0, 3.0, 4.0], sfreq),
+    )
+
+    result = ConditionTestProcessing(
+        ConditionTestParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            p_value_correction_method="none",
+        ),
         resolver=_AlternatingResolver(),
-    ).process_group(group)
+    ).process_group(BIDSFileGroup(primary=hilbert_file))
 
-    freqs = np.fft.rfftfreq(unfiltered.epochs.condition_a.shape[-1], d=1.0 / sfreq)
-    idx_50hz = int(np.argmin(np.abs(freqs - 50.0)))
-    unfiltered_amp = np.abs(
-        np.fft.rfft(unfiltered.epochs.condition_a[0, 0, :])
-    )[idx_50hz]
-    filtered_amp = np.abs(np.fft.rfft(filtered.epochs.condition_a[0, 0, :]))[
-        idx_50hz
-    ]
+    assert result.condition_a_trial_count == 2
+    assert result.condition_b_trial_count == 2
+    assert result.metadata["signal_input_types"] == ["hilbert"]
+    np.testing.assert_allclose(result.difference.mean, np.full((1, 3), 5.5))
 
-    assert filtered_amp < (unfiltered_amp * 0.25)
-    assert filtered.metadata["notch_filter_freqs"] == [50.0]
-    assert filtered.metadata["notch_filter_applied"] is True
-    np.testing.assert_allclose(raw.get_data(), original_data)
+
+def test_process_group_selects_requested_hilbert_smoothing_window(tmp_path: Path) -> None:
+    sfreq = 10.0
+    unsmoothed = np.zeros((1, 60), dtype=np.float32)
+    smoothed = np.zeros((1, 60), dtype=np.float32)
+    unsmoothed[:, 10:13] = 10.0
+    unsmoothed[:, 20:23] = 9.0
+    unsmoothed[:, 30:33] = 10.0
+    unsmoothed[:, 40:43] = 9.0
+    smoothed[:, 10:13] = 6.0
+    smoothed[:, 20:23] = 1.0
+    smoothed[:, 30:33] = 8.0
+    smoothed[:, 40:43] = 2.0
+    hilbert_file = _write_hilbert_ieeg_file(
+        tmp_path,
+        windows={0: unsmoothed, 250: smoothed},
+        sfreq=sfreq,
+        events=_hilbert_anchor_events([1.0, 2.0, 3.0, 4.0], sfreq),
+    )
+
+    result = ConditionTestProcessing(
+        ConditionTestParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            hilbert_smoothing_window_ms=250,
+            p_value_correction_method="none",
+        ),
+        resolver=_AlternatingResolver(),
+    ).process_group(BIDSFileGroup(primary=hilbert_file))
+
+    assert result.metadata["hilbert_smoothing_window_ms"] == 250
+    np.testing.assert_allclose(result.difference.mean, np.full((1, 3), 5.5))
+
+
+def test_process_group_raises_when_hilbert_window_missing(tmp_path: Path) -> None:
+    hilbert_file = _write_hilbert_ieeg_file(
+        tmp_path,
+        windows={0: np.zeros((1, 60), dtype=np.float32)},
+        events=_hilbert_anchor_events([1.0, 2.0, 3.0, 4.0]),
+    )
+
+    processor = ConditionTestProcessing(
+        ConditionTestParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            hilbert_smoothing_window_ms=250,
+        ),
+        resolver=_AlternatingResolver(),
+    )
+
+    with pytest.raises(ValueError, match="Available windows: 0"):
+        processor.process_group(BIDSFileGroup(primary=hilbert_file))
 
 
 def test_process_group_supports_anchor_to_response_trial_activity_summary_for_condition_test(

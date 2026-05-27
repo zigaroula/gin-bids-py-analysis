@@ -25,40 +25,7 @@ def test_base_params_normalize_common_fields() -> None:
     assert params.n_bins == 0
     assert params.events_source == "annotations"
     assert params.event_sample_shift_samples == 0
-    assert params.notch_filter_freqs == []
     assert params.trial_activity_summary.kind == "epoch_mean"
-
-
-def test_base_params_normalize_notch_filter_freqs() -> None:
-    assert BaseTrialStatsParams(
-        anchor_event_codes=["10"],
-        tmin_s=-1.0,
-        tmax_s=2.0,
-        notch_filter_freqs=50,
-    ).notch_filter_freqs == [50.0]
-    assert BaseTrialStatsParams(
-        anchor_event_codes=["10"],
-        tmin_s=-1.0,
-        tmax_s=2.0,
-        notch_filter_freqs="50",
-    ).notch_filter_freqs == [50.0]
-    assert BaseTrialStatsParams(
-        anchor_event_codes=["10"],
-        tmin_s=-1.0,
-        tmax_s=2.0,
-        notch_filter_freqs=[50, 150],
-    ).notch_filter_freqs == [50.0, 150.0]
-
-
-@pytest.mark.parametrize("freqs", [0, -50, float("nan"), float("inf"), "bad"])
-def test_base_params_reject_invalid_notch_filter_freqs(freqs: object) -> None:
-    with pytest.raises(ValueError, match="notch_filter_freqs"):
-        BaseTrialStatsParams(
-            anchor_event_codes=["10"],
-            tmin_s=-1.0,
-            tmax_s=2.0,
-            notch_filter_freqs=freqs,
-        )
 
 
 def test_base_params_accepts_trial_activity_summary_payload() -> None:

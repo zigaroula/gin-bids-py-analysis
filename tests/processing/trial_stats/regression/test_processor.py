@@ -9,6 +9,9 @@ from mne.io import RawArray
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
+from gin_bids_py_analysis.processing.hilbert.params import HilbertWriterParams
+from gin_bids_py_analysis.processing.hilbert.result import HilbertProcessingResult
+from gin_bids_py_analysis.processing.hilbert.writer import HilbertProcessingWriter
 from gin_bids_py_analysis.processing.trial_stats import (
     RegressionParams,
     RegressionProcessing,
@@ -44,6 +47,61 @@ def _make_raw(
     raw = RawArray(np.asarray(data, dtype=np.float64), info, verbose="ERROR")
     raw.set_annotations(annotations)
     return raw
+
+
+def _write_hilbert_ieeg_file(
+    tmp_path: Path,
+    *,
+    data: np.ndarray,
+    sfreq: float = 10.0,
+    events: list[dict] | None = None,
+) -> BIDSFile:
+    source_file = _make_bids_file(
+        tmp_path / "sub-01_task-decid_run-1_ieeg.vhdr",
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": ".vhdr",
+            "datatype": "ieeg",
+        },
+    )
+    result = HilbertProcessingResult(
+        source_group=BIDSFileGroup(primary=source_file),
+        metadata={"unit": "amplitude", "montage_mode": "mono", "centered": False},
+        smoothed={0: np.asarray(data, dtype=np.float32)},
+        channel_names=[f"A{idx + 1}" for idx in range(data.shape[0])],
+        bins=[50.0, 60.0],
+        downsampled_fs=sfreq,
+        original_fs=1000.0,
+        events=events,
+    )
+    out = HilbertProcessingWriter(HilbertWriterParams(bids_root=tmp_path)).write(result)
+    return _make_bids_file(
+        out,
+        {
+            "subject": "01",
+            "task": "decid",
+            "run": "1",
+            "suffix": "ieeg",
+            "extension": out.suffix,
+            "datatype": "ieeg",
+            "desc": "hilbert",
+        },
+    )
+
+
+def _hilbert_anchor_events(onsets_s: list[float], sfreq: float = 10.0) -> list[dict]:
+    return [
+        {
+            "onset": int(round(onset_s * sfreq)),
+            "duration": 0,
+            "type": "Stimulus",
+            "description": "10",
+        }
+        for onset_s in onsets_s
+    ]
 
 
 class _SlopeResolver:
@@ -181,6 +239,52 @@ def test_process_group_computes_condition_slopes(tmp_path: Path) -> None:
     np.testing.assert_allclose(result.regression.condition_b.slope, np.full((1, 3), -1.0), atol=1e-8)
     assert result.condition_a_trial_count == 3
     assert result.condition_b_trial_count == 3
+
+
+def test_process_group_computes_condition_slopes_from_hilbert_hdf5(
+    tmp_path: Path,
+) -> None:
+    sfreq = 10.0
+    data = np.zeros((1, 100), dtype=np.float32)
+    onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    labels = ["accepted", "rejected", "accepted", "rejected", "accepted", "rejected"]
+    predictors = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0]
+
+    for onset, label, predictor in zip(onsets, labels, predictors):
+        start = int(onset * sfreq)
+        stop = start + 3
+        if label == "accepted":
+            value = (2.0 * predictor) + 1.0
+        else:
+            value = (-1.0 * predictor) + 5.0
+        data[0, start:stop] = value
+
+    hilbert_file = _write_hilbert_ieeg_file(
+        tmp_path,
+        data=data,
+        sfreq=sfreq,
+        events=_hilbert_anchor_events(onsets, sfreq),
+    )
+
+    result = RegressionProcessing(
+        RegressionParams(
+            anchor_event_codes=["10"],
+            tmin_s=0.0,
+            tmax_s=0.2,
+            condition_a="accepted",
+            condition_b="rejected",
+            predictor="predictor_value",
+            min_trials_per_condition=3,
+            p_value_correction_method="none",
+        ),
+        resolver=_SlopeResolver(labels, predictors),
+    ).process_group(BIDSFileGroup(primary=hilbert_file))
+
+    assert result.metadata["signal_input_types"] == ["hilbert"]
+    assert result.regression.condition_a.stats_valid is True
+    assert result.regression.condition_b.stats_valid is True
+    np.testing.assert_allclose(result.regression.condition_a.slope, np.full((1, 3), 2.0), atol=1e-8)
+    np.testing.assert_allclose(result.regression.condition_b.slope, np.full((1, 3), -1.0), atol=1e-8)
 
 
 def test_process_group_excludes_invalid_predictor_trials(tmp_path: Path) -> None:

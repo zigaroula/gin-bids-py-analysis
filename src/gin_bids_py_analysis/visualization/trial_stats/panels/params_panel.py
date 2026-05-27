@@ -54,10 +54,6 @@ def _predictor_transform_to_json(value: object) -> str:
     return ""
 
 
-def _freqs_to_text(freqs: list[float]) -> str:
-    return ", ".join(f"{freq:g}" for freq in freqs)
-
-
 class ParamsPanel(QWidget):
     """Right panel with all ``ConditionTestParams`` fields and a Compute button.
 
@@ -93,7 +89,6 @@ class ParamsPanel(QWidget):
             atlas_regions=list(params.atlas_regions),
             window_ms=params.window_ms,
             n_bins=params.n_bins,
-            notch_filter_freqs=list(params.notch_filter_freqs),
             activity_zscore=params.activity_zscore,
             activity_baseline_tmin_s=params.activity_baseline_tmin_s,
             activity_baseline_tmax_s=params.activity_baseline_tmax_s,
@@ -235,10 +230,6 @@ class ParamsPanel(QWidget):
         self._n_bins.setRange(0, 10_000)
         self._n_bins.setSpecialValueText("disabled")
         form.addRow("n bins", self._n_bins)
-
-        self._notch_filter_freqs = QLineEdit()
-        self._notch_filter_freqs.setPlaceholderText("disabled")
-        form.addRow("Notch freqs (Hz)", self._notch_filter_freqs)
 
         self._activity_scaling = QComboBox()
         self._activity_scaling.addItem("none")
@@ -399,7 +390,6 @@ class ParamsPanel(QWidget):
                 atlas_regions=atlas_regions,
                 window_ms=self._window_ms.value(),
                 n_bins=self._n_bins.value(),
-                notch_filter_freqs=self._notch_filter_freqs.text().strip(),
                 activity_zscore=self._activity_scaling.currentText(),
                 activity_baseline_tmin_s=self._activity_baseline_tmin.value(),
                 activity_baseline_tmax_s=self._activity_baseline_tmax.value(),
@@ -467,7 +457,6 @@ class ParamsPanel(QWidget):
                 atlas_regions=atlas_regions,
                 window_ms=self._window_ms.value(),
                 n_bins=self._n_bins.value(),
-                notch_filter_freqs=self._notch_filter_freqs.text().strip(),
                 activity_zscore=self._activity_scaling.currentText(),
                 activity_baseline_tmin_s=self._activity_baseline_tmin.value(),
                 activity_baseline_tmax_s=self._activity_baseline_tmax.value(),
@@ -501,7 +490,6 @@ class ParamsPanel(QWidget):
         self._atlas_regions.setText(", ".join(params.atlas_regions))
         self._window_ms.setValue(params.window_ms)
         self._n_bins.setValue(params.n_bins)
-        self._notch_filter_freqs.setText(_freqs_to_text(params.notch_filter_freqs))
         self._refresh_activity_scaling_options(is_slope=False)
         idx_activity = self._activity_scaling.findText(params.activity_zscore)
         if idx_activity >= 0:
@@ -557,7 +545,6 @@ class ParamsPanel(QWidget):
         self._atlas_regions.setText(", ".join(params.atlas_regions))
         self._window_ms.setValue(params.window_ms)
         self._n_bins.setValue(params.n_bins)
-        self._notch_filter_freqs.setText(_freqs_to_text(params.notch_filter_freqs))
         self._refresh_activity_scaling_options(is_slope=True)
         idx_activity = self._activity_scaling.findText(params.activity_zscore)
         if idx_activity >= 0:

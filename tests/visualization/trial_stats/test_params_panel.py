@@ -30,7 +30,6 @@ class TestParamsPanelRoundTrip:
         assert recovered.atlas_regions == []
         assert recovered.window_ms == pytest.approx(0.0)
         assert recovered.n_bins == 0
-        assert recovered.notch_filter_freqs == []
         assert recovered.activity_zscore == "none"
         assert recovered.activity_baseline_tmin_s == pytest.approx(-0.2)
         assert recovered.activity_baseline_tmax_s == pytest.approx(0.0)
@@ -56,7 +55,6 @@ class TestParamsPanelRoundTrip:
             atlas_regions=[],
             window_ms=0.0,
             n_bins=0,
-            notch_filter_freqs=[50.0],
             activity_zscore="baseline",
             activity_baseline_tmin_s=-0.1,
             activity_baseline_tmax_s=0.0,
@@ -76,7 +74,6 @@ class TestParamsPanelRoundTrip:
         assert recovered.equal_var
         assert recovered.p_value_correction_method == "bonferroni"
         assert recovered.significance_alpha == pytest.approx(0.01)
-        assert recovered.notch_filter_freqs == [50.0]
         assert recovered.activity_zscore == "baseline"
         assert recovered.activity_baseline_tmin_s == pytest.approx(-0.1)
         assert recovered.activity_baseline_tmax_s == pytest.approx(0.0)
@@ -253,7 +250,6 @@ class TestParamsPanelRoundTrip:
                     "predictor_zscore": "condition",
                     "activity_baseline_scope": "condition",
                     "activity_baseline_remove_outlier_trial_means": True,
-                    "notch_filter_freqs": [50.0, 150.0],
                     "experiment_start_event_code": "EXP_START",
                     "experiment_end_event_code": "EXP_END",
                 }
@@ -275,7 +271,6 @@ class TestParamsPanelRoundTrip:
         assert params.predictor_transform_by_condition["rejected"].offset == pytest.approx(0.5)
         assert params.activity_baseline_scope == "condition"
         assert params.activity_baseline_remove_outlier_trial_means is True
-        assert params.notch_filter_freqs == [50.0, 150.0]
         assert params.experiment_start_event_code == "EXP_START"
         assert params.experiment_end_event_code == "EXP_END"
 

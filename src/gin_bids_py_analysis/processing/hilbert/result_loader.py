@@ -76,15 +76,18 @@ def _load_from_matlab(path: Path) -> HilbertProcessingResult:
     meta = data.meta
     _require_matlab_schema(meta, path.name)
 
-    envelope = np.asarray(data.data.envelope, dtype=np.float32)
-    if envelope.ndim == 2:
-        envelope = envelope.reshape(1, *envelope.shape)
     windows = np.asarray(data.axes.smoothing_window_ms, dtype=np.int64).ravel()
+    channel_names = mat_str_list(getattr(data.axes, "channel", None))
+    envelope = _normalize_matlab_envelope(
+        np.asarray(data.data.envelope, dtype=np.float32),
+        n_windows=len(windows),
+        n_channels=len(channel_names),
+        path_name=path.name,
+    )
     smoothed = {
         int(window): envelope[idx]
         for idx, window in enumerate(windows)
     }
-    channel_names = mat_str_list(getattr(data.axes, "channel", None))
     bins = np.asarray(data.axes.band_limits_hz, dtype=np.float64).ravel().tolist()
     metadata = _load_matlab_metadata(meta)
     raw_bids_path = mat_str(
@@ -108,6 +111,38 @@ def _load_from_matlab(path: Path) -> HilbertProcessingResult:
             default=0.0,
         ),
         events=events,
+    )
+
+
+def _normalize_matlab_envelope(
+    envelope: np.ndarray,
+    *,
+    n_windows: int,
+    n_channels: int,
+    path_name: str,
+) -> np.ndarray:
+    """Return MATLAB-loaded envelope data as [window, channel, time]."""
+    arr = np.asarray(envelope, dtype=np.float32)
+    if arr.ndim == 3:
+        return arr
+    if arr.ndim == 2:
+        if n_windows == 1 and arr.shape[0] == n_channels:
+            return arr.reshape(1, arr.shape[0], arr.shape[1])
+        if n_channels == 1 and arr.shape[0] == n_windows:
+            return arr.reshape(arr.shape[0], 1, arr.shape[1])
+        if n_windows == 1 and n_channels == 1:
+            return arr.reshape(1, 1, -1)
+    if arr.ndim == 1:
+        if n_windows == 1 and n_channels == 1:
+            return arr.reshape(1, 1, arr.shape[0])
+        if n_windows == 1 and n_channels > 0 and arr.size % n_channels == 0:
+            return arr.reshape(1, n_channels, arr.size // n_channels)
+        if n_channels == 1 and n_windows > 0 and arr.size % n_windows == 0:
+            return arr.reshape(n_windows, 1, arr.size // n_windows)
+
+    raise ValueError(
+        f"{path_name}: unsupported MATLAB Hilbert envelope shape {arr.shape}; "
+        "expected data shaped as smoothing_window x channel x time."
     )
 
 

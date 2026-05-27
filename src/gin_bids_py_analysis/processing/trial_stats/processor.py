@@ -3,18 +3,24 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 import json
 from typing import Any, Sequence
 import warnings
 
+import mne
 import numpy as np
 from mne.io import BaseRaw
+from mne.io import RawArray
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
 from gin_bids_py_analysis.bids.matching import files_matching_entities, shared_entities
 from gin_bids_py_analysis.processing.base import BaseProcessing
+from gin_bids_py_analysis.processing.hilbert.result import HilbertProcessingResult
+from gin_bids_py_analysis.processing.hilbert.result_loader import load_hilbert_result
 from gin_bids_py_analysis.processing.utils.atlas import (
     aggregate_epochs_with_mne,
     resolve_atlas_grouping,
@@ -40,7 +46,6 @@ from gin_bids_py_analysis.processing.utils.events import (
     AnnotationEvent,
     parse_annotation_description,
 )
-from gin_bids_py_analysis.processing.utils.filters import apply_notch_filter
 from gin_bids_py_analysis.processing.utils.input_events import (
     ResolvedInputEvents,
     resolve_input_events,
@@ -60,6 +65,9 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, 
 
 from .params import BaseTrialStatsParams
 from .result import BaseTrialStatsProcessingResult, ConditionEpochs, ConditionTrialSummaryValues
+
+_SIGNAL_INPUT_EXTENSIONS = frozenset({".vhdr", ".h5", ".hdf5", ".mat"})
+_HILBERT_EXTENSIONS = frozenset({".h5", ".hdf5", ".mat"})
 
 
 @dataclass
@@ -91,6 +99,116 @@ class TrialStatsProcessingContext:
         return "roi" if self.atlas_mode else "channel"
 
 
+@contextmanager
+def _load_trial_stats_signal(
+    ieeg_file: BIDSFile,
+    *,
+    hilbert_smoothing_window_ms: int,
+) -> Iterator[tuple[BaseRaw, str]]:
+    ext = str(ieeg_file.extension or "").lower()
+    if ext not in _HILBERT_EXTENSIONS:
+        with ieeg_file.ensure_loaded() as raw:
+            yield raw, "brainvision"
+        return
+
+    try:
+        hilbert_result = load_hilbert_result(ieeg_file.path)
+    except ValueError as exc:
+        raise ValueError(
+            f"{ieeg_file.path.name}: expected a Hilbert HDF5/MAT derivative "
+            "with schema_name='hilbert'."
+        ) from exc
+
+    raw = _hilbert_result_to_raw(
+        hilbert_result,
+        source_name=ieeg_file.path.name,
+        smoothing_window_ms=hilbert_smoothing_window_ms,
+    )
+    yield raw, "hilbert"
+
+
+def _hilbert_result_to_raw(
+    result: HilbertProcessingResult,
+    *,
+    source_name: str,
+    smoothing_window_ms: int,
+) -> BaseRaw:
+    if smoothing_window_ms not in result.smoothed:
+        available = ", ".join(str(window) for window in sorted(result.smoothed))
+        raise ValueError(
+            f"{source_name}: Hilbert smoothing window {smoothing_window_ms} ms "
+            f"is not available. Available windows: {available or 'none'}."
+        )
+
+    sfreq = float(result.downsampled_fs)
+    if sfreq <= 0.0 or not np.isfinite(sfreq):
+        raise ValueError(f"{source_name}: Hilbert downsampled_fs must be a positive number.")
+
+    data = np.asarray(result.smoothed[smoothing_window_ms], dtype=np.float64)
+    if data.ndim > 2:
+        data = np.squeeze(data)
+    if data.ndim == 1 and len(result.channel_names) == 1:
+        data = data.reshape(1, -1)
+    if data.ndim != 2:
+        raise ValueError(
+            f"{source_name}: selected Hilbert envelope must have shape "
+            "[channel, time]."
+        )
+    if data.shape[0] != len(result.channel_names):
+        raise ValueError(
+            f"{source_name}: Hilbert channel count ({data.shape[0]}) does not "
+            f"match channel names ({len(result.channel_names)})."
+        )
+
+    info = mne.create_info(
+        ch_names=list(result.channel_names),
+        sfreq=sfreq,
+        ch_types=["seeg"] * len(result.channel_names),
+    )
+    raw = RawArray(data, info, verbose="ERROR")
+    annotations = _hilbert_events_to_annotations(result.events, sfreq=sfreq)
+    if annotations is not None:
+        raw.set_annotations(annotations)
+    return raw
+
+
+def _hilbert_events_to_annotations(
+    events: list[dict] | None,
+    *,
+    sfreq: float,
+) -> mne.Annotations | None:
+    if not events:
+        return None
+
+    onsets: list[float] = []
+    durations: list[float] = []
+    descriptions: list[str] = []
+    for event in events:
+        onsets.append(float(event.get("onset", 0)) / sfreq)
+        durations.append(float(event.get("duration", 0)) / sfreq)
+        descriptions.append(_format_hilbert_event_description(event))
+
+    return mne.Annotations(
+        onset=onsets,
+        duration=durations,
+        description=descriptions,
+    )
+
+
+def _format_hilbert_event_description(event: dict) -> str:
+    event_type = str(event.get("type", "Stimulus") or "Stimulus").strip()
+    description = str(event.get("description", "")).strip()
+    if "/" in description:
+        return description
+    if event_type == "Stimulus" and description:
+        return f"Stimulus/S {description}"
+    if event_type == "Response" and description:
+        return f"Response/R {description}"
+    if event_type:
+        return f"{event_type}/{description or 'n/a'}"
+    return description or "n/a"
+
+
 class BaseTrialStatsProcessing(BaseProcessing, ABC):
     """Template method for subject-level trial statistics pipelines."""
 
@@ -114,12 +232,13 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
 
         ieeg_files = files_matching_entities(
             group.all_files,
-            extension=".vhdr",
+            extension=_SIGNAL_INPUT_EXTENSIONS,
             suffix="ieeg",
         )
         if not ieeg_files:
             raise ValueError(
-                f"{self.__class__.__name__} requires at least one ieeg BrainVision file."
+                f"{self.__class__.__name__} requires at least one ieeg signal file "
+                "(.vhdr BrainVision or Hilbert .h5/.hdf5/.mat)."
             )
 
         table_files = files_matching_entities(
@@ -158,8 +277,11 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
         time_axis_ref: np.ndarray | None = None
 
         for ieeg_file in ieeg_files:
-            with ieeg_file.ensure_loaded() as raw:
-                raw = apply_notch_filter(raw, self.params.notch_filter_freqs)
+            with _load_trial_stats_signal(
+                ieeg_file,
+                hilbert_smoothing_window_ms=self.params.hilbert_smoothing_window_ms,
+            ) as (raw, signal_input_type):
+                state.setdefault("signal_input_types", set()).add(signal_input_type)
                 sfreq = float(raw.info["sfreq"])
                 channel_names = list(raw.ch_names)
                 if sfreq_ref is None:
@@ -1072,8 +1194,8 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
                 state.get("events_onset_precision", {"sample_quantized"})
             ),
             "events_files": sorted(state.get("events_files", set())),
-            "notch_filter_freqs": list(self.params.notch_filter_freqs),
-            "notch_filter_applied": bool(self.params.notch_filter_freqs),
+            "hilbert_smoothing_window_ms": self.params.hilbert_smoothing_window_ms,
+            "signal_input_types": sorted(state.get("signal_input_types", {"brainvision"})),
             "experiment_start_event_code": self.params.experiment_start_event_code,
             "experiment_end_event_code": self.params.experiment_end_event_code,
             "event_sample_shift_samples": self.params.event_sample_shift_samples,
