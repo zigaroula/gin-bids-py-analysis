@@ -9,8 +9,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.helpers import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.helpers import (
     build_bids_path,
     build_subject_groups,
     normalize_subject_value,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from gin_bids_py_analysis.processing.trial_stats import RegressionParams
+from bidsforge.processing.trial_stats import RegressionParams
 
 
 def test_params_validate_core_constraints() -> None:

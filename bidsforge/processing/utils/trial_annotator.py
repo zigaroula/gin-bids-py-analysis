@@ -1,0 +1,562 @@
+"""Trial window annotators for enriching and invalidating resolved trials.
+
+Two classes implement the ``TrialWindowAnnotator`` protocol and run in a
+shared list between trial resolution and normalization:
+
+* ``EventFileWindowAnnotator`` — pure annotation.  Loads TSV/CSV event files
+  from ``group.secondaries`` and stores, for each resolved trial, the list of
+  all event row dicts whose onset falls inside the trial's epoch window.  It
+  never modifies ``keep`` or ``exclusion_reason``.
+
+* ``EventAnnotationInvalidationRule`` — pure invalidation.  Reads the list
+  stored by an annotator (or any other source) from ``trial.metadata``,
+  optionally filters it with a :class:`ConditionExpr`, and sets
+  ``trial.keep = False`` when the count of matching events reaches the
+  configured threshold.
+
+* ``EventAnnotationFeatureMaskRule`` — feature-level masking.  Reads annotated
+  events and schedules only the matching event channels for downstream NaN
+  masking, preserving the rest of the trial.
+
+* ``TrialMetadataInvalidationRule`` — invalidates trials based on scalar
+  values stored in ``trial.metadata`` (e.g. ``RT``, ``rating``).  Evaluates a
+  :class:`ConditionExpr` directly against the metadata dict and sets
+  ``trial.keep = False`` when the expression is *not* satisfied.  This
+  separates behavioral validity checks (RT threshold, minimum rating) from
+  condition classification in :class:`~.trial_resolver.TableTrialResolver`.
+
+Both classes are valid ``TrialWindowAnnotator`` implementations and can be
+mixed freely in the same annotators list.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Literal, Sequence
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.bids.matching import (
+    entities_compatible,
+    files_matching_entities,
+)
+from bidsforge.processing.utils.condition_rules import (
+    ConditionExpr,
+    matches_condition_expr,
+)
+from bidsforge.processing.utils.tables import load_table_rows
+from bidsforge.processing.utils.trial_resolver import ResolvedTrial
+
+DEFERRED_TRIAL_EXCLUSIONS_KEY = "deferred_trial_exclusions"
+EXCLUDED_FROM_STATISTICS_KEY = "excluded_from_statistics"
+STATISTICS_EXCLUSION_REASON_KEY = "statistics_exclusion_reason"
+TRIAL_FEATURE_NAN_MASKS_KEY = "trial_feature_nan_masks"
+
+
+class TrialWindowAnnotator:
+    """Protocol for objects that annotate or invalidate resolved trials.
+
+    Implementations must provide ``annotate_trials()``.  The method mutates
+    *trials* in-place; it must not return a value.
+
+    The method receives the full epoch window defaults (``tmin_s``,
+    ``tmax_s``) that the processor will use, together with the iEEG channel
+    names available at annotation time.  Implementations may ignore any
+    argument they do not need.
+    """
+
+    def annotate_trials(
+        self,
+        group: BIDSFileGroup,
+        ieeg_file: BIDSFile,
+        trials: list[ResolvedTrial],
+        tmin_s: float,
+        tmax_s: float,
+        *,
+        ieeg_channel_names: list[str],
+    ) -> None:
+        raise NotImplementedError
+
+
+class EventFileWindowAnnotator(BaseModel):
+    """Load external event files and annotate each trial with in-window events.
+
+    For every resolved trial the annotator scans the rows of every matched
+    event file and stores, under ``trial.metadata[metadata_events_key]``, the
+    list of row value dicts whose ``onset_column`` falls inside the trial's
+    epoch window ``[anchor_onset_s + tmin, anchor_onset_s + tmax]``.
+
+    Only rows whose source file (or row-level entities when present) is
+    compatible with the currently processed ``ieeg_file`` are considered. This
+    mirrors :class:`~bidsforge.processing.utils.trial_resolver.TableTrialResolver`
+    behavior and prevents cross-run / cross-session event leakage when subject
+    groups aggregate multiple recordings.
+
+    The list is *always* written (as ``[]`` when no events match) so that
+    downstream :class:`EventAnnotationInvalidationRule` instances can rely on
+    the key being present.
+
+    No filtering is applied here.  The annotator collects all events in the
+    window regardless of their content.  Filtering and invalidation is the
+    responsibility of :class:`EventAnnotationInvalidationRule`. Stored event
+    dicts are enriched with the source event-file BIDS entities (for example
+    ``subject``, ``session``, ``task``, ``run``) when those keys are not
+    already present in the row itself.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    filter: dict[str, Any] = Field(
+        description=(
+            "BIDS entity filter used to select files from ``group.secondaries``. "
+            "Passed directly to ``files_matching_entities()`` as keyword arguments. "
+            "For example ``{'suffix': 'events', 'desc': 'hfospikes'}`` selects only "
+            "HFO/spike detection output files."
+        ),
+    )
+    metadata_events_key: str = Field(
+        description=(
+            "Key written into ``trial.metadata`` that holds the list of matching "
+            "event row dicts.  Choose a unique name per annotator so that multiple "
+            "annotators can coexist without collision."
+        ),
+    )
+    onset_column: str = Field(
+        default="onset",
+        description="Column name in the event TSV/CSV that carries onset times in seconds.",
+    )
+    window_tmin_s: float | None = Field(
+        default=None,
+        description=(
+            "Start of the event search window relative to anchor onset (seconds). "
+            "When ``None`` the processor's ``tmin_s`` is used."
+        ),
+    )
+    window_tmax_s: float | None = Field(
+        default=None,
+        description=(
+            "End of the event search window relative to anchor onset (seconds). "
+            "When ``None`` the processor's ``tmax_s`` is used."
+        ),
+    )
+
+    @field_validator("filter", mode="before")
+    @classmethod
+    def _normalize_filter(cls, value: object) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            raise TypeError("filter must be a dict of BIDS entity key-value pairs.")
+        return dict(value)
+
+    @field_validator("metadata_events_key", mode="before")
+    @classmethod
+    def _normalize_metadata_events_key(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("metadata_events_key must be a non-empty string.")
+        return cleaned
+
+    @field_validator("onset_column", mode="before")
+    @classmethod
+    def _normalize_onset_column(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("onset_column must be a non-empty string.")
+        return cleaned
+
+    def annotate_trials(
+        self,
+        group: BIDSFileGroup,
+        ieeg_file: BIDSFile,
+        trials: list[ResolvedTrial],
+        tmin_s: float,
+        tmax_s: float,
+        *,
+        ieeg_channel_names: list[str],
+    ) -> None:
+        """Write in-window event lists into each trial's metadata dict."""
+        del ieeg_channel_names  # not used by this annotator
+
+        effective_tmin = self.window_tmin_s if self.window_tmin_s is not None else tmin_s
+        effective_tmax = self.window_tmax_s if self.window_tmax_s is not None else tmax_s
+
+        matched_files = files_matching_entities(group.secondaries, **self.filter)
+        rows = [
+            row
+            for row in load_table_rows(matched_files)
+            if entities_compatible(
+                ieeg_file.entities,
+                row.file.entities,
+                preferred_entities=row.values,
+            )
+        ]
+
+        # Pre-parse onsets once for all rows; skip rows with missing / invalid onset.
+        parsed: list[tuple[float, dict[str, Any]]] = []
+        for row in rows:
+            raw_onset = row.values.get(self.onset_column)
+            if raw_onset is None or raw_onset == "":
+                continue
+            try:
+                onset = float(raw_onset)
+            except (ValueError, TypeError):
+                continue
+            event_values: dict[str, Any] = {
+                str(key): value
+                for key, value in row.file.entities.items()
+                if value is not None
+            }
+            event_values.update(dict(row.values))
+            event_values["source_path"] = str(row.file.path)
+            event_values["source_row_index"] = int(row.row_index)
+            parsed.append((onset, event_values))
+
+        for trial in trials:
+            win_start = trial.anchor_onset_s + effective_tmin
+            win_end = trial.anchor_onset_s + effective_tmax
+            in_window = [
+                values
+                for onset, values in parsed
+                if win_start <= onset <= win_end
+            ]
+            trial.metadata[self.metadata_events_key] = in_window
+
+
+class EventAnnotationInvalidationRule(BaseModel):
+    """Invalidate trials based on annotated event lists.
+
+    Reads ``trial.metadata[metadata_events_key]`` (populated by an
+    :class:`EventFileWindowAnnotator`), applies an optional
+    :class:`ConditionExpr` filter to each event dict, and sets
+    ``trial.keep = False`` when the number of matching events is at or above
+    ``invalidate_if_count_gte``.
+
+    The ``exclusion_reason`` is only set when the trial is being invalidated
+    *for the first time*; an already-excluded trial's reason is preserved.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    metadata_events_key: str = Field(
+        description=(
+            "Metadata key to read from each trial.  Must match the "
+            "``metadata_events_key`` of a preceding ``EventFileWindowAnnotator``."
+        ),
+    )
+    event_filter: ConditionExpr | None = Field(
+        default=None,
+        description=(
+            "Optional boolean expression evaluated on each event dict before counting. "
+            "When ``None`` every event in the list counts. "
+            "Example: ``{'all': [{'column': 'event_type', 'op': '==', 'value': 'Spk'}, "
+            "{'column': 'channel', 'op': 'in', 'values': ['vmPFC-1', 'vmPFC-2']}]}``"
+        ),
+    )
+    invalidate_if_count_gte: int = Field(
+        default=1,
+        ge=1,
+        description="Invalidate the trial when the count of matching events reaches this threshold.",
+    )
+    exclusion_reason: str = Field(
+        default="event_in_window",
+        description="Exclusion reason written to ``trial.exclusion_reason`` upon invalidation.",
+    )
+
+    @field_validator("metadata_events_key", mode="before")
+    @classmethod
+    def _normalize_metadata_events_key(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("metadata_events_key must be a non-empty string.")
+        return cleaned
+
+    @field_validator("exclusion_reason", mode="before")
+    @classmethod
+    def _normalize_exclusion_reason(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("exclusion_reason must be a non-empty string.")
+        return cleaned
+
+    def annotate_trials(
+        self,
+        group: BIDSFileGroup,
+        ieeg_file: BIDSFile,
+        trials: list[ResolvedTrial],
+        tmin_s: float,
+        tmax_s: float,
+        *,
+        ieeg_channel_names: list[str],
+    ) -> None:
+        """Apply the invalidation rule to each trial in-place."""
+        del group, ieeg_file, tmin_s, tmax_s, ieeg_channel_names  # not used
+
+        for trial in trials:
+            events: list[dict[str, Any]] = trial.metadata.get(self.metadata_events_key, [])
+
+            if self.event_filter is not None:
+                matching = [
+                    event
+                    for event in events
+                    if matches_condition_expr(self.event_filter, event)
+                ]
+            else:
+                matching = list(events)
+
+            if len(matching) >= self.invalidate_if_count_gte:
+                trial.keep = False
+                if trial.exclusion_reason is None:
+                    trial.exclusion_reason = self.exclusion_reason
+
+
+class EventAnnotationFeatureMaskRule(BaseModel):
+    """Schedule feature-level NaN masking from annotated event lists.
+
+    Reads ``trial.metadata[metadata_events_key]``, applies an optional
+    :class:`ConditionExpr` to each event, then stores the matching channels in
+    ``trial.metadata[TRIAL_FEATURE_NAN_MASKS_KEY]``. The trial remains kept;
+    downstream trial-stat processors apply the mask after epoch extraction.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    metadata_events_key: str = Field(
+        description=(
+            "Metadata key to read from each trial. Must match a preceding "
+            "EventFileWindowAnnotator metadata key."
+        ),
+    )
+    event_filter: ConditionExpr | None = Field(
+        default=None,
+        description="Optional boolean expression evaluated on each event dict.",
+    )
+    channel_column: str = Field(
+        default="channel",
+        description="Event column containing the channel/feature name to mask.",
+    )
+    exclusion_reason: str = Field(
+        default="event_channel_in_window",
+        description="Reason stored with the requested feature mask.",
+    )
+
+    @field_validator("metadata_events_key", mode="before")
+    @classmethod
+    def _normalize_metadata_events_key(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("metadata_events_key must be a non-empty string.")
+        return cleaned
+
+    @field_validator("channel_column", mode="before")
+    @classmethod
+    def _normalize_channel_column(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("channel_column must be a non-empty string.")
+        return cleaned
+
+    @field_validator("exclusion_reason", mode="before")
+    @classmethod
+    def _normalize_exclusion_reason(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("exclusion_reason must be a non-empty string.")
+        return cleaned
+
+    def annotate_trials(
+        self,
+        group: BIDSFileGroup,
+        ieeg_file: BIDSFile,
+        trials: list[ResolvedTrial],
+        tmin_s: float,
+        tmax_s: float,
+        *,
+        ieeg_channel_names: list[str],
+    ) -> None:
+        """Append matching event channels to each trial's feature-mask metadata."""
+        del group, ieeg_file, tmin_s, tmax_s  # not used
+
+        feature_by_key = {
+            str(feature_name).casefold(): str(feature_name)
+            for feature_name in ieeg_channel_names
+        }
+
+        for trial in trials:
+            events: list[dict[str, Any]] = trial.metadata.get(self.metadata_events_key, [])
+            if self.event_filter is not None:
+                matching = [
+                    event
+                    for event in events
+                    if matches_condition_expr(self.event_filter, event)
+                ]
+            else:
+                matching = list(events)
+
+            features: list[str] = []
+            for event in matching:
+                raw_channel = event.get(self.channel_column)
+                if raw_channel is None:
+                    continue
+                feature_name = feature_by_key.get(str(raw_channel).strip().casefold())
+                if feature_name is not None:
+                    features.append(feature_name)
+
+            if not features:
+                continue
+
+            entries = list(trial.metadata.get(TRIAL_FEATURE_NAN_MASKS_KEY, []))
+            entries.append(
+                {
+                    "features": sorted(set(features)),
+                    "reason": self.exclusion_reason,
+                }
+            )
+            trial.metadata[TRIAL_FEATURE_NAN_MASKS_KEY] = entries
+
+
+class TrialMetadataInvalidationRule(BaseModel):
+    """Invalidate trials whose metadata does not satisfy a behavioral condition.
+
+    Evaluates a :class:`ConditionExpr` directly against ``trial.metadata``
+    and sets ``trial.keep = False`` when the expression is *not* satisfied.
+
+    Typical use-cases:
+
+    * Exclude trials with RT above a threshold::
+
+          TrialMetadataInvalidationRule(
+              condition={"column": "RT", "op": "<=", "value": 3.0},
+              exclusion_reason="rt_too_long",
+          )
+
+    * Require a minimum rating::
+
+          TrialMetadataInvalidationRule(
+              condition={"column": "rating", "op": ">=", "value": 0},
+              exclusion_reason="negative_rating",
+          )
+
+    * Combine multiple criteria::
+
+          TrialMetadataInvalidationRule(
+              condition={"all": [
+                  {"column": "RT", "op": "<=", "value": 3.0},
+                  {"column": "rating", "op": ">=", "value": 0},
+              ]},
+              exclusion_reason="behavioral_threshold",
+          )
+
+    The metadata values must have already been extracted before this rule
+    runs.  Use ``extract_columns`` in
+    :class:`~.trial_resolver.TableTrialResolver` to populate them from the
+    behavioral TSV.
+
+    Trials that are already excluded (``trial.keep = False``) are skipped so
+    that their existing ``exclusion_reason`` is preserved.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    condition: ConditionExpr = Field(
+        description=(
+            "Boolean expression evaluated against ``trial.metadata``. "
+            "Trials that do *not* satisfy it are invalidated."
+        ),
+    )
+    exclusion_reason: str = Field(
+        default="behavioral_threshold",
+        description="Exclusion reason written to ``trial.exclusion_reason`` upon invalidation.",
+    )
+
+    @field_validator("exclusion_reason", mode="before")
+    @classmethod
+    def _normalize_exclusion_reason(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("exclusion_reason must be a non-empty string.")
+        return cleaned
+
+    def annotate_trials(
+        self,
+        group: BIDSFileGroup,
+        ieeg_file: BIDSFile,
+        trials: list[ResolvedTrial],
+        tmin_s: float,
+        tmax_s: float,
+        *,
+        ieeg_channel_names: list[str],
+    ) -> None:
+        """Invalidate trials whose metadata does not satisfy ``self.condition``."""
+        del group, ieeg_file, tmin_s, tmax_s, ieeg_channel_names  # not used
+
+        for trial in trials:
+            if not trial.keep:
+                continue
+            if not matches_condition_expr(self.condition, trial.metadata):
+                trial.keep = False
+                trial.exclusion_reason = self.exclusion_reason
+
+
+class DeferredTrialMetadataInvalidationRule(BaseModel):
+    """Mark trials for invalidation at a later processing phase.
+
+    This keeps an epoch available for cleaning steps that should still see it
+    while ensuring it can be excluded from downstream statistics at a precise
+    phase.  It is useful for reproducing pipelines where behavioral invalidation
+    happens after some signal-cleaning passes.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    condition: ConditionExpr = Field(
+        description=(
+            "Boolean expression evaluated against ``trial.metadata``. "
+            "Trials that do *not* satisfy it are marked for deferred exclusion."
+        ),
+    )
+    exclusion_reason: str = Field(
+        default="behavioral_threshold",
+        description="Exclusion reason applied when the deferred phase is reached.",
+    )
+    apply_phase: Literal[
+        "after_epoch_trial_rejection",
+        "before_activity_zscore",
+    ] = Field(
+        default="before_activity_zscore",
+        description="Processing phase at which the trial should be excluded.",
+    )
+
+    @field_validator("exclusion_reason", mode="before")
+    @classmethod
+    def _normalize_exclusion_reason(cls, value: object) -> str:
+        cleaned = str(value).strip()
+        if not cleaned:
+            raise ValueError("exclusion_reason must be a non-empty string.")
+        return cleaned
+
+    def annotate_trials(
+        self,
+        group: BIDSFileGroup,
+        ieeg_file: BIDSFile,
+        trials: list[ResolvedTrial],
+        tmin_s: float,
+        tmax_s: float,
+        *,
+        ieeg_channel_names: list[str],
+    ) -> None:
+        """Record deferred exclusions without changing ``trial.keep``."""
+        del group, ieeg_file, tmin_s, tmax_s, ieeg_channel_names  # not used
+
+        for trial in trials:
+            if not trial.keep:
+                continue
+            if matches_condition_expr(self.condition, trial.metadata):
+                continue
+            entries = list(trial.metadata.get(DEFERRED_TRIAL_EXCLUSIONS_KEY, []))
+            entries.append(
+                {
+                    "reason": self.exclusion_reason,
+                    "phase": self.apply_phase,
+                }
+            )
+            trial.metadata[DEFERRED_TRIAL_EXCLUSIONS_KEY] = entries

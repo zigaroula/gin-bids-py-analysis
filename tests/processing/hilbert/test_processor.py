@@ -12,11 +12,11 @@ import math
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.hilbert.dsp import process_all_channels
-from gin_bids_py_analysis.processing.hilbert.params import HilbertParams, MontageMode, NormalizationMode
-import gin_bids_py_analysis.processing.hilbert.processor as processor_module
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.hilbert.dsp import process_all_channels
+from bidsforge.processing.hilbert.params import HilbertParams, MontageMode, NormalizationMode
+import bidsforge.processing.hilbert.processor as processor_module
 
 
 # ---------------------------------------------------------------------------

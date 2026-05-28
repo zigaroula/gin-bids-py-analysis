@@ -5,7 +5,7 @@ import pytest
 from mne import create_info
 from mne.io import BaseRaw, RawArray
 
-from gin_bids_py_analysis.processing.utils.filters import apply_notch_filter
+from bidsforge.processing.utils.filters import apply_notch_filter
 
 
 def _make_raw() -> RawArray:

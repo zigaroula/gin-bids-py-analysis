@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from gin_bids_py_analysis.processing.trial_stats.regression.stats import (
+from bidsforge.processing.trial_stats.regression.stats import (
     compute_linear_regression_maps,
     compute_permuted_regression_maps,
 )
-from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
+from bidsforge.processing.utils.statistics import correct_p_values
 
 
 def test_compute_linear_regression_maps_known_solution() -> None:

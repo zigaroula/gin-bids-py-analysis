@@ -11,8 +11,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset, BIDSFile, BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_stats_group import (
+from bidsforge.bids import BIDSDataset, BIDSFile, BIDSFileGroup
+from bidsforge.processing.trial_stats_group import (
     RegressionGroupProcessing,
     RegressionGroupProcessingWriter,
     build_regression_compatible_groups,

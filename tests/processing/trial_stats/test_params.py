@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from gin_bids_py_analysis.processing.trial_stats import (
+from bidsforge.processing.trial_stats import (
     BaseTrialStatsParams,
     ConditionTestParams,
     RegressionParams,

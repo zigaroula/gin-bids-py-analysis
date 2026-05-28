@@ -18,18 +18,18 @@ import pytest
 from mne import Annotations
 from pathlib import Path
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.hilbert.params import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.hilbert.params import (
     HilbertWriterParams,
     NormalizationMode,
 )
-from gin_bids_py_analysis.processing.hilbert.result import HilbertProcessingResult
-from gin_bids_py_analysis.processing.hilbert.writer import (
+from bidsforge.processing.hilbert.result import HilbertProcessingResult
+from bidsforge.processing.hilbert.writer import (
     HilbertProcessingWriter,
     _downsample_events,
 )
-from gin_bids_py_analysis.processing.utils.matlab import matlab_round
+from bidsforge.processing.utils.matlab import matlab_round
 
 
 # ---------------------------------------------------------------------------

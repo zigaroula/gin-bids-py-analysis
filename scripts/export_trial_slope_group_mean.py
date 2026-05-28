@@ -21,8 +21,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from gin_bids_py_analysis.bids import BIDSDataset
-from gin_bids_py_analysis.processing.trial_stats_group.regression.result_loader import (
+from bidsforge.bids import BIDSDataset
+from bidsforge.processing.trial_stats_group.regression.result_loader import (
     load_regression_group_result,
 )
 

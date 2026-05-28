@@ -7,18 +7,18 @@ import pytest
 from mne import Annotations, create_info
 from mne.io import RawArray
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.hilbert.params import HilbertWriterParams
-from gin_bids_py_analysis.processing.hilbert.result import HilbertProcessingResult
-from gin_bids_py_analysis.processing.hilbert.writer import HilbertProcessingWriter
-from gin_bids_py_analysis.processing.trial_stats import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.hilbert.params import HilbertWriterParams
+from bidsforge.processing.hilbert.result import HilbertProcessingResult
+from bidsforge.processing.hilbert.writer import HilbertProcessingWriter
+from bidsforge.processing.trial_stats import (
     TableTrialResolver,
     ConditionTestParams,
     ConditionTestProcessing,
 )
-import gin_bids_py_analysis.processing.utils.epoching as epoching_module
-from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
+import bidsforge.processing.utils.epoching as epoching_module
+from bidsforge.processing.utils.trial_resolver import ResolvedTrial
 
 
 class _MockPyBIDSFile:

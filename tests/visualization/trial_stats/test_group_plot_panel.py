@@ -5,11 +5,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_stats_group import (
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.trial_stats_group import (
     RegressionGroupProcessingResult,
 )
-from gin_bids_py_analysis.processing.trial_stats_group import (
+from bidsforge.processing.trial_stats_group import (
     ConditionTestGroupProcessingResult,
     ConditionTestEpochSummary,
     GroupEpochStats,
@@ -20,7 +20,7 @@ from gin_bids_py_analysis.processing.trial_stats_group import (
     RegressionMetricStats,
     VsZeroStatsPair,
 )
-from gin_bids_py_analysis.visualization.trial_stats.panels.group_plot_panel import (
+from bidsforge.visualization.trial_stats.panels.group_plot_panel import (
     GroupPlotPanel,
 )
 

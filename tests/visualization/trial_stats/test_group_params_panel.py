@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from gin_bids_py_analysis.processing.trial_stats_group import ConditionTestGroupParams
-from gin_bids_py_analysis.visualization.trial_stats.panels.group_params_panel import (
+from bidsforge.processing.trial_stats_group import ConditionTestGroupParams
+from bidsforge.visualization.trial_stats.panels.group_params_panel import (
     GroupParamsPanel,
 )
 

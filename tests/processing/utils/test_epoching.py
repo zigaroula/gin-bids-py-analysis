@@ -6,7 +6,7 @@ import pytest
 from mne import Annotations, create_info
 from mne.io import RawArray
 
-from gin_bids_py_analysis.processing.utils.epoching import extract_anchor_events_with_mne
+from bidsforge.processing.utils.epoching import extract_anchor_events_with_mne
 
 
 # ---------------------------------------------------------------------------

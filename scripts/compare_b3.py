@@ -27,11 +27,11 @@ from matplotlib.widgets import Button
 import numpy as np
 import scipy.io
 
-from gin_bids_py_analysis.bids import BIDSDataset
-from gin_bids_py_analysis.processing.trial_stats.regression.stats import (
+from bidsforge.bids import BIDSDataset
+from bidsforge.processing.trial_stats.regression.stats import (
     compute_linear_regression_maps,
 )
-from gin_bids_py_analysis.processing.trial_stats.regression import (
+from bidsforge.processing.trial_stats.regression import (
     RegressionProcessing,
     load_regression_result,
 )

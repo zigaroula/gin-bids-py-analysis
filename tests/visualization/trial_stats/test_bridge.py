@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.visualization.trial_stats._bridge import (
+from bidsforge.visualization.trial_stats._bridge import (
     _write_hdf5_structure,
     build_group_file_group_from_results,
     build_in_memory_bids_file,

@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset
-from gin_bids_py_analysis.processing.trial_stats_group import ConditionTestGroupParams
-from gin_bids_py_analysis.visualization.trial_stats import launch_precomputed
+from bidsforge.bids import BIDSDataset
+from bidsforge.processing.trial_stats_group import ConditionTestGroupParams
+from bidsforge.visualization.trial_stats import launch_precomputed
 
 # ---------------------------------------------------------------------------
 # Parameters  (edit these)

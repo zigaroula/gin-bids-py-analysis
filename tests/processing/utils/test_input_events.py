@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import pytest
 from mne import Annotations
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.utils.input_events import resolve_input_events
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.utils.input_events import resolve_input_events
 
 
 class _MockPyBIDSFile:

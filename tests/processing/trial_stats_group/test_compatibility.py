@@ -5,10 +5,10 @@ from pathlib import Path
 
 import numpy as np
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_stats import ConditionTestProcessingResult
-from gin_bids_py_analysis.processing.trial_stats_group.compatibility import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.trial_stats import ConditionTestProcessingResult
+from bidsforge.processing.trial_stats_group.compatibility import (
     build_subject_stats_signature,
 )
 

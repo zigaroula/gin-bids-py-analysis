@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.processing.utils.matlab import (
+from bidsforge.processing.utils.matlab import (
     mat_float,
     mat_int,
     mat_str,

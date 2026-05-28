@@ -16,9 +16,9 @@ import pytest
 
 from pydantic import computed_field
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.base import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.base import (
     BaseProcessing,
     BaseProcessingParams,
     BaseProcessingResult,
@@ -157,8 +157,8 @@ def test_execute_n_jobs_one_avoids_parallel_manager(
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             raise AssertionError("Parallel() should not be used when n_jobs=1")
 
-    monkeypatch.setattr("gin_bids_py_analysis.processing.base.mp.Manager", _unexpected_manager)
-    monkeypatch.setattr("gin_bids_py_analysis.processing.base.Parallel", _UnexpectedParallel)
+    monkeypatch.setattr("bidsforge.processing.base.mp.Manager", _unexpected_manager)
+    monkeypatch.setattr("bidsforge.processing.base.Parallel", _UnexpectedParallel)
 
     results = _DummyProcessor().execute([mock_bids_file], n_jobs=1)
     assert len(results) == 1
@@ -176,8 +176,8 @@ def test_run_n_jobs_one_avoids_parallel_manager(
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             raise AssertionError("Parallel() should not be used when n_jobs=1")
 
-    monkeypatch.setattr("gin_bids_py_analysis.processing.base.mp.Manager", _unexpected_manager)
-    monkeypatch.setattr("gin_bids_py_analysis.processing.base.Parallel", _UnexpectedParallel)
+    monkeypatch.setattr("bidsforge.processing.base.mp.Manager", _unexpected_manager)
+    monkeypatch.setattr("bidsforge.processing.base.Parallel", _UnexpectedParallel)
 
     paths = _DummyProcessor().run([mock_bids_file], _dummy_writer(tmp_path), n_jobs=1)
     assert len(paths) == 1

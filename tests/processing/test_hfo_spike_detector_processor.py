@@ -4,10 +4,10 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from gin_bids_py_analysis.processing.hfo_spike_detection.params import HfoSpikeDetectorParams
-from gin_bids_py_analysis.processing.hfo_spike_detection.processor import HfoSpikeDetectorProcessing
-from gin_bids_py_analysis.processing.hfo_spike_detection.result import HfoSpikeDetectorProcessingResult
-from gin_bids_py_analysis.processing.utils.channels import (
+from bidsforge.processing.hfo_spike_detection.params import HfoSpikeDetectorParams
+from bidsforge.processing.hfo_spike_detection.processor import HfoSpikeDetectorProcessing
+from bidsforge.processing.hfo_spike_detection.result import HfoSpikeDetectorProcessingResult
+from bidsforge.processing.utils.channels import (
     BipolarDirection,
     BipolarStorage,
     MontageMode,
@@ -40,15 +40,15 @@ def test_hfo_spike_detector_processor_uses_threads_budget_for_pyfftw(
 
     fake_pyfftw = SimpleNamespace(config=SimpleNamespace(NUM_THREADS=99))
     monkeypatch.setattr(
-        "gin_bids_py_analysis.processing.hfo_spike_detection.processor._PYFFTW_AVAILABLE",
+        "bidsforge.processing.hfo_spike_detection.processor._PYFFTW_AVAILABLE",
         True,
     )
     monkeypatch.setattr(
-        "gin_bids_py_analysis.processing.hfo_spike_detection.processor.pyfftw",
+        "bidsforge.processing.hfo_spike_detection.processor.pyfftw",
         fake_pyfftw,
     )
     monkeypatch.setattr(
-        "gin_bids_py_analysis.processing.hfo_spike_detection.processor.get_threads_for_worker",
+        "bidsforge.processing.hfo_spike_detection.processor.get_threads_for_worker",
         lambda: 4,
     )
 
@@ -62,7 +62,7 @@ def test_hfo_spike_detector_processor_uses_threads_budget_for_pyfftw(
         )
 
     monkeypatch.setattr(
-        "gin_bids_py_analysis.processing.hfo_spike_detection.processor.hfo_spike_detector",
+        "bidsforge.processing.hfo_spike_detection.processor.hfo_spike_detector",
         _fake_detector,
     )
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset, BIDSFile, BIDSSubject
+from bidsforge.bids import BIDSDataset, BIDSFile, BIDSSubject
 
 
 def test_get_files_returns_bids_file_instances(bids_root: Path) -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from gin_bids_py_analysis.processing.trial_stats_group import ConditionTestGroupParams
+from bidsforge.processing.trial_stats_group import ConditionTestGroupParams
 
 
 def test_params_require_atlas_name_in_atlas_mode() -> None:

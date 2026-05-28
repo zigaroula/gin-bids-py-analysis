@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.matching import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.matching import (
     entities_compatible,
     entity_match_score,
     entity_specificity,

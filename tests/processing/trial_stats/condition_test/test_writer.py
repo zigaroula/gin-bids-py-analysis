@@ -9,10 +9,10 @@ import numpy as np
 import pytest
 import scipy.io
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
-from gin_bids_py_analysis.processing.trial_stats import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.utils.trial_resolver import ResolvedTrial
+from bidsforge.processing.trial_stats import (
     SignalActivityEstimate,
     ConditionSignalActivity,
     ConditionContrast,
@@ -380,7 +380,7 @@ def _make_minimal_result(
 def test_writer_hdf5_channel_significant_mask_written_and_loaded(
     tmp_path: Path,
 ) -> None:
-    from gin_bids_py_analysis.processing.trial_stats import load_condition_test_result
+    from bidsforge.processing.trial_stats import load_condition_test_result
 
     mask = np.array([True, False], dtype=bool)
     result = _make_minimal_result(tmp_path, channel_significant_mask=mask)
@@ -423,7 +423,7 @@ def test_writer_hdf5_channel_significant_mask_written_and_loaded(
 def test_writer_hdf5_channel_significant_mask_absent_when_none(
     tmp_path: Path,
 ) -> None:
-    from gin_bids_py_analysis.processing.trial_stats import load_condition_test_result
+    from bidsforge.processing.trial_stats import load_condition_test_result
 
     result = _make_minimal_result(tmp_path, channel_significant_mask=None)
 
@@ -442,7 +442,7 @@ def test_writer_hdf5_channel_significant_mask_absent_when_none(
 def test_writer_round_trips_trial_activity_summary_for_condition_test(
     tmp_path: Path,
 ) -> None:
-    from gin_bids_py_analysis.processing.trial_stats import load_condition_test_result
+    from bidsforge.processing.trial_stats import load_condition_test_result
 
     result = _make_minimal_result(tmp_path, channel_significant_mask=None)
     result.trial_activity_summary_kind = "anchor_to_response_mean"

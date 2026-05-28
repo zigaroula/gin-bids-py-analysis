@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.processing.utils.tables import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.processing.utils.tables import (
     LoadedTableRow,
     load_table_rows,
     row_float_value,

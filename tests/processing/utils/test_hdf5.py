@@ -4,7 +4,7 @@ import h5py
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.processing.utils.hdf5 import (
+from bidsforge.processing.utils.hdf5 import (
     coerce_feature_time,
     dataset_or_none,
     decode_str_array,

@@ -9,15 +9,15 @@ import h5py
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_stats_group import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.trial_stats_group import (
     RegressionGroupParams,
     RegressionGroupProcessing,
     build_regression_compatible_groups,
 )
-from gin_bids_py_analysis.processing.trial_stats.regression import load_regression_result
-from gin_bids_py_analysis.processing.utils.serialization import write_matlab_tree
+from bidsforge.processing.trial_stats.regression import load_regression_result
+from bidsforge.processing.utils.serialization import write_matlab_tree
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]

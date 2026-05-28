@@ -1,4 +1,4 @@
-# GitHub Copilot Instructions - gin-bids-py-analysis
+# GitHub Copilot Instructions - bidsforge
 
 > This is the live architecture document.
 > Update it whenever a module's responsibilities, public API, or design rules change.
@@ -7,15 +7,15 @@
 
 ## Project Overview
 
-`gin-bids-py-analysis` is a Python package for BIDS-based iEEG analysis.
+`bidsforge` is a Python package for BIDS-based iEEG analysis.
 It wraps PyBIDS for file discovery, provides a typed query interface over an
 entire dataset (source + derivatives in one object), and enforces a strict
 separation between numerical computation and file I/O in the processing layer.
 
 | Item | Value |
 |---|---|
-| Pip name | `gin-bids-py-analysis` |
-| Import name | `gin_bids_py_analysis` |
+| Pip name | `bidsforge` |
+| Import name | `bidsforge` |
 | Python | >= 3.10 |
 | Dependency management | plain `pip` + `setuptools`; install with `pip install -e ".[dev]"` |
 | Virtual env | `.venv` at the project root - prefer `.venv\Scripts\pip`, `.venv\Scripts\python`, and `.venv\Scripts\pytest` |
@@ -26,7 +26,7 @@ separation between numerical computation and file I/O in the processing layer.
 ## Module Map
 
 ```text
-src/gin_bids_py_analysis/
+src/bidsforge/
 |- bids/                BIDS file discovery, wrapping, and querying
 |- data/
 |  `- loader.py         iEEG loading helpers; `load_ieeg()` wraps `mne.io.read_raw`
@@ -207,7 +207,7 @@ This package is the reference pattern for grouped downstream analyses on derivat
 
 ## Adding a New Analysis
 
-1. Create `src/gin_bids_py_analysis/processing/<name>/`.
+1. Create `src/bidsforge/processing/<name>/`.
 2. Add `__init__.py` that re-exports the public classes for the analysis.
 3. Add `params.py` with:
    - `<Name>Params(BaseProcessingParams)`
@@ -227,7 +227,7 @@ This package is the reference pattern for grouped downstream analyses on derivat
 ### Querying the dataset
 
 ```python
-from gin_bids_py_analysis.bids import BIDSDataset
+from bidsforge.bids import BIDSDataset
 
 ds = BIDSDataset("/path/to/bids")  # derivatives=True by default
 files = ds.get_files(subject="01", suffix="ieeg", extension=".vhdr")
@@ -243,8 +243,8 @@ print(files[0].entities)    # full entity dict
 ```python
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup
-from gin_bids_py_analysis.processing.hilbert import (
+from bidsforge.bids import BIDSDataset, BIDSFileGroup
+from bidsforge.processing.hilbert import (
     HilbertParams,
     HilbertProcessing,
     HilbertProcessingWriter,
@@ -300,7 +300,7 @@ writer = HilbertProcessingWriter(
 .venv\Scripts\pip install -e ".[dev]"
 .venv\Scripts\pytest
 .venv\Scripts\pytest tests/processing/hilbert -q
-.venv\Scripts\pytest --cov=gin_bids_py_analysis --cov-report=term-missing
+.venv\Scripts\pytest --cov=bidsforge --cov-report=term-missing
 ```
 
 Tests that require a real PyBIDS-indexed dataset may be skipped until the local

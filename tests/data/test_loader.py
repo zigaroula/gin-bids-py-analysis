@@ -1,4 +1,4 @@
-"""Unit tests for gin_bids_py_analysis.data.loader.
+"""Unit tests for bidsforge.data.loader.
 
 All tests are mock-based: no real file or MNE/file-system access is required
 to run these (mne and builtins.open are patched as needed).
@@ -13,34 +13,34 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from gin_bids_py_analysis.data import load_ieeg, load_json, load_table
+from bidsforge.data import load_ieeg, load_json, load_table
 
 
 class TestLoadIeeg:
     def test_calls_mne_read_raw_with_path_string(self):
         path = Path("/data/sub-01_ieeg.vhdr")
-        with patch("gin_bids_py_analysis.data.loader.mne.io.read_raw") as mock_read:
+        with patch("bidsforge.data.loader.mne.io.read_raw") as mock_read:
             load_ieeg(path)
         mock_read.assert_called_once()
         assert mock_read.call_args.args[0] == str(path)
 
     def test_accepts_str_path(self):
-        with patch("gin_bids_py_analysis.data.loader.mne.io.read_raw") as mock_read:
+        with patch("bidsforge.data.loader.mne.io.read_raw") as mock_read:
             load_ieeg("/data/sub-01_ieeg.vhdr")
         assert mock_read.call_args.args[0] == "/data/sub-01_ieeg.vhdr"
 
     def test_preload_true_by_default(self):
-        with patch("gin_bids_py_analysis.data.loader.mne.io.read_raw") as mock_read:
+        with patch("bidsforge.data.loader.mne.io.read_raw") as mock_read:
             load_ieeg(Path("/data/sub-01_ieeg.vhdr"))
         assert mock_read.call_args.kwargs["preload"] is True
 
     def test_preload_false_is_forwarded(self):
-        with patch("gin_bids_py_analysis.data.loader.mne.io.read_raw") as mock_read:
+        with patch("bidsforge.data.loader.mne.io.read_raw") as mock_read:
             load_ieeg(Path("/data/sub-01_ieeg.vhdr"), preload=False)
         assert mock_read.call_args.kwargs["preload"] is False
 
     def test_extra_kwargs_forwarded_to_mne(self):
-        with patch("gin_bids_py_analysis.data.loader.mne.io.read_raw") as mock_read:
+        with patch("bidsforge.data.loader.mne.io.read_raw") as mock_read:
             load_ieeg(Path("/data/sub-01_ieeg.vhdr"), verbose=False, allow_maxshield=True)
         kwargs = mock_read.call_args.kwargs
         assert kwargs["verbose"] is False
@@ -49,13 +49,13 @@ class TestLoadIeeg:
     def test_returns_mne_raw_object(self):
         fake_raw = MagicMock()
         with patch(
-            "gin_bids_py_analysis.data.loader.mne.io.read_raw", return_value=fake_raw
+            "bidsforge.data.loader.mne.io.read_raw", return_value=fake_raw
         ):
             result = load_ieeg(Path("/data/sub-01_ieeg.vhdr"))
         assert result is fake_raw
 
     def test_exported_from_data_package(self):
-        from gin_bids_py_analysis.data import load_ieeg as _load_ieeg  # noqa: PLC0415
+        from bidsforge.data import load_ieeg as _load_ieeg  # noqa: PLC0415
 
         assert callable(_load_ieeg)
 
@@ -107,7 +107,7 @@ class TestLoadTable:
         assert rows[0]["col"] == "hello"
 
     def test_exported_from_data_package(self):
-        from gin_bids_py_analysis.data import load_table as _load_table  # noqa: PLC0415
+        from bidsforge.data import load_table as _load_table  # noqa: PLC0415
 
         assert callable(_load_table)
 
@@ -128,7 +128,7 @@ class TestLoadJson:
         assert result == {"key": "value"}
 
     def test_exported_from_data_package(self):
-        from gin_bids_py_analysis.data import load_json as _load_json  # noqa: PLC0415
+        from bidsforge.data import load_json as _load_json  # noqa: PLC0415
 
         assert callable(_load_json)
 

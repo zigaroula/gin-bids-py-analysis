@@ -7,9 +7,9 @@ import numpy as np
 import pytest
 import scipy.io
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_stats import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.trial_stats import (
     SignalActivityEstimate,
     ConditionSignalActivity,
     ConditionTrialSummaryValues,
@@ -18,13 +18,13 @@ from gin_bids_py_analysis.processing.trial_stats import (
     RegressionWriterParams,
     load_regression_result,
 )
-from gin_bids_py_analysis.processing.trial_stats.regression import (
+from bidsforge.processing.trial_stats.regression import (
     ConditionPredictorValues,
     ConditionRegressionStats,
     RegressionPredictor,
     RegressionStats,
 )
-from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
+from bidsforge.processing.utils.trial_resolver import ResolvedTrial
 
 
 class _MockPyBIDSFile:

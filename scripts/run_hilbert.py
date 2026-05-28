@@ -11,8 +11,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset
-from gin_bids_py_analysis.processing.hilbert import (
+from bidsforge.bids import BIDSDataset
+from bidsforge.processing.hilbert import (
     HilbertProcessing,
     HilbertProcessingWriter,
 )

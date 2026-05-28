@@ -1,4 +1,4 @@
-# gin-bids-py-analysis
+# bidsforge
 
 BIDS-based iEEG analysis pipelines:
 - `hilbert` (band envelope extraction)
@@ -18,7 +18,7 @@ Requirements:
 
 ```bash
 git clone <repo-url>
-cd gin-bids-py-analysis
+cd bidsforge
 
 python3 -m venv .venv
 source .venv/bin/activate
@@ -31,7 +31,7 @@ python -m pip install -e .
 
 ```powershell
 git clone <repo-url>
-cd gin-bids-py-analysis
+cd bidsforge
 
 py -3 -m venv .venv
 .venv\Scripts\Activate.ps1
@@ -51,7 +51,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ```bat
 git clone <repo-url>
-cd gin-bids-py-analysis
+cd bidsforge
 
 py -3 -m venv .venv
 .venv\Scripts\activate.bat
@@ -88,8 +88,8 @@ The writer automatically creates a `dataset_description.json` in each derivative
 Minimal pattern:
 
 ```python
-from gin_bids_py_analysis.bids import BIDSDataset
-from gin_bids_py_analysis.processing.hilbert import (
+from bidsforge.bids import BIDSDataset
+from bidsforge.processing.hilbert import (
     HilbertParams, HilbertProcessing, HilbertWriterParams, HilbertProcessingWriter
 )
 
@@ -119,7 +119,7 @@ Run:
 python scripts/run_hilbert.py
 ```
 
-Main configuration is in `HilbertParams` (`src/gin_bids_py_analysis/processing/hilbert/params.py`):
+Main configuration is in `HilbertParams` (`src/bidsforge/processing/hilbert/params.py`):
 - Frequency grid:
   - `f_min`, `f_max`, `f_step` (subbands are adjacent bin pairs).
   - Validation: `f_max > f_min`, and `f_step < (f_max - f_min)`.
@@ -153,7 +153,7 @@ Run:
 python scripts/run_hfo_spike_detection.py
 ```
 
-Main configuration is in `HfoSpikeDetectorParams` (`src/gin_bids_py_analysis/processing/hfo_spike_detection/params.py`):
+Main configuration is in `HfoSpikeDetectorParams` (`src/bidsforge/processing/hfo_spike_detection/params.py`):
 - Detection controls:
   - `alpha`
   - `detection_type` (`["Osc"]`, `["Spk"]`, or both)
@@ -190,7 +190,7 @@ Input selection and grouping:
 - `build_subject_groups(...)`: builds one file group per subject.
 
 Core configuration in `ConditionTestParams`
-(`src/gin_bids_py_analysis/processing/trial_stats/condition_test/params.py`):
+(`src/bidsforge/processing/trial_stats/condition_test/params.py`):
 - Required:
   - `anchor_event_codes`
   - `tmin_s`, `tmax_s`
@@ -280,7 +280,7 @@ This pipeline computes, for each condition separately, a linear regression
 between epoched gamma activity and a continuous predictor value coming from TSV/CSV.
 
 Core configuration in `RegressionParams`
-(`src/gin_bids_py_analysis/processing/trial_stats/regression/params.py`):
+(`src/bidsforge/processing/trial_stats/regression/params.py`):
 - Required:
   - `anchor_event_codes`
   - `tmin_s`, `tmax_s`
@@ -329,7 +329,7 @@ Input discovery:
 - `build_condition_test_compatible_groups(...)` automatically splits files into compatible sets (same task, condition labels, time axis, and binning signature).
 
 Core configuration in `ConditionTestGroupParams`
-(`src/gin_bids_py_analysis/processing/trial_stats_group/condition_test/params.py`):
+(`src/bidsforge/processing/trial_stats_group/condition_test/params.py`):
 - Metric to aggregate from each subject file:
   - `source_metric`: `mean_difference`, `t_values`, `condition_a_mean`, `condition_b_mean`
 - Statistical controls:
@@ -364,7 +364,7 @@ Input discovery:
 - `build_regression_compatible_groups(...)` automatically splits files into compatible sets.
 
 Core configuration in `RegressionGroupParams`
-(`src/gin_bids_py_analysis/processing/trial_stats_group/regression/params.py`):
+(`src/bidsforge/processing/trial_stats_group/regression/params.py`):
 - Metric to aggregate from each subject file:
   - `source_metric`: `slope`, `r_value`
 - Group contrast configuration:
@@ -403,5 +403,5 @@ There are two ways to visualize trial-stats results:
 
 ```bash
 pytest
-pytest --cov=gin_bids_py_analysis --cov-report=term-missing
+pytest --cov=bidsforge --cov-report=term-missing
 ```

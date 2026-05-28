@@ -4,8 +4,8 @@ Tests for BIDSSubject filtering.
 
 from __future__ import annotations
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.subject import BIDSSubject
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.subject import BIDSSubject
 
 
 class _MockPyBIDSFile:

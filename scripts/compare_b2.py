@@ -24,7 +24,7 @@ import numpy as np
 import scipy.io
 from matplotlib.widgets import Button, Slider
 
-from gin_bids_py_analysis.processing.utils.epoch_quality import (
+from bidsforge.processing.utils.epoch_quality import (
     apply_trial_nan_mask,
     detect_outlier_trial_channel_pairs_by_max,
     detect_outlier_trial_channel_pairs_by_mean,
@@ -32,7 +32,7 @@ from gin_bids_py_analysis.processing.utils.epoch_quality import (
     reject_channels_by_trial_max_spread,
     reject_channels_by_trial_mean_spread,
 )
-from gin_bids_py_analysis.processing.utils.statistics import (
+from bidsforge.processing.utils.statistics import (
     compute_baseline_outlier_mask,
     zscore_activity_by_baseline,
 )

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.processing.utils.cluster_permutation import (
+from bidsforge.processing.utils.cluster_permutation import (
     compute_cluster_null_distribution,
     compute_cluster_null_distribution_paired,
     compute_cluster_permutation_pvalue,

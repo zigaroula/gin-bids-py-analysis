@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.processing.utils.epoch_quality import (
+from bidsforge.processing.utils.epoch_quality import (
     apply_channel_exclusions,
     apply_trial_nan_mask,
     detect_outlier_trial_channel_pairs_by_max,

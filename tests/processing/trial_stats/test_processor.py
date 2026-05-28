@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from gin_bids_py_analysis.processing.trial_stats import (
+from bidsforge.processing.trial_stats import (
     BaseTrialStatsParams,
     BaseTrialStatsProcessing,
     BaseTrialStatsProcessingResult,
 )
-from gin_bids_py_analysis.processing.utils.statistics import zscore_activity_by_baseline
+from bidsforge.processing.utils.statistics import zscore_activity_by_baseline
 
 
 class _DummyResolver:

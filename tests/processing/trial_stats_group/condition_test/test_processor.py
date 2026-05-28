@@ -7,11 +7,11 @@ from pathlib import Path
 import h5py
 import numpy as np
 import pytest
-from gin_bids_py_analysis.processing.utils.serialization import write_matlab_tree
+from bidsforge.processing.utils.serialization import write_matlab_tree
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_stats_group import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.trial_stats_group import (
     ConditionTestGroupParams,
     ConditionTestGroupProcessing,
     build_condition_test_compatible_groups,

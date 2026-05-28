@@ -19,15 +19,15 @@ import numpy as np
 import pytest
 import scipy.io
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.hilbert.params import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.hilbert.params import (
     HilbertWriterParams,
     NormalizationMode,
 )
-from gin_bids_py_analysis.processing.hilbert.result_loader import load_hilbert_result
-from gin_bids_py_analysis.processing.hilbert.result import HilbertProcessingResult
-from gin_bids_py_analysis.processing.hilbert.writer import HilbertProcessingWriter
+from bidsforge.processing.hilbert.result_loader import load_hilbert_result
+from bidsforge.processing.hilbert.result import HilbertProcessingResult
+from bidsforge.processing.hilbert.writer import HilbertProcessingWriter
 
 
 # ---------------------------------------------------------------------------

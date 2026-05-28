@@ -4,7 +4,7 @@ import h5py
 import numpy as np
 import scipy.io
 
-from gin_bids_py_analysis.processing.utils.serialization import (
+from bidsforge.processing.utils.serialization import (
     compressed,
     write_hdf5_tree,
     write_matlab_tree,

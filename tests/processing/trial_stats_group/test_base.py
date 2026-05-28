@@ -5,15 +5,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.processing.trial_stats_group.compatibility import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.processing.trial_stats_group.compatibility import (
     SubjectStatsInput,
     SubjectStatsSignature,
     build_compatible_groups,
     hash_time_axis,
     validate_group_compatibility,
 )
-from gin_bids_py_analysis.processing.trial_stats_group.processor import (
+from bidsforge.processing.trial_stats_group.processor import (
     BaseTrialStatsGroupContributionRecord,
     collect_manual_roi_records,
     find_missing_manual_roi_channels,

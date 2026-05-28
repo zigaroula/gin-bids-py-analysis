@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import h5py
 import pytest
 
-from gin_bids_py_analysis.visualization.trial_stats.worker import (
+from bidsforge.visualization.trial_stats.worker import (
     ComputeAllWorker,
     ComputeWorker,
     GroupComputeWorker,
@@ -138,7 +138,7 @@ class TestGroupComputeWorker:
         worker = GroupComputeWorker(all_results, group_params)
 
         with patch(
-            "gin_bids_py_analysis.visualization.trial_stats._bridge"
+            "bidsforge.visualization.trial_stats._bridge"
             ".build_condition_test_compatible_groups",
             side_effect=RuntimeError("bridge error"),
         ):
@@ -148,7 +148,7 @@ class TestGroupComputeWorker:
         assert "bridge error" in blocker.args[0]
 
     def test_result_ready_signal_in_slope_mode(self, qtbot, synthetic_slope_result):
-        from gin_bids_py_analysis.processing.trial_stats_group import (
+        from bidsforge.processing.trial_stats_group import (
             RegressionGroupParams,
         )
 

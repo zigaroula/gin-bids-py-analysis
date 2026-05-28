@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import numpy as np
 
-from gin_bids_py_analysis.processing.utils.group_stats import (
+from bidsforge.processing.utils.group_stats import (
     compute_one_sample_epoch_summary,
     compute_one_sample_timecourse,
 )
-from gin_bids_py_analysis.processing.utils.cluster_permutation import (
+from bidsforge.processing.utils.cluster_permutation import (
     compute_cluster_null_distribution,
     compute_cluster_null_distribution_sign_flip,
     compute_mne_cluster_permutation,
     compute_cluster_permutation_pvalue,
     find_temporal_clusters,
 )
-from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
+from bidsforge.processing.utils.statistics import correct_p_values
 
 
 def test_compute_one_sample_timecourse_detects_positive_effect() -> None:

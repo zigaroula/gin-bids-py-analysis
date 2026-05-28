@@ -1,5 +1,5 @@
 """
-Unit tests for gin_bids_py_analysis.processing.hilbert.dsp
+Unit tests for bidsforge.processing.hilbert.dsp
 
 Each test targets a single function or a clearly bounded behaviour so that
 failures pinpoint the exact broken piece of the pipeline.
@@ -12,13 +12,13 @@ import math
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.processing.hilbert.fir import (
+from bidsforge.processing.hilbert.fir import (
     FirBandPass,
     _hamming_window,
     _hilbert_coeff,
     _number_of_points,
 )
-from gin_bids_py_analysis.processing.hilbert.dsp import (
+from bidsforge.processing.hilbert.dsp import (
     apply_shannon_clamp,
     build_frequency_bins,
     downsample,
@@ -28,12 +28,12 @@ from gin_bids_py_analysis.processing.hilbert.dsp import (
     normalize_percent,
     process_channel,
 )
-from gin_bids_py_analysis.processing.hilbert.params import (
+from bidsforge.processing.hilbert.params import (
     HilbertParams,
     NormalizationMode,
     ProcessingMethod,
 )
-from gin_bids_py_analysis.processing.utils.channels import build_montage
+from bidsforge.processing.utils.channels import build_montage
 
 
 # ---------------------------------------------------------------------------

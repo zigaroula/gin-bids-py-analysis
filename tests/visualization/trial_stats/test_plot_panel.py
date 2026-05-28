@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.visualization.trial_stats.panels.plot_panel import (
+from bidsforge.visualization.trial_stats.panels.plot_panel import (
     PlotPanel,
     _compute_scatter_summary_points,
     _predictor_axis_label,

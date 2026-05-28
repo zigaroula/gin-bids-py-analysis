@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
-from gin_bids_py_analysis.processing.trial_stats import TableTrialResolver
-from gin_bids_py_analysis.processing.trial_stats.condition_test import (
+from bidsforge.bids import BIDSDataset, BIDSFileGroup, build_subject_groups
+from bidsforge.processing.trial_stats import TableTrialResolver
+from bidsforge.processing.trial_stats.condition_test import (
     ConditionTestParams,
     ConditionTestProcessing,
     ConditionTestProcessingWriter,

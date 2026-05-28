@@ -10,8 +10,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset
-from gin_bids_py_analysis.visualization.trial_stats import launch_slope
+from bidsforge.bids import BIDSDataset
+from bidsforge.visualization.trial_stats import launch_slope
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:

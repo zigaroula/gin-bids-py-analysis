@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from gin_bids_py_analysis.processing.trial_stats import RegressionParams
-from gin_bids_py_analysis.processing.trial_stats import ConditionTestParams
-from gin_bids_py_analysis.visualization.trial_stats.panels.params_panel import ParamsPanel
+from bidsforge.processing.trial_stats import RegressionParams
+from bidsforge.processing.trial_stats import ConditionTestParams
+from bidsforge.visualization.trial_stats.panels.params_panel import ParamsPanel
 
 
 class TestParamsPanelRoundTrip:

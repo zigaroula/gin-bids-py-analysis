@@ -29,7 +29,7 @@ import h5py
 import numpy as np
 from scipy.stats import ttest_1samp, ttest_rel
 
-from gin_bids_py_analysis.processing.utils.hdf5 import decode_str_array
+from bidsforge.processing.utils.hdf5 import decode_str_array
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:

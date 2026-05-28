@@ -11,8 +11,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset
-from gin_bids_py_analysis.processing.trial_stats.regression import (
+from bidsforge.bids import BIDSDataset
+from bidsforge.processing.trial_stats.regression import (
     RegressionProcessing,
     RegressionProcessingWriter,
 )

@@ -3,12 +3,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.processing.utils.group_stats import (
+from bidsforge.processing.utils.group_stats import (
     compute_condition_group_stats,
     compute_one_sample_epoch_summary,
     compute_one_sample_timecourse,
 )
-from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
+from bidsforge.processing.utils.statistics import correct_p_values
 
 
 def test_compute_one_sample_timecourse_shape() -> None:

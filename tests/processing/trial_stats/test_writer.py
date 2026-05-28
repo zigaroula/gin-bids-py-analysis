@@ -6,18 +6,18 @@ import h5py
 import numpy as np
 import scipy.io
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_stats import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.trial_stats import (
     SignalActivityEstimate,
     BaseTrialStatsProcessingResult,
     BaseTrialStatsProcessingWriter,
     BaseTrialStatsWriterParams,
     ConditionSignalActivity,
 )
-from gin_bids_py_analysis.processing.trial_stats.writer import _trial_table_path
-from gin_bids_py_analysis.processing.utils.matlab import make_struct
-from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
+from bidsforge.processing.trial_stats.writer import _trial_table_path
+from bidsforge.processing.utils.matlab import make_struct
+from bidsforge.processing.utils.trial_resolver import ResolvedTrial
 
 
 class _MockPyBIDSFile:

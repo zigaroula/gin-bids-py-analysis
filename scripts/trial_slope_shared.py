@@ -8,36 +8,36 @@ from typing import Any, Literal, Sequence
 
 import numpy as np
 
-from gin_bids_py_analysis.bids import BIDSDataset, BIDSFile, BIDSFileGroup, build_subject_groups
-from gin_bids_py_analysis.bids.helpers import normalize_subject_value
-from gin_bids_py_analysis.processing.hilbert import (
+from bidsforge.bids import BIDSDataset, BIDSFile, BIDSFileGroup, build_subject_groups
+from bidsforge.bids.helpers import normalize_subject_value
+from bidsforge.processing.hilbert import (
     HilbertParams,
     HilbertWriterParams,
     NormalizationMode,
     ProcessingMethod,
 )
-from gin_bids_py_analysis.processing.trial_stats.regression import (
+from bidsforge.processing.trial_stats.regression import (
     RegressionParams,
     RegressionWriterParams,
 )
-from gin_bids_py_analysis.processing.trial_stats.result import BaseTrialStatsProcessingResult
-from gin_bids_py_analysis.processing.trial_stats_group import (
+from bidsforge.processing.trial_stats.result import BaseTrialStatsProcessingResult
+from bidsforge.processing.trial_stats_group import (
     RegressionGroupParams,
     RegressionGroupWriterParams,
 )
-from gin_bids_py_analysis.processing.utils.channels import (
+from bidsforge.processing.utils.channels import (
     BipolarDirection,
     BipolarStorage,
     MontageMode,
 )
-from gin_bids_py_analysis.processing.utils.condition_rules import ConditionExpr
-from gin_bids_py_analysis.processing.utils.trial_annotator import (
+from bidsforge.processing.utils.condition_rules import ConditionExpr
+from bidsforge.processing.utils.trial_annotator import (
     DeferredTrialMetadataInvalidationRule,
     EventAnnotationFeatureMaskRule,
     EventAnnotationInvalidationRule,
     EventFileWindowAnnotator,
 )
-from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, TableTrialResolver
+from bidsforge.processing.utils.trial_resolver import ResolvedTrial, TableTrialResolver
 
 # ---------------------------------------------------------------------------
 # Trial slope recipe parameters  (edit these)

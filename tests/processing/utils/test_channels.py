@@ -7,7 +7,7 @@ import re
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.processing.utils.channels import (
+from bidsforge.processing.utils.channels import (
     normalize_channel_name,
     select_channels_for_montage,
 )

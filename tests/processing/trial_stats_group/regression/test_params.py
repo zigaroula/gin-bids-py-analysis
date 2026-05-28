@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from gin_bids_py_analysis.processing.trial_stats_group import (
+from bidsforge.processing.trial_stats_group import (
     RegressionGroupParams,
     RegressionGroupWriterParams,
 )

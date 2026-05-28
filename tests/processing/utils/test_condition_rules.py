@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gin_bids_py_analysis.processing.utils.condition_rules import (
+from bidsforge.processing.utils.condition_rules import (
     ConditionDefinition,
     ConditionExpr,
     matches_condition_expr,

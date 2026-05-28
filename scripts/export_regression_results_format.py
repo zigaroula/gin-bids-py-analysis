@@ -19,22 +19,22 @@ from pathlib import Path
 
 import h5py
 
-from gin_bids_py_analysis.processing.trial_stats.regression.result_loader import (
+from bidsforge.processing.trial_stats.regression.result_loader import (
     load_regression_result,
 )
-from gin_bids_py_analysis.processing.trial_stats.regression.writer import (
+from bidsforge.processing.trial_stats.regression.writer import (
     RegressionProcessingWriter,
 )
-from gin_bids_py_analysis.processing.trial_stats.regression.params import (
+from bidsforge.processing.trial_stats.regression.params import (
     RegressionWriterParams,
 )
-from gin_bids_py_analysis.processing.trial_stats_group.regression.result_loader import (
+from bidsforge.processing.trial_stats_group.regression.result_loader import (
     load_regression_group_result,
 )
-from gin_bids_py_analysis.processing.trial_stats_group.regression.writer import (
+from bidsforge.processing.trial_stats_group.regression.writer import (
     RegressionGroupProcessingWriter,
 )
-from gin_bids_py_analysis.processing.trial_stats_group.regression.params import (
+from bidsforge.processing.trial_stats_group.regression.params import (
     RegressionGroupWriterParams,
 )
 

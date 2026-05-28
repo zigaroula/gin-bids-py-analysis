@@ -21,18 +21,18 @@ import numpy as np
 import pytest
 import scipy.io
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.hfo_spike_detection.params import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.hfo_spike_detection.params import (
     HfoSpikeDetectorWriterParams,
 )
-from gin_bids_py_analysis.processing.hfo_spike_detection.result import (
+from bidsforge.processing.hfo_spike_detection.result import (
     HfoSpikeDetectorProcessingResult,
 )
-from gin_bids_py_analysis.processing.hfo_spike_detection.result_loader import (
+from bidsforge.processing.hfo_spike_detection.result_loader import (
     load_hfo_spike_detection_result,
 )
-from gin_bids_py_analysis.processing.hfo_spike_detection.writer import (
+from bidsforge.processing.hfo_spike_detection.writer import (
     HfoSpikeDetectorProcessingWriter,
 )
 

@@ -22,16 +22,16 @@ from typing import Iterable
 import h5py
 import numpy as np
 
-from gin_bids_py_analysis.bids import BIDSFile, BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_stats_group import (
+from bidsforge.bids import BIDSFile, BIDSFileGroup
+from bidsforge.processing.trial_stats_group import (
     RegressionGroupProcessing,
     RegressionGroupProcessingWriter,
     build_regression_compatible_groups,
 )
-from gin_bids_py_analysis.processing.trial_stats_group.regression.params import (
+from bidsforge.processing.trial_stats_group.regression.params import (
     RegressionGroupWriterParams,
 )
-from gin_bids_py_analysis.processing.trial_stats_group.regression.result_loader import (
+from bidsforge.processing.trial_stats_group.regression.result_loader import (
     load_regression_group_result,
 )
 

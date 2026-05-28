@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gin_bids_py_analysis.bids.file import BIDSFile
+from bidsforge.bids.file import BIDSFile
 
 
 def test_entity_access_via_getitem(mock_bids_file: BIDSFile) -> None:
@@ -251,7 +251,7 @@ class TestAutoDetection:
         file = self._file_with_ext(".vhdr")
         fake_raw = MagicMock()
         with patch(
-            "gin_bids_py_analysis.data.loader.mne.io.read_raw", return_value=fake_raw
+            "bidsforge.data.loader.mne.io.read_raw", return_value=fake_raw
         ):
             with file.ensure_loaded() as data:
                 assert data is fake_raw
@@ -296,7 +296,7 @@ class TestPickleSafety:
         assert roundtripped._externally_loaded is False
 
     def test_loader_and_kwargs_survive_pickle(self, mock_bids_file: BIDSFile) -> None:
-        from gin_bids_py_analysis.data.loader import load_table  # noqa: PLC0415
+        from bidsforge.data.loader import load_table  # noqa: PLC0415
 
         mock_bids_file.set_loader(load_table, verbose=False)
         roundtripped = pickle.loads(pickle.dumps(mock_bids_file))

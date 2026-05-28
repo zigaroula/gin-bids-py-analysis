@@ -9,15 +9,15 @@ import csv
 import re
 from pathlib import Path
 
-from gin_bids_py_analysis.bids import BIDSDataset
-from gin_bids_py_analysis.bids.helpers import normalize_subject_value
-from gin_bids_py_analysis.processing.hfo_spike_detection import (
+from bidsforge.bids import BIDSDataset
+from bidsforge.bids.helpers import normalize_subject_value
+from bidsforge.processing.hfo_spike_detection import (
     HfoSpikeDetectorParams,
     HfoSpikeDetectorProcessing,
     HfoSpikeDetectorProcessingWriter,
     HfoSpikeDetectorWriterParams,
 )
-from gin_bids_py_analysis.processing.utils.channels import (
+from bidsforge.processing.utils.channels import (
     BipolarDirection,
     BipolarStorage,
     MontageMode,

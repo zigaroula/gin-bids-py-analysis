@@ -8,20 +8,20 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.trial_stats import RegressionParams
-from gin_bids_py_analysis.processing.trial_stats import RegressionProcessingResult
-from gin_bids_py_analysis.processing.trial_stats.regression import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.trial_stats import RegressionParams
+from bidsforge.processing.trial_stats import RegressionProcessingResult
+from bidsforge.processing.trial_stats.regression import (
     ConditionPredictorValues,
     ConditionRegressionStats,
     RegressionPredictor,
     RegressionStats,
 )
-from gin_bids_py_analysis.processing.trial_stats import ConditionTestParams
-from gin_bids_py_analysis.processing.trial_stats import ConditionTestProcessingResult
-from gin_bids_py_analysis.processing.trial_stats import ConditionContrast, DifferenceEstimate
-from gin_bids_py_analysis.processing.trial_stats import (
+from bidsforge.processing.trial_stats import ConditionTestParams
+from bidsforge.processing.trial_stats import ConditionTestProcessingResult
+from bidsforge.processing.trial_stats import ConditionContrast, DifferenceEstimate
+from bidsforge.processing.trial_stats import (
     SignalActivityEstimate,
     ConditionSignalActivity,
     ConditionTrialSummaryValues,

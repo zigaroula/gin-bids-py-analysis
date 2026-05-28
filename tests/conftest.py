@@ -1,5 +1,5 @@
 """
-Shared pytest fixtures for gin-bids-py-analysis tests.
+Shared pytest fixtures for bidsforge tests.
 
 Fixtures defined here are available to all test modules without explicit import.
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from gin_bids_py_analysis.bids.file import BIDSFile
+from bidsforge.bids.file import BIDSFile
 
 
 # ---------------------------------------------------------------------------

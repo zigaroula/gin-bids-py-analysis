@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.utils.events import AnnotationEvent
-from gin_bids_py_analysis.processing.utils.trial_resolver import TableTrialResolver
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.utils.events import AnnotationEvent
+from bidsforge.processing.utils.trial_resolver import TableTrialResolver
 
 
 class _MockPyBIDSFile:

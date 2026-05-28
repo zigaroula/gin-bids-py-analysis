@@ -6,15 +6,15 @@ from typing import Any
 
 import pytest
 
-from gin_bids_py_analysis.bids.file import BIDSFile
-from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.processing.utils.condition_rules import ConditionExpr
-from gin_bids_py_analysis.processing.utils.trial_annotator import (
+from bidsforge.bids.file import BIDSFile
+from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.utils.condition_rules import ConditionExpr
+from bidsforge.processing.utils.trial_annotator import (
     EventAnnotationInvalidationRule,
     EventFileWindowAnnotator,
     TrialMetadataInvalidationRule,
 )
-from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial
+from bidsforge.processing.utils.trial_resolver import ResolvedTrial
 
 
 # ---------------------------------------------------------------------------

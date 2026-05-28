@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from mne import Annotations
 
-from gin_bids_py_analysis.processing.utils.events import (
+from bidsforge.processing.utils.events import (
     coerce_annotation_events,
     parse_annotation_description,
 )
