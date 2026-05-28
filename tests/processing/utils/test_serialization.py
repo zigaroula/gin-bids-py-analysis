@@ -49,4 +49,20 @@ def test_write_matlab_tree_preserves_nested_structure(tmp_path) -> None:
     assert list(np.atleast_1d(data.data.labels)) == ["A1", "B2"]
 
 
+def test_write_matlab_tree_writes_1d_arrays_as_columns(tmp_path) -> None:
+    path = tmp_path / "tree.mat"
+    write_matlab_tree(
+        path,
+        {
+            "data": {
+                "values": np.array([1, 2, 3], dtype=np.int64),
+            },
+        },
+    )
+
+    mat = scipy.io.loadmat(str(path), squeeze_me=False)
+    values = mat["data"]["data"][0, 0]["values"][0, 0]
+    assert values.shape == (3, 1)
+
+
 

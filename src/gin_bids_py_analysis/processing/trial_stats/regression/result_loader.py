@@ -20,6 +20,7 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
 from gin_bids_py_analysis.processing.utils.matlab import (
     mat_float,
     mat_int,
+    mat_root,
     mat_str,
     mat_str_list,
 )
@@ -84,6 +85,30 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
             condition_b = labels[1] if len(labels) >= 2 else "condition_b"
         else:
             condition_a, condition_b = "condition_a", "condition_b"
+        available_metrics_ds = dataset_or_none(fh, "meta/available_regression_metrics")
+        if available_metrics_ds is not None:
+            available_regression_metrics = decode_str_array(
+                np.asarray(available_metrics_ds[:], dtype=object)
+            )
+        else:
+            available_regression_metrics = [
+                metric
+                for metric, present in {
+                    "slope": (
+                        dataset_or_none(fh, f"stats/regression/{condition_a}/slope")
+                        is not None
+                        and dataset_or_none(fh, f"stats/regression/{condition_b}/slope")
+                        is not None
+                    ),
+                    "r_value": (
+                        dataset_or_none(fh, f"stats/regression/{condition_a}/r_value")
+                        is not None
+                        and dataset_or_none(fh, f"stats/regression/{condition_b}/r_value")
+                        is not None
+                    ),
+                }.items()
+                if present
+            ]
 
         trial_counts_ds = dataset_or_none(fh, "meta/trial_counts")
         if trial_counts_ds is not None:
@@ -363,6 +388,7 @@ def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
             "trial_activity_summary_label": trial_activity_summary_label,
             "epoch_cleaning": epoch_cleaning,
             "epoch_cleaning_audit": epoch_cleaning_audit,
+            "available_regression_metrics": available_regression_metrics,
         },
         regression=RegressionStats(
             condition_a=ConditionRegressionStats(
@@ -452,7 +478,7 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
     from scipy.io import loadmat
 
     mat = loadmat(str(path), squeeze_me=True, struct_as_record=False)
-    data = mat["data"]
+    data = mat_root(mat, "regression")
     _require_v2_schema_mat(data.meta, path.name)
     regression = data.stats.regression
     activity = data.data.signal_activity
@@ -481,6 +507,9 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
     labels = mat_str_list(getattr(meta, "condition_labels", None))
     condition_a = labels[0] if len(labels) >= 1 else "condition_a"
     condition_b = labels[1] if len(labels) >= 2 else "condition_b"
+    available_regression_metrics = mat_str_list(
+        getattr(meta, "available_regression_metrics", None)
+    )
 
     def _mat_2d(obj: object, attr: str) -> np.ndarray:
         raw = getattr(obj, attr, None) if obj is not None else None
@@ -550,6 +579,21 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
     condition_b_mean = _mat_2d(getattr(activity, condition_b, None), "mean")
     condition_a_sem = _mat_2d(getattr(activity, condition_a, None), "sem")
     condition_b_sem = _mat_2d(getattr(activity, condition_b, None), "sem")
+    if not available_regression_metrics:
+        available_regression_metrics = [
+            metric
+            for metric, present in {
+                "slope": (
+                    getattr(reg_a, "slope", None) is not None
+                    and getattr(reg_b, "slope", None) is not None
+                ),
+                "r_value": (
+                    getattr(reg_a, "r_value", None) is not None
+                    and getattr(reg_b, "r_value", None) is not None
+                ),
+            }.items()
+            if present
+        ]
 
     condition_a_predictor_raw_values = np.asarray(
         getattr(getattr(predictor, condition_a, None), "raw_values", None)
@@ -751,6 +795,7 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
             "trial_activity_summary_label": trial_activity_summary_label,
             "epoch_cleaning": epoch_cleaning,
             "epoch_cleaning_audit": epoch_cleaning_audit,
+            "available_regression_metrics": available_regression_metrics,
         },
         regression=RegressionStats(
             condition_a=ConditionRegressionStats(

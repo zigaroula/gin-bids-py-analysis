@@ -16,6 +16,8 @@ from gin_bids_py_analysis.processing.trial_stats_group import (
     RegressionGroupProcessing,
     build_regression_compatible_groups,
 )
+from gin_bids_py_analysis.processing.trial_stats.regression import load_regression_result
+from gin_bids_py_analysis.processing.utils.serialization import write_matlab_tree
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -114,9 +116,16 @@ def _write_slope_stats_h5(
         axes.create_dataset("time_s", data=time_s.astype(np.float64))
 
         meta = fh.create_group("meta")
+        meta.create_dataset("schema_version", data="3.0", dtype=str_dtype)
         meta.create_dataset("analysis_type", data="slope_regression", dtype=str_dtype)
         meta.create_dataset("analysis_level", data=analysis_level, dtype=str_dtype)
         meta.create_dataset("condition_labels", data=np.array(list(condition_labels), dtype=object), dtype=str_dtype)
+        meta.create_dataset("available_regression_metrics", data=np.array(["slope", "r_value"], dtype=object), dtype=str_dtype)
+        meta.create_dataset("trial_counts", data=np.array([0, 0], dtype=np.int64))
+        meta.create_dataset("sampling_frequency_hz", data=0.0)
+        meta.create_dataset("p_value_correction_method", data="fdr_bh", dtype=str_dtype)
+        meta.create_dataset("significance_alpha", data=0.05)
+        meta.create_dataset("stats_valid", data=True)
         meta.create_dataset("binning_mode", data="none", dtype=str_dtype)
         meta.create_dataset("window_ms", data=0.0)
         meta.create_dataset("n_bins", data=0)
@@ -135,6 +144,14 @@ def _write_slope_stats_h5(
         meta.create_dataset("activity_zscore", data=activity_zscore, dtype=str_dtype)
         meta.create_dataset("activity_baseline_tmin_s", data=activity_baseline_tmin_s)
         meta.create_dataset("activity_baseline_tmax_s", data=activity_baseline_tmax_s)
+        meta.create_dataset("activity_baseline_scope", data="global", dtype=str_dtype)
+        meta.create_dataset("activity_baseline_remove_outlier_trial_means", data=False)
+        meta.create_dataset("trial_activity_summary_kind", data="epoch_mean", dtype=str_dtype)
+        meta.create_dataset("trial_activity_summary_missing_response_policy", data="nan_if_missing", dtype=str_dtype)
+        meta.create_dataset("trial_activity_summary_source_json", data="{}", dtype=str_dtype)
+        meta.create_dataset("trial_activity_summary_label", data="Epoch mean activity", dtype=str_dtype)
+        meta.create_dataset("epoch_cleaning_json", data="{}", dtype=str_dtype)
+        meta.create_dataset("epoch_cleaning_audit_json", data="{}", dtype=str_dtype)
 
         prov = fh.create_group("provenance")
         prov.create_dataset(
@@ -201,6 +218,96 @@ def test_build_compatible_groups_splits_activity_zscore_inputs() -> None:
         groups = build_regression_compatible_groups(files)
         assert len(groups) == 2
         assert all(len(group.all_files) == 1 for group in groups)
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+
+
+def test_load_regression_result_from_matlab_schema_reports_available_metrics() -> None:
+    case_dir = _make_case_dir("matlab_schema")
+    try:
+        path = case_dir / "sub-01_desc-onset_stats.mat"
+        time_s = np.array([0.0, 0.1, 0.2], dtype=np.float64)
+        slope_a = np.ones((2, 3), dtype=np.float64)
+        slope_b = np.ones((2, 3), dtype=np.float64) * -1
+        r_a = np.ones((2, 3), dtype=np.float64) * 0.5
+        r_b = np.ones((2, 3), dtype=np.float64) * -0.5
+        mean_a = np.ones((2, 3), dtype=np.float64) * 2
+        mean_b = np.ones((2, 3), dtype=np.float64) * 3
+
+        write_matlab_tree(
+            path,
+            {
+                "stats": {
+                    "regression": {
+                        "pleasant": {"slope": slope_a, "r_value": r_a},
+                        "unpleasant": {"slope": slope_b, "r_value": r_b},
+                    }
+                },
+                "data": {
+                    "signal_activity": {
+                        "pleasant": {"mean": mean_a},
+                        "unpleasant": {"mean": mean_b},
+                    }
+                },
+                "predictor": {
+                    "pleasant": {
+                        "raw_values": np.array([], dtype=np.float64),
+                        "transformed_values": np.array([], dtype=np.float64),
+                        "values": np.array([], dtype=np.float64),
+                    },
+                    "unpleasant": {
+                        "raw_values": np.array([], dtype=np.float64),
+                        "transformed_values": np.array([], dtype=np.float64),
+                        "values": np.array([], dtype=np.float64),
+                    },
+                },
+                "axes": {
+                    "channel": np.array(["A1", "A2"], dtype=object),
+                    "time_s": time_s,
+                },
+                "meta": {
+                    "schema_version": "3.0",
+                    "analysis_type": "slope_regression",
+                    "analysis_level": "channel",
+                    "condition_labels": np.array(["pleasant", "unpleasant"], dtype=object),
+                    "available_regression_metrics": np.array(["slope", "r_value"], dtype=object),
+                    "binning_mode": "none",
+                    "window_ms": 0.0,
+                    "n_bins": 0,
+                    "effective_n_bins": len(time_s),
+                    "sampling_frequency_hz": 0.0,
+                    "p_value_correction_method": "fdr_bh",
+                    "significance_alpha": 0.05,
+                    "stats_valid": True,
+                    "predictor": "matlab_zscore",
+                    "predictor_zscore": "none",
+                    "predictor_transform_by_condition_json": "{}",
+                    "activity_zscore": "none",
+                    "activity_baseline_tmin_s": -0.2,
+                    "activity_baseline_tmax_s": 0.0,
+                    "activity_baseline_scope": "global",
+                    "activity_baseline_remove_outlier_trial_means": False,
+                    "trial_activity_summary_kind": "epoch_mean",
+                    "trial_activity_summary_missing_response_policy": "nan_if_missing",
+                    "trial_activity_summary_source_json": "{}",
+                    "trial_activity_summary_label": "Epoch mean activity",
+                    "epoch_cleaning_json": "{}",
+                    "epoch_cleaning_audit_json": "{}",
+                },
+                "provenance": {
+                    "source_ieeg_files": np.array([], dtype=object),
+                    "source_electrodes_files": np.array([], dtype=object),
+                },
+            },
+            root_name="regression",
+        )
+
+        result = load_regression_result(path)
+
+        assert (result.condition_a, result.condition_b) == ("pleasant", "unpleasant")
+        assert set(result.metadata["available_regression_metrics"]) == {"slope", "r_value"}
+        np.testing.assert_allclose(result.regression.condition_a.slope, slope_a)
+        np.testing.assert_allclose(result.signal_activity.condition_b.mean, mean_b)
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 

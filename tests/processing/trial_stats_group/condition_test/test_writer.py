@@ -243,7 +243,7 @@ def test_writer_outputs_matlab_format() -> None:
         assert out_path.name == "sub-group_task-decid_desc-conditiontestgroup_stats.mat"
 
         mat = scipy.io.loadmat(str(out_path), squeeze_me=True, struct_as_record=False)
-        data = mat["data"]
+        data = mat["condition_test_group"]
         # With squeeze_me=True, (1, 2) arrays become (2,) and (1,) become scalars
         assert np.atleast_1d(data.stats.signal_activity.t_values).shape == (2,)
         assert np.atleast_1d(data.stats.signal_activity.p_values).shape == (2,)

@@ -62,9 +62,10 @@ class HilbertProcessingResult(BaseProcessingResult):
 
         meta: dict[str, object] = {
             "schema_name": "hilbert",
-            "schema_version": "2.0",
+            "schema_version": "2.1",
             "sampling_frequency_hz": float(self.original_fs),
             "downsampled_frequency_hz": float(self.downsampled_fs),
+            "band_limits_hz": np.array(self.bins, dtype=np.float32),
             "montage_mode": str(self.metadata.get("montage_mode", "")),
             "unit": str(self.metadata.get("unit", "amplitude")),
             "dimension_order": "smoothing_window x channel x time",
@@ -86,7 +87,6 @@ class HilbertProcessingResult(BaseProcessingResult):
             "axes": {
                 "channel": np.array(self.channel_names, dtype=object),
                 "smoothing_window_ms": np.array(sorted_windows, dtype=np.int32),
-                "band_limits_hz": np.array(self.bins, dtype=np.float32),
                 "time_s": np.arange(n_down, dtype=np.float64) / self.downsampled_fs,
             },
             "meta": meta,

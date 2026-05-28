@@ -6,6 +6,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import scipy.io
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
@@ -257,6 +258,39 @@ def test_writer_hdf5_roundtrip_via_loader() -> None:
         assert len(loaded.contributions) == 2
         assert len(loaded.slope_contributions.condition_a) == 2
         assert loaded.slope_contributions.condition_a[0].shape == (2, 3)
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+
+
+def test_writer_matlab_uses_pipeline_root_and_roundtrips() -> None:
+    case_dir = _make_case_dir("writer_matlab")
+    try:
+        primary = _make_bids_file(
+            case_dir / "sub-01_task-decid_desc-slopestat_stats.h5",
+            {
+                "subject": "01",
+                "task": "decid",
+                "desc": "slopestat",
+                "suffix": "stats",
+                "extension": ".h5",
+            },
+        )
+        result = _make_result(primary, n_rois=2, n_t=3)
+        writer = RegressionGroupProcessingWriter(
+            RegressionGroupWriterParams(bids_root=case_dir, output_format="matlab")
+        )
+
+        out_path = writer.write(result)
+        mat = scipy.io.loadmat(str(out_path), squeeze_me=True, struct_as_record=False)
+
+        assert out_path.suffix == ".mat"
+        assert "regression_group" in mat
+        loaded = load_regression_group_result(out_path)
+        assert loaded.region_names == result.region_names
+        np.testing.assert_allclose(
+            loaded.regression_stats.contrast.t_values,
+            result.regression_stats.contrast.t_values,
+        )
     finally:
         shutil.rmtree(case_dir, ignore_errors=True)
 

@@ -111,6 +111,10 @@ class ConditionTestProcessingResult(BaseTrialStatsProcessingResult):
                 },
                 "meta": {
                     "analysis_type": "condition_test",
+                    "available_condition_metrics": np.array(
+                        self.available_condition_metrics(),
+                        dtype=object,
+                    ),
                     "n_permutations": int(self.metadata.get("n_permutations", 0)),
                     "channel_significance_mode": str(
                         self.metadata.get("channel_significance_mode", "none")
@@ -125,4 +129,16 @@ class ConditionTestProcessingResult(BaseTrialStatsProcessingResult):
             },
         )
         return tree
+
+    def available_condition_metrics(self) -> list[str]:
+        metrics: list[str] = []
+        if np.asarray(self.difference.mean).size:
+            metrics.append("mean_difference")
+        if np.asarray(self.contrast.t_values).size:
+            metrics.append("t_values")
+        if np.asarray(self.signal_activity.condition_a.mean).size:
+            metrics.append("condition_a_mean")
+        if np.asarray(self.signal_activity.condition_b.mean).size:
+            metrics.append("condition_b_mean")
+        return metrics
 

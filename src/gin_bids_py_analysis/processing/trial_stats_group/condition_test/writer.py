@@ -26,6 +26,6 @@ class ConditionTestGroupProcessingWriter(BaseTrialStatsGroupProcessingWriter):
             pipeline_version=package_version(),
         )
         if self.params.output_format == "matlab":
-            write_matlab_tree(output_path, tree)
+            write_matlab_tree(output_path, tree, root_name="condition_test_group")
         else:
             write_hdf5_tree(output_path, tree)

@@ -85,6 +85,7 @@ def _make_result(
     include_counts: bool = True,
     include_freq_band: bool = True,
     n_samples: int = 1024,
+    detection_charac: object | None = None,
 ) -> HfoSpikeDetectorProcessingResult:
     ch_names = [f"A{i + 1}" for i in range(n_channels)]
     markers = [_make_marker(ch_names[i % n_channels]) for i in range(n_events)]
@@ -96,7 +97,7 @@ def _make_result(
         freq_band=np.array([[80, 250], [250, 500]], dtype=np.float32) if include_freq_band else np.array([]),
         n_spk=np.zeros(n_channels, dtype=np.float64) if include_counts else np.array([]),
         n_osc=np.zeros((n_channels, 2), dtype=np.float64) if include_counts else np.array([]),
-        detection_charac=np.array([]),
+        detection_charac=np.array([]) if detection_charac is None else detection_charac,
         original_fs=512.0,
     )
 
@@ -128,7 +129,14 @@ class TestToOutputTree:
     def test_top_level_keys(self) -> None:
         result = _make_result("dummy.vhdr")
         tree = result.to_output_tree()
-        assert set(tree.keys()) == {"events", "counts", "axes", "meta", "provenance"}
+        assert set(tree.keys()) == {
+            "events",
+            "counts",
+            "features",
+            "axes",
+            "meta",
+            "provenance",
+        }
 
     def test_events_subkeys(self) -> None:
         result = _make_result("dummy.vhdr", n_events=2)
@@ -155,6 +163,9 @@ class TestToOutputTree:
         counts = tree["counts"]  # type: ignore[index]
         assert "n_spk" in counts
         assert "n_osc" in counts
+        assert "freq_band" in counts
+        assert counts["n_spk"].shape == (3,)
+        assert counts["n_osc"].shape == (3, 2)
 
     def test_counts_none_when_arrays_empty(self) -> None:
         result = _make_result("dummy.vhdr", include_counts=False)
@@ -164,10 +175,29 @@ class TestToOutputTree:
         assert counts.get("n_spk") is None
         assert counts.get("n_osc") is None
 
+    def test_detection_charac_accepts_per_channel_list(self) -> None:
+        result = _make_result(
+            "dummy.vhdr",
+            detection_charac=[
+                np.ones((2, 11), dtype=np.float64),
+                np.full((1, 11), 2.0, dtype=np.float64),
+            ],
+        )
+
+        tree = result.to_output_tree()
+        features = tree["features"]  # type: ignore[index]
+        node = features["detection_charac"]
+
+        assert node is not None
+        assert node.value.shape == (3, 11)
+        assert len(features["detection_charac_columns"]) == 11
+        assert len(features["detection_charac_descriptions"]) == 11
+
     def test_freq_band_none_when_empty(self) -> None:
         result = _make_result("dummy.vhdr", include_freq_band=False)
         tree = result.to_output_tree()
-        assert tree["axes"]["freq_band"] is None  # type: ignore[index]
+        assert "freq_band" not in tree["axes"]  # type: ignore[index]
+        assert tree["counts"]["freq_band"] is None  # type: ignore[index]
 
     def test_meta_duration_computed_from_n_samples(self) -> None:
         result = _make_result("dummy.vhdr", n_samples=512)
@@ -179,6 +209,11 @@ class TestToOutputTree:
         result = _make_result("dummy.vhdr")
         tree = result.to_output_tree(pipeline_version="9.9.9")
         assert tree["provenance"]["pipeline_version"] == "9.9.9"  # type: ignore[index]
+
+    def test_schema_version_is_2_1(self) -> None:
+        result = _make_result("dummy.vhdr")
+        tree = result.to_output_tree()
+        assert tree["meta"]["schema_version"] == "2.1"  # type: ignore[index]
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +232,14 @@ class TestHdf5Writer:
         result = _make_result(str(tmp_path / "dummy.vhdr"), n_events=2)
         out = _hdf5_writer(tmp_path).write(result)
         with h5py.File(out, "r") as fh:
-            assert set(fh.keys()) == {"events", "counts", "axes", "meta", "provenance"}
+            assert set(fh.keys()) == {
+                "events",
+                "counts",
+                "features",
+                "axes",
+                "meta",
+                "provenance",
+            }
 
     def test_hdf5_n_events_matches_markers(self, tmp_path: Path) -> None:
         n = 4
@@ -243,6 +285,7 @@ class TestHdf5Writer:
         assert loaded.original_fs == result.original_fs
         np.testing.assert_array_equal(loaded.freq_band, result.freq_band)
         np.testing.assert_array_equal(loaded.n_spk, result.n_spk.astype(np.int64))
+        np.testing.assert_array_equal(loaded.n_osc, result.n_osc.astype(np.int64))
         assert loaded.markers == result.markers
 
 
@@ -262,16 +305,44 @@ class TestMatlabWriter:
         result = _make_result(str(tmp_path / "dummy.vhdr"), n_events=2)
         out = _matlab_writer(tmp_path).write(result)
         mat = scipy.io.loadmat(str(out))
-        assert "data" in mat
+        assert "hfo_spike_detection" in mat
 
     def test_mat_n_events_matches(self, tmp_path: Path) -> None:
         n = 3
         result = _make_result(str(tmp_path / "dummy.vhdr"), n_events=n)
         out = _matlab_writer(tmp_path).write(result)
         mat = scipy.io.loadmat(str(out), squeeze_me=False)
-        # onset lives at data.events.onset; stored as a row-vector (1, n_events)
-        onset = mat["data"]["events"][0, 0]["onset"][0, 0]
+        onset = mat["hfo_spike_detection"]["events"][0, 0]["onset"][0, 0]
         assert onset.size == n
+
+    def test_mat_count_shapes_match_export_schema(self, tmp_path: Path) -> None:
+        result = _make_result(str(tmp_path / "dummy.vhdr"), n_channels=20)
+        out = _matlab_writer(tmp_path).write(result)
+        mat = scipy.io.loadmat(str(out), squeeze_me=False)
+
+        counts = mat["hfo_spike_detection"]["counts"][0, 0]
+        assert counts["n_spk"][0, 0].shape == (20, 1)
+        assert counts["n_osc"][0, 0].shape == (20, 2)
+        assert counts["freq_band"][0, 0].shape == (2, 2)
+
+        features = mat["hfo_spike_detection"]["features"][0, 0]
+        assert features["detection_charac"][0, 0].shape == (0, 11)
+        assert features["detection_charac_columns"][0, 0].size == 11
+
+    def test_mat_single_band_n_osc_exports_as_column_vector(self, tmp_path: Path) -> None:
+        result = _make_result(str(tmp_path / "dummy.vhdr"), n_channels=20)
+        result.freq_band = np.array([[80, 250]], dtype=np.float32)
+        result.n_osc = np.zeros((20, 1), dtype=np.float64)
+
+        out = _matlab_writer(tmp_path).write(result)
+        mat = scipy.io.loadmat(str(out), squeeze_me=False)
+
+        counts = mat["hfo_spike_detection"]["counts"][0, 0]
+        assert counts["n_osc"][0, 0].shape == (20, 1)
+
+        loaded = load_hfo_spike_detection_result(out)
+        np.testing.assert_array_equal(loaded.freq_band, result.freq_band)
+        np.testing.assert_array_equal(loaded.n_osc, result.n_osc.astype(np.int64))
 
     def test_mat_roundtrip_via_loader(self, tmp_path: Path) -> None:
         result = _make_result(str(tmp_path / "dummy.vhdr"), n_events=2)
@@ -280,6 +351,9 @@ class TestMatlabWriter:
         loaded = load_hfo_spike_detection_result(out)
 
         assert loaded.channel_names == result.channel_names
+        np.testing.assert_array_equal(loaded.freq_band, result.freq_band)
+        np.testing.assert_array_equal(loaded.n_spk, result.n_spk.astype(np.int64))
+        np.testing.assert_array_equal(loaded.n_osc, result.n_osc.astype(np.int64))
         assert loaded.markers == result.markers
 
 

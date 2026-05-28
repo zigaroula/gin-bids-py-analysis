@@ -7,7 +7,7 @@ Supports two output formats:
     ``*_events.tsv`` (one row per detected event) and ``*_rates.tsv``
     (per-channel event rates in events / second).
 - **HDF5** (``"hdf5"``, default) — a single structured ``.h5`` file
-    containing all detection data, counts, axes, metadata, and provenance.
+    containing detection data, counts, features, axes, metadata, and provenance.
 """
 
 from __future__ import annotations
@@ -62,13 +62,17 @@ class HfoSpikeDetectorProcessingWriter(BaseProcessingWriter):
             /sample_index         int64    [n_events]   — onset sample index
             /frequency_index      int64    [n_events]   — frequency bin index
             /detection_strength   float64  [n_events]   — detection strength score
-        /detection_counts
+        /counts
             /n_spk                int64    [n_channels]          — spikes per channel
+                                                          MATLAB: [n_channels, 1]
             /n_osc                int64    [n_channels, n_bands] — oscillations per channel/band
-            /detection_charac     float64  [...]                 — raw characteristics (omitted if empty)
+            /freq_band            float32  [n_bands, 2]          — frequency band edges in Hz
+        /features
+            /detection_charac              float64 [n_events, 11] — raw characteristics
+            /detection_charac_columns      str     [11]           — column names
+            /detection_charac_descriptions str     [11]           — column descriptions
         /axes
             /channel_names        str      [n_channels] — ordered channel labels
-            /freq_band            float32  [n_bands, 2] — frequency band edges in Hz
         /meta
             /original_fs          scalar float64  — source recording sampling rate in Hz
             /montage_mode         str             — mono / bipolar
@@ -116,7 +120,7 @@ class HfoSpikeDetectorProcessingWriter(BaseProcessingWriter):
         else:
             tree = result.to_output_tree(pipeline_version=_package_version())
             if self.params.output_format == "matlab":
-                write_matlab_tree(output_path, tree)
+                write_matlab_tree(output_path, tree, root_name="hfo_spike_detection")
             else:
                 write_hdf5_tree(output_path, tree)
 

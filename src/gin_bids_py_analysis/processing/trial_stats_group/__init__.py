@@ -1,11 +1,10 @@
 """Shared group-level trial-statistics domain package."""
 
 from .params import BaseTrialStatsGroupParams, BaseTrialStatsGroupWriterParams
+from .compatibility import SubjectStatsInput, SubjectStatsSignature
 from .processor import (
     BaseTrialStatsGroupContributionRecord,
     BaseTrialStatsGroupProcessing,
-    BaseTrialStatsGroupSnapshot,
-    BaseTrialStatsGroupSnapshotSignature,
 )
 from .result import (
     BaseTrialStatsGroupProcessingResult,
@@ -44,8 +43,8 @@ __all__ = [
     "ROIChannelContribution",
     "BaseTrialStatsGroupParams",
     "BaseTrialStatsGroupWriterParams",
-    "BaseTrialStatsGroupSnapshotSignature",
-    "BaseTrialStatsGroupSnapshot",
+    "SubjectStatsSignature",
+    "SubjectStatsInput",
     "BaseTrialStatsGroupContributionRecord",
     "BaseTrialStatsGroupProcessingResult",
     "GroupEpochStats",

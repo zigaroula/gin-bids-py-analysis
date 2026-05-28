@@ -148,6 +148,12 @@ def test_writer_outputs_hdf5_and_trial_table_with_grouped_entities(
         assert "channel" not in fh["axes"]
         assert list(fh["meta"]["trial_counts"][:]) == [4, 4]
         assert fh["meta"]["p_value_correction_method"].asstr()[()] == "fdr_bh"
+        assert list(fh["meta"]["available_condition_metrics"].asstr()[:]) == [
+            "mean_difference",
+            "t_values",
+            "condition_a_mean",
+            "condition_b_mean",
+        ]
         assert float(fh["meta"]["significance_alpha"][()]) == 0.05
         assert fh["meta"]["analysis_level"].asstr()[()] == "roi"
         assert fh["meta"]["atlas_name"].asstr()[()] == "atlasA"
@@ -258,7 +264,7 @@ def test_writer_outputs_matlab_and_trial_table() -> None:
         assert trial_table_path.exists()
 
         mat = scipy.io.loadmat(str(output_path), squeeze_me=True, struct_as_record=False)
-        data = mat["data"]
+        data = mat["conditiontest"]
         # With squeeze_me=True, shapes are exactly as stored (no singleton dims here)
         assert data.stats.condition_contrast.t_values.shape == (2, 3)
         assert data.stats.condition_contrast.p_values.shape == (2, 3)
@@ -281,6 +287,12 @@ def test_writer_outputs_matlab_and_trial_table() -> None:
         # trial counts array: 2-element after squeeze
         counts = np.atleast_1d(data.meta.trial_counts)
         assert int(counts[0]) == 3
+        assert list(np.atleast_1d(data.meta.available_condition_metrics)) == [
+            "mean_difference",
+            "t_values",
+            "condition_a_mean",
+            "condition_b_mean",
+        ]
         assert str(data.meta.activity_zscore) == "baseline"
         assert float(data.meta.activity_baseline_tmin_s) == pytest.approx(-0.1)
         assert float(data.meta.activity_baseline_tmax_s) == pytest.approx(0.0)
@@ -393,6 +405,12 @@ def test_writer_hdf5_channel_significant_mask_written_and_loaded(
 
     # Round-trip through the loader
     loaded = load_condition_test_result(output_path)
+    assert loaded.metadata["available_condition_metrics"] == [
+        "mean_difference",
+        "t_values",
+        "condition_a_mean",
+        "condition_b_mean",
+    ]
     assert loaded.contrast.channel_significant_mask is not None
     np.testing.assert_array_equal(loaded.contrast.channel_significant_mask, mask)
     assert loaded.activity_zscore == "baseline"

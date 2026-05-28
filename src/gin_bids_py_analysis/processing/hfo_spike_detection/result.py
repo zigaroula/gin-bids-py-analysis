@@ -13,6 +13,35 @@ from gin_bids_py_analysis.processing.base import BaseProcessingResult
 from gin_bids_py_analysis.processing.utils.serialization import OutputTree, compressed
 
 
+DETECTION_CHARAC_COLUMNS = (
+    "sample_index",
+    "frequency_index",
+    "z_value",
+    "duration_half_height_samples",
+    "frequency_extent_bins",
+    "area_half_height",
+    "right_duration_samples",
+    "left_duration_samples",
+    "upper_frequency_extent_bins",
+    "lower_frequency_extent_bins",
+    "fwhm_time_samples",
+)
+
+DETECTION_CHARAC_DESCRIPTIONS = (
+    "Sample index of the detected time-frequency maximum.",
+    "Frequency-bin index of the detected time-frequency maximum.",
+    "Z-scored detection strength at the maximum.",
+    "Full duration at half height, in samples.",
+    "Full frequency extent at half height, in frequency bins.",
+    "Half-height region area in sample-bin units.",
+    "Right-side duration from the maximum at half height, in samples.",
+    "Left-side duration from the maximum at half height, in samples.",
+    "Upper frequency extent from the maximum at half height, in bins.",
+    "Lower frequency extent from the maximum at half height, in bins.",
+    "Expected time full-width at half maximum, in samples.",
+)
+
+
 @dataclass
 class HfoSpikeDetectorProcessingResult(BaseProcessingResult):
     """
@@ -70,6 +99,12 @@ class HfoSpikeDetectorProcessingResult(BaseProcessingResult):
     algorithm_config: dict[str, Any] = field(default_factory=dict)
     original_fs: float = 0.0
 
+    def __post_init__(self) -> None:
+        self.freq_band = _coerce_freq_band(self.freq_band)
+        self.n_spk = np.asarray(self.n_spk)
+        self.n_osc = _coerce_n_osc(self.n_osc, self.freq_band)
+        self.detection_charac = _coerce_detection_charac(self.detection_charac)
+
     def to_output_tree(self, *, pipeline_version: str = "unknown") -> OutputTree:
         """Return the canonical serialisable output tree for this result.
 
@@ -112,6 +147,19 @@ class HfoSpikeDetectorProcessingResult(BaseProcessingResult):
             [e.get("visualization_color", "#808080") for e in self.markers], dtype=object
         )
 
+        n_spk_export = self.n_spk.astype(np.int64) if self.n_spk.size > 0 else None
+        n_osc_export = self.n_osc.astype(np.int64) if self.n_osc.size > 0 else None
+        freq_band_export = (
+            self.freq_band.astype(np.float32)
+            if self.freq_band.size > 0
+            else None
+        )
+        detection_charac_export = (
+            self.detection_charac.astype(np.float64)
+            if self.detection_charac.size > 0
+            else np.empty((0, len(DETECTION_CHARAC_COLUMNS)), dtype=np.float64)
+        )
+
         return {
             "events": {
                 "onset": onsets,
@@ -125,23 +173,25 @@ class HfoSpikeDetectorProcessingResult(BaseProcessingResult):
                 "color": colors,
             },
             "counts": {
-                "n_spk": self.n_spk.astype(np.int64) if self.n_spk.size > 0 else None,
-                "n_osc": self.n_osc.astype(np.int64) if self.n_osc.size > 0 else None,
-                "detection_charac": (
-                    compressed(self.detection_charac.astype(np.float64))
-                    if self.detection_charac.size > 0
-                    else None
+                "n_spk": n_spk_export,
+                "n_osc": n_osc_export,
+                "freq_band": freq_band_export,
+            },
+            "features": {
+                "detection_charac": compressed(detection_charac_export),
+                "detection_charac_columns": np.array(
+                    DETECTION_CHARAC_COLUMNS, dtype=object
+                ),
+                "detection_charac_descriptions": np.array(
+                    DETECTION_CHARAC_DESCRIPTIONS, dtype=object
                 ),
             },
             "axes": {
                 "channel_names": np.array(self.channel_names, dtype=object),
-                "freq_band": (
-                    self.freq_band.astype(np.float32) if self.freq_band.size > 0 else None
-                ),
             },
             "meta": {
                 "schema_name": "hfo_spike_detection",
-                "schema_version": "2.0",
+                "schema_version": "2.1",
                 "original_fs": float(self.original_fs),
                 "montage_mode": str(self.metadata.get("montage_mode", "")),
                 "duration_seconds": float(duration),
@@ -154,3 +204,45 @@ class HfoSpikeDetectorProcessingResult(BaseProcessingResult):
                 "pipeline_version": pipeline_version,
             },
         }
+
+
+def _coerce_detection_charac(value: Any) -> np.ndarray:
+    if value is None:
+        return np.empty((0, 11), dtype=np.float64)
+    if isinstance(value, np.ndarray):
+        if value.size == 0:
+            return np.empty((0, 11), dtype=np.float64)
+        if value.ndim == 1:
+            return value.reshape(1, -1)
+        return value
+    if isinstance(value, (list, tuple)):
+        rows = [
+            np.asarray(item, dtype=np.float64)
+            for item in value
+            if np.asarray(item).size > 0
+        ]
+        if not rows:
+            return np.empty((0, 11), dtype=np.float64)
+        return np.vstack(rows)
+    arr = np.asarray(value)
+    if arr.ndim == 1 and arr.size > 0:
+        return arr.reshape(1, -1)
+    return arr
+
+
+def _coerce_freq_band(value: Any) -> np.ndarray:
+    arr = np.asarray(value)
+    if arr.size == 0:
+        return np.array([])
+    if arr.ndim == 1 and arr.size == 2:
+        return arr.reshape(1, 2)
+    return arr
+
+
+def _coerce_n_osc(value: Any, freq_band: np.ndarray) -> np.ndarray:
+    arr = np.asarray(value)
+    if arr.size == 0:
+        return np.array([])
+    if arr.ndim == 1 and freq_band.shape == (1, 2):
+        return arr.reshape(-1, 1)
+    return arr

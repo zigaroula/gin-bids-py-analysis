@@ -383,10 +383,14 @@ def hfo_spike_detector(
         progress_callback(100.0, "Analysis complete", n_chan)
     
     # Combine results
-    max_event_combined = []
+    max_event_rows = []
     for me in max_event:
         if me is not None and me.size > 0:
-            max_event_combined.append(me.T)
+            max_event_rows.append(me.T)
+    if max_event_rows:
+        max_event_combined = np.vstack(max_event_rows).astype(np.float64, copy=False)
+    else:
+        max_event_combined = np.empty((0, 11), dtype=np.float64)
     
     markers_combined = []
     for m in markers:

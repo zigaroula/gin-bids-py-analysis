@@ -6,16 +6,18 @@ import numpy as np
 import pytest
 
 from gin_bids_py_analysis.bids.file import BIDSFile
+from gin_bids_py_analysis.processing.trial_stats_group.compatibility import (
+    SubjectStatsInput,
+    SubjectStatsSignature,
+    build_compatible_groups,
+    hash_time_axis,
+    validate_group_compatibility,
+)
 from gin_bids_py_analysis.processing.trial_stats_group.processor import (
     BaseTrialStatsGroupContributionRecord,
-    BaseTrialStatsGroupSnapshot,
-    BaseTrialStatsGroupSnapshotSignature,
-    build_compatible_groups,
     collect_manual_roi_records,
     find_missing_manual_roi_channels,
     format_manual_roi_missing_channels_message,
-    hash_time_axis,
-    validate_group_compatibility,
 )
 
 
@@ -29,9 +31,9 @@ def _make_bids_file(path: Path, entities: dict[str, str]) -> BIDSFile:
     return BIDSFile(_MockPyBIDSFile(str(path), entities))
 
 
-def _make_signature(*, task: str = "decid", source_desc: str = "conditiontest") -> BaseTrialStatsGroupSnapshotSignature:
+def _make_signature(*, task: str = "decid", source_desc: str = "conditiontest") -> SubjectStatsSignature:
     time_axis = np.array([-0.2, 0.0, 0.2], dtype=np.float64)
-    return BaseTrialStatsGroupSnapshotSignature(
+    return SubjectStatsSignature(
         task=task,
         source_desc=source_desc,
         condition_labels=("accepted", "rejected"),
@@ -41,18 +43,27 @@ def _make_signature(*, task: str = "decid", source_desc: str = "conditiontest") 
         window_ms=0.0,
         n_bins=0,
         effective_n_bins=len(time_axis),
+        activity_zscore="none",
+        activity_baseline_tmin_s=-0.2,
+        activity_baseline_tmax_s=0.0,
+        activity_baseline_scope="global",
+        activity_baseline_remove_outlier_trial_means=False,
+        trial_activity_summary_kind="epoch_mean",
+        trial_activity_summary_missing_response_policy="clamp_to_epoch",
+        trial_activity_summary_source_json="{}",
+        trial_activity_summary_label="Epoch mean activity",
         analysis_level="channel",
     )
 
 
-def _make_snapshot(
+def _make_input(
     *,
     path: str,
     subject: str = "01",
     analysis_level: str = "channel",
-) -> BaseTrialStatsGroupSnapshot:
+) -> SubjectStatsInput:
     signature = _make_signature()
-    return BaseTrialStatsGroupSnapshot(
+    return SubjectStatsInput(
         stats_file=_make_bids_file(
             Path(path),
             {
@@ -78,6 +89,7 @@ def _make_snapshot(
         source_ieeg_files=[],
         source_electrodes_files=[],
         signature=signature,
+        result=object(),
     )
 
 
@@ -105,14 +117,14 @@ def test_build_compatible_groups_splits_by_signature_key(tmp_path: Path) -> None
 
 
 def test_validate_group_compatibility_rejects_non_channel_inputs() -> None:
-    snapshots = [
-        _make_snapshot(path="sub-01_stats.h5", subject="01"),
-        _make_snapshot(path="sub-02_stats.h5", subject="02", analysis_level="roi"),
+    inputs = [
+        _make_input(path="sub-01_stats.h5", subject="01"),
+        _make_input(path="sub-02_stats.h5", subject="02", analysis_level="roi"),
     ]
 
     with pytest.raises(ValueError, match="non-channel"):
         validate_group_compatibility(
-            snapshots,
+            inputs,
             empty_message="empty",
             non_channel_message="non-channel",
             incompatible_message="incompatible",
@@ -120,10 +132,10 @@ def test_validate_group_compatibility_rejects_non_channel_inputs() -> None:
 
 
 def test_collect_manual_roi_records_normalizes_subject_and_channel_matching() -> None:
-    snapshot = _make_snapshot(path="sub-01_stats.h5", subject="sub-01")
+    item = _make_input(path="sub-01_stats.h5", subject="sub-01")
 
     records = collect_manual_roi_records(
-        snapshots=[snapshot],
+        inputs=[item],
         manual_region_channels={"Insula": {"01": ["a1", "A2", "missing"]}},
         create_record=lambda roi, subject, snap, idx: BaseTrialStatsGroupContributionRecord(
             roi=roi,
@@ -138,10 +150,10 @@ def test_collect_manual_roi_records_normalizes_subject_and_channel_matching() ->
 
 
 def test_find_missing_manual_roi_channels_reports_subject_and_channel_misses() -> None:
-    snapshot = _make_snapshot(path="sub-01_stats.h5", subject="sub-01")
+    item = _make_input(path="sub-01_stats.h5", subject="sub-01")
 
     missing = find_missing_manual_roi_channels(
-        snapshots=[snapshot],
+        inputs=[item],
         manual_region_channels={
             "Insula": {"01": ["A1", "A3"], "02": ["B1"]},
         },

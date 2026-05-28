@@ -16,7 +16,12 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
     float_scalar,
     str_scalar,
 )
-from gin_bids_py_analysis.processing.utils.matlab import mat_float, mat_str, mat_str_list
+from gin_bids_py_analysis.processing.utils.matlab import (
+    mat_float,
+    mat_root,
+    mat_str,
+    mat_str_list,
+)
 
 from .result import HilbertProcessingResult
 
@@ -41,7 +46,7 @@ def _load_from_hdf5(path: Path) -> HilbertProcessingResult:
             for idx, window in enumerate(windows)
         }
         channel_names = decode_str_array(np.asarray(fh["axes/channel"][:], dtype=object))
-        bins = np.asarray(fh["axes/band_limits_hz"][:], dtype=np.float64).ravel().tolist()
+        bins = np.asarray(fh["meta/band_limits_hz"][:], dtype=np.float64).ravel().tolist()
 
         metadata = _load_hdf5_metadata(fh)
         raw_bids_path = str_scalar(
@@ -72,7 +77,7 @@ def _load_from_matlab(path: Path) -> HilbertProcessingResult:
     from scipy.io import loadmat
 
     mat = loadmat(str(path), squeeze_me=True, struct_as_record=False)
-    data = mat["data"]
+    data = mat_root(mat, "hilbert")
     meta = data.meta
     _require_matlab_schema(meta, path.name)
 
@@ -88,7 +93,7 @@ def _load_from_matlab(path: Path) -> HilbertProcessingResult:
         int(window): envelope[idx]
         for idx, window in enumerate(windows)
     }
-    bins = np.asarray(data.axes.band_limits_hz, dtype=np.float64).ravel().tolist()
+    bins = np.asarray(meta.band_limits_hz, dtype=np.float64).ravel().tolist()
     metadata = _load_matlab_metadata(meta)
     raw_bids_path = mat_str(
         getattr(data.provenance, "raw_bids_path", None),
@@ -238,7 +243,7 @@ def _load_matlab_events(events: object | None) -> list[dict[str, Any]] | None:
 def _require_hdf5_schema(fh: h5py.File, path_name: str) -> None:
     schema_name = str_scalar(dataset_or_none(fh, "meta/schema_name"), default="")
     schema_version = str_scalar(dataset_or_none(fh, "meta/schema_version"), default="")
-    if schema_name != "hilbert" or schema_version != "2.0":
+    if schema_name != "hilbert" or schema_version != "2.1":
         raise ValueError(
             f"{path_name}: unsupported Hilbert schema "
             f"(schema_name={schema_name!r}, schema_version={schema_version!r})."
@@ -248,7 +253,7 @@ def _require_hdf5_schema(fh: h5py.File, path_name: str) -> None:
 def _require_matlab_schema(meta: object, path_name: str) -> None:
     schema_name = mat_str(getattr(meta, "schema_name", None), default="")
     schema_version = mat_str(getattr(meta, "schema_version", None), default="")
-    if schema_name != "hilbert" or schema_version != "2.0":
+    if schema_name != "hilbert" or schema_version != "2.1":
         raise ValueError(
             f"{path_name}: unsupported Hilbert schema "
             f"(schema_name={schema_name!r}, schema_version={schema_version!r})."

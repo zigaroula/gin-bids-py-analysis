@@ -7,9 +7,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 import pytest
-import scipy.io
-
-from gin_bids_py_analysis.processing.utils.matlab import make_struct
+from gin_bids_py_analysis.processing.utils.serialization import write_matlab_tree
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
@@ -73,10 +71,11 @@ def _write_trial_stats_h5(
 
         data_grp = fh.create_group("data")
         activity_grp = data_grp.create_group("signal_activity")
-        cond_a_grp = activity_grp.create_group("condition_a")
+        label_a, label_b = condition_labels
+        cond_a_grp = activity_grp.create_group(label_a)
         cond_a_grp.create_dataset("mean", data=mean_difference + 1.0)
         cond_a_grp.create_dataset("sem", data=np.full_like(mean_difference, 0.2))
-        cond_b_grp = activity_grp.create_group("condition_b")
+        cond_b_grp = activity_grp.create_group(label_b)
         cond_b_grp.create_dataset("mean", data=np.ones_like(mean_difference))
         cond_b_grp.create_dataset("sem", data=np.full_like(mean_difference, 0.2))
         diff_grp = activity_grp.create_group("difference")
@@ -92,9 +91,19 @@ def _write_trial_stats_h5(
 
         meta_grp = fh.create_group("meta")
         meta_grp.create_dataset("schema_version", data="3.0", dtype=str_dtype)
+        meta_grp.create_dataset("analysis_type", data="condition_test", dtype=str_dtype)
         meta_grp.create_dataset("analysis_level", data=analysis_level, dtype=str_dtype)
         meta_grp.create_dataset("condition_labels", data=np.array(condition_labels, dtype=object), dtype=str_dtype)
+        meta_grp.create_dataset(
+            "available_condition_metrics",
+            data=np.array(["mean_difference", "t_values", "condition_a_mean", "condition_b_mean"], dtype=object),
+            dtype=str_dtype,
+        )
         meta_grp.create_dataset("trial_counts", data=np.array([12, 11], dtype=np.int64))
+        meta_grp.create_dataset("sampling_frequency_hz", data=0.0)
+        meta_grp.create_dataset("p_value_correction_method", data="fdr_bh", dtype=str_dtype)
+        meta_grp.create_dataset("significance_alpha", data=0.05)
+        meta_grp.create_dataset("stats_valid", data=True)
         meta_grp.create_dataset("binning_mode", data="none", dtype=str_dtype)
         meta_grp.create_dataset("window_ms", data=0.0)
         meta_grp.create_dataset("n_bins", data=0)
@@ -102,6 +111,15 @@ def _write_trial_stats_h5(
         meta_grp.create_dataset("activity_zscore", data=activity_zscore, dtype=str_dtype)
         meta_grp.create_dataset("activity_baseline_tmin_s", data=activity_baseline_tmin_s)
         meta_grp.create_dataset("activity_baseline_tmax_s", data=activity_baseline_tmax_s)
+        meta_grp.create_dataset("activity_baseline_scope", data="global", dtype=str_dtype)
+        meta_grp.create_dataset("activity_baseline_remove_outlier_trial_means", data=False)
+        meta_grp.create_dataset("n_permutations", data=0 if permuted_t_values is None else int(permuted_t_values.shape[0]))
+        meta_grp.create_dataset("trial_activity_summary_kind", data="epoch_mean", dtype=str_dtype)
+        meta_grp.create_dataset("trial_activity_summary_missing_response_policy", data="clamp_to_epoch", dtype=str_dtype)
+        meta_grp.create_dataset("trial_activity_summary_source_json", data="{}", dtype=str_dtype)
+        meta_grp.create_dataset("trial_activity_summary_label", data="Epoch mean activity", dtype=str_dtype)
+        meta_grp.create_dataset("epoch_cleaning_json", data="{}", dtype=str_dtype)
+        meta_grp.create_dataset("epoch_cleaning_audit_json", data="{}", dtype=str_dtype)
 
         prov_grp = fh.create_group("provenance")
         prov_grp.create_dataset(
@@ -458,7 +476,7 @@ def test_process_group_cluster_permutation_mne_mode() -> None:
                 roi_mode="manual",
                 manual_region_channels={"ROI_A": {"01": ["A1"], "02": ["A1"]}},
                 p_value_correction_method="cluster_permutation",
-                cluster_permutation_method="mne",
+                cluster_permutation_method="sign_flip",
                 n_group_permutations=40,
                 permutation_seed=321,
             )
@@ -497,61 +515,85 @@ def _write_trial_stats_mat(
     """Write a minimal trial-stats .mat fixture matching the TrialStatsProcessingWriter schema."""
     t_arr = t_values if t_values is not None else np.full_like(mean_difference, 1.0, dtype=np.float64)
     p_arr = np.full_like(mean_difference, 0.1, dtype=np.float64)
-    sig_arr = np.zeros_like(mean_difference, dtype=np.uint8)
-
-    stats_struct = make_struct(
-        t_values=t_arr.astype(np.float64),
-        p_values=p_arr.astype(np.float64),
-        p_values_uncorrected=p_arr.astype(np.float64),
-        significant_mask=sig_arr,
-    )
-    means_struct = make_struct(
-        **{
-            condition_labels[0]: (mean_difference + 1.0).astype(np.float64),
-            condition_labels[1]: np.ones_like(mean_difference, dtype=np.float64),
-            "difference": mean_difference.astype(np.float64),
-        }
-    )
+    sig_arr = np.zeros_like(mean_difference, dtype=bool)
 
     primary_axis_name = "region" if analysis_level == "roi" else "channel"
-    axes_struct = make_struct(
-        **{
-            primary_axis_name: np.array(channels, dtype=object),
-            "time_s": time_s.astype(np.float64),
-        }
+    label_a, label_b = condition_labels
+    write_matlab_tree(
+        path,
+        {
+            "stats": {
+                "condition_contrast": {
+                    "t_values": t_arr.astype(np.float64),
+                    "p_values": p_arr.astype(np.float64),
+                    "p_values_uncorrected": p_arr.astype(np.float64),
+                    "significant_mask": sig_arr,
+                },
+            },
+            "data": {
+                "signal_activity": {
+                    label_a: {
+                        "mean": (mean_difference + 1.0).astype(np.float64),
+                        "sem": np.full_like(mean_difference, 0.2),
+                    },
+                    label_b: {
+                        "mean": np.ones_like(mean_difference, dtype=np.float64),
+                        "sem": np.full_like(mean_difference, 0.2),
+                    },
+                    "difference": {
+                        "mean": mean_difference.astype(np.float64),
+                        "sem": np.full_like(mean_difference, 0.3),
+                        "ci95_low": (mean_difference - 0.5).astype(np.float64),
+                        "ci95_high": (mean_difference + 0.5).astype(np.float64),
+                    },
+                },
+            },
+            "axes": {
+                primary_axis_name: np.array(channels, dtype=object),
+                "time_s": time_s.astype(np.float64),
+            },
+            "meta": {
+                "schema_version": "3.0",
+                "analysis_type": "condition_test",
+                "analysis_level": analysis_level,
+                "condition_labels": np.array(list(condition_labels), dtype=object),
+                "available_condition_metrics": np.array(
+                    ["mean_difference", "t_values", "condition_a_mean", "condition_b_mean"],
+                    dtype=object,
+                ),
+                "trial_counts": np.array([12, 11], dtype=np.int64),
+                "sampling_frequency_hz": 512.0,
+                "p_value_correction_method": "none",
+                "significance_alpha": 0.05,
+                "atlas_name": "",
+                "atlas_regions": np.array([], dtype=object),
+                "window_ms": 0.0,
+                "n_bins": 0,
+                "effective_n_bins": int(len(time_s)),
+                "binning_mode": "none",
+                "activity_zscore": "none",
+                "activity_baseline_tmin_s": -0.2,
+                "activity_baseline_tmax_s": 0.0,
+                "activity_baseline_scope": "global",
+                "activity_baseline_remove_outlier_trial_means": False,
+                "n_permutations": 0,
+                "trial_activity_summary_kind": "epoch_mean",
+                "trial_activity_summary_missing_response_policy": "clamp_to_epoch",
+                "trial_activity_summary_source_json": "{}",
+                "trial_activity_summary_label": "Epoch mean activity",
+                "epoch_cleaning_json": "{}",
+                "epoch_cleaning_audit_json": "{}",
+                "stats_valid": True,
+            },
+            "provenance": {
+                "source_ieeg_files": np.array(source_ieeg_files or [], dtype=object),
+                "source_electrodes_files": np.array(source_electrodes_files or [], dtype=object),
+                "pipeline_name": "conditiontest",
+                "pipeline_version": "test",
+            },
+        },
+        root_name="conditiontest",
     )
-    meta_struct = make_struct(
-        trial_counts=np.array([12, 11], dtype=np.int64),
-        trial_count_labels=np.array(list(condition_labels), dtype=object),
-        sampling_frequency_hz=512.0,
-        p_value_correction_method=np.str_("none"),
-        significance_alpha=0.05,
-        analysis_level=np.str_(analysis_level),
-        atlas_name=np.str_(""),
-        atlas_regions=np.array([], dtype=object),
-        window_ms=0.0,
-        n_bins=0,
-        effective_n_bins=int(len(time_s)),
-        binning_mode=np.str_("none"),
-        activity_zscore=np.str_("none"),
-        activity_baseline_tmin_s=-0.2,
-        activity_baseline_tmax_s=0.0,
-        stats_valid=np.uint8(1),
-    )
-    prov_struct = make_struct(
-        source_ieeg_files=np.array(source_ieeg_files or [], dtype=object),
-        source_electrodes_files=np.array(source_electrodes_files or [], dtype=object),
-        pipeline_name=np.str_("conditiontest"),
-        pipeline_version=np.str_("test"),
-    )
-    data = make_struct(
-        stats=stats_struct,
-        means=means_struct,
-        axes=axes_struct,
-        meta=meta_struct,
-        provenance=prov_struct,
-    )
-    scipy.io.savemat(str(path), {"data": data}, do_compression=True)
 
 
 def test_process_group_manual_mode_mat_input() -> None:

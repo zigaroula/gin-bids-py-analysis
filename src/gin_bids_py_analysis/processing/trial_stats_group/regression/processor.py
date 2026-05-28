@@ -1,31 +1,13 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Sequence
 
-import h5py
 import numpy as np
 
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.bids.helpers import normalize_subject_value
-from gin_bids_py_analysis.processing.utils.channels import normalize_channel_name
-from gin_bids_py_analysis.processing.utils.hdf5 import (
-    coerce_feature_time,
-    dataset_or_none,
-    decode_str_array,
-    float_scalar,
-    int_scalar,
-    str_scalar,
-)
-from gin_bids_py_analysis.processing.utils.matlab import (
-    mat_float,
-    mat_int,
-    mat_str,
-    mat_str_list,
-    matlab_safe_name,
-)
 
 from gin_bids_py_analysis.processing.utils.group_stats import (
     compute_condition_group_stats,
@@ -44,23 +26,26 @@ from gin_bids_py_analysis.processing.utils.cluster_permutation import (
     compute_mne_cluster_permutation,
     find_temporal_clusters,
 )
-from gin_bids_py_analysis.processing.trial_stats.params import (
-    normalize_trial_activity_summary_missing_response_policy,
+from gin_bids_py_analysis.processing.trial_stats.regression import (
+    RegressionProcessingResult,
+    load_regression_result,
 )
 
+from ..compatibility import (
+    SubjectStatsInput,
+    SubjectStatsSignature,
+    build_compatible_groups,
+    build_subject_stats_input,
+    load_result_via_public_loader,
+    validate_group_compatibility,
+)
 from ..processor import (
-    BaseRawTrialStatsData,
     BaseTrialStatsGroupContributionRecord,
     BaseTrialStatsGroupProcessing,
-    BaseTrialStatsGroupSnapshot,
-    BaseTrialStatsGroupSnapshotSignature,
-    build_compatible_groups,
     collect_atlas_roi_records,
     collect_manual_roi_records,
     find_missing_manual_roi_channels,
     format_manual_roi_missing_channels_message,
-    hash_time_axis,
-    validate_group_compatibility,
 )
 from ..result import (
     GroupEpochStats,
@@ -84,78 +69,8 @@ from .result import (
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class _RawRegressionStatsData(BaseRawTrialStatsData):
-    """Format-agnostic in-memory representation of one subject regression file."""
-
-    available_metrics: frozenset[str]
-    condition_a_slope: np.ndarray       # (n_channels, n_times)
-    condition_b_slope: np.ndarray       # (n_channels, n_times)
-    condition_a_mean: np.ndarray        # (n_channels, n_times)
-    condition_b_mean: np.ndarray        # (n_channels, n_times)
-    condition_a_r_value: np.ndarray     # (n_channels, n_times)
-    condition_b_r_value: np.ndarray     # (n_channels, n_times)
-    condition_a_predictor_raw_values: np.ndarray  # (n_trials_a,)
-    condition_b_predictor_raw_values: np.ndarray  # (n_trials_b,)
-    condition_a_predictor_transformed_values: np.ndarray  # (n_trials_a,)
-    condition_b_predictor_transformed_values: np.ndarray  # (n_trials_b,)
-    condition_a_predictor_values: np.ndarray  # (n_trials_a,)
-    condition_b_predictor_values: np.ndarray  # (n_trials_b,)
-    condition_a_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_a) or empty
-    condition_b_trial_activity_summary_values: np.ndarray  # (n_channels, n_trials_b) or empty
-    condition_a_permuted_slopes: np.ndarray | None  # (n_perm, n_channels, n_times) float32 or None
-    condition_b_permuted_slopes: np.ndarray | None  # (n_perm, n_channels, n_times) float32 or None
-    predictor: str
-    predictor_zscore: str
-    predictor_transform_by_condition: dict[str, dict[str, float]]
-    trial_activity_summary_kind: str
-    trial_activity_summary_missing_response_policy: str
-    trial_activity_summary_source: dict[str, str]
-    trial_activity_summary_label: str
-
-
-@dataclass(frozen=True)
-class _SnapshotSignature(BaseTrialStatsGroupSnapshotSignature):
-    task: str
-    source_desc: str
-    condition_labels: tuple[str, str]
-    time_axis_hash: str
-    time_axis_len: int
-    binning_mode: str
-    window_ms: float
-    n_bins: int
-    effective_n_bins: int
-    predictor: str
-    predictor_zscore: str
-    predictor_transform_by_condition_json: str
-    activity_zscore: str
-    activity_baseline_tmin_s: float
-    activity_baseline_tmax_s: float
-    trial_activity_summary_kind: str
-    trial_activity_summary_missing_response_policy: str
-    trial_activity_summary_source_json: str
-    trial_activity_summary_label: str
-    analysis_level: str
-
-    @property
-    def key(self) -> tuple[Any, ...]:
-        return self.base_key + (
-            self.predictor,
-            self.predictor_zscore,
-            self.predictor_transform_by_condition_json,
-            self.activity_zscore,
-            self.activity_baseline_tmin_s,
-            self.activity_baseline_tmax_s,
-            self.trial_activity_summary_kind,
-            self.trial_activity_summary_missing_response_policy,
-            self.trial_activity_summary_source_json,
-            self.trial_activity_summary_label,
-            self.analysis_level,
-        )
-
-
-@dataclass(frozen=True)
-class _RegressionStatsSnapshot(BaseTrialStatsGroupSnapshot):
-    raw: _RawRegressionStatsData
+class _RegressionStatsInput(SubjectStatsInput):
+    result: RegressionProcessingResult
 
 
 @dataclass(frozen=True)
@@ -190,7 +105,7 @@ def build_regression_compatible_groups(
     stats_files: Sequence[BIDSFile],
 ) -> list[BIDSFileGroup]:
     """Group subject-level regression files by compatibility."""
-    return build_compatible_groups(stats_files, read_signature=_read_snapshot_signature)
+    return build_compatible_groups(stats_files, read_signature=_read_input_signature)
 
 
 # ---------------------------------------------------------------------------
@@ -215,20 +130,20 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                 "RegressionGroupProcessing requires at least one regression stats file."
             )
 
-        snapshots = [_load_slope_stats_snapshot(file) for file in files]
-        _validate_group_compatibility(snapshots)
+        inputs = [_load_slope_stats_input(file) for file in files]
+        _validate_group_compatibility(inputs)
         _validate_source_metric_availability(
-            snapshots,
+            inputs,
             primary_regression_metric=self.params.primary_regression_metric,
         )
 
-        first = snapshots[0]
+        first = inputs[0]
         excluded_rois: dict[str, str] = {}
         missing_manual_channels: dict[str, dict[str, list[str]]] = {}
 
         if self.params.roi_mode == "manual":
             missing_manual_channels = find_missing_manual_roi_channels(
-                snapshots=snapshots,
+                inputs=inputs,
                 manual_region_channels=self.params.manual_region_channels,
             )
             missing_message = format_manual_roi_missing_channels_message(
@@ -237,14 +152,14 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             if missing_message:
                 print(missing_message)
             roi_records = _collect_manual_roi_records(
-                snapshots=snapshots,
+                inputs=inputs,
                 manual_region_channels=self.params.manual_region_channels,
             )
             used_electrode_paths: set[str] = set()
         else:
             assert self.params.atlas_name is not None
             roi_records, used_electrode_paths = _collect_atlas_roi_records(
-                snapshots=snapshots,
+                inputs=inputs,
                 atlas_name=self.params.atlas_name,
             )
 
@@ -755,26 +670,26 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
                 "window_ms": first.window_ms,
                 "n_bins": first.n_bins,
                 "effective_n_bins": first.effective_n_bins,
-                "predictor": first.raw.predictor,
-                "predictor_zscore": first.raw.predictor_zscore,
+                "predictor": first.result.predictor,
+                "predictor_zscore": first.result.predictor_zscore,
                 "predictor_transform_by_condition_json": json.dumps(
-                    first.raw.predictor_transform_by_condition,
+                    first.result.predictor_transform_by_condition,
                     sort_keys=True,
                     separators=(",", ":"),
                 ),
-                "activity_zscore": first.raw.activity_zscore,
-                "activity_baseline_tmin_s": first.raw.activity_baseline_tmin_s,
-                "activity_baseline_tmax_s": first.raw.activity_baseline_tmax_s,
-                "trial_activity_summary_kind": first.raw.trial_activity_summary_kind,
+                "activity_zscore": first.result.activity_zscore,
+                "activity_baseline_tmin_s": first.result.activity_baseline_tmin_s,
+                "activity_baseline_tmax_s": first.result.activity_baseline_tmax_s,
+                "trial_activity_summary_kind": first.result.trial_activity_summary_kind,
                 "trial_activity_summary_missing_response_policy": (
-                    first.raw.trial_activity_summary_missing_response_policy
+                    first.result.trial_activity_summary_missing_response_policy
                 ),
                 "trial_activity_summary_source_json": json.dumps(
-                    first.raw.trial_activity_summary_source,
+                    first.result.trial_activity_summary_source,
                     sort_keys=True,
                     separators=(",", ":"),
                 ),
-                "trial_activity_summary_label": first.raw.trial_activity_summary_label,
+                "trial_activity_summary_label": first.result.trial_activity_summary_label,
                 "scatter_aggregation": "trial_pool",
             },
             regression_stats=RegressionMetricStats(
@@ -884,7 +799,7 @@ class RegressionGroupProcessing(BaseTrialStatsGroupProcessing):
             significance_alpha=alpha,
             roi_mode=self.params.roi_mode,
             atlas_name=self.params.atlas_name,
-            source_subject_stats_files=[str(s.stats_file.path) for s in snapshots],
+            source_subject_stats_files=[str(item.stats_file.path) for item in inputs],
             source_electrodes_files=sorted(used_electrode_paths),
             excluded_rois=excluded_rois,
             cluster_p_values=cluster_p_values_out,
@@ -935,11 +850,11 @@ def _metric_values_for_record(
 
 def _collect_manual_roi_records(
     *,
-    snapshots: Sequence[_RegressionStatsSnapshot],
+    inputs: Sequence[_RegressionStatsInput],
     manual_region_channels: dict[str, dict[str, list[str]]],
 ) -> dict[str, list[_ContributionRecord]]:
     return collect_manual_roi_records(
-        snapshots=snapshots,
+        inputs=inputs,
         manual_region_channels=manual_region_channels,
         create_record=_create_contribution_record,
     )
@@ -947,11 +862,11 @@ def _collect_manual_roi_records(
 
 def _collect_atlas_roi_records(
     *,
-    snapshots: Sequence[_RegressionStatsSnapshot],
+    inputs: Sequence[_RegressionStatsInput],
     atlas_name: str,
 ) -> tuple[dict[str, list[_ContributionRecord]], set[str]]:
     return collect_atlas_roi_records(
-        snapshots=snapshots,
+        inputs=inputs,
         atlas_name=atlas_name,
         create_record=_create_contribution_record,
     )
@@ -960,58 +875,59 @@ def _collect_atlas_roi_records(
 def _create_contribution_record(
     roi: str,
     subject: str,
-    snapshot: _RegressionStatsSnapshot,
+    item: _RegressionStatsInput,
     idx: int,
 ) -> _ContributionRecord:
+    result = item.result
     return _ContributionRecord(
         roi=roi,
         subject=subject,
-        channel=snapshot.channel_names[idx],
-        source_stats_file=str(snapshot.stats_file.path),
-        slope_a_values=np.asarray(snapshot.raw.condition_a_slope[idx, :], dtype=np.float64),
-        slope_b_values=np.asarray(snapshot.raw.condition_b_slope[idx, :], dtype=np.float64),
-        mean_a_values=np.asarray(snapshot.raw.condition_a_mean[idx, :], dtype=np.float64),
-        mean_b_values=np.asarray(snapshot.raw.condition_b_mean[idx, :], dtype=np.float64),
-        r_value_a_values=np.asarray(snapshot.raw.condition_a_r_value[idx, :], dtype=np.float64),
-        r_value_b_values=np.asarray(snapshot.raw.condition_b_r_value[idx, :], dtype=np.float64),
-        predictor_a_raw_values=np.asarray(snapshot.raw.condition_a_predictor_raw_values, dtype=np.float64),
-        predictor_b_raw_values=np.asarray(snapshot.raw.condition_b_predictor_raw_values, dtype=np.float64),
+        channel=item.channel_names[idx],
+        source_stats_file=str(item.stats_file.path),
+        slope_a_values=np.asarray(result.regression.condition_a.slope[idx, :], dtype=np.float64),
+        slope_b_values=np.asarray(result.regression.condition_b.slope[idx, :], dtype=np.float64),
+        mean_a_values=np.asarray(result.signal_activity.condition_a.mean[idx, :], dtype=np.float64),
+        mean_b_values=np.asarray(result.signal_activity.condition_b.mean[idx, :], dtype=np.float64),
+        r_value_a_values=np.asarray(result.regression.condition_a.r_value[idx, :], dtype=np.float64),
+        r_value_b_values=np.asarray(result.regression.condition_b.r_value[idx, :], dtype=np.float64),
+        predictor_a_raw_values=np.asarray(result.predictor_values.condition_a.raw_values, dtype=np.float64),
+        predictor_b_raw_values=np.asarray(result.predictor_values.condition_b.raw_values, dtype=np.float64),
         predictor_a_transformed_values=np.asarray(
-            snapshot.raw.condition_a_predictor_transformed_values,
+            result.predictor_values.condition_a.transformed_values,
             dtype=np.float64,
         ),
         predictor_b_transformed_values=np.asarray(
-            snapshot.raw.condition_b_predictor_transformed_values,
+            result.predictor_values.condition_b.transformed_values,
             dtype=np.float64,
         ),
-        predictor_a_values=np.asarray(snapshot.raw.condition_a_predictor_values, dtype=np.float64),
-        predictor_b_values=np.asarray(snapshot.raw.condition_b_predictor_values, dtype=np.float64),
+        predictor_a_values=np.asarray(result.predictor_values.condition_a.values, dtype=np.float64),
+        predictor_b_values=np.asarray(result.predictor_values.condition_b.values, dtype=np.float64),
         scatter_activity_a=(
             np.asarray(
-                snapshot.raw.condition_a_trial_activity_summary_values[idx, :],
+                result.trial_activity_summary_values.condition_a[idx, :],
                 dtype=np.float64,
             )
-            if snapshot.raw.condition_a_trial_activity_summary_values.ndim == 2
-            and snapshot.raw.condition_a_trial_activity_summary_values.shape[0] > idx
+            if result.trial_activity_summary_values.condition_a.ndim == 2
+            and result.trial_activity_summary_values.condition_a.shape[0] > idx
             else np.empty(0, dtype=np.float64)
         ),
         scatter_activity_b=(
             np.asarray(
-                snapshot.raw.condition_b_trial_activity_summary_values[idx, :],
+                result.trial_activity_summary_values.condition_b[idx, :],
                 dtype=np.float64,
             )
-            if snapshot.raw.condition_b_trial_activity_summary_values.ndim == 2
-            and snapshot.raw.condition_b_trial_activity_summary_values.shape[0] > idx
+            if result.trial_activity_summary_values.condition_b.ndim == 2
+            and result.trial_activity_summary_values.condition_b.shape[0] > idx
             else np.empty(0, dtype=np.float64)
         ),
         perm_slope_a_values=(
-            np.asarray(snapshot.raw.condition_a_permuted_slopes[:, idx, :], dtype=np.float32)
-            if snapshot.raw.condition_a_permuted_slopes is not None
+            np.asarray(result.regression.condition_a.permuted_slopes[:, idx, :], dtype=np.float32)
+            if result.regression.condition_a.permuted_slopes is not None
             else None
         ),
         perm_slope_b_values=(
-            np.asarray(snapshot.raw.condition_b_permuted_slopes[:, idx, :], dtype=np.float32)
-            if snapshot.raw.condition_b_permuted_slopes is not None
+            np.asarray(result.regression.condition_b.permuted_slopes[:, idx, :], dtype=np.float32)
+            if result.regression.condition_b.permuted_slopes is not None
             else None
         ),
     )
@@ -1021,10 +937,10 @@ def _create_contribution_record(
 # Compatibility validation
 # ---------------------------------------------------------------------------
 
-def _validate_group_compatibility(snapshots: Sequence[_RegressionStatsSnapshot]) -> None:
+def _validate_group_compatibility(inputs: Sequence[_RegressionStatsInput]) -> None:
     validate_group_compatibility(
-        snapshots,
-        empty_message="At least one regression snapshot is required.",
+        inputs,
+        empty_message="At least one regression input is required.",
         non_channel_message="regression_group requires channel-level regression inputs.",
         incompatible_message=(
             "Incompatible regression inputs in one processing group. "
@@ -1034,14 +950,14 @@ def _validate_group_compatibility(snapshots: Sequence[_RegressionStatsSnapshot])
 
 
 def _validate_source_metric_availability(
-    snapshots: Sequence[_RegressionStatsSnapshot],
+    inputs: Sequence[_RegressionStatsInput],
     *,
     primary_regression_metric: str,
 ) -> None:
     missing = [
-        snapshot.stats_file.path.name
-        for snapshot in snapshots
-        if primary_regression_metric not in snapshot.raw.available_metrics
+        item.stats_file.path.name
+        for item in inputs
+        if primary_regression_metric not in _available_regression_metrics(item.result)
     ]
     if missing:
         joined = ", ".join(missing)
@@ -1051,619 +967,48 @@ def _validate_source_metric_availability(
         )
 
 
+def _read_input_signature(stats_file: BIDSFile) -> SubjectStatsSignature:
+    item = _load_slope_stats_input(stats_file)
+    return item.signature
+
+
+def _load_slope_stats_input(stats_file: BIDSFile) -> _RegressionStatsInput:
+    result = load_result_via_public_loader(stats_file, load_regression_result)
+    base_input = build_subject_stats_input(
+        stats_file,
+        result,
+        extra_key_parts={
+            "predictor": result.predictor,
+            "predictor_zscore": result.predictor_zscore,
+            "predictor_transform_by_condition": result.predictor_transform_by_condition,
+        },
+    )
+    return _RegressionStatsInput(
+        stats_file=base_input.stats_file,
+        result=result,
+        subject=base_input.subject,
+        task=base_input.task,
+        source_desc=base_input.source_desc,
+        condition_labels=base_input.condition_labels,
+        channel_names=base_input.channel_names,
+        channel_index_by_norm=base_input.channel_index_by_norm,
+        time_axis_s=base_input.time_axis_s,
+        analysis_level=base_input.analysis_level,
+        binning_mode=base_input.binning_mode,
+        window_ms=base_input.window_ms,
+        n_bins=base_input.n_bins,
+        effective_n_bins=base_input.effective_n_bins,
+        source_ieeg_files=base_input.source_ieeg_files,
+        source_electrodes_files=base_input.source_electrodes_files,
+        signature=base_input.signature,
+    )
+
+
+def _available_regression_metrics(result: RegressionProcessingResult) -> set[str]:
+    available = result.metadata.get("available_regression_metrics")
+    if not available:
+        available = result.available_regression_metrics()
+    return {str(item) for item in available}
+
+
 # ---------------------------------------------------------------------------
-# Snapshot I/O helpers
-# ---------------------------------------------------------------------------
-
-def _read_snapshot_signature(stats_file: BIDSFile) -> _SnapshotSignature:
-    raw = _load_raw_slope_stats(stats_file)
-    return _build_signature(stats_file=stats_file, raw=raw)
-
-
-def _load_slope_stats_snapshot(stats_file: BIDSFile) -> _RegressionStatsSnapshot:
-    raw = _load_raw_slope_stats(stats_file)
-    raw_subject = str(stats_file.get("subject") or stats_file.get("sub") or "").strip()
-    subject = normalize_subject_value(raw_subject)
-
-    channel_index_by_norm: dict[str, int] = {}
-    for idx, name in enumerate(raw.channels):
-        key = normalize_channel_name(name)
-        channel_index_by_norm.setdefault(key, idx)
-
-    signature = _build_signature(stats_file=stats_file, raw=raw)
-    return _RegressionStatsSnapshot(
-        stats_file=stats_file,
-        subject=subject,
-        task=str(stats_file.get("task") or ""),
-        source_desc=str(stats_file.get("desc") or ""),
-        condition_labels=raw.condition_labels,
-        channel_names=raw.channels,
-        channel_index_by_norm=channel_index_by_norm,
-        time_axis_s=raw.time_axis_s,
-        analysis_level=raw.analysis_level,
-        binning_mode=raw.binning_mode,
-        window_ms=raw.window_ms,
-        n_bins=raw.n_bins,
-        effective_n_bins=raw.effective_n_bins,
-        source_ieeg_files=raw.source_ieeg_files,
-        source_electrodes_files=raw.source_electrodes_files,
-        signature=signature,
-        raw=raw,
-    )
-
-
-def _build_signature(
-    *,
-    stats_file: BIDSFile,
-    raw: _RawRegressionStatsData,
-) -> _SnapshotSignature:
-    return _SnapshotSignature(
-        task=str(stats_file.get("task") or ""),
-        source_desc=str(stats_file.get("desc") or ""),
-        condition_labels=raw.condition_labels,
-        time_axis_hash=hash_time_axis(raw.time_axis_s),
-        time_axis_len=int(len(raw.time_axis_s)),
-        binning_mode=str(raw.binning_mode or "none"),
-        window_ms=float(raw.window_ms),
-        n_bins=int(raw.n_bins),
-        effective_n_bins=int(raw.effective_n_bins),
-        predictor=str(raw.predictor or ""),
-        predictor_zscore=str(raw.predictor_zscore or "none"),
-        predictor_transform_by_condition_json=json.dumps(
-            raw.predictor_transform_by_condition,
-            sort_keys=True,
-            separators=(",", ":"),
-        ),
-        activity_zscore=str(raw.activity_zscore or "none"),
-        activity_baseline_tmin_s=float(raw.activity_baseline_tmin_s),
-        activity_baseline_tmax_s=float(raw.activity_baseline_tmax_s),
-        trial_activity_summary_kind=str(raw.trial_activity_summary_kind or "epoch_mean"),
-        trial_activity_summary_missing_response_policy=(
-            normalize_trial_activity_summary_missing_response_policy(
-                raw.trial_activity_summary_missing_response_policy or "nan_if_missing"
-            )
-        ),
-        trial_activity_summary_source_json=json.dumps(
-            raw.trial_activity_summary_source,
-            sort_keys=True,
-            separators=(",", ":"),
-        ),
-        trial_activity_summary_label=str(
-            raw.trial_activity_summary_label or "Epoch mean activity"
-        ),
-        analysis_level=str(raw.analysis_level or "channel"),
-    )
-
-
-def _load_raw_slope_stats(stats_file: BIDSFile) -> _RawRegressionStatsData:
-    extension = (stats_file.extension or "").lower()
-    if extension == ".mat":
-        return _load_raw_from_matlab(stats_file)
-    return _load_raw_from_hdf5(stats_file)
-
-
-def _load_raw_from_hdf5(stats_file: BIDSFile) -> _RawRegressionStatsData:
-    with stats_file.ensure_loaded() as fh:
-        analysis_type = str_scalar(dataset_or_none(fh, "meta/analysis_type"), default="")
-        if analysis_type and analysis_type != "slope_regression":
-            raise ValueError(
-                f"{stats_file.path.name}: not a regression file "
-                f"(meta/analysis_type={analysis_type!r})."
-            )
-
-        analysis_level = str_scalar(dataset_or_none(fh, "meta/analysis_level"), default="channel")
-        axis_name = "channel" if analysis_level == "channel" else "region"
-        if "axes" not in fh or axis_name not in fh["axes"]:
-            raise ValueError(
-                f"{stats_file.path.name}: axes/{axis_name} dataset is required."
-            )
-        channels = decode_str_array(np.asarray(fh["axes"][axis_name][:]))
-        time_axis_s = np.asarray(fh["axes"]["time_s"][:], dtype=np.float64)
-        condition_labels = _read_condition_labels_hdf5(fh)
-        label_a, label_b = condition_labels
-
-        n_ch = len(channels)
-        n_t = len(time_axis_s)
-        _empty = np.full((n_ch, n_t), np.nan, dtype=np.float64)
-
-        def _read_2d(path_key: str) -> np.ndarray:
-            ds = dataset_or_none(fh, path_key)
-            if ds is None:
-                return _empty.copy()
-            return coerce_feature_time(
-                np.asarray(ds[:], dtype=np.float64), n_features=n_ch, n_times=n_t
-            )
-
-        ds_cond_a_slope = dataset_or_none(fh, f"stats/regression/{label_a}/slope")
-        ds_cond_b_slope = dataset_or_none(fh, f"stats/regression/{label_b}/slope")
-        ds_cond_a_r = dataset_or_none(fh, f"stats/regression/{label_a}/r_value")
-        ds_cond_b_r = dataset_or_none(fh, f"stats/regression/{label_b}/r_value")
-
-        condition_a_slope = _read_2d(f"stats/regression/{label_a}/slope")
-        condition_b_slope = _read_2d(f"stats/regression/{label_b}/slope")
-        condition_a_r_value = _read_2d(f"stats/regression/{label_a}/r_value")
-        condition_b_r_value = _read_2d(f"stats/regression/{label_b}/r_value")
-
-        condition_a_mean = _read_2d(f"data/signal_activity/{label_a}/mean")
-        condition_b_mean = _read_2d(f"data/signal_activity/{label_b}/mean")
-
-        binning_mode = str_scalar(dataset_or_none(fh, "meta/binning_mode"), default="none")
-        window_ms = float_scalar(dataset_or_none(fh, "meta/window_ms"), default=0.0)
-        n_bins = int_scalar(dataset_or_none(fh, "meta/n_bins"), default=0)
-        effective_n_bins = int_scalar(
-            dataset_or_none(fh, "meta/effective_n_bins"), default=n_t
-        )
-        predictor_ds = dataset_or_none(fh, "meta/predictor")
-        if predictor_ds is None:
-            raise ValueError(
-                f"{stats_file.path.name}: unsupported legacy regression_group input; "
-                "meta/predictor is required."
-            )
-        predictor = str_scalar(predictor_ds, default="")
-        predictor_zscore_ds = dataset_or_none(fh, "meta/predictor_zscore")
-        if predictor_zscore_ds is None:
-            raise ValueError(
-                f"{stats_file.path.name}: unsupported legacy regression_group input; "
-                "meta/predictor_zscore is required."
-            )
-        predictor_zscore = str_scalar(predictor_zscore_ds, default="none")
-        predictor_transform_ds = dataset_or_none(
-            fh,
-            "meta/predictor_transform_by_condition_json",
-        )
-        if predictor_transform_ds is None:
-            raise ValueError(
-                f"{stats_file.path.name}: unsupported legacy regression_group input; "
-                "meta/predictor_transform_by_condition_json is required."
-            )
-        predictor_transform_raw = str_scalar(predictor_transform_ds, default="{}")
-        try:
-            predictor_transform_by_condition = (
-                json.loads(predictor_transform_raw) if predictor_transform_raw else {}
-            )
-        except json.JSONDecodeError:
-            predictor_transform_by_condition = {}
-        activity_zscore_ds = dataset_or_none(fh, "meta/activity_zscore")
-        if activity_zscore_ds is None:
-            raise ValueError(
-                f"{stats_file.path.name}: unsupported legacy regression_group input; "
-                "meta/activity_zscore is required."
-            )
-        activity_zscore = str_scalar(activity_zscore_ds, default="none")
-        activity_baseline_tmin_s = float_scalar(
-            dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
-            default=-0.2,
-        )
-        activity_baseline_tmax_s = float_scalar(
-            dataset_or_none(fh, "meta/activity_baseline_tmax_s"),
-            default=0.0,
-        )
-        trial_activity_summary_kind = "epoch_mean"
-        trial_activity_summary_missing_response_policy = "nan_if_missing"
-        trial_activity_summary_source: dict[str, str] = {}
-        trial_activity_summary_label = "Epoch mean activity"
-        if "trial_activity_summary" in fh:
-            tg = fh["trial_activity_summary"]
-            condition_a_trial_activity_summary_values = (
-                np.asarray(tg[f"{label_a}_values"][:], dtype=np.float64)
-                if f"{label_a}_values" in tg
-                else np.empty((n_ch, 0), dtype=np.float64)
-            )
-            condition_b_trial_activity_summary_values = (
-                np.asarray(tg[f"{label_b}_values"][:], dtype=np.float64)
-                if f"{label_b}_values" in tg
-                else np.empty((n_ch, 0), dtype=np.float64)
-            )
-            trial_activity_summary_kind = str_scalar(
-                dataset_or_none(tg, "kind"),
-                default=trial_activity_summary_kind,
-            )
-            trial_activity_summary_missing_response_policy = (
-                normalize_trial_activity_summary_missing_response_policy(
-                    str_scalar(
-                        dataset_or_none(tg, "missing_response_policy"),
-                        default=trial_activity_summary_missing_response_policy,
-                    )
-                )
-            )
-            trial_activity_summary_source_raw = str_scalar(
-                dataset_or_none(tg, "source_json"),
-                default="{}",
-            )
-            try:
-                loaded_summary_source = (
-                    json.loads(trial_activity_summary_source_raw)
-                    if trial_activity_summary_source_raw
-                    else {}
-                )
-                if isinstance(loaded_summary_source, dict):
-                    trial_activity_summary_source = {
-                        str(key): str(value)
-                        for key, value in loaded_summary_source.items()
-                    }
-            except json.JSONDecodeError:
-                trial_activity_summary_source = {}
-            trial_activity_summary_label = (
-                str_scalar(
-                    dataset_or_none(tg, "label"),
-                    default=trial_activity_summary_label,
-                )
-                or trial_activity_summary_label
-            )
-        else:
-            condition_a_trial_activity_summary_values = np.empty((n_ch, 0), dtype=np.float64)
-            condition_b_trial_activity_summary_values = np.empty((n_ch, 0), dtype=np.float64)
-
-        source_ieeg_files: list[str] = []
-        source_electrodes_files: list[str] = []
-        if "provenance" in fh:
-            prov = fh["provenance"]
-            if "source_ieeg_files" in prov:
-                source_ieeg_files = decode_str_array(
-                    np.asarray(prov["source_ieeg_files"][:], dtype=object)
-                )
-            if "source_electrodes_files" in prov:
-                source_electrodes_files = decode_str_array(
-                    np.asarray(prov["source_electrodes_files"][:], dtype=object)
-                )
-
-        perm_a_ds = dataset_or_none(fh, f"stats/regression/{label_a}/permuted_slopes")
-        raw_condition_a_permuted_slopes: np.ndarray | None = (
-            np.asarray(perm_a_ds[:], dtype=np.float32) if perm_a_ds is not None else None
-        )
-        perm_b_ds = dataset_or_none(fh, f"stats/regression/{label_b}/permuted_slopes")
-        raw_condition_b_permuted_slopes: np.ndarray | None = (
-            np.asarray(perm_b_ds[:], dtype=np.float32) if perm_b_ds is not None else None
-        )
-
-    return _RawRegressionStatsData(
-        analysis_level=analysis_level,
-        available_metrics=frozenset(
-            metric
-            for metric, present in {
-                "slope": ds_cond_a_slope is not None and ds_cond_b_slope is not None,
-                "r_value": ds_cond_a_r is not None and ds_cond_b_r is not None,
-            }.items()
-            if present
-        ),
-        channels=channels,
-        time_axis_s=time_axis_s,
-        condition_labels=condition_labels,
-        condition_a_slope=condition_a_slope,
-        condition_b_slope=condition_b_slope,
-        condition_a_mean=condition_a_mean,
-        condition_b_mean=condition_b_mean,
-        condition_a_r_value=condition_a_r_value,
-        condition_b_r_value=condition_b_r_value,
-        condition_a_predictor_raw_values=_read_predictor_values_hdf5(
-            stats_file,
-            f"predictor/{label_a}/raw_values",
-        ),
-        condition_b_predictor_raw_values=_read_predictor_values_hdf5(
-            stats_file,
-            f"predictor/{label_b}/raw_values",
-        ),
-        condition_a_predictor_transformed_values=_read_predictor_values_hdf5(
-            stats_file,
-            f"predictor/{label_a}/transformed_values",
-        ),
-        condition_b_predictor_transformed_values=_read_predictor_values_hdf5(
-            stats_file,
-            f"predictor/{label_b}/transformed_values",
-        ),
-        condition_a_predictor_values=_read_predictor_values_hdf5(stats_file, f"predictor/{label_a}/values"),
-        condition_b_predictor_values=_read_predictor_values_hdf5(stats_file, f"predictor/{label_b}/values"),
-        condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
-        condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
-        condition_a_permuted_slopes=raw_condition_a_permuted_slopes,
-        condition_b_permuted_slopes=raw_condition_b_permuted_slopes,
-        binning_mode=binning_mode,
-        window_ms=window_ms,
-        n_bins=n_bins,
-        effective_n_bins=effective_n_bins,
-        predictor=predictor,
-        predictor_zscore=predictor_zscore,
-        predictor_transform_by_condition=predictor_transform_by_condition,
-        activity_zscore=activity_zscore,
-        activity_baseline_tmin_s=activity_baseline_tmin_s,
-        activity_baseline_tmax_s=activity_baseline_tmax_s,
-        trial_activity_summary_kind=trial_activity_summary_kind,
-        trial_activity_summary_missing_response_policy=(
-            trial_activity_summary_missing_response_policy
-        ),
-        trial_activity_summary_source=trial_activity_summary_source,
-        trial_activity_summary_label=trial_activity_summary_label,
-        source_ieeg_files=source_ieeg_files,
-        source_electrodes_files=source_electrodes_files,
-    )
-
-
-def _load_raw_from_matlab(stats_file: BIDSFile) -> _RawRegressionStatsData:
-    with stats_file.ensure_loaded() as mat:
-        data = mat["data"]
-        meta = data.meta
-        axes = data.axes
-        prov = getattr(data, "provenance", None)
-
-        analysis_level = mat_str(getattr(meta, "analysis_level", None), default="channel")
-        axis_attr = "channel" if analysis_level == "channel" else "region"
-        channels = mat_str_list(getattr(axes, axis_attr, None))
-        if not channels:
-            raise ValueError(
-                f"{stats_file.path.name}: axes.{axis_attr} array is required in .mat file."
-            )
-
-        time_axis_s = np.asarray(axes.time_s, dtype=np.float64).ravel()
-        condition_labels = _mat_condition_labels(meta)
-        n_ch = len(channels)
-        n_t = len(time_axis_s)
-        _empty = np.full((n_ch, n_t), np.nan, dtype=np.float64)
-
-        def _read_mat_2d(obj: Any, attr: str) -> np.ndarray:
-            arr = getattr(obj, attr, None)
-            if arr is None:
-                return _empty.copy()
-            return coerce_feature_time(
-                np.asarray(arr, dtype=np.float64), n_features=n_ch, n_times=n_t
-            )
-
-        def _read_feature_trial_2d(obj: Any, attr: str) -> np.ndarray:
-            arr = getattr(obj, attr, None) if obj is not None else None
-            if arr is None:
-                return np.empty((n_ch, 0), dtype=np.float64)
-            out = np.asarray(arr, dtype=np.float64)
-            if out.size == 0:
-                return np.empty((n_ch, 0), dtype=np.float64)
-            if out.ndim != 2:
-                if out.size % max(n_ch, 1) != 0:
-                    return np.empty((n_ch, 0), dtype=np.float64)
-                return out.reshape(n_ch, -1)
-            if out.shape[0] == n_ch:
-                return out
-            if out.shape[1] == n_ch:
-                return out.T
-            if out.size % max(n_ch, 1) != 0:
-                return np.empty((n_ch, 0), dtype=np.float64)
-            return out.reshape(n_ch, -1)
-
-        regression = getattr(data, "regression", None)
-        safe_a = matlab_safe_name(condition_labels[0])
-        safe_b = matlab_safe_name(condition_labels[1])
-        cond_a_reg = getattr(regression, safe_a, None) if regression is not None else None
-        cond_b_reg = getattr(regression, safe_b, None) if regression is not None else None
-
-        condition_a_slope = _read_mat_2d(cond_a_reg, "slope") if cond_a_reg is not None else _empty.copy()
-        condition_b_slope = _read_mat_2d(cond_b_reg, "slope") if cond_b_reg is not None else _empty.copy()
-        condition_a_r_value = _read_mat_2d(cond_a_reg, "r_value") if cond_a_reg is not None else _empty.copy()
-        condition_b_r_value = _read_mat_2d(cond_b_reg, "r_value") if cond_b_reg is not None else _empty.copy()
-
-        means = getattr(data, "means", None)
-        condition_a_mean = _read_mat_2d(means, safe_a) if means is not None else _empty.copy()
-        condition_b_mean = _read_mat_2d(means, safe_b) if means is not None else _empty.copy()
-
-        binning_mode = mat_str(getattr(meta, "binning_mode", None), default="none")
-        window_ms = mat_float(getattr(meta, "window_ms", None), default=0.0)
-        n_bins = mat_int(getattr(meta, "n_bins", None), default=0)
-        effective_n_bins = mat_int(getattr(meta, "effective_n_bins", None), default=n_t)
-        predictor_raw_meta = getattr(meta, "predictor", None)
-        if predictor_raw_meta is None:
-            raise ValueError(
-                f"{stats_file.path.name}: unsupported legacy regression_group input; "
-                "meta.predictor is required."
-            )
-        predictor = mat_str(predictor_raw_meta, default="")
-        predictor_zscore_raw = getattr(meta, "predictor_zscore", None)
-        if predictor_zscore_raw is None:
-            raise ValueError(
-                f"{stats_file.path.name}: unsupported legacy regression_group input; "
-                "meta.predictor_zscore is required."
-            )
-        predictor_zscore = mat_str(predictor_zscore_raw, default="none")
-        predictor_transform_raw = getattr(meta, "predictor_transform_by_condition_json", None)
-        if predictor_transform_raw is None:
-            raise ValueError(
-                f"{stats_file.path.name}: unsupported legacy regression_group input; "
-                "meta.predictor_transform_by_condition_json is required."
-            )
-        predictor_transform_json = mat_str(predictor_transform_raw, default="{}")
-        try:
-            predictor_transform_by_condition = (
-                json.loads(predictor_transform_json) if predictor_transform_json else {}
-            )
-        except json.JSONDecodeError:
-            predictor_transform_by_condition = {}
-        activity_zscore_raw = getattr(meta, "activity_zscore", None)
-        if activity_zscore_raw is None:
-            raise ValueError(
-                f"{stats_file.path.name}: unsupported legacy regression_group input; "
-                "meta.activity_zscore is required."
-            )
-        activity_zscore = mat_str(activity_zscore_raw, default="none")
-        activity_baseline_tmin_s = mat_float(
-            getattr(meta, "activity_baseline_tmin_s", None),
-            default=-0.2,
-        )
-        activity_baseline_tmax_s = mat_float(
-            getattr(meta, "activity_baseline_tmax_s", None),
-            default=0.0,
-        )
-
-        source_ieeg_files: list[str] = []
-        source_electrodes_files: list[str] = []
-        if prov is not None:
-            source_ieeg_files = mat_str_list(getattr(prov, "source_ieeg_files", None))
-            source_electrodes_files = mat_str_list(getattr(prov, "source_electrodes_files", None))
-
-        predictor_raw = getattr(data, "predictor", None)
-        condition_a_predictor_raw_values: np.ndarray
-        condition_b_predictor_raw_values: np.ndarray
-        condition_a_predictor_transformed_values: np.ndarray
-        condition_b_predictor_transformed_values: np.ndarray
-        condition_a_predictor_values: np.ndarray
-        condition_b_predictor_values: np.ndarray
-        if predictor_raw is not None:
-            cond_a_pred = getattr(predictor_raw, safe_a, None)
-            cond_b_pred = getattr(predictor_raw, safe_b, None)
-            raw_raw_a = getattr(cond_a_pred, "raw_values", None) if cond_a_pred is not None else None
-            raw_raw_b = getattr(cond_b_pred, "raw_values", None) if cond_b_pred is not None else None
-            raw_trans_a = getattr(cond_a_pred, "transformed_values", None) if cond_a_pred is not None else None
-            raw_trans_b = getattr(cond_b_pred, "transformed_values", None) if cond_b_pred is not None else None
-            raw_a = getattr(cond_a_pred, "values", None) if cond_a_pred is not None else None
-            raw_b = getattr(cond_b_pred, "values", None) if cond_b_pred is not None else None
-            condition_a_predictor_raw_values = np.asarray(raw_raw_a, dtype=np.float64).ravel() if raw_raw_a is not None else np.empty(0, dtype=np.float64)
-            condition_b_predictor_raw_values = np.asarray(raw_raw_b, dtype=np.float64).ravel() if raw_raw_b is not None else np.empty(0, dtype=np.float64)
-            condition_a_predictor_transformed_values = np.asarray(raw_trans_a, dtype=np.float64).ravel() if raw_trans_a is not None else np.empty(0, dtype=np.float64)
-            condition_b_predictor_transformed_values = np.asarray(raw_trans_b, dtype=np.float64).ravel() if raw_trans_b is not None else np.empty(0, dtype=np.float64)
-            condition_a_predictor_values = np.asarray(raw_a, dtype=np.float64).ravel() if raw_a is not None else np.empty(0, dtype=np.float64)
-            condition_b_predictor_values = np.asarray(raw_b, dtype=np.float64).ravel() if raw_b is not None else np.empty(0, dtype=np.float64)
-        else:
-            condition_a_predictor_raw_values = np.empty(0, dtype=np.float64)
-            condition_b_predictor_raw_values = np.empty(0, dtype=np.float64)
-            condition_a_predictor_transformed_values = np.empty(0, dtype=np.float64)
-            condition_b_predictor_transformed_values = np.empty(0, dtype=np.float64)
-            condition_a_predictor_values = np.empty(0, dtype=np.float64)
-            condition_b_predictor_values = np.empty(0, dtype=np.float64)
-
-        trial_activity_summary_kind = "epoch_mean"
-        trial_activity_summary_missing_response_policy = "nan_if_missing"
-        trial_activity_summary_source: dict[str, str] = {}
-        trial_activity_summary_label = "Epoch mean activity"
-        trial_activity_summary = getattr(data, "trial_activity_summary", None)
-        if trial_activity_summary is not None:
-            condition_a_trial_activity_summary_values = _read_feature_trial_2d(
-                trial_activity_summary,
-                f"{safe_a}_values",
-            )
-            condition_b_trial_activity_summary_values = _read_feature_trial_2d(
-                trial_activity_summary,
-                f"{safe_b}_values",
-            )
-            trial_activity_summary_kind = mat_str(
-                getattr(trial_activity_summary, "kind", None),
-                default=trial_activity_summary_kind,
-            )
-            trial_activity_summary_missing_response_policy = (
-                normalize_trial_activity_summary_missing_response_policy(
-                    mat_str(
-                        getattr(trial_activity_summary, "missing_response_policy", None),
-                        default=trial_activity_summary_missing_response_policy,
-                    )
-                )
-            )
-            trial_activity_summary_source_raw = mat_str(
-                getattr(trial_activity_summary, "source_json", None),
-                default="{}",
-            )
-            try:
-                loaded_summary_source = (
-                    json.loads(trial_activity_summary_source_raw)
-                    if trial_activity_summary_source_raw
-                    else {}
-                )
-                if isinstance(loaded_summary_source, dict):
-                    trial_activity_summary_source = {
-                        str(key): str(value)
-                        for key, value in loaded_summary_source.items()
-                    }
-            except json.JSONDecodeError:
-                trial_activity_summary_source = {}
-            trial_activity_summary_label = (
-                mat_str(
-                    getattr(trial_activity_summary, "label", None),
-                    default=trial_activity_summary_label,
-                )
-                or trial_activity_summary_label
-            )
-        else:
-            condition_a_trial_activity_summary_values = np.empty((n_ch, 0), dtype=np.float64)
-            condition_b_trial_activity_summary_values = np.empty((n_ch, 0), dtype=np.float64)
-
-        _mat_perm_a = getattr(cond_a_reg, "permuted_slopes", None) if cond_a_reg is not None else None
-        mat_condition_a_permuted_slopes: np.ndarray | None = (
-            np.asarray(_mat_perm_a, dtype=np.float32)
-            if _mat_perm_a is not None and np.asarray(_mat_perm_a).size > 0
-            else None
-        )
-        _mat_perm_b = getattr(cond_b_reg, "permuted_slopes", None) if cond_b_reg is not None else None
-        mat_condition_b_permuted_slopes: np.ndarray | None = (
-            np.asarray(_mat_perm_b, dtype=np.float32)
-            if _mat_perm_b is not None and np.asarray(_mat_perm_b).size > 0
-            else None
-        )
-
-    return _RawRegressionStatsData(
-        analysis_level=analysis_level,
-        available_metrics=frozenset(
-            metric
-            for metric, present in {
-                "slope": cond_a_reg is not None and cond_b_reg is not None and getattr(cond_a_reg, "slope", None) is not None and getattr(cond_b_reg, "slope", None) is not None,
-                "r_value": cond_a_reg is not None and cond_b_reg is not None and getattr(cond_a_reg, "r_value", None) is not None and getattr(cond_b_reg, "r_value", None) is not None,
-            }.items()
-            if present
-        ),
-        channels=channels,
-        time_axis_s=time_axis_s,
-        condition_labels=condition_labels,
-        condition_a_slope=condition_a_slope,
-        condition_b_slope=condition_b_slope,
-        condition_a_mean=condition_a_mean,
-        condition_b_mean=condition_b_mean,
-        condition_a_r_value=condition_a_r_value,
-        condition_b_r_value=condition_b_r_value,
-        condition_a_predictor_raw_values=condition_a_predictor_raw_values,
-        condition_b_predictor_raw_values=condition_b_predictor_raw_values,
-        condition_a_predictor_transformed_values=condition_a_predictor_transformed_values,
-        condition_b_predictor_transformed_values=condition_b_predictor_transformed_values,
-        condition_a_predictor_values=condition_a_predictor_values,
-        condition_b_predictor_values=condition_b_predictor_values,
-        condition_a_trial_activity_summary_values=condition_a_trial_activity_summary_values,
-        condition_b_trial_activity_summary_values=condition_b_trial_activity_summary_values,
-        condition_a_permuted_slopes=mat_condition_a_permuted_slopes,
-        condition_b_permuted_slopes=mat_condition_b_permuted_slopes,
-        binning_mode=binning_mode,
-        window_ms=window_ms,
-        n_bins=n_bins,
-        effective_n_bins=effective_n_bins,
-        predictor=predictor,
-        predictor_zscore=predictor_zscore,
-        predictor_transform_by_condition=predictor_transform_by_condition,
-        activity_zscore=activity_zscore,
-        activity_baseline_tmin_s=activity_baseline_tmin_s,
-        activity_baseline_tmax_s=activity_baseline_tmax_s,
-        trial_activity_summary_kind=trial_activity_summary_kind,
-        trial_activity_summary_missing_response_policy=(
-            trial_activity_summary_missing_response_policy
-        ),
-        trial_activity_summary_source=trial_activity_summary_source,
-        trial_activity_summary_label=trial_activity_summary_label,
-        source_ieeg_files=source_ieeg_files,
-        source_electrodes_files=source_electrodes_files,
-    )
-
-
-def _read_predictor_values_hdf5(stats_file: BIDSFile, path: str) -> np.ndarray:
-    """Read a 1-D predictor values array from a subject slope-stats HDF5 file."""
-    with stats_file.ensure_loaded() as fh:
-        ds = dataset_or_none(fh, path)
-        if ds is None:
-            return np.empty(0, dtype=np.float64)
-        return np.asarray(ds[:], dtype=np.float64).ravel()
-
-
-def _read_condition_labels_hdf5(fh: h5py.File) -> tuple[str, str]:
-    labels_ds = dataset_or_none(fh, "meta/condition_labels")
-    if labels_ds is not None:
-        labels = decode_str_array(np.asarray(labels_ds[:], dtype=object))
-        if len(labels) >= 2:
-            return labels[0], labels[1]
-    return "condition_a", "condition_b"
-
-
-def _mat_condition_labels(meta: Any) -> tuple[str, str]:
-    labels = mat_str_list(getattr(meta, "trial_count_labels", None))
-    if len(labels) >= 2:
-        return labels[0], labels[1]
-    return "condition_a", "condition_b"
-
-
-

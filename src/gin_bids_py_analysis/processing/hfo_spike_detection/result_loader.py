@@ -17,7 +17,12 @@ from gin_bids_py_analysis.processing.utils.hdf5 import (
     float_scalar,
     str_scalar,
 )
-from gin_bids_py_analysis.processing.utils.matlab import mat_float, mat_str, mat_str_list
+from gin_bids_py_analysis.processing.utils.matlab import (
+    mat_float,
+    mat_root,
+    mat_str,
+    mat_str_list,
+)
 
 from .result import HfoSpikeDetectorProcessingResult
 
@@ -55,10 +60,10 @@ def _load_from_hdf5(path: Path) -> HfoSpikeDetectorProcessingResult:
         channel_names = decode_str_array(
             np.asarray(fh["axes/channel_names"][:], dtype=object)
         )
-        freq_band_ds = dataset_or_none(fh, "axes/freq_band")
+        freq_band_ds = dataset_or_none(fh, "counts/freq_band")
         n_spk_ds = dataset_or_none(fh, "counts/n_spk")
         n_osc_ds = dataset_or_none(fh, "counts/n_osc")
-        detection_charac_ds = dataset_or_none(fh, "counts/detection_charac")
+        detection_charac_ds = dataset_or_none(fh, "features/detection_charac")
         raw_bids_path = str_scalar(
             dataset_or_none(fh, "provenance/raw_bids_path"),
             default=str(path),
@@ -69,6 +74,13 @@ def _load_from_hdf5(path: Path) -> HfoSpikeDetectorProcessingResult:
             default=0.0,
         )
         n_samples = int(round(duration_seconds * original_fs)) if original_fs > 0 else 0
+        freq_band = (
+            np.asarray(freq_band_ds[:], dtype=np.float32)
+            if freq_band_ds is not None
+            else np.array([])
+        )
+        if freq_band.ndim == 1 and freq_band.size == 2:
+            freq_band = freq_band.reshape(1, 2)
 
         return HfoSpikeDetectorProcessingResult(
             source_group=BIDSFileGroup(primary=BIDSFile.from_path(raw_bids_path)),
@@ -81,20 +93,17 @@ def _load_from_hdf5(path: Path) -> HfoSpikeDetectorProcessingResult:
             },
             markers=markers,
             channel_names=channel_names,
-            freq_band=(
-                np.asarray(freq_band_ds[:], dtype=np.float32)
-                if freq_band_ds is not None
-                else np.array([])
-            ),
+            freq_band=freq_band,
             n_spk=(
-                np.asarray(n_spk_ds[:], dtype=np.int64)
+                np.asarray(n_spk_ds[:], dtype=np.int64).ravel()
                 if n_spk_ds is not None
                 else np.array([])
             ),
-            n_osc=(
+            n_osc=_mat_array_or_empty(
                 np.asarray(n_osc_ds[:], dtype=np.int64)
                 if n_osc_ds is not None
-                else np.array([])
+                else None,
+                dtype=np.int64,
             ),
             detection_charac=(
                 np.asarray(detection_charac_ds[:], dtype=np.float64)
@@ -109,7 +118,7 @@ def _load_from_matlab(path: Path) -> HfoSpikeDetectorProcessingResult:
     from scipy.io import loadmat
 
     mat = loadmat(str(path), squeeze_me=True, struct_as_record=False)
-    data = mat["data"]
+    data = mat_root(mat, "hfo_spike_detection")
     meta = data.meta
     _require_matlab_schema(meta, path.name)
     events = data.events
@@ -131,6 +140,12 @@ def _load_from_matlab(path: Path) -> HfoSpikeDetectorProcessingResult:
         getattr(data.provenance, "raw_bids_path", None),
         default=str(path),
     )
+    freq_band = _mat_array_or_empty(
+        getattr(data.counts, "freq_band", None),
+        dtype=np.float32,
+    )
+    if freq_band.ndim == 1 and freq_band.size == 2:
+        freq_band = freq_band.reshape(1, 2)
 
     return HfoSpikeDetectorProcessingResult(
         source_group=BIDSFileGroup(primary=BIDSFile.from_path(raw_bids_path)),
@@ -140,11 +155,11 @@ def _load_from_matlab(path: Path) -> HfoSpikeDetectorProcessingResult:
         },
         markers=markers,
         channel_names=mat_str_list(getattr(data.axes, "channel_names", None)),
-        freq_band=_mat_array_or_empty(getattr(data.axes, "freq_band", None), dtype=np.float32),
-        n_spk=_mat_array_or_empty(getattr(data.counts, "n_spk", None), dtype=np.int64),
+        freq_band=freq_band,
+        n_spk=_mat_array_or_empty(getattr(data.counts, "n_spk", None), dtype=np.int64).ravel(),
         n_osc=_mat_array_or_empty(getattr(data.counts, "n_osc", None), dtype=np.int64),
         detection_charac=_mat_array_or_empty(
-            getattr(data.counts, "detection_charac", None),
+            getattr(data.features, "detection_charac", None),
             dtype=np.float64,
         ),
         original_fs=original_fs,
@@ -255,7 +270,7 @@ def _int_from_row(row: dict[str, str], key: str) -> int:
 def _require_hdf5_schema(fh: h5py.File, path_name: str) -> None:
     schema_name = str_scalar(dataset_or_none(fh, "meta/schema_name"), default="")
     schema_version = str_scalar(dataset_or_none(fh, "meta/schema_version"), default="")
-    if schema_name != "hfo_spike_detection" or schema_version != "2.0":
+    if schema_name != "hfo_spike_detection" or schema_version != "2.1":
         raise ValueError(
             f"{path_name}: unsupported HFO/spike detection schema "
             f"(schema_name={schema_name!r}, schema_version={schema_version!r})."
@@ -265,7 +280,7 @@ def _require_hdf5_schema(fh: h5py.File, path_name: str) -> None:
 def _require_matlab_schema(meta: object, path_name: str) -> None:
     schema_name = mat_str(getattr(meta, "schema_name", None), default="")
     schema_version = mat_str(getattr(meta, "schema_version", None), default="")
-    if schema_name != "hfo_spike_detection" or schema_version != "2.0":
+    if schema_name != "hfo_spike_detection" or schema_version != "2.1":
         raise ValueError(
             f"{path_name}: unsupported HFO/spike detection schema "
             f"(schema_name={schema_name!r}, schema_version={schema_version!r})."

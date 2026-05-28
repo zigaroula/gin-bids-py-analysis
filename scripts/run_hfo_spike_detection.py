@@ -27,7 +27,7 @@ from gin_bids_py_analysis.processing.utils.channels import (
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
+BIDS_ROOT = Path(r"E:\Boulot\clarissa_bids")
 
 # BIDS entity filters: only files matching ALL of these will be processed.
 # Remove any key you don't want to filter on.
@@ -42,9 +42,9 @@ FILE_FILTERS = {
 # are merged into a single subject → channel-list mapping.
 # Set to an empty dict (or remove entries) to disable and use all channels.
 CHANNELS_CSV_FILES = {
-    "vmPFC": Path(r"D:\Boulot\csv\PFCvm_elecs_tbl.csv"),
-    "daINS": Path(r"D:\Boulot\csv\aINS_dors_elecs_tbl.csv"),
-    "vaINS": Path(r"D:\Boulot\csv\aINS_vent_elecs_tbl.csv"),
+    "vmPFC": Path(r"E:\Boulot\csv\PFCvm_elecs_tbl.csv"),
+    "daINS": Path(r"E:\Boulot\csv\aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"E:\Boulot\csv\aINS_vent_elecs_tbl.csv"),
 }
 
 # Algorithm parameters for detection
@@ -58,7 +58,7 @@ PARAMS = HfoSpikeDetectorParams(
 # Writer configuration for output files
 WRITER_PARAMS = HfoSpikeDetectorWriterParams(
     bids_root=BIDS_ROOT,
-    output_format="tsv"
+    output_format="matlab"
 )
 
 N_JOBS = 1  # parallelism across files; set to -1 to use all available CPUs

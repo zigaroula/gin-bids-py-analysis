@@ -149,8 +149,13 @@ class TestToOutputTree:
         tree = result.to_output_tree()
         axes = tree["axes"]  # type: ignore[index]
         assert len(axes["channel"]) == n_ch
-        assert len(axes["band_limits_hz"]) == len(result.bins)
+        assert "band_limits_hz" not in axes
         assert len(axes["time_s"]) == n_samp
+
+    def test_band_limits_are_metadata(self) -> None:
+        result = _make_result("dummy.vhdr", windows=[0])
+        meta = result.to_output_tree()["meta"]  # type: ignore[index]
+        np.testing.assert_allclose(meta["band_limits_hz"], result.bins)
 
     def test_time_axis_spacing(self) -> None:
         n_samp = 64
@@ -168,6 +173,7 @@ class TestToOutputTree:
             "schema_version",
             "sampling_frequency_hz",
             "downsampled_frequency_hz",
+            "band_limits_hz",
             "montage_mode",
             "unit",
             "dimension_order",
@@ -253,6 +259,14 @@ class TestHdf5Writer:
         with h5py.File(out, "r") as fh:
             assert list(fh["axes/smoothing_window_ms"][:]) == [0, 250, 1000]
 
+    def test_hdf5_band_limits_are_metadata(self, tmp_path: Path) -> None:
+        result = _make_result(str(tmp_path / "dummy.vhdr"), windows=[0])
+        writer = HilbertProcessingWriter(HilbertWriterParams(bids_root=tmp_path))
+        out = writer.write(result)
+        with h5py.File(out, "r") as fh:
+            assert "band_limits_hz" not in fh["axes"]
+            np.testing.assert_allclose(fh["meta/band_limits_hz"][:], result.bins)
+
     def test_hdf5_pipeline_name_in_provenance(self, tmp_path: Path) -> None:
         result = _make_result(str(tmp_path / "dummy.vhdr"), windows=[0])
         writer = HilbertProcessingWriter(HilbertWriterParams(bids_root=tmp_path))
@@ -310,7 +324,7 @@ class TestMatlabWriter:
         result = _make_result(str(tmp_path / "dummy.vhdr"), windows=[0])
         out = self._matlab_writer(tmp_path).write(result)
         mat = scipy.io.loadmat(str(out))
-        assert "data" in mat
+        assert "hilbert" in mat
 
     def test_mat_envelope_shape(self, tmp_path: Path) -> None:
         n_ch, n_samp = 3, 100
@@ -322,9 +336,18 @@ class TestMatlabWriter:
         )
         out = self._matlab_writer(tmp_path).write(result)
         mat = scipy.io.loadmat(str(out), squeeze_me=False)
-        # envelope lives at data.data.envelope
-        envelope = mat["data"]["data"][0, 0]["envelope"][0, 0]
+        envelope = mat["hilbert"]["data"][0, 0]["envelope"][0, 0]
         assert envelope.shape == (2, n_ch, n_samp)
+
+    def test_mat_band_limits_are_metadata(self, tmp_path: Path) -> None:
+        result = _make_result(str(tmp_path / "dummy.vhdr"), windows=[0])
+        out = self._matlab_writer(tmp_path).write(result)
+        mat = scipy.io.loadmat(str(out), squeeze_me=False)
+
+        axes = mat["hilbert"]["axes"][0, 0]
+        meta = mat["hilbert"]["meta"][0, 0]
+        assert "band_limits_hz" not in axes.dtype.names
+        np.testing.assert_allclose(meta["band_limits_hz"][0, 0].ravel(), result.bins)
 
     def test_mat_roundtrip_via_loader(self, tmp_path: Path) -> None:
         result = _make_result(str(tmp_path / "dummy.vhdr"), windows=[0, 250])

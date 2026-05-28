@@ -250,11 +250,16 @@ def _load_from_hdf5(path: Path) -> ConditionTestGroupProcessingResult:
 
 
 def _load_from_matlab(path: Path) -> ConditionTestGroupProcessingResult:
-    from gin_bids_py_analysis.processing.utils.matlab import mat_float, mat_str, mat_str_list
+    from gin_bids_py_analysis.processing.utils.matlab import (
+        mat_float,
+        mat_root,
+        mat_str,
+        mat_str_list,
+    )
     from scipy.io import loadmat
 
-    mat = loadmat(str(path), squeeze_me=False, struct_as_record=False)
-    data = mat["data"]
+    mat = loadmat(str(path), squeeze_me=True, struct_as_record=False)
+    data = mat_root(mat, "condition_test_group")
     region_names = mat_str_list(getattr(data.axes, "region", None))
     time_axis_s = np.asarray(data.axes.time_s, dtype=np.float64).ravel()
     n_rois = len(region_names)

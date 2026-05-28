@@ -1,49 +1,35 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Sequence
 
-import h5py
 import numpy as np
 from gin_bids_py_analysis.bids.file import BIDSFile
 from gin_bids_py_analysis.bids.file_group import BIDSFileGroup
-from gin_bids_py_analysis.bids.helpers import (
-    normalize_subject_value,
-)
-from gin_bids_py_analysis.processing.utils.channels import normalize_channel_name
-from gin_bids_py_analysis.processing.utils.hdf5 import (
-    coerce_feature_time,
-    dataset_or_none,
-    decode_str_array,
-    float_scalar,
-    int_scalar,
-    str_scalar,
-)
-from gin_bids_py_analysis.processing.utils.matlab import (
-    mat_float,
-    mat_int,
-    mat_str,
-    mat_str_list,
-    matlab_safe_name,
-)
 
 from gin_bids_py_analysis.processing.utils.group_stats import (
     compute_condition_group_stats,
     compute_one_sample_epoch_summary,
     compute_one_sample_timecourse,
 )
+from gin_bids_py_analysis.processing.trial_stats.condition_test import (
+    ConditionTestProcessingResult,
+    load_condition_test_result,
+)
 
+from ..compatibility import (
+    SubjectStatsInput,
+    SubjectStatsSignature,
+    build_compatible_groups,
+    build_subject_stats_input,
+    load_result_via_public_loader,
+    validate_group_compatibility,
+)
 from ..processor import (
-    BaseRawTrialStatsData,
     BaseTrialStatsGroupContributionRecord,
     BaseTrialStatsGroupProcessing,
-    BaseTrialStatsGroupSnapshot,
-    BaseTrialStatsGroupSnapshotSignature,
-    build_compatible_groups,
     collect_atlas_roi_records,
     collect_manual_roi_records,
-    hash_time_axis,
-    validate_group_compatibility,
 )
 from ..result import (
     GroupEpochStats,
@@ -65,43 +51,9 @@ from gin_bids_py_analysis.processing.utils.statistics import correct_p_values
 
 
 @dataclass(frozen=True)
-class _RawConditionTestStatsData(BaseRawTrialStatsData):
-    """Format-agnostic in-memory representation of one subject condition_test file."""
-
-    metric_values: np.ndarray  # shape (n_channels, n_times)
-    condition_a_mean_values: np.ndarray  # shape (n_channels, n_times)
-    condition_b_mean_values: np.ndarray  # shape (n_channels, n_times)
-    permuted_t_values: np.ndarray | None  # shape (n_perm, n_channels, n_times) or None
-
-
-@dataclass(frozen=True)
-class _SnapshotSignature(BaseTrialStatsGroupSnapshotSignature):
-    task: str
-    source_desc: str
-    condition_labels: tuple[str, str]
-    time_axis_hash: str
-    time_axis_len: int
-    binning_mode: str
-    window_ms: float
-    n_bins: int
-    effective_n_bins: int
-    activity_zscore: str
-    activity_baseline_tmin_s: float
-    activity_baseline_tmax_s: float
-    analysis_level: str
-
-    @property
-    def key(self) -> tuple[Any, ...]:
-        return self.base_key + (
-            self.activity_zscore,
-            self.activity_baseline_tmin_s,
-            self.activity_baseline_tmax_s,
-        )
-
-
-@dataclass(frozen=True)
-class _ConditionTestStatsSnapshot(BaseTrialStatsGroupSnapshot):
-    raw: _RawConditionTestStatsData
+class _ConditionTestStatsInput(SubjectStatsInput):
+    result: ConditionTestProcessingResult
+    source_metric: str
 
 
 @dataclass(frozen=True)
@@ -124,7 +76,7 @@ def build_condition_test_compatible_groups(
     """Group subject-level condition_test files by compatibility."""
     return build_compatible_groups(
         stats_files,
-        read_signature=lambda file: _read_snapshot_signature(
+        read_signature=lambda file: _read_input_signature(
             file,
             source_metric=primary_condition_metric,
         ),
@@ -149,44 +101,44 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
                 "ConditionTestGroupProcessing requires at least one condition_test stats file."
             )
 
-        snapshots = [
-            _load_trial_stats_snapshot(
+        inputs = [
+            _load_trial_stats_input(
                 file,
                 source_metric=self.params.primary_condition_metric,
             )
             for file in files
         ]
-        _validate_group_compatibility(snapshots)
+        _validate_group_compatibility(inputs)
 
         method = self.params.p_value_correction_method
         rng: np.random.Generator | None = None
         if method == "cluster_permutation":
             if self.params.cluster_permutation_method == "custom":
-                for snap in snapshots:
-                    if snap.raw.permuted_t_values is None:
+                for item in inputs:
+                    if item.result.contrast.permuted_t_values is None:
                         raise ValueError(
                             f"cluster_permutation with cluster_permutation_method='custom' "
                             f"requires permuted_t_values in all source files, "
-                            f"but {snap.stats_file.path.name} has none. "
+                            f"but {item.stats_file.path.name} has none. "
                             "Re-run the subject-level condition_test analysis "
                             "with n_permutations > 0."
                         )
             rng = np.random.default_rng(self.params.permutation_seed)
 
-        first = snapshots[0]
+        first = inputs[0]
         n_times = int(len(first.time_axis_s))
         excluded_rois: dict[str, str] = {}
 
         if self.params.roi_mode == "manual":
             roi_records = _collect_manual_roi_records(
-                snapshots=snapshots,
+                inputs=inputs,
                 manual_region_channels=self.params.manual_region_channels,
             )
             used_electrode_paths: set[str] = set()
         else:
             assert self.params.atlas_name is not None
             roi_records, used_electrode_paths = _collect_atlas_roi_records(
-                snapshots=snapshots,
+                inputs=inputs,
                 atlas_name=self.params.atlas_name,
             )
 
@@ -415,9 +367,9 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
                 "window_ms": first.window_ms,
                 "n_bins": first.n_bins,
                 "effective_n_bins": first.effective_n_bins,
-                "activity_zscore": first.raw.activity_zscore,
-                "activity_baseline_tmin_s": first.raw.activity_baseline_tmin_s,
-                "activity_baseline_tmax_s": first.raw.activity_baseline_tmax_s,
+                "activity_zscore": first.result.activity_zscore,
+                "activity_baseline_tmin_s": first.result.activity_baseline_tmin_s,
+                "activity_baseline_tmax_s": first.result.activity_baseline_tmax_s,
                 "excluded_rois": dict(excluded_rois),
             },
             signal_activity_stats=GroupTimecourseStats(
@@ -467,7 +419,7 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
                 condition_b=cond_b_contribution_samples,
                 labels=contribution_label_rows,
             ),
-            source_subject_stats_files=[str(snapshot.stats_file.path) for snapshot in snapshots],
+            source_subject_stats_files=[str(item.stats_file.path) for item in inputs],
             source_electrodes_files=sorted(used_electrode_paths),
             excluded_rois=excluded_rois,
             cluster_p_values=cluster_p_values_out,
@@ -478,11 +430,11 @@ class ConditionTestGroupProcessing(BaseTrialStatsGroupProcessing):
 
 def _collect_manual_roi_records(
     *,
-    snapshots: Sequence[_ConditionTestStatsSnapshot],
+    inputs: Sequence[_ConditionTestStatsInput],
     manual_region_channels: dict[str, dict[str, list[str]]],
 ) -> dict[str, list[_ContributionRecord]]:
     return collect_manual_roi_records(
-        snapshots=snapshots,
+        inputs=inputs,
         manual_region_channels=manual_region_channels,
         create_record=_create_contribution_record,
     )
@@ -490,11 +442,11 @@ def _collect_manual_roi_records(
 
 def _collect_atlas_roi_records(
     *,
-    snapshots: Sequence[_ConditionTestStatsSnapshot],
+    inputs: Sequence[_ConditionTestStatsInput],
     atlas_name: str,
 ) -> tuple[dict[str, list[_ContributionRecord]], set[str]]:
     return collect_atlas_roi_records(
-        snapshots=snapshots,
+        inputs=inputs,
         atlas_name=atlas_name,
         create_record=_create_contribution_record,
     )
@@ -503,29 +455,33 @@ def _collect_atlas_roi_records(
 def _create_contribution_record(
     roi: str,
     subject: str,
-    snapshot: _ConditionTestStatsSnapshot,
+    item: _ConditionTestStatsInput,
     idx: int,
 ) -> _ContributionRecord:
+    result = item.result
     return _ContributionRecord(
         roi=roi,
         subject=subject,
-        channel=snapshot.channel_names[idx],
-        source_stats_file=str(snapshot.stats_file.path),
-        values=np.asarray(snapshot.raw.metric_values[idx, :], dtype=np.float64),
-        condition_a_values=np.asarray(snapshot.raw.condition_a_mean_values[idx, :], dtype=np.float64),
-        condition_b_values=np.asarray(snapshot.raw.condition_b_mean_values[idx, :], dtype=np.float64),
+        channel=item.channel_names[idx],
+        source_stats_file=str(item.stats_file.path),
+        values=np.asarray(
+            _condition_metric_values(result, item.source_metric)[idx, :],
+            dtype=np.float64,
+        ),
+        condition_a_values=np.asarray(result.signal_activity.condition_a.mean[idx, :], dtype=np.float64),
+        condition_b_values=np.asarray(result.signal_activity.condition_b.mean[idx, :], dtype=np.float64),
         permuted_t_values=(
-            np.asarray(snapshot.raw.permuted_t_values[:, idx, :], dtype=np.float32)
-            if snapshot.raw.permuted_t_values is not None
+            np.asarray(result.contrast.permuted_t_values[:, idx, :], dtype=np.float32)
+            if result.contrast.permuted_t_values is not None
             else None
         ),
     )
 
 
-def _validate_group_compatibility(snapshots: Sequence[_ConditionTestStatsSnapshot]) -> None:
+def _validate_group_compatibility(inputs: Sequence[_ConditionTestStatsInput]) -> None:
     validate_group_compatibility(
-        snapshots,
-        empty_message="At least one condition_test snapshot is required.",
+        inputs,
+        empty_message="At least one condition_test input is required.",
         non_channel_message=(
             "condition_test_group requires channel-level condition_test inputs."
         ),
@@ -536,396 +492,79 @@ def _validate_group_compatibility(snapshots: Sequence[_ConditionTestStatsSnapsho
     )
 
 
-def _build_signature(
-    *,
-    stats_file: BIDSFile,
-    condition_labels: tuple[str, str],
-    time_axis_s: np.ndarray,
-    analysis_level: str,
-    binning_mode: str,
-    window_ms: float,
-    n_bins: int,
-    effective_n_bins: int,
-    activity_zscore: str,
-    activity_baseline_tmin_s: float,
-    activity_baseline_tmax_s: float,
-) -> _SnapshotSignature:
-    return _SnapshotSignature(
-        task=str(stats_file.get("task") or ""),
-        source_desc=str(stats_file.get("desc") or ""),
-        condition_labels=condition_labels,
-        time_axis_hash=hash_time_axis(time_axis_s),
-        time_axis_len=int(len(time_axis_s)),
-        binning_mode=str(binning_mode or "none"),
-        window_ms=float(window_ms),
-        n_bins=int(n_bins),
-        effective_n_bins=int(effective_n_bins),
-        activity_zscore=str(activity_zscore or "none"),
-        activity_baseline_tmin_s=float(activity_baseline_tmin_s),
-        activity_baseline_tmax_s=float(activity_baseline_tmax_s),
-        analysis_level=str(analysis_level or "channel"),
-    )
-
-
-def _read_snapshot_signature(
+def _read_input_signature(
     stats_file: BIDSFile,
     *,
     source_metric: str,
-) -> _SnapshotSignature:
-    raw = _load_raw_trial_stats(stats_file, source_metric=source_metric)
-    return _build_signature(
-        stats_file=stats_file,
-        condition_labels=raw.condition_labels,
-        time_axis_s=raw.time_axis_s,
-        analysis_level=raw.analysis_level,
-        binning_mode=raw.binning_mode,
-        window_ms=raw.window_ms,
-        n_bins=raw.n_bins,
-        effective_n_bins=raw.effective_n_bins,
-        activity_zscore=raw.activity_zscore,
-        activity_baseline_tmin_s=raw.activity_baseline_tmin_s,
-        activity_baseline_tmax_s=raw.activity_baseline_tmax_s,
-    )
+) -> SubjectStatsSignature:
+    item = _load_trial_stats_input(stats_file, source_metric=source_metric)
+    return item.signature
 
 
-def _load_trial_stats_snapshot(
+def _load_trial_stats_input(
     stats_file: BIDSFile,
     *,
     source_metric: str,
-) -> _ConditionTestStatsSnapshot:
-    raw = _load_raw_trial_stats(stats_file, source_metric=source_metric)
-    raw_subject = str(stats_file.get("subject") or stats_file.get("sub") or "").strip()
-    subject = normalize_subject_value(raw_subject)
-
-    channel_index_by_norm: dict[str, int] = {}
-    for idx, name in enumerate(raw.channels):
-        key = normalize_channel_name(name)
-        channel_index_by_norm.setdefault(key, idx)
-
-    signature = _build_signature(
-        stats_file=stats_file,
-        condition_labels=raw.condition_labels,
-        time_axis_s=raw.time_axis_s,
-        analysis_level=raw.analysis_level,
-        binning_mode=raw.binning_mode,
-        window_ms=raw.window_ms,
-        n_bins=raw.n_bins,
-        effective_n_bins=raw.effective_n_bins,
-        activity_zscore=raw.activity_zscore,
-        activity_baseline_tmin_s=raw.activity_baseline_tmin_s,
-        activity_baseline_tmax_s=raw.activity_baseline_tmax_s,
+) -> _ConditionTestStatsInput:
+    result = load_result_via_public_loader(stats_file, load_condition_test_result)
+    _validate_condition_metric_available(
+        result,
+        source_metric=source_metric,
+        filename=stats_file.path.name,
     )
-    return _ConditionTestStatsSnapshot(
-        stats_file=stats_file,
-        subject=subject,
-        task=str(stats_file.get("task") or ""),
-        source_desc=str(stats_file.get("desc") or ""),
-        condition_labels=raw.condition_labels,
-        channel_names=raw.channels,
-        channel_index_by_norm=channel_index_by_norm,
-        time_axis_s=raw.time_axis_s,
-        analysis_level=raw.analysis_level,
-        binning_mode=raw.binning_mode,
-        window_ms=raw.window_ms,
-        n_bins=raw.n_bins,
-        effective_n_bins=raw.effective_n_bins,
-        source_ieeg_files=raw.source_ieeg_files,
-        source_electrodes_files=raw.source_electrodes_files,
-        signature=signature,
-        raw=raw,
+    base_input = build_subject_stats_input(
+        stats_file,
+        result,
+        extra_key_parts={"primary_condition_metric": source_metric},
+    )
+    return _ConditionTestStatsInput(
+        stats_file=base_input.stats_file,
+        result=result,
+        subject=base_input.subject,
+        task=base_input.task,
+        source_desc=base_input.source_desc,
+        condition_labels=base_input.condition_labels,
+        channel_names=base_input.channel_names,
+        channel_index_by_norm=base_input.channel_index_by_norm,
+        time_axis_s=base_input.time_axis_s,
+        analysis_level=base_input.analysis_level,
+        binning_mode=base_input.binning_mode,
+        window_ms=base_input.window_ms,
+        n_bins=base_input.n_bins,
+        effective_n_bins=base_input.effective_n_bins,
+        source_ieeg_files=base_input.source_ieeg_files,
+        source_electrodes_files=base_input.source_electrodes_files,
+        signature=base_input.signature,
+        source_metric=source_metric,
     )
 
 
-def _load_raw_trial_stats(
-    stats_file: BIDSFile,
-    *,
+def _condition_metric_values(
+    result: ConditionTestProcessingResult,
     source_metric: str,
-) -> _RawConditionTestStatsData:
-    """Dispatch to the appropriate format-specific loader based on file extension."""
-    extension = (stats_file.extension or "").lower()
-    if extension == ".mat":
-        return _load_raw_from_matlab(stats_file, source_metric=source_metric)
-    return _load_raw_from_hdf5(stats_file, source_metric=source_metric)
-
-
-def _load_raw_from_hdf5(
-    stats_file: BIDSFile,
-    *,
-    source_metric: str,
-) -> _RawConditionTestStatsData:
-    with stats_file.ensure_loaded() as fh:
-        analysis_level = str_scalar(dataset_or_none(fh, "meta/analysis_level"), default="channel")
-        axis_name = "channel" if analysis_level == "channel" else "region"
-        if axis_name not in fh["axes"]:
-            raise ValueError(
-                f"{stats_file.path.name}: axes/{axis_name} dataset is required."
-            )
-        channels = decode_str_array(np.asarray(fh["axes"][axis_name][:]))
-        time_axis_s = np.asarray(fh["axes"]["time_s"][:], dtype=np.float64)
-        condition_labels = _read_condition_labels_hdf5(fh)
-        metric_values = _load_metric_matrix_hdf5(
-            fh,
-            source_metric=source_metric,
-            condition_labels=condition_labels,
-            n_channels=len(channels),
-            n_times=len(time_axis_s),
-        )
-        n_ch = len(channels)
-        n_t = len(time_axis_s)
-        _empty_cond = np.full((n_ch, n_t), np.nan, dtype=np.float64)
-        raw_a_ds = dataset_or_none(fh, "data/signal_activity/condition_a/mean")
-        condition_a_mean_values = (
-            coerce_feature_time(
-                np.asarray(raw_a_ds[:], dtype=np.float64),
-                n_features=n_ch,
-                n_times=n_t,
-            )
-            if raw_a_ds is not None
-            else _empty_cond.copy()
-        )
-        raw_b_ds = dataset_or_none(fh, "data/signal_activity/condition_b/mean")
-        condition_b_mean_values = (
-            coerce_feature_time(
-                np.asarray(raw_b_ds[:], dtype=np.float64),
-                n_features=n_ch,
-                n_times=n_t,
-            )
-            if raw_b_ds is not None
-            else _empty_cond.copy()
-        )
-        binning_mode = str_scalar(dataset_or_none(fh, "meta/binning_mode"), default="none")
-        window_ms = float_scalar(dataset_or_none(fh, "meta/window_ms"), default=0.0)
-        n_bins = int_scalar(dataset_or_none(fh, "meta/n_bins"), default=0)
-        effective_n_bins = int_scalar(
-            dataset_or_none(fh, "meta/effective_n_bins"),
-            default=len(time_axis_s),
-        )
-        activity_zscore_ds = dataset_or_none(fh, "meta/activity_zscore")
-        if activity_zscore_ds is None:
-            raise ValueError(
-                f"{stats_file.path.name}: unsupported legacy condition_test_group input; "
-                "meta/activity_zscore is required."
-            )
-        activity_zscore = str_scalar(activity_zscore_ds, default="none")
-        activity_baseline_tmin_s = float_scalar(
-            dataset_or_none(fh, "meta/activity_baseline_tmin_s"),
-            default=-0.2,
-        )
-        activity_baseline_tmax_s = float_scalar(
-            dataset_or_none(fh, "meta/activity_baseline_tmax_s"),
-            default=0.0,
-        )
-        source_ieeg_files = decode_str_array(
-            np.asarray(fh["provenance"]["source_ieeg_files"][:], dtype=object)
-        ) if "provenance" in fh and "source_ieeg_files" in fh["provenance"] else []
-        source_electrodes_files = decode_str_array(
-            np.asarray(fh["provenance"]["source_electrodes_files"][:], dtype=object)
-        ) if "provenance" in fh and "source_electrodes_files" in fh["provenance"] else []
-        perm_ds = dataset_or_none(fh, "stats/condition_contrast/permuted_t_values")
-        permuted_t_values: np.ndarray | None = (
-            np.asarray(perm_ds[:], dtype=np.float32) if perm_ds is not None else None
-        )
-
-    return _RawConditionTestStatsData(
-        analysis_level=analysis_level,
-        channels=channels,
-        time_axis_s=time_axis_s,
-        metric_values=metric_values,
-        condition_a_mean_values=condition_a_mean_values,
-        condition_b_mean_values=condition_b_mean_values,
-        condition_labels=condition_labels,
-        binning_mode=binning_mode,
-        window_ms=window_ms,
-        n_bins=n_bins,
-        effective_n_bins=effective_n_bins,
-        activity_zscore=activity_zscore,
-        activity_baseline_tmin_s=activity_baseline_tmin_s,
-        activity_baseline_tmax_s=activity_baseline_tmax_s,
-        source_ieeg_files=source_ieeg_files,
-        source_electrodes_files=source_electrodes_files,
-        permuted_t_values=permuted_t_values,
-    )
-
-
-def _read_condition_labels_hdf5(fh: h5py.File) -> tuple[str, str]:
-    labels_dataset = dataset_or_none(fh, "meta/condition_labels")
-    if labels_dataset is not None:
-        labels = decode_str_array(np.asarray(labels_dataset[:], dtype=object))
-        if len(labels) >= 2:
-            return labels[0], labels[1]
-    return "condition_a", "condition_b"
-
-
-def _load_metric_matrix_hdf5(
-    fh: h5py.File,
-    *,
-    source_metric: str,
-    condition_labels: tuple[str, str],
-    n_channels: int,
-    n_times: int,
 ) -> np.ndarray:
     if source_metric == "mean_difference":
-        dataset = dataset_or_none(fh, "data/signal_activity/difference/mean")
-        if dataset is None:
-            raise ValueError(f"{fh.filename}: data/signal_activity/difference/mean dataset is required.")
-        raw = np.asarray(dataset[:], dtype=np.float64)
-        return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
-
+        return np.asarray(result.difference.mean, dtype=np.float64)
     if source_metric == "t_values":
-        dataset = dataset_or_none(fh, "stats/condition_contrast/t_values")
-        if dataset is None:
-            raise ValueError(f"{fh.filename}: stats/condition_contrast/t_values dataset is required.")
-        raw = np.asarray(dataset[:], dtype=np.float64)
-        return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
-
-    metric_name = "condition_a" if source_metric == "condition_a_mean" else "condition_b"
-    dataset = dataset_or_none(fh, f"data/signal_activity/{metric_name}/mean")
-    if dataset is None:
-        raise ValueError(
-            f"{fh.filename}: data/signal_activity/{metric_name}/mean dataset is required "
-            f"for source_metric={source_metric!r}."
-        )
-    raw = np.asarray(dataset[:], dtype=np.float64)
-    return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
+        return np.asarray(result.contrast.t_values, dtype=np.float64)
+    if source_metric == "condition_a_mean":
+        return np.asarray(result.signal_activity.condition_a.mean, dtype=np.float64)
+    if source_metric == "condition_b_mean":
+        return np.asarray(result.signal_activity.condition_b.mean, dtype=np.float64)
+    raise ValueError(f"Unsupported primary_condition_metric={source_metric!r}.")
 
 
-def _load_raw_from_matlab(
-    stats_file: BIDSFile,
+def _validate_condition_metric_available(
+    result: ConditionTestProcessingResult,
     *,
     source_metric: str,
-) -> _RawConditionTestStatsData:
-    with stats_file.ensure_loaded() as mat:
-        data = mat["data"]
-        meta = data.meta
-        axes = data.axes
-        prov = getattr(data, "provenance", None)
-
-        analysis_level = mat_str(meta.analysis_level, default="channel")
-        axis_attr = "channel" if analysis_level == "channel" else "region"
-        channels = mat_str_list(getattr(axes, axis_attr, None))
-        if not channels:
-            raise ValueError(
-                f"{stats_file.path.name}: axes.{axis_attr} array is required in .mat file."
-            )
-
-        time_axis_s = np.asarray(axes.time_s, dtype=np.float64).ravel()
-        condition_labels = _mat_condition_labels(meta)
-        metric_values = _load_metric_matrix_mat(
-            data,
-            source_metric=source_metric,
-            condition_labels=condition_labels,
-            n_channels=len(channels),
-            n_times=len(time_axis_s),
-            filename=stats_file.path.name,
-        )
-        n_ch = len(channels)
-        n_t = len(time_axis_s)
-        _empty_cond = np.full((n_ch, n_t), np.nan, dtype=np.float64)
-        means = data.means
-        safe_a = matlab_safe_name(condition_labels[0])
-        safe_b = matlab_safe_name(condition_labels[1])
-        cond_a_array = getattr(means, safe_a, None)
-        if cond_a_array is not None:
-            condition_a_mean_values = coerce_feature_time(
-                np.asarray(cond_a_array, dtype=np.float64), n_features=n_ch, n_times=n_t
-            )
-        else:
-            condition_a_mean_values = _empty_cond.copy()
-        cond_b_array = getattr(means, safe_b, None)
-        if cond_b_array is not None:
-            condition_b_mean_values = coerce_feature_time(
-                np.asarray(cond_b_array, dtype=np.float64), n_features=n_ch, n_times=n_t
-            )
-        else:
-            condition_b_mean_values = _empty_cond.copy()
-        binning_mode = mat_str(getattr(meta, "binning_mode", None), default="none")
-        window_ms = mat_float(getattr(meta, "window_ms", None), default=0.0)
-        n_bins = mat_int(getattr(meta, "n_bins", None), default=0)
-        effective_n_bins = mat_int(
-            getattr(meta, "effective_n_bins", None), default=len(time_axis_s)
-        )
-        activity_zscore_raw = getattr(meta, "activity_zscore", None)
-        if activity_zscore_raw is None:
-            raise ValueError(
-                f"{stats_file.path.name}: unsupported legacy condition_test_group input; "
-                "meta.activity_zscore is required."
-            )
-        activity_zscore = mat_str(activity_zscore_raw, default="none")
-        activity_baseline_tmin_s = mat_float(
-            getattr(meta, "activity_baseline_tmin_s", None),
-            default=-0.2,
-        )
-        activity_baseline_tmax_s = mat_float(
-            getattr(meta, "activity_baseline_tmax_s", None),
-            default=0.0,
-        )
-        source_ieeg_files: list[str] = []
-        source_electrodes_files: list[str] = []
-        if prov is not None:
-            source_ieeg_files = mat_str_list(getattr(prov, "source_ieeg_files", None))
-            source_electrodes_files = mat_str_list(getattr(prov, "source_electrodes_files", None))
-
-    return _RawConditionTestStatsData(
-        analysis_level=analysis_level,
-        channels=channels,
-        time_axis_s=time_axis_s,
-        metric_values=metric_values,
-        condition_a_mean_values=condition_a_mean_values,
-        condition_b_mean_values=condition_b_mean_values,
-        condition_labels=condition_labels,
-        binning_mode=binning_mode,
-        window_ms=window_ms,
-        n_bins=n_bins,
-        effective_n_bins=effective_n_bins,
-        activity_zscore=activity_zscore,
-        activity_baseline_tmin_s=activity_baseline_tmin_s,
-        activity_baseline_tmax_s=activity_baseline_tmax_s,
-        source_ieeg_files=source_ieeg_files,
-        source_electrodes_files=source_electrodes_files,
-        permuted_t_values=None,
-    )
-
-
-def _mat_condition_labels(meta: Any) -> tuple[str, str]:
-    labels = mat_str_list(getattr(meta, "trial_count_labels", None))
-    if len(labels) >= 2:
-        return labels[0], labels[1]
-    return "condition_a", "condition_b"
-
-
-def _load_metric_matrix_mat(
-    data: Any,
-    *,
-    source_metric: str,
-    condition_labels: tuple[str, str],
-    n_channels: int,
-    n_times: int,
     filename: str,
-) -> np.ndarray:
-    means = data.means
-    stats = data.stats
-
-    if source_metric == "mean_difference":
-        raw = np.asarray(means.difference, dtype=np.float64)
-        return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
-
-    if source_metric == "t_values":
-        raw = np.asarray(stats.t_values, dtype=np.float64)
-        return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
-
-    safe_a = matlab_safe_name(condition_labels[0])
-    safe_b = matlab_safe_name(condition_labels[1])
-    attr_name = safe_a if source_metric == "condition_a_mean" else safe_b
-    metric_array = getattr(means, attr_name, None)
-    if metric_array is None:
+) -> None:
+    available = result.metadata.get("available_condition_metrics")
+    if not available:
+        available = result.available_condition_metrics()
+    if source_metric not in set(str(item) for item in available):
         raise ValueError(
-            f"{filename}: means.{attr_name!r} field is required "
-            f"for source_metric={source_metric!r}."
+            f"primary_condition_metric={source_metric!r} is not available in "
+            f"condition_test file: {filename}."
         )
-    raw = np.asarray(metric_array, dtype=np.float64)
-    return coerce_feature_time(raw, n_features=n_channels, n_times=n_times)
-
-
-
-
-

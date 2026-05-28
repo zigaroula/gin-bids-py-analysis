@@ -88,6 +88,7 @@ def write_matlab_tree(
         {root_name: _to_matlab_value(tree)},
         do_compression=True,
         long_field_names=True,
+        oned_as="column",
     )
 
 

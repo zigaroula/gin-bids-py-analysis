@@ -65,11 +65,11 @@ class HilbertProcessingWriter(BaseProcessingWriter):
         /axes
             /channel              str      [n_channels]          — labels after montaging
             /smoothing_window_ms  int32    [n_smoothing_windows] — sorted ascending
-            /band_limits_hz       float32  [n_bins]              — bin edges (clamped)
             /time_s               float64  [n_down]              — envelope time axis
         /meta
             /sampling_frequency_hz     scalar float64  — original recording fs
             /downsampled_frequency_hz  scalar float64  — envelope fs
+            /band_limits_hz            float32 [n_bins] — bin edges (clamped)
             /montage_mode              str
             /unit                      str  ("percent" or "amplitude")
             /dimension_order           str  "smoothing_window × channel × time"
@@ -96,7 +96,7 @@ class HilbertProcessingWriter(BaseProcessingWriter):
         else:
             tree = result.to_output_tree(pipeline_version=_package_version())
             if self.params.output_format == "matlab":
-                write_matlab_tree(output_path, tree)
+                write_matlab_tree(output_path, tree, root_name="hilbert")
             else:
                 write_hdf5_tree(output_path, tree)
 

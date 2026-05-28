@@ -43,7 +43,7 @@ from gin_bids_py_analysis.processing.utils.trial_resolver import ResolvedTrial, 
 # Trial slope recipe parameters  (edit these)
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"C:\GRE\data\clarissa_bids")
+BIDS_ROOT = Path(r"E:\Boulot\clarissa_bids")
 
 # Set to a BIDS subject id to restrict the full pipeline, or None for all subjects.
 SUBJECT: str | None = None
@@ -58,7 +58,7 @@ TRIAL_SLOPE_OUTPUT_DESCRIPTION = "onset"
 # Hilbert derivative used as input for trial-slope stats.
 HILBERT_OUTPUT_DESCRIPTION = "bga"
 HILBERT_SMOOTHING_WINDOW_MS_FOR_STATS = 250
-HILBERT_OUTPUT_FORMAT: Literal["hdf5", "brainvision"] = "brainvision"
+HILBERT_OUTPUT_FORMAT: Literal["hdf5", "brainvision", "matlab"] = "matlab"
 
 # Pipeline toggles that usually need to stay synchronized across scripts.
 ENABLE_HILBERT_NOTCH_FILTER = True
@@ -112,6 +112,7 @@ EXPORT_CONDITION_B_COLOR = "tomato"
 HILBERT_FILE_FILTERS = {
     "suffix": "ieeg",
     "extension": ".vhdr",
+    "task": "valuation"
 }
 
 HILBERT_SECONDARY_FILTERS = [
@@ -120,6 +121,7 @@ HILBERT_SECONDARY_FILTERS = [
         "suffix": "events",
         "extension": ".tsv",
         "datatype": "ieeg",
+        "task": "valuation"
     },
 ]
 
@@ -155,7 +157,7 @@ HILBERT_CHANNELS_TO_EXCLUDE_FOR_MONTAGE = (
 
 USE_MATLAB_ZSCORES: bool = True
 
-MATLAB_ZSCORES_PATH = Path(r"D:\data_clarissa\subjects.mat")
+MATLAB_ZSCORES_PATH = Path(r"E:\data_clarissa\subjects.mat")
 MATLAB_ZSCORE_COLUMN_INDEX = 6  # 0-based index for column 7 in trial_characteristics1
 
 # ---------------------------------------------------------------------------
@@ -164,12 +166,13 @@ MATLAB_ZSCORE_COLUMN_INDEX = 6  # 0-based index for column 7 in trial_characteri
 
 TRIAL_SLOPE_IEEG_FILTERS = {
     "suffix": "ieeg",
-    "extension": ".vhdr",
+    "extension": ".mat",
+    "task": "valuation"
 }
 
 TRIAL_SLOPE_SECONDARY_FILTERS = [
-    {"scope": "raw", "datatype": "beh", "suffix": "beh", "extension": ".tsv"},
-    {"scope": "raw", "datatype": "ieeg", "suffix": "events", "extension": ".tsv"},
+    {"scope": "raw", "datatype": "beh", "suffix": "beh", "extension": ".tsv", "task": "valuation"},
+    {"scope": "raw", "datatype": "ieeg", "suffix": "events", "extension": ".tsv", "task": "valuation"},
     {"scope": "raw", "datatype": "ieeg", "suffix": "electrodes", "extension": ".tsv"},
     {
         "scope": "hfo_spike_detection",
@@ -177,6 +180,7 @@ TRIAL_SLOPE_SECONDARY_FILTERS = [
         "suffix": "events",
         "extension": ".tsv",
         "desc": "hfospikes",
+        "task": "valuation"
     },
 ]
 
@@ -233,7 +237,7 @@ TRIAL_SLOPE_ACTIVITY_SUMMARY = {
     "kind": "anchor_to_response_mean",
     "response": {"source": "table_column", "column": "RT", "units": "s"},
 }
-TRIAL_SLOPE_N_PERMUTATIONS = 500
+TRIAL_SLOPE_N_PERMUTATIONS = 0
 
 _PARTICIPANTS_SOURCE_SUBJECT_COLUMNS = (
     "source_subject_id",
@@ -382,10 +386,10 @@ def event_sample_shift_for_subject(
 
 
 ROI_CSV_FILES = {
-    "vmPFC": Path(r"D:\Boulot\csv\PFCvm_elecs_tbl.csv"),
-    "aIns": Path(r"D:\Boulot\csv\aINS_b5_finite_channels.csv"),
-    "daINS": Path(r"D:\Boulot\csv\aINS_dors_elecs_tbl.csv"),
-    "vaINS": Path(r"D:\Boulot\csv\aINS_vent_elecs_tbl.csv"),
+    "vmPFC": Path(r"E:\Boulot\csv\PFCvm_elecs_tbl.csv"),
+    "aIns": Path(r"E:\Boulot\csv\aINS_b5_finite_channels.csv"),
+    "daINS": Path(r"E:\Boulot\csv\aINS_dors_elecs_tbl.csv"),
+    "vaINS": Path(r"E:\Boulot\csv\aINS_vent_elecs_tbl.csv"),
 }
 
 GROUP_ROI_COMBINATIONS = {}
@@ -410,9 +414,9 @@ HFO_SPIKE_EVENT_WINDOW_TMAX_S = 6.0
 MAX_RT_S: float = 20.0
 MIN_RATING: float = 0.0
 
-REGRESSION_OUTPUT_FORMAT: Literal["hdf5", "matlab"] = "hdf5"
+REGRESSION_OUTPUT_FORMAT: Literal["hdf5", "matlab"] = "matlab"
 REGRESSION_INCLUDE_EPOCHS = False
-REGRESSION_GROUP_OUTPUT_FORMAT: Literal["hdf5", "matlab"] = "hdf5"
+REGRESSION_GROUP_OUTPUT_FORMAT: Literal["hdf5", "matlab"] = "matlab"
 
 TRIAL_SLOPE_PRESET_OVERRIDES: dict[str, dict[str, Any]] = {
     "regular": {},
@@ -488,7 +492,7 @@ class TrialSlopeRecipe:
     trial_slope_output_description: str
     hilbert_output_description: str
     hilbert_smoothing_window_ms_for_stats: int
-    hilbert_output_format: Literal["hdf5", "brainvision"]
+    hilbert_output_format: Literal["hdf5", "brainvision", "matlab"]
     enable_hilbert_notch_filter: bool
     hilbert_notch_filter_freqs: Sequence[float]
     use_hfo_spike_event_filter: bool
@@ -518,6 +522,8 @@ class TrialSlopeRecipe:
 
     @property
     def hilbert_derivative_description(self) -> str:
+        if self.hilbert_output_format in {"hdf5", "matlab"}:
+            return self.hilbert_output_description
         return (
             f"{self.hilbert_output_description}"
             f"sm{self.hilbert_smoothing_window_ms_for_stats}"

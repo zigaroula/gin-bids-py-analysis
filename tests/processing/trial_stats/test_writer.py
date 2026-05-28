@@ -140,7 +140,7 @@ def test_base_writer_writes_shared_matlab_with_safe_condition_names(tmp_path: Pa
         str(output_path),
         squeeze_me=True,
         struct_as_record=False,
-    )["data"]
+    )["dummy_subject"]
 
     assert output_path.suffix == ".mat"
     assert hasattr(data.data.signal_activity, "go_no_go")

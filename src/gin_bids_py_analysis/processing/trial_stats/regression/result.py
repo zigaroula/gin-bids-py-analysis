@@ -117,6 +117,10 @@ class RegressionProcessingResult(BaseTrialStatsProcessingResult):
                 },
                 "meta": {
                     "analysis_type": "slope_regression",
+                    "available_regression_metrics": np.array(
+                        self.available_regression_metrics(),
+                        dtype=object,
+                    ),
                     "predictor": str(self.predictor),
                     "predictor_zscore": str(self.predictor_zscore),
                     "predictor_transform_by_condition_json": json.dumps(
@@ -130,6 +134,20 @@ class RegressionProcessingResult(BaseTrialStatsProcessingResult):
             },
         )
         return tree
+
+    def available_regression_metrics(self) -> list[str]:
+        metrics: list[str] = []
+        if (
+            np.asarray(self.regression.condition_a.slope).size
+            and np.asarray(self.regression.condition_b.slope).size
+        ):
+            metrics.append("slope")
+        if (
+            np.asarray(self.regression.condition_a.r_value).size
+            and np.asarray(self.regression.condition_b.r_value).size
+        ):
+            metrics.append("r_value")
+        return metrics
 
     def _build_trial_table_extra_tree(self) -> dict[str, object]:
         """Add predictor trial columns to the trial table."""

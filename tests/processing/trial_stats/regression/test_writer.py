@@ -174,6 +174,10 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
 
     with h5py.File(output_path, "r") as fh:
         assert fh["meta"]["analysis_type"].asstr()[()] == "slope_regression"
+        assert list(fh["meta"]["available_regression_metrics"].asstr()[:]) == [
+            "slope",
+            "r_value",
+        ]
         assert fh["meta"]["activity_zscore"].asstr()[()] == "baseline"
         assert float(fh["meta"]["activity_baseline_tmin_s"][()]) == pytest.approx(-0.2)
         assert float(fh["meta"]["activity_baseline_tmax_s"][()]) == pytest.approx(0.0)
@@ -207,6 +211,7 @@ def test_writer_outputs_hdf5_and_loader_roundtrip(tmp_path: Path) -> None:
         result.trial_activity_summary_values.condition_b,
     )
     assert loaded.predictor == "predictor_value"
+    assert loaded.metadata["available_regression_metrics"] == ["slope", "r_value"]
     assert loaded.activity_zscore == "baseline"
     assert loaded.activity_baseline_tmin_s == pytest.approx(-0.2)
     assert loaded.activity_baseline_tmax_s == pytest.approx(0.0)
@@ -228,8 +233,12 @@ def test_writer_outputs_matlab(tmp_path: Path) -> None:
     output_path = writer.write(result)
     assert output_path.suffix == ".mat"
     mat = scipy.io.loadmat(str(output_path), squeeze_me=True, struct_as_record=False)
-    data = mat["data"]
+    data = mat["regression"]
     assert str(data.meta.analysis_type) == "slope_regression"
+    assert list(np.atleast_1d(data.meta.available_regression_metrics)) == [
+        "slope",
+        "r_value",
+    ]
     assert data.stats.regression.accepted.slope.shape == (2, 3)
     assert str(data.trial_activity_summary.kind) == "anchor_to_response_mean"
     loaded = load_regression_result(output_path)
@@ -242,6 +251,7 @@ def test_writer_outputs_matlab(tmp_path: Path) -> None:
         result.trial_activity_summary_values.condition_b,
     )
     assert loaded.epoch_cleaning_audit == result.epoch_cleaning_audit
+    assert loaded.metadata["available_regression_metrics"] == ["slope", "r_value"]
 
 
 def test_loader_falls_back_to_empty_when_no_trial_activity_summary(tmp_path: Path) -> None:

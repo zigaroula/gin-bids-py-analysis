@@ -104,6 +104,34 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
             condition_b = labels[1] if len(labels) >= 2 else "condition_b"
         else:
             condition_a, condition_b = "condition_a", "condition_b"
+        available_metrics_ds = dataset_or_none(fh, "meta/available_condition_metrics")
+        if available_metrics_ds is not None:
+            available_condition_metrics = decode_str_array(
+                np.asarray(available_metrics_ds[:], dtype=object)
+            )
+        else:
+            available_condition_metrics = [
+                metric
+                for metric, present in {
+                    "mean_difference": dataset_or_none(
+                        fh, "data/signal_activity/difference/mean"
+                    )
+                    is not None,
+                    "t_values": dataset_or_none(
+                        fh, "stats/condition_contrast/t_values"
+                    )
+                    is not None,
+                    "condition_a_mean": dataset_or_none(
+                        fh, f"data/signal_activity/{condition_a}/mean"
+                    )
+                    is not None,
+                    "condition_b_mean": dataset_or_none(
+                        fh, f"data/signal_activity/{condition_b}/mean"
+                    )
+                    is not None,
+                }.items()
+                if present
+            ]
 
         # --- trial counts ---
         trial_counts_ds = dataset_or_none(fh, "meta/trial_counts")
@@ -367,6 +395,7 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
             "trial_activity_summary_label": trial_activity_summary_label,
             "epoch_cleaning": epoch_cleaning,
             "epoch_cleaning_audit": epoch_cleaning_audit,
+            "available_condition_metrics": available_condition_metrics,
             "n_permutations": (
                 permuted_t_values.shape[0]
                 if permuted_t_values is not None
@@ -437,13 +466,14 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
     from gin_bids_py_analysis.processing.utils.matlab import (
         mat_float,
         mat_int,
+        mat_root,
         mat_str,
         mat_str_list,
     )
     from scipy.io import loadmat
 
     mat = loadmat(str(path), squeeze_me=True, struct_as_record=False)
-    data = mat["data"]
+    data = mat_root(mat, "conditiontest")
     meta = data.meta
     _require_v2_schema_mat(meta, path.name)
     axes = data.axes
@@ -470,6 +500,9 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
         condition_b = labels[1] if len(labels) >= 2 else "condition_b"
     else:
         condition_a, condition_b = "condition_a", "condition_b"
+    available_condition_metrics = mat_str_list(
+        getattr(meta, "available_condition_metrics", None)
+    )
 
     # --- trial counts ---
     trial_counts_raw = getattr(meta, "trial_counts", None)
@@ -510,6 +543,20 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
     condition_a_mean = _mat_arr(getattr(signal_activity, condition_a, None), "mean")
     condition_b_mean = _mat_arr(getattr(signal_activity, condition_b, None), "mean")
     mean_difference = _mat_arr(signal_activity.difference, "mean")
+    if not available_condition_metrics:
+        available_condition_metrics = [
+            metric
+            for metric, present in {
+                "mean_difference": hasattr(signal_activity, "difference")
+                and hasattr(signal_activity.difference, "mean"),
+                "t_values": hasattr(stats, "t_values"),
+                "condition_a_mean": hasattr(signal_activity, condition_a)
+                and hasattr(getattr(signal_activity, condition_a), "mean"),
+                "condition_b_mean": hasattr(signal_activity, condition_b)
+                and hasattr(getattr(signal_activity, condition_b), "mean"),
+            }.items()
+            if present
+        ]
 
     # --- uncertainty ---
     condition_a_sem = _mat_arr(getattr(signal_activity, condition_a, None), "sem")
@@ -682,6 +729,7 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
             "trial_activity_summary_label": trial_activity_summary_label,
             "epoch_cleaning": epoch_cleaning,
             "epoch_cleaning_audit": epoch_cleaning_audit,
+            "available_condition_metrics": available_condition_metrics,
         },
         signal_activity=ConditionSignalActivity(
             condition_a=SignalActivityEstimate(mean=condition_a_mean, sem=condition_a_sem),

@@ -45,7 +45,7 @@ class BaseTrialStatsProcessingWriter(BaseProcessingWriter, ABC):
             pipeline_version=_package_version(),
         )
         if self.params.output_format == "matlab":
-            write_matlab_tree(output_path, tree)
+            write_matlab_tree(output_path, tree, root_name=self._pipeline_name())
         else:
             write_hdf5_tree(output_path, tree)
         self._write_trial_table_tsv(result, _trial_table_path(output_path))

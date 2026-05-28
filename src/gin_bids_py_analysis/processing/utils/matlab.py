@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -90,6 +91,34 @@ def make_struct(**fields: object) -> np.ndarray:
     for key, value in fields.items():
         arr[key][0] = value
     return arr
+
+
+def mat_root(
+    mat: Mapping[str, Any],
+    preferred: str,
+    *,
+    fallback: str = "data",
+) -> Any:
+    """Return the top-level MATLAB variable for a processing result.
+
+    Newer exports use a pipeline-specific root variable (for example
+    ``hilbert``), while older files used the generic ``data`` variable.
+    """
+    if preferred in mat:
+        return _unwrap_mat_root(mat[preferred])
+    if fallback in mat:
+        return _unwrap_mat_root(mat[fallback])
+    available = ", ".join(sorted(k for k in mat if not k.startswith("__")))
+    raise KeyError(
+        f"MATLAB file does not contain root variable {preferred!r}"
+        f" or fallback {fallback!r}. Available variables: {available or '<none>'}."
+    )
+
+
+def _unwrap_mat_root(value: Any) -> Any:
+    if isinstance(value, np.ndarray) and value.size == 1 and not value.dtype.names:
+        return value.item()
+    return value
 
 
 def mat_str(value: Any, *, default: str = "") -> str:
