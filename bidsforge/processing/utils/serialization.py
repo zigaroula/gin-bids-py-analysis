@@ -2,25 +2,31 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping, TypeAlias
 
 import h5py
 import numpy as np
+from numpy.typing import NDArray
 from scipy.io import savemat
 
 from bidsforge.processing.utils.matlab import make_struct, matlab_safe_name
 
-OutputScalar = str | bytes | bool | int | float | np.generic
-OutputValue = (
-    OutputScalar
-    | np.ndarray
-    | list[Any]
-    | tuple[Any, ...]
-    | Mapping[str, Any]
-    | "OutputNode"
-    | None
-)
-OutputTree = Mapping[str, OutputValue]
+if TYPE_CHECKING:
+    OutputScalar: TypeAlias = str | bytes | bool | int | float | np.generic[Any]
+    OutputValue: TypeAlias = (
+        OutputScalar
+        | NDArray[Any]
+        | list[Any]
+        | tuple[Any, ...]
+        | Mapping[str, Any]
+        | "OutputNode"
+        | None
+    )
+    OutputTree: TypeAlias = Mapping[str, OutputValue]
+else:
+    OutputScalar = str | bytes | bool | int | float | np.generic
+    OutputValue = Any
+    OutputTree = Mapping[str, Any]
 
 
 @dataclass(frozen=True)

@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-try:
-    import bids.layout as _layout
-except ImportError:  # pragma: no cover - exercised only without pybids installed
-    class _LayoutModule:
-        class BIDSFile:  # type: ignore[empty-body]
-            pass
 
-    _layout = _LayoutModule()
+class _PyBIDSFileLike(Protocol):
+    path: str | Path
+    entities: Mapping[str, Any]
+
 
 # Maps file extensions to the name of the loader function in data.loader that
 # handles them.  Used by ensure_loaded() when no explicit loader is set.
@@ -45,7 +42,7 @@ class BIDSFile:
     - ``file.path``            — ``pathlib.Path`` to the file
     """
 
-    def __init__(self, pybids_file: _layout.BIDSFile) -> None:
+    def __init__(self, pybids_file: _PyBIDSFileLike) -> None:
         # Eagerly resolve all data from the SQLAlchemy-backed pybids object
         # while we are in the main process and the session is alive.
         # This makes BIDSFile fully pickle-safe for joblib multiprocessing.
