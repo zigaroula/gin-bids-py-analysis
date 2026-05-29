@@ -26,11 +26,12 @@ PUBLIC_GITIGNORE_TEMPLATE = Path("scripts/dev/public.gitignore")
 ALLOWLIST = [
     ".gitignore",
     "README.md",
+    "codemeta.json",
     "pyproject.toml",
     "bidsforge/**",
     "docs/**",
-    "scripts/*.py",
-    "scripts/README.md",
+    "scripts/**",
+    "tests/**",
 ]
 
 OPTIONAL_ALLOWLIST = [
@@ -58,6 +59,7 @@ DENYLIST = [
     "scripts/debug/**",
     "docs/pipelines/hfo_spike_detection.md",
     "bidsforge/processing/hfo_spike_detection/**",
+    "tests/processing/test_hfo_spike_detector_*.py",
 ]
 
 SECRET_PATTERNS = [
