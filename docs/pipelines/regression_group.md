@@ -97,7 +97,7 @@ RegressionGroupParams(
 )
 ```
 
-For larger projects, `scripts/trial_slope_shared.py` contains helper functions for loading ROI definitions from CSV files and combining ROIs before group analysis.
+For larger projects, editable scripts under `scripts/` can contain helper functions for loading ROI definitions from CSV files and combining ROIs before group analysis.
 
 ## Writer Parameters
 

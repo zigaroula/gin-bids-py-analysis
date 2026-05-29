@@ -1,6 +1,6 @@
 """
 HFO/spike detector analysis — run script.
-Edit the parameters below and run: python scripts/run_hfo_spike_detection.py
+Edit the parameters below and run: python scripts/debug/run_hfo_spike_detection.py
 """
 
 from __future__ import annotations

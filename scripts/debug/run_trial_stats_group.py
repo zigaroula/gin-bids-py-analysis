@@ -1,6 +1,6 @@
 """
 Group-level ROI statistics on condition_test outputs - run script.
-Edit the parameters below and run: python scripts/run_trial_stats_group.py
+Edit the parameters below and run: python scripts/debug/run_trial_stats_group.py
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ TRIAL_STATS_FILTERS = {
 PARAMS = ConditionTestGroupParams(
     primary_condition_metric="t_values",
     p_value_correction_method="none",
-    cluster_permutation_method="mne",
+    cluster_permutation_method="custom",
     significance_alpha=0.05,
     roi_mode="manual",
     manual_region_channels={

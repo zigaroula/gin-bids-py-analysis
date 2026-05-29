@@ -3,7 +3,7 @@ Trial statistics visualization script.
 Edit BIDS_ROOT, IEEG_FILTERS, SECONDARY_FILTERS, PARAMS, and RESOLVER below,
 then run:
 
-    python scripts/visualize_trial_stats.py
+    python scripts/debug/visualize_trial_stats.py
 """
 
 from __future__ import annotations

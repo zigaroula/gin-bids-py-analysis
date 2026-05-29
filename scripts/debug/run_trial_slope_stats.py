@@ -1,9 +1,9 @@
 """
 Trial slope statistics on iEEG recordings - run script.
 
-Edit the shared recipe in scripts/trial_slope_shared.py, then run:
+Edit the shared recipe in scripts/debug/trial_slope_shared.py, then run:
 
-    python scripts/run_trial_slope_stats.py
+    python scripts/debug/run_trial_slope_stats.py
 """
 
 from __future__ import annotations

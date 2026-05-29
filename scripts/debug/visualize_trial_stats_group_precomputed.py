@@ -4,7 +4,7 @@ trial statistics group result.
 
 Edit BIDS_ROOT, GROUP_STATS_FILTERS, and GROUP_PARAMS below, then run:
 
-    python scripts/visualize_trial_stats_group_precomputed.py
+    python scripts/debug/visualize_trial_stats_group_precomputed.py
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ BIDS_ROOT = Path(r"E:\CBT\bids")
 GROUP_PARAMS = ConditionTestGroupParams(
     primary_condition_metric="t_values",
     p_value_correction_method="cluster_permutation",
-    cluster_permutation_method="mne",
+    cluster_permutation_method="custom",
     significance_alpha=0.05,
     # roi_mode="atlas",
     # atlas_name="MarsAtlas",

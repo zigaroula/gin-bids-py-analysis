@@ -11,7 +11,7 @@ The script compares, by channel and time point:
 - Python regression.condition_[a|b].slope
 
 Usage:
-    .venv\\Scripts\\python scripts\\compare_b3_vs_python_regression.py
+    .venv\\Scripts\\python scripts\\debug\\compare_b3.py
 """
 
 from __future__ import annotations

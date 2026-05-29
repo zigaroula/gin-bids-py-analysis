@@ -16,8 +16,8 @@ The public snapshot currently includes:
 - `pyproject.toml`
 - `bidsforge/`
 - `docs/`
-- top-level utility scripts in `scripts/*.py`
-- `scripts/README.md`, if present
+- public recipe scripts in `scripts/*.py`
+- `scripts/README.md`
 - optional release files such as `LICENSE`, `LICENSE.md`, `CHANGELOG.md`, and
   `CITATION.cff`
 
@@ -25,9 +25,7 @@ The public snapshot currently excludes:
 
 - `bidsforge/processing/hfo_spike_detection/`
 - `docs/pipelines/hfo_spike_detection.md`
-- `scripts/run_hfo_spike_detection.py`
 - `scripts/dev/`
-- `scripts/debug/`
 - `.github/`
 - local caches, virtual environments, build artifacts, and generated outputs
 

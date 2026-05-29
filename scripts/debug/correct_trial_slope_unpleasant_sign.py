@@ -7,7 +7,7 @@ recomputes group-level ROI results and exports mean-slope figures.
 
 Run from the repository root:
 
-    python scripts/correct_trial_slope_unpleasant_sign.py
+    python scripts/debug/correct_trial_slope_unpleasant_sign.py
 """
 
 from __future__ import annotations

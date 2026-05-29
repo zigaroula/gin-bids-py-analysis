@@ -28,4 +28,4 @@ This directory has three documentation layers. Start with the end-to-end guide i
 
 ## About `scripts/`
 
-The repository-level [scripts directory](../scripts/) contains editable analysis recipes for real projects and quick inspection utilities. They are useful starting points, but the supported Python API is the pipeline pattern documented in the end-to-end and pipeline guides.
+Repository-level scripts can contain editable analysis recipes for real projects and quick inspection utilities. They are useful starting points, but the supported Python API is the pipeline pattern documented in the end-to-end and pipeline guides.

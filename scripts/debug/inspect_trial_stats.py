@@ -4,9 +4,9 @@ visual summary. Supports subject-level `condition_test` / `regression` outputs
 and group-level `condition_test_group` / `regression_group` outputs.
 
 Examples:
-  python scripts/inspect_trial_stats.py --input E:\\CBT\\bids\\derivatives\\condition_test\\sub-01\\ieeg\\sub-01_desc-conditiontest_stats.h5
-  python scripts/inspect_trial_stats.py --bids-root E:\\CBT\\bids
-  python scripts/inspect_trial_stats.py --bids-root E:\\CBT\\bids --no-save-figure
+  python scripts/debug/inspect_trial_stats.py --input E:\\CBT\\bids\\derivatives\\condition_test\\sub-01\\ieeg\\sub-01_desc-conditiontest_stats.h5
+  python scripts/debug/inspect_trial_stats.py --bids-root E:\\CBT\\bids
+  python scripts/debug/inspect_trial_stats.py --bids-root E:\\CBT\\bids --no-save-figure
 """
 
 from __future__ import annotations

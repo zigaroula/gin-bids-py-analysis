@@ -56,7 +56,6 @@ DENYLIST = [
     "outputs/**",
     "scripts/dev/**",
     "scripts/debug/**",
-    "scripts/run_hfo_spike_detection.py",
     "docs/pipelines/hfo_spike_detection.md",
     "bidsforge/processing/hfo_spike_detection/**",
 ]

@@ -13,7 +13,7 @@ Python subject regression HDF5 rows and compares:
 
 Run from the repository root:
 
-    .venv\\Scripts\\python scripts\\compare_b5.py
+    .venv\\Scripts\\python scripts\\debug\\compare_b5.py
 """
 
 from __future__ import annotations

@@ -12,7 +12,7 @@ differ, an optional per-trace normalization (divide by per-trial std) can be
 toggled with the "Norm" button to compare shapes independently of scale.
 
 Usage:
-    .venv\\Scripts\\python scripts\\compare_b1_vs_bids_raw.py
+    .venv\\Scripts\\python scripts\\debug\\compare_b1.py
 """
 
 from __future__ import annotations

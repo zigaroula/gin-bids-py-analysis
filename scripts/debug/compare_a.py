@@ -12,7 +12,7 @@ BIDS raw:
     contacts, e.g. ``PD02PD01`` -> ``PD02 - PD01``.
 
 Usage:
-    .venv\\Scripts\\python scripts\\compare_a.py
+    .venv\\Scripts\\python scripts\\debug\\compare_a.py
 """
 
 from __future__ import annotations

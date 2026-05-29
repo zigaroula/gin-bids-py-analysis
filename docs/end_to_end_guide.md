@@ -238,18 +238,13 @@ For atlas-based ROI definitions, set `roi_mode="atlas"` and provide `atlas_name`
 
 ## 7. Inspect or Visualize Outputs
 
-Quick static inspection:
-
-```bash
-python scripts/inspect_trial_stats.py
-```
-
 Interactive visualization requires the `viz` extra:
 
 ```bash
 python -m pip install -e ".[viz]"
-python scripts/visualize_trial_stats.py
 ```
+
+Use `bidsforge.visualization.trial_stats` from your own project script or notebook to inspect saved results.
 
 ## 8. Recommended Workflow
 

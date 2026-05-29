@@ -3,7 +3,7 @@ Export the group visualizer "Mean slope" plot to an image file.
 
 Edit the parameters below, then run from the repository root:
 
-    python scripts/export_trial_slope_group_mean.py
+    python scripts/debug/export_trial_slope_group_mean.py
 
 The plot is intentionally aligned with the "Group" -> "Mean slope" tab from
 the interactive trial slope visualizer.

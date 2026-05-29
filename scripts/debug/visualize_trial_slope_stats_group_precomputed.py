@@ -1,9 +1,9 @@
 """
 Launch the interactive group visualization for a pre-computed trial-slope result.
 
-Edit the shared recipe in scripts/trial_slope_shared.py, then run:
+Edit the shared recipe in scripts/debug/trial_slope_shared.py, then run:
 
-    python scripts/visualize_trial_slope_stats_group_precomputed.py
+    python scripts/debug/visualize_trial_slope_stats_group_precomputed.py
 """
 
 from __future__ import annotations

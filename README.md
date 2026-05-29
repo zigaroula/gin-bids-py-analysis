@@ -84,7 +84,7 @@ writer = HilbertProcessingWriter(
 out_paths = processor.run(files, writer, n_jobs=1, skip_existing=True)
 ```
 
-Repository scripts under [scripts/](scripts/) provide practical starting points for common runs. They are intentionally editable recipes, not a stable command-line interface.
+Repository-specific scripts can live under `scripts/` when they make repeated analyses easier. They are intentionally editable recipes, not a stable command-line interface.
 
 ## Built-In Public Pipelines
 
@@ -125,13 +125,7 @@ Developer guide:
 
 ## Visualization
 
-Visualization helpers live under `bidsforge.visualization.trial_stats` and can be launched with scripts such as:
-
-```bash
-python scripts/visualize_trial_stats.py
-python scripts/visualize_trial_stats_precomputed.py
-python scripts/visualize_trial_stats_group_precomputed.py
-```
+Visualization helpers live under `bidsforge.visualization.trial_stats`.
 
 Install visualization dependencies first:
 

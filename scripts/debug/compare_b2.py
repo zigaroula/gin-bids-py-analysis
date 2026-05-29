@@ -8,7 +8,7 @@ BrainVision  : continuous Hilbert-processed signal with embedded events.
                Re-epoched here with the same parameters.
 
 Usage:
-    .venv\\Scripts\\python scripts\\compare_matlab_vs_bids.py
+    .venv\\Scripts\\python scripts\\debug\\compare_b2.py
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """
 Trial statistics on iEEG recordings - run script.
-Edit the parameters below and run: python scripts/run_trial_stats.py
+Edit the parameters below and run: python scripts/debug/run_trial_stats.py
 """
 
 from __future__ import annotations

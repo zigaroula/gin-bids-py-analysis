@@ -3,7 +3,7 @@ Convert precomputed regression result files to another writer format.
 
 Edit the settings below, then run from the repository root:
 
-    python scripts/export_regression_results_format.py
+    python scripts/debug/export_regression_results_format.py
 
 The default use case is:
 - find all subject-level and group-level regression ``*_stats.h5`` files
