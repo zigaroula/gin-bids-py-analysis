@@ -270,7 +270,7 @@ def _int_from_row(row: dict[str, str], key: str) -> int:
 def _require_hdf5_schema(fh: h5py.File, path_name: str) -> None:
     schema_name = str_scalar(dataset_or_none(fh, "meta/schema_name"), default="")
     schema_version = str_scalar(dataset_or_none(fh, "meta/schema_version"), default="")
-    if schema_name != "hfo_spike_detection" or schema_version != "2.1":
+    if schema_name != "hfo_spike_detection" or schema_version != "1.0":
         raise ValueError(
             f"{path_name}: unsupported HFO/spike detection schema "
             f"(schema_name={schema_name!r}, schema_version={schema_version!r})."
@@ -280,7 +280,7 @@ def _require_hdf5_schema(fh: h5py.File, path_name: str) -> None:
 def _require_matlab_schema(meta: object, path_name: str) -> None:
     schema_name = mat_str(getattr(meta, "schema_name", None), default="")
     schema_version = mat_str(getattr(meta, "schema_version", None), default="")
-    if schema_name != "hfo_spike_detection" or schema_version != "2.1":
+    if schema_name != "hfo_spike_detection" or schema_version != "1.0":
         raise ValueError(
             f"{path_name}: unsupported HFO/spike detection schema "
             f"(schema_name={schema_name!r}, schema_version={schema_version!r})."

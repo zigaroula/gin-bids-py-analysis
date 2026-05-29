@@ -191,7 +191,7 @@ class HfoSpikeDetectorProcessingResult(BaseProcessingResult):
             },
             "meta": {
                 "schema_name": "hfo_spike_detection",
-                "schema_version": "2.1",
+                "schema_version": "1.0",
                 "original_fs": float(self.original_fs),
                 "montage_mode": str(self.metadata.get("montage_mode", "")),
                 "duration_seconds": float(duration),

@@ -80,7 +80,7 @@ def load_condition_test_result(path: Path | str) -> ConditionTestProcessingResul
 
 def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
     with h5py.File(path, "r") as fh:
-        _require_v2_schema(fh, path.name)
+        _require_schema(fh, path.name)
         # --- axes (channel / region names + time) ---
         analysis_level = str_scalar(
             dataset_or_none(fh, "meta/analysis_level"), default="channel"
@@ -475,7 +475,7 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
     mat = loadmat(str(path), squeeze_me=True, struct_as_record=False)
     data = mat_root(mat, "conditiontest")
     meta = data.meta
-    _require_v2_schema_mat(meta, path.name)
+    _require_schema_mat(meta, path.name)
     axes = data.axes
     stats = data.stats.condition_contrast
     prov = getattr(data, "provenance", None)
@@ -832,21 +832,21 @@ def _load_json_mapping(raw_value: str) -> dict[str, object]:
     return {str(key): value for key, value in loaded.items()}
 
 
-def _require_v2_schema(fh: h5py.File, path_name: str) -> None:
+def _require_schema(fh: h5py.File, path_name: str) -> None:
     schema_version = str_scalar(dataset_or_none(fh, "meta/schema_version"), default="")
-    if schema_version != "3.0":
+    if schema_version != "1.0":
         raise ValueError(
             f"{path_name}: unsupported trial_stats schema. "
-            "schema_version='3.0' is required; regenerate outputs with the v3 writer."
+            "schema_version='1.0' is required; regenerate outputs with the current writer."
         )
 
 
-def _require_v2_schema_mat(meta: object, path_name: str) -> None:
+def _require_schema_mat(meta: object, path_name: str) -> None:
     from bidsforge.processing.utils.matlab import mat_str
 
     schema_version = mat_str(getattr(meta, "schema_version", None), default="")
-    if schema_version != "3.0":
+    if schema_version != "1.0":
         raise ValueError(
             f"{path_name}: unsupported trial_stats schema. "
-            "schema_version='3.0' is required; regenerate outputs with the v3 writer."
+            "schema_version='1.0' is required; regenerate outputs with the current writer."
         )

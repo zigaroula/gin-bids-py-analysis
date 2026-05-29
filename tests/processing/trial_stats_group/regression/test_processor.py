@@ -116,7 +116,7 @@ def _write_slope_stats_h5(
         axes.create_dataset("time_s", data=time_s.astype(np.float64))
 
         meta = fh.create_group("meta")
-        meta.create_dataset("schema_version", data="3.0", dtype=str_dtype)
+        meta.create_dataset("schema_version", data="1.0", dtype=str_dtype)
         meta.create_dataset("analysis_type", data="slope_regression", dtype=str_dtype)
         meta.create_dataset("analysis_level", data=analysis_level, dtype=str_dtype)
         meta.create_dataset("condition_labels", data=np.array(list(condition_labels), dtype=object), dtype=str_dtype)
@@ -266,7 +266,7 @@ def test_load_regression_result_from_matlab_schema_reports_available_metrics() -
                     "time_s": time_s,
                 },
                 "meta": {
-                    "schema_version": "3.0",
+                    "schema_version": "1.0",
                     "analysis_type": "slope_regression",
                     "analysis_level": "channel",
                     "condition_labels": np.array(["pleasant", "unpleasant"], dtype=object),

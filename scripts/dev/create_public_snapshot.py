@@ -367,7 +367,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--branch",
-        default="main",
+        default="master",
         help="Branch name to use when initializing the public repository.",
     )
     parser.add_argument(

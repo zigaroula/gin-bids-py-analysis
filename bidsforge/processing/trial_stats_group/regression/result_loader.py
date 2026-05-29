@@ -48,7 +48,7 @@ def load_regression_group_result(
 
 def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
     with h5py.File(path, "r") as fh:
-        _require_v3_schema(fh, path.name)
+        _require_schema(fh, path.name)
         region_names = decode_str_array(np.asarray(fh["axes"]["region"][:]))
         time_axis_s = np.asarray(fh["axes"]["time_s"][:], dtype=np.float64)
         n_rois = len(region_names)
@@ -554,10 +554,10 @@ def _load_from_matlab(path: Path) -> RegressionGroupProcessingResult:
 
     meta = data.meta
     schema_version = mat_str(getattr(meta, "schema_version", None), default="")
-    if schema_version != "3.0":
+    if schema_version != "1.0":
         raise ValueError(
             "unsupported trial_stats_group schema. "
-            "schema_version='3.0' is required; regenerate outputs with the v3 writer."
+            "schema_version='1.0' is required; regenerate outputs with the current writer."
         )
     significance_alpha = mat_float(getattr(meta, "significance_alpha", None), default=0.05)
 
@@ -1249,11 +1249,11 @@ def _read_scatter_mat(
     return out_pred_a, out_act_a, out_pred_b, out_act_b
 
 
-def _require_v3_schema(fh: h5py.File, path_name: str) -> None:
+def _require_schema(fh: h5py.File, path_name: str) -> None:
     schema_version = str_scalar(dataset_or_none(fh, "meta/schema_version"), default="")
-    if schema_version != "3.0":
+    if schema_version != "1.0":
         raise ValueError(
             f"{path_name}: unsupported trial_stats_group schema. "
-            "schema_version='3.0' is required; regenerate outputs with the v3 writer."
+            "schema_version='1.0' is required; regenerate outputs with the current writer."
         )
 

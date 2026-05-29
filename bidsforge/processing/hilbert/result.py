@@ -62,7 +62,7 @@ class HilbertProcessingResult(BaseProcessingResult):
 
         meta: dict[str, object] = {
             "schema_name": "hilbert",
-            "schema_version": "2.1",
+            "schema_version": "1.0",
             "sampling_frequency_hz": float(self.original_fs),
             "downsampled_frequency_hz": float(self.downsampled_fs),
             "band_limits_hz": np.array(self.bins, dtype=np.float32),

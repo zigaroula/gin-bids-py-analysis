@@ -225,7 +225,7 @@ class BaseTrialStatsProcessingResult(BaseProcessingResult):
     ) -> dict[str, object]:
         return {
             "schema_name": "trial_stats_subject",
-            "schema_version": "3.0",
+            "schema_version": "1.0",
             "condition_labels": np.array(
                 [self.condition_a, self.condition_b], dtype=object
             ),

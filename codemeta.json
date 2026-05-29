@@ -1,0 +1,86 @@
+{
+  "@context": "https://w3id.org/codemeta/3.0",
+  "@type": "SoftwareSourceCode",
+  "name": "bidsforge",
+  "description": "bidsforge runs analysis workflows on BIDS datasets and writes BIDS derivatives under derivatives/<pipeline_label>/. It is designed for projects where iEEG recordings, events, behavior tables, and electrode localizations are already organized in BIDS or BIDS-like form and need to be processed consistently.",
+  "author": [
+    {
+      "givenName": "Benjamin",
+      "familyName": "BONTEMPS",
+      "type": "Person"
+    },
+    {
+      "givenName": "Julien",
+      "familyName": "BASTIN",
+      "type": "Person"
+    },
+    {
+      "givenName": "Jean Philippe",
+      "familyName": "LACHAUX",
+      "type": "Person"
+    }
+  ],
+  "license": [
+    "https://spdx.org/licenses/BSD-3-Clause"
+  ],
+  "version": "1.0.0",
+  "dateModified": "2026-05-29",
+  "codeRepository": "https://github.com/GIN-iEEG/bidsforge",
+  "downloadUrl": "https://github.com/GIN-iEEG/bidsforge/refs/heads/master.zip",
+  "relatedLink": [
+    "https://github.com/GIN-iEEG/bidsforge/blob/master/README.md"
+  ],
+  "programmingLanguage": [
+    "Python"
+  ],
+  "operatingSystem": [
+    "Windows",
+    "macOS",
+    "Linux"
+  ],
+  "availableOnDevice": [
+    "desktop"
+  ],
+  "softwareRequirements": [
+    "Python >=3.10",
+    "numpy",
+    "pandas",
+    "scipy",
+    "h5py",
+    "mne",
+    "pybids",
+    "pybv",
+    "joblib",
+    "tqdm",
+    "pyfftw",
+    "pydantic"
+  ],
+  "developmentStatus": "active",
+  "keywords": [
+    "BIDS",
+    "iEEG",
+    "intracranial EEG",
+    "neuroscience",
+    "neuroimaging",
+    "electrophysiology",
+    "BIDS derivatives",
+    "brain signals",
+    "event-related analysis",
+    "Hilbert transform",
+    "trial statistics",
+    "Python"
+  ],
+  "applicationCategory": "Scientific/Engineering",
+  "maintainer": [
+    {
+      "givenName": "Benjamin",
+      "familyName": "BONTEMPS",
+      "type": "Person"
+    }
+  ],
+  "funder": {
+    "type": "Organization",
+    "name": "EBRAINS 2.0"
+  },
+  "funding": "101147319"
+}

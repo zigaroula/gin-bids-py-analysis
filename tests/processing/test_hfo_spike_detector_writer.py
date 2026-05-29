@@ -210,10 +210,10 @@ class TestToOutputTree:
         tree = result.to_output_tree(pipeline_version="9.9.9")
         assert tree["provenance"]["pipeline_version"] == "9.9.9"  # type: ignore[index]
 
-    def test_schema_version_is_2_1(self) -> None:
+    def test_schema_version_is_1_0(self) -> None:
         result = _make_result("dummy.vhdr")
         tree = result.to_output_tree()
-        assert tree["meta"]["schema_version"] == "2.1"  # type: ignore[index]
+        assert tree["meta"]["schema_version"] == "1.0"  # type: ignore[index]
 
 
 # ---------------------------------------------------------------------------

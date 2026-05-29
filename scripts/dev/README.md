@@ -48,7 +48,7 @@ If the public repository already exists remotely, clone it first:
 ```bash
 cd ..
 git clone git@github.com:GIN/bidsforge.git bidsforge-public
-cd gin-bids-py-analysis
+cd bidsforge
 ```
 
 If the public repository has not been cloned yet, the script can initialize the
@@ -85,22 +85,22 @@ result.
 After the checks pass, create a public release commit:
 
 ```bash
-python scripts/dev/create_public_snapshot.py --commit --message "Release 0.1.0"
+python scripts/dev/create_public_snapshot.py --commit --message "Release 1.0.0"
 ```
 
 To also create an annotated tag:
 
 ```bash
-python scripts/dev/create_public_snapshot.py --commit --message "Release 0.1.0" --tag v0.1.0
+python scripts/dev/create_public_snapshot.py --commit --message "Release 1.0.0" --tag v1.0.0
 ```
 
 Then push from the public repository:
 
 ```bash
 cd ../bidsforge-public
-git push origin main
-git push origin v0.1.0
-cd ../gin-bids-py-analysis
+git push origin master
+git push origin v1.0.0
+cd ../bidsforge
 ```
 
 Use `--skip-tests` only for local diagnostics. External scanners `gitleaks` and

@@ -39,7 +39,7 @@ Install in editable mode:
 
 ```bash
 git clone <repo-url>
-cd gin-bids-py-analysis
+cd bidsforge
 
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -135,6 +135,8 @@ python -m pip install -e ".[viz]"
 
 ## Development
 
+If you want to contribute to project development, please contact Benjamin BONTEMPS first. The repository you can access is most likely the public repository, not the active development repository.
+
 Run tests:
 
 ```bash
@@ -144,7 +146,7 @@ pytest --cov=bidsforge --cov-report=term-missing
 
 ## License
 
-**gin2bids** is released under the **BSD-3-Clause License**.
+**bidsforge** is released under the **BSD-3-Clause License**.
 
 Copyright © 2026  
 Benjamin BONTEMPS

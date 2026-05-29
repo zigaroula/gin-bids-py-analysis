@@ -79,7 +79,7 @@ def _write_hdf5_structure(
     )
 
     meta = fh.create_group("meta")
-    meta.create_dataset("schema_version", data=np.bytes_("3.0"))
+    meta.create_dataset("schema_version", data=np.bytes_("1.0"))
     meta.create_dataset("analysis_type", data=np.bytes_(str(result.analysis_type)))
     meta.create_dataset("analysis_level", data=np.bytes_(str(result.analysis_level)))
     meta.create_dataset(

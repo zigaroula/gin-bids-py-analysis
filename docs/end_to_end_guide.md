@@ -7,7 +7,7 @@ Use this guide to get from a BIDS dataset to analysis derivatives with `bidsforg
 Use a project-local virtual environment:
 
 ```bash
-cd C:\GRE\dev\gin-bids-py-analysis
+cd bidsforge
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip

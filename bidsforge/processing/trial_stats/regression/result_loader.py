@@ -61,7 +61,7 @@ def load_regression_result(path: Path | str) -> RegressionProcessingResult:
 
 def _load_from_hdf5(path: Path) -> RegressionProcessingResult:
     with h5py.File(path, "r") as fh:
-        _require_v2_schema(fh, path.name)
+        _require_schema(fh, path.name)
         analysis_type = str_scalar(dataset_or_none(fh, "meta/analysis_type"), default="")
         if analysis_type and analysis_type != "slope_regression":
             raise ValueError(
@@ -479,7 +479,7 @@ def _load_from_matlab(path: Path) -> RegressionProcessingResult:
 
     mat = loadmat(str(path), squeeze_me=True, struct_as_record=False)
     data = mat_root(mat, "regression")
-    _require_v2_schema_mat(data.meta, path.name)
+    _require_schema_mat(data.meta, path.name)
     regression = data.stats.regression
     activity = data.data.signal_activity
     uncertainty = getattr(data, "uncertainty", None)
@@ -942,20 +942,20 @@ def _load_json_mapping(raw_value: str) -> dict[str, object]:
     return {str(key): value for key, value in loaded.items()}
 
 
-def _require_v2_schema(fh: h5py.File, path_name: str) -> None:
+def _require_schema(fh: h5py.File, path_name: str) -> None:
     schema_version = str_scalar(dataset_or_none(fh, "meta/schema_version"), default="")
-    if schema_version != "3.0":
+    if schema_version != "1.0":
         raise ValueError(
             f"{path_name}: unsupported trial_stats schema. "
-            "schema_version='3.0' is required; regenerate outputs with the v3 writer."
+            "schema_version='1.0' is required; regenerate outputs with the current writer."
         )
 
 
-def _require_v2_schema_mat(meta: object, path_name: str) -> None:
+def _require_schema_mat(meta: object, path_name: str) -> None:
     schema_version = mat_str(getattr(meta, "schema_version", None), default="")
-    if schema_version != "3.0":
+    if schema_version != "1.0":
         raise ValueError(
             f"{path_name}: unsupported trial_stats schema. "
-            "schema_version='3.0' is required; regenerate outputs with the v3 writer."
+            "schema_version='1.0' is required; regenerate outputs with the current writer."
         )
 

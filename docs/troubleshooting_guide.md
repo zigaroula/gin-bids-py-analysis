@@ -32,7 +32,7 @@ print(len(ds.get_files(scope="hilbert", suffix="ieeg", extension=".h5")))
 **Solution**:
 
 ```bash
-cd C:\GRE\dev\gin-bids-py-analysis
+cd bidsforge
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e .
 python -c "import bidsforge; print(bidsforge.__file__)"

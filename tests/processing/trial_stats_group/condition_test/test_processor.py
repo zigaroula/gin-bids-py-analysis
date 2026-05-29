@@ -90,7 +90,7 @@ def _write_trial_stats_h5(
         axes_grp.create_dataset("time_s", data=time_s)
 
         meta_grp = fh.create_group("meta")
-        meta_grp.create_dataset("schema_version", data="3.0", dtype=str_dtype)
+        meta_grp.create_dataset("schema_version", data="1.0", dtype=str_dtype)
         meta_grp.create_dataset("analysis_type", data="condition_test", dtype=str_dtype)
         meta_grp.create_dataset("analysis_level", data=analysis_level, dtype=str_dtype)
         meta_grp.create_dataset("condition_labels", data=np.array(condition_labels, dtype=object), dtype=str_dtype)
@@ -553,7 +553,7 @@ def _write_trial_stats_mat(
                 "time_s": time_s.astype(np.float64),
             },
             "meta": {
-                "schema_version": "3.0",
+                "schema_version": "1.0",
                 "analysis_type": "condition_test",
                 "analysis_level": analysis_level,
                 "condition_labels": np.array(list(condition_labels), dtype=object),

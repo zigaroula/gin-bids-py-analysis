@@ -310,7 +310,7 @@ class BaseTrialStatsGroupProcessingResult(BaseProcessingResult):
     def _build_meta_tree(self) -> dict[str, object]:
         out: dict[str, object] = {
             "schema_name": "trial_stats_group",
-            "schema_version": "3.0",
+            "schema_version": "1.0",
             "analysis_level": "roi_group",
             "condition_labels": np.array(list(self.condition_labels), dtype=object),
             "p_value_correction_method": str(self.p_value_correction_method),
