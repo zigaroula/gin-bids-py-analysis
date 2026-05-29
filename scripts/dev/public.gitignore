@@ -1,0 +1,48 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Native extensions and build outputs
+*.so
+build/
+dist/
+sdist/
+wheels/
+*.egg-info/
+*.egg
+MANIFEST
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.test_tmp/
+
+# Type checker and tooling caches
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.tox/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Local editor and OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local data and generated outputs
+downloads/
+converted/
+outputs/
+tmp/
+temp/
+.bids_cache/
