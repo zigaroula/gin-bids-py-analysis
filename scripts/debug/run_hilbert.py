@@ -11,15 +11,17 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = _SCRIPT_DIR.parents[1]
+for path in (_REPO_ROOT, _SCRIPT_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
 from bidsforge.bids import BIDSDataset
 from bidsforge.processing.hilbert import (
     HilbertProcessing,
     HilbertProcessingWriter,
 )
-
-_SCRIPT_DIR = Path(__file__).resolve().parent
-if str(_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPT_DIR))
 
 from trial_slope_shared import (  # noqa: E402
     BIDS_ROOT,

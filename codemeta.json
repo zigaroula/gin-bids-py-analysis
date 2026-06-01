@@ -2,21 +2,21 @@
   "@context": "https://w3id.org/codemeta/3.0",
   "@type": "SoftwareSourceCode",
   "name": "bidsforge",
-  "description": "bidsforge runs analysis workflows on BIDS datasets and writes BIDS derivatives under derivatives/<pipeline_label>/. It is designed for projects where iEEG recordings, events, behavior tables, and electrode localizations are already organized in BIDS or BIDS-like form and need to be processed consistently.",
+  "description": "`bidsforge` runs analysis workflows on BIDS datasets and writes BIDS derivatives under `derivatives/<pipeline_label>/`. It is designed for projects where iEEG recordings, events, behavior tables, and electrode localizations are already organized in BIDS or BIDS-like form and need to be processed consistently.",
   "author": [
     {
       "givenName": "Benjamin",
-      "familyName": "BONTEMPS",
+      "familyName": "Bontemps",
       "type": "Person"
     },
     {
       "givenName": "Julien",
-      "familyName": "BASTIN",
+      "familyName": "Bastin",
       "type": "Person"
     },
     {
       "givenName": "Jean Philippe",
-      "familyName": "LACHAUX",
+      "familyName": "Lachaux",
       "type": "Person"
     }
   ],
@@ -24,9 +24,9 @@
     "https://spdx.org/licenses/BSD-3-Clause"
   ],
   "version": "1.0.0",
-  "dateModified": "2026-05-29",
+  "dateModified": "2026-06-01",
   "codeRepository": "https://github.com/GIN-iEEG/bidsforge",
-  "downloadUrl": "https://github.com/GIN-iEEG/bidsforge/archive/refs/heads/master.zip",
+  "downloadUrl": "https://github.com/GIN-iEEG/bidsforge/archive/refs/tags/v1.0.0.zip",
   "relatedLink": [
     "https://github.com/GIN-iEEG/bidsforge/blob/master/README.md"
   ],
@@ -74,7 +74,7 @@
   "maintainer": [
     {
       "givenName": "Benjamin",
-      "familyName": "BONTEMPS",
+      "familyName": "Bontemps",
       "type": "Person"
     }
   ],

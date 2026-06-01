@@ -16,6 +16,11 @@ from bidsforge.processing.hilbert import (
     NormalizationMode,
     ProcessingMethod,
 )
+from bidsforge.processing.time_frequency import (
+    TimeFrequencyMethod,
+    TimeFrequencyParams,
+    TimeFrequencyWriterParams,
+)
 from bidsforge.processing.trial_stats.regression import (
     RegressionParams,
     RegressionWriterParams,
@@ -43,7 +48,7 @@ from bidsforge.processing.utils.trial_resolver import ResolvedTrial, TableTrialR
 # Trial slope recipe parameters  (edit these)
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"E:\Boulot\clarissa_bids")
+BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
 
 # Set to a BIDS subject id to restrict the full pipeline, or None for all subjects.
 SUBJECT: str | None = None
@@ -141,6 +146,35 @@ HILBERT_NORMALIZATION_MODE = NormalizationMode.PERCENT
 HILBERT_CHANNELS_FOR_MONTAGE: list[str] | str | None = None
 HILBERT_CHANNELS_TO_EXCLUDE_FOR_MONTAGE = (
     r"(?:MKR|DELD|DELG|EOG|ECG|EMG|DC|EXG|EKG|REF|GND|EMPTY).*"
+)
+
+# ---------------------------------------------------------------------------
+# Time-frequency b1 configuration
+# ---------------------------------------------------------------------------
+
+TIME_FREQUENCY_OUTPUT_DESCRIPTION = "tf"
+TIME_FREQUENCY_OUTPUT_FORMAT: Literal["hdf5", "matlab"] = "hdf5"
+TIME_FREQUENCY_N_JOBS = 1
+TIME_FREQUENCY_SKIP_EXISTING = False
+
+# The TFR b1 step is run on the same raw valuation recordings as Hilbert.
+TIME_FREQUENCY_FILE_FILTERS = HILBERT_FILE_FILTERS
+TIME_FREQUENCY_SECONDARY_FILTERS = HILBERT_SECONDARY_FILTERS
+TIME_FREQUENCY_EVENTS_SOURCE = HILBERT_EVENTS_SOURCE
+TIME_FREQUENCY_EVENT_SAMPLE_SHIFT_SAMPLES = HILBERT_EVENT_SAMPLE_SHIFT_SAMPLES
+
+TIME_FREQUENCY_TIME_DECIMATION = 20
+TIME_FREQUENCY_BASELINE_WINDOW_S = (-1.3, -0.7)
+TIME_FREQUENCY_METHOD = TimeFrequencyMethod.FIELDTRIP
+# Keep this False for direct comparison with the original MATLAB b1 .wya file,
+# which stores raw dB power. baseline_db is still computed and written.
+TIME_FREQUENCY_APPLY_BASELINE = False
+TIME_FREQUENCY_MONTAGE_MODE = HILBERT_MONTAGE_MODE
+TIME_FREQUENCY_BIPOLAR_DIRECTION = HILBERT_BIPOLAR_DIRECTION
+TIME_FREQUENCY_BIPOLAR_STORAGE = HILBERT_BIPOLAR_STORAGE
+TIME_FREQUENCY_CHANNELS_FOR_MONTAGE = HILBERT_CHANNELS_FOR_MONTAGE
+TIME_FREQUENCY_CHANNELS_TO_EXCLUDE_FOR_MONTAGE = (
+    HILBERT_CHANNELS_TO_EXCLUDE_FOR_MONTAGE
 )
 
 # ---------------------------------------------------------------------------
@@ -508,6 +542,10 @@ class TrialSlopeRecipe:
     hilbert_file_filters: dict[str, Any]
     hilbert_secondary_filters: list[dict[str, Any]]
     hilbert_smoothing_windows_ms: Sequence[int]
+    time_frequency_output_description: str
+    time_frequency_output_format: Literal["hdf5", "matlab"]
+    time_frequency_file_filters: dict[str, Any]
+    time_frequency_secondary_filters: list[dict[str, Any]]
     trial_slope_ieeg_filters: dict[str, Any]
     trial_slope_secondary_filters: list[dict[str, Any]]
     roi_csv_files: dict[str, Path]
@@ -531,6 +569,12 @@ class TrialSlopeRecipe:
 
     def hilbert_primary_filters(self) -> dict[str, Any]:
         filters = {"scope": "raw", **self.hilbert_file_filters}
+        if self.subject:
+            filters["subject"] = self.subject
+        return filters
+
+    def time_frequency_primary_filters(self) -> dict[str, Any]:
+        filters = {"scope": "raw", **self.time_frequency_file_filters}
         if self.subject:
             filters["subject"] = self.subject
         return filters
@@ -591,6 +635,35 @@ class TrialSlopeRecipe:
             bids_root=self.bids_root,
             output_description=self.hilbert_output_description,
             output_format=self.hilbert_output_format,
+        )
+
+    def build_time_frequency_params(self) -> TimeFrequencyParams:
+        return TimeFrequencyParams(
+            anchor_event_codes=list(self.anchor_event_codes),
+            events_source=TIME_FREQUENCY_EVENTS_SOURCE,
+            event_sample_shift_samples=TIME_FREQUENCY_EVENT_SAMPLE_SHIFT_SAMPLES,
+            experiment_start_event_code=self.experiment_start_event_code,
+            experiment_end_event_code=self.experiment_end_event_code,
+            tmin_s=self.epoch_tmin_s,
+            tmax_s=self.epoch_tmax_s,
+            method=TIME_FREQUENCY_METHOD,
+            time_decimation=TIME_FREQUENCY_TIME_DECIMATION,
+            baseline_window_s=TIME_FREQUENCY_BASELINE_WINDOW_S,
+            apply_baseline=TIME_FREQUENCY_APPLY_BASELINE,
+            montage_mode=TIME_FREQUENCY_MONTAGE_MODE,
+            bipolar_direction=TIME_FREQUENCY_BIPOLAR_DIRECTION,
+            bipolar_storage=TIME_FREQUENCY_BIPOLAR_STORAGE,
+            channels_for_montage=TIME_FREQUENCY_CHANNELS_FOR_MONTAGE,
+            channels_to_exclude_for_montage=(
+                TIME_FREQUENCY_CHANNELS_TO_EXCLUDE_FOR_MONTAGE
+            ),
+        )
+
+    def build_time_frequency_writer_params(self) -> TimeFrequencyWriterParams:
+        return TimeFrequencyWriterParams(
+            bids_root=self.bids_root,
+            output_description=self.time_frequency_output_description,
+            output_format=self.time_frequency_output_format,
         )
 
     def build_regression_params(self, subject_id: str = "") -> RegressionParams:
@@ -689,6 +762,14 @@ class TrialSlopeRecipe:
             aggregate_runs=False,
         )
 
+    def build_time_frequency_groups(self, dataset: BIDSDataset) -> list[BIDSFileGroup]:
+        return build_subject_groups(
+            dataset,
+            self.time_frequency_primary_filters(),
+            list(self.time_frequency_secondary_filters),
+            aggregate_runs=False,
+        )
+
     def build_trial_annotators(
         self,
         manual_region_channels: dict[str, dict[str, list[str]]],
@@ -770,9 +851,13 @@ class TrialSlopeRecipe:
             f"BIDS root: {self.bids_root}",
             f"subject filter: {self.subject or 'all'}",
             f"Hilbert desc: {self.hilbert_output_description}",
+            f"Time-frequency desc: {self.time_frequency_output_description}",
+            f"Time-frequency method: {TIME_FREQUENCY_METHOD.value}",
+            f"Time-frequency apply baseline: {TIME_FREQUENCY_APPLY_BASELINE}",
             f"Trial-slope input desc: {self.hilbert_derivative_description}",
             f"Stats/group desc: {self.trial_slope_output_description}",
             f"Hilbert output format: {self.hilbert_output_format}",
+            f"Time-frequency output format: {self.time_frequency_output_format}",
             (
                 "Hilbert notch: "
                 f"{list(self.hilbert_notch_filter_freqs) if self.enable_hilbert_notch_filter else 'off'}"
@@ -818,6 +903,10 @@ RECIPE = TrialSlopeRecipe(
     hilbert_file_filters=HILBERT_FILE_FILTERS,
     hilbert_secondary_filters=HILBERT_SECONDARY_FILTERS,
     hilbert_smoothing_windows_ms=HILBERT_SMOOTHING_WINDOWS_MS,
+    time_frequency_output_description=TIME_FREQUENCY_OUTPUT_DESCRIPTION,
+    time_frequency_output_format=TIME_FREQUENCY_OUTPUT_FORMAT,
+    time_frequency_file_filters=TIME_FREQUENCY_FILE_FILTERS,
+    time_frequency_secondary_filters=TIME_FREQUENCY_SECONDARY_FILTERS,
     trial_slope_ieeg_filters=TRIAL_SLOPE_IEEG_FILTERS,
     trial_slope_secondary_filters=TRIAL_SLOPE_SECONDARY_FILTERS,
     roi_csv_files=ROI_CSV_FILES,
@@ -849,6 +938,14 @@ def build_hilbert_params() -> HilbertParams:
 
 def build_hilbert_writer_params() -> HilbertWriterParams:
     return RECIPE.build_hilbert_writer_params()
+
+
+def build_time_frequency_params() -> TimeFrequencyParams:
+    return RECIPE.build_time_frequency_params()
+
+
+def build_time_frequency_writer_params() -> TimeFrequencyWriterParams:
+    return RECIPE.build_time_frequency_writer_params()
 
 
 def build_regression_writer_params() -> RegressionWriterParams:
@@ -1348,6 +1445,12 @@ def build_hilbert_groups(
     dataset: BIDSDataset,
 ) -> list[BIDSFileGroup]:
     return RECIPE.build_hilbert_groups(dataset)
+
+
+def build_time_frequency_groups(
+    dataset: BIDSDataset,
+) -> list[BIDSFileGroup]:
+    return RECIPE.build_time_frequency_groups(dataset)
 
 
 def build_trial_slope_groups(
