@@ -8,6 +8,7 @@ Edit the shared recipe in scripts/debug/trial_slope_shared.py, then run:
 
 from __future__ import annotations
 
+from collections import defaultdict
 import sys
 from pathlib import Path
 
@@ -43,15 +44,33 @@ def main() -> list[Path]:
         f"Running with n_jobs={TIME_FREQUENCY_N_JOBS}."
     )
 
-    processor = TimeFrequencyProcessing(build_time_frequency_params())
     writer = TimeFrequencyProcessingWriter(build_time_frequency_writer_params())
 
-    out_paths = processor.run(
-        groups,
-        writer,
-        n_jobs=TIME_FREQUENCY_N_JOBS,
-        skip_existing=TIME_FREQUENCY_SKIP_EXISTING,
-    )
+    groups_by_shift = defaultdict(list)
+    params_by_shift = {}
+    for group in groups:
+        subject_id = group.primary.get("subject") or ""
+        params = build_time_frequency_params(subject_id)
+        shift = int(params.event_sample_shift_samples)
+        groups_by_shift[shift].append(group)
+        params_by_shift[shift] = params
+
+    out_paths = []
+    for shift, shifted_groups in sorted(groups_by_shift.items()):
+        print(
+            f"Running {len(shifted_groups)} group(s) with "
+            f"event_sample_shift_samples={shift}."
+        )
+        processor = TimeFrequencyProcessing(params_by_shift[shift])
+        out_paths.extend(
+            processor.run(
+                shifted_groups,
+                writer,
+                n_jobs=TIME_FREQUENCY_N_JOBS,
+                skip_existing=TIME_FREQUENCY_SKIP_EXISTING,
+            )
+        )
+
     for path in out_paths:
         print(f"Wrote {path}")
     return out_paths

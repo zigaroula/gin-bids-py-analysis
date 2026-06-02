@@ -48,7 +48,7 @@ from bidsforge.processing.utils.trial_resolver import ResolvedTrial, TableTrialR
 # Trial slope recipe parameters  (edit these)
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\Boulot\clarissa_bids")
+BIDS_ROOT = Path(r"E:\Boulot\clarissa_bids")
 
 # Set to a BIDS subject id to restrict the full pipeline, or None for all subjects.
 SUBJECT: str | None = None
@@ -161,7 +161,9 @@ TIME_FREQUENCY_SKIP_EXISTING = False
 TIME_FREQUENCY_FILE_FILTERS = HILBERT_FILE_FILTERS
 TIME_FREQUENCY_SECONDARY_FILTERS = HILBERT_SECONDARY_FILTERS
 TIME_FREQUENCY_EVENTS_SOURCE = HILBERT_EVENTS_SOURCE
-TIME_FREQUENCY_EVENT_SAMPLE_SHIFT_SAMPLES = HILBERT_EVENT_SAMPLE_SHIFT_SAMPLES
+# "auto" reproduces SPM epoch anchoring by source format:
+# Micromed/Grenoble-like recordings need -1 sample, Prague recordings need 0.
+TIME_FREQUENCY_EVENT_SAMPLE_SHIFT_SAMPLES: int | Literal["auto"] = "auto"
 
 TIME_FREQUENCY_TIME_DECIMATION = 20
 TIME_FREQUENCY_BASELINE_WINDOW_S = (-1.3, -0.7)
@@ -637,11 +639,16 @@ class TrialSlopeRecipe:
             output_format=self.hilbert_output_format,
         )
 
-    def build_time_frequency_params(self) -> TimeFrequencyParams:
+    def build_time_frequency_params(self, subject_id: str = "") -> TimeFrequencyParams:
+        event_sample_shift_samples = (
+            event_sample_shift_for_subject(subject_id, bids_root=self.bids_root)
+            if TIME_FREQUENCY_EVENT_SAMPLE_SHIFT_SAMPLES == "auto"
+            else int(TIME_FREQUENCY_EVENT_SAMPLE_SHIFT_SAMPLES)
+        )
         return TimeFrequencyParams(
             anchor_event_codes=list(self.anchor_event_codes),
             events_source=TIME_FREQUENCY_EVENTS_SOURCE,
-            event_sample_shift_samples=TIME_FREQUENCY_EVENT_SAMPLE_SHIFT_SAMPLES,
+            event_sample_shift_samples=event_sample_shift_samples,
             experiment_start_event_code=self.experiment_start_event_code,
             experiment_end_event_code=self.experiment_end_event_code,
             tmin_s=self.epoch_tmin_s,
@@ -853,6 +860,7 @@ class TrialSlopeRecipe:
             f"Hilbert desc: {self.hilbert_output_description}",
             f"Time-frequency desc: {self.time_frequency_output_description}",
             f"Time-frequency method: {TIME_FREQUENCY_METHOD.value}",
+            f"Time-frequency event shift: {TIME_FREQUENCY_EVENT_SAMPLE_SHIFT_SAMPLES}",
             f"Time-frequency apply baseline: {TIME_FREQUENCY_APPLY_BASELINE}",
             f"Trial-slope input desc: {self.hilbert_derivative_description}",
             f"Stats/group desc: {self.trial_slope_output_description}",
@@ -940,8 +948,8 @@ def build_hilbert_writer_params() -> HilbertWriterParams:
     return RECIPE.build_hilbert_writer_params()
 
 
-def build_time_frequency_params() -> TimeFrequencyParams:
-    return RECIPE.build_time_frequency_params()
+def build_time_frequency_params(subject_id: str = "") -> TimeFrequencyParams:
+    return RECIPE.build_time_frequency_params(subject_id)
 
 
 def build_time_frequency_writer_params() -> TimeFrequencyWriterParams:

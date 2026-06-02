@@ -39,7 +39,7 @@ COMPARE_A_SPM_EVENT_SAMPLE_SHIFT_SAMPLES: int = 0
 # Base roots (edit if the data lives somewhere else)
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT: Path = Path(r"D:\Boulot\clarissa_bids")
+BIDS_ROOT: Path = Path(r"E:\Boulot\clarissa_bids")
 MATLAB_ROOT: Path = Path(r"C:\GRE\dev\clarissa\seeg")
 
 # ---------------------------------------------------------------------------

@@ -90,13 +90,27 @@ def build_time_frequency_grid(
             k = np.floor(2.0 * time_window_s[high] * smoothing_hz[high] - 1.0)
             smoothing_hz[high] = (k + 1.0) / (2.0 * time_window_s[high])
 
-    n_tapers = np.asarray(
-        [
-            _n_tapers(float(tw), float(sm), params)
-            for tw, sm in zip(time_window_s, smoothing_hz)
-        ],
-        dtype=np.int64,
-    )
+    if params.method == TimeFrequencyMethod.FIELDTRIP:
+        n_tapers = np.asarray(
+            [
+                _fieldtrip_n_tapers(
+                    int(round(float(tw) * float(sampling_frequency_hz))),
+                    float(sm),
+                    float(sampling_frequency_hz),
+                    params,
+                )
+                for tw, sm in zip(time_window_s, smoothing_hz)
+            ],
+            dtype=np.int64,
+        )
+    else:
+        n_tapers = np.asarray(
+            [
+                _n_tapers(float(tw), float(sm), params)
+                for tw, sm in zip(time_window_s, smoothing_hz)
+            ],
+            dtype=np.int64,
+        )
     return TimeFrequencyGrid(
         time_s=time_s,
         frequency_hz=freqs.astype(np.float64),
@@ -432,7 +446,7 @@ def _fieldtrip_dpss_tapers(
     params: TimeFrequencyParams,
 ) -> np.ndarray:
     nw = float(timwinsample) * float(smoothing_hz) / float(fs)
-    final_k = _n_tapers(float(timwinsample) / float(fs), smoothing_hz, params)
+    final_k = _fieldtrip_n_tapers(timwinsample, smoothing_hz, fs, params)
     tapers = dpss(
         timwinsample,
         NW=max(nw, 0.5),
@@ -471,3 +485,17 @@ def _fieldtrip_wavelet_ffts(
         )
         wavelet_ffts[idx] = _fftmod.fft(wavelet, n=endnsample).astype(np.complex64)
     return wavelet_ffts
+
+
+def _fieldtrip_n_tapers(
+    timwinsample: int,
+    smoothing_hz: float,
+    fs: float,
+    params: TimeFrequencyParams,
+) -> int:
+    nw = float(timwinsample) * float(smoothing_hz) / float(fs)
+    value = int(round(2.0 * nw)) - 1
+    value = max(int(params.min_tapers), value)
+    if params.max_tapers is not None:
+        value = min(int(params.max_tapers), value)
+    return value
