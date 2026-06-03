@@ -32,6 +32,8 @@ class TimeFrequencyStatsContext:
     kept_trials_b: list[ResolvedTrial]
     resolved_trials: list[ResolvedTrial]
     source_table_files: list[str]
+    source_ieeg_files: list[str]
+    source_electrodes_files: list[str]
     metadata: dict[str, Any]
 
 
@@ -94,6 +96,10 @@ class BaseTimeFrequencyStatsProcessing(BaseProcessing, ABC):
         source_table_files = sorted(
             {str(file.path) for file in table_files if file.suffix != "electrodes"}
         )
+        source_electrodes_files = sorted(
+            {str(file.path) for file in table_files if file.suffix == "electrodes"}
+        )
+        source_ieeg_files = [str(result.source_group.primary.path)]
         metadata = {
             "time_window_s": list(self.params.time_window_s or []),
             "time_selection": self.params.time_selection,
@@ -118,6 +124,8 @@ class BaseTimeFrequencyStatsProcessing(BaseProcessing, ABC):
             kept_trials_b=kept_b,
             resolved_trials=resolved,
             source_table_files=source_table_files,
+            source_ieeg_files=source_ieeg_files,
+            source_electrodes_files=source_electrodes_files,
             metadata=metadata,
         )
         return self._compute_and_build_result(context)
@@ -185,6 +193,8 @@ class BaseTimeFrequencyStatsProcessing(BaseProcessing, ABC):
             "resolved_trials": context.resolved_trials,
             "source_tfr_file": str(context.tfr_file.path),
             "source_table_files": context.source_table_files,
+            "source_ieeg_files": context.source_ieeg_files,
+            "source_electrodes_files": context.source_electrodes_files,
             "epochs": None,
             "power_mode": self.params.power_mode,
             "p_value_correction_method": self.params.p_value_correction_method,
@@ -280,4 +290,3 @@ def _select_time_window(
 
 def _empty_epochs(power: np.ndarray) -> np.ndarray:
     return np.empty((0, power.shape[1], power.shape[2], power.shape[3]), dtype=np.float64)
-

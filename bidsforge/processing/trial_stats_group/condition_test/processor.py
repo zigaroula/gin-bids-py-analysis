@@ -522,11 +522,10 @@ def _load_trial_stats_input(
         result,
         extra_key_parts={"primary_condition_metric": source_metric},
     )
-    return _ConditionTestStatsInput(
-        **{f.name: getattr(base_input, f.name) for f in dataclasses.fields(base_input)},
-        result=result,
-        source_metric=source_metric,
-    )
+    values = {f.name: getattr(base_input, f.name) for f in dataclasses.fields(base_input)}
+    values["result"] = result
+    values["source_metric"] = source_metric
+    return _ConditionTestStatsInput(**values)
 
 
 def _condition_metric_values(

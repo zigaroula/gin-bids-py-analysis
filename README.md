@@ -1,6 +1,6 @@
 # bidsforge
 
-**BIDS-based iEEG analysis pipelines for Hilbert envelopes, subject-level trial statistics, and group-level ROI statistics.**
+**BIDS-based iEEG analysis pipelines for Hilbert envelopes, time-frequency maps, subject-level trial statistics, and group-level ROI statistics.**
 
 `bidsforge` runs analysis workflows on BIDS datasets and writes BIDS derivatives under `derivatives/<pipeline_label>/`. It is designed for projects where iEEG recordings, events, behavior tables, and electrode localizations are already organized in BIDS or BIDS-like form and need to be processed consistently.
 
@@ -9,6 +9,7 @@
 Use `bidsforge` when you need to:
 
 - extract Hilbert-band envelopes from BIDS iEEG recordings;
+- compute trial-level time-frequency power maps;
 - compare two trial conditions at subject level;
 - regress trial activity against a continuous predictor at subject level;
 - aggregate subject-level statistics into group-level ROI results;
@@ -89,10 +90,15 @@ Repository-specific scripts can live under `scripts/` when they make repeated an
 ## Built-In Public Pipelines
 
 - `hilbert`: extracts Hilbert-band envelopes from iEEG recordings.
+- `time_frequency`: computes trial-level multitaper TFR power from iEEG recordings.
 - `condition_test`: compares two trial conditions at subject level.
 - `regression`: computes condition-specific trial-wise regression at subject level.
 - `condition_test_group`: aggregates `condition_test` outputs into group-level ROI statistics.
 - `regression_group`: aggregates `regression` outputs into group-level ROI statistics.
+- `time_frequency_condition_test`: compares two trial conditions on TFR derivatives at subject level.
+- `time_frequency_regression`: computes condition-specific trial-wise regression on TFR derivatives.
+- `time_frequency_condition_test_group`: aggregates TF condition-test outputs into group-level ROI statistics.
+- `time_frequency_regression_group`: aggregates TF regression outputs into group-level ROI statistics.
 
 Typical order:
 
@@ -101,6 +107,11 @@ raw iEEG
   -> hilbert
   -> condition_test or regression
   -> condition_test_group or regression_group
+
+raw iEEG
+  -> time_frequency
+  -> time_frequency_condition_test or time_frequency_regression
+  -> time_frequency_condition_test_group or time_frequency_regression_group
 ```
 
 ## Documentation
@@ -114,6 +125,11 @@ Start here:
 Pipeline guides:
 
 - [docs/pipelines/hilbert.md](docs/pipelines/hilbert.md)
+- [docs/pipelines/time_frequency.md](docs/pipelines/time_frequency.md)
+- [docs/pipelines/time_frequency_condition_test.md](docs/pipelines/time_frequency_condition_test.md)
+- [docs/pipelines/time_frequency_regression.md](docs/pipelines/time_frequency_regression.md)
+- [docs/pipelines/time_frequency_condition_test_group.md](docs/pipelines/time_frequency_condition_test_group.md)
+- [docs/pipelines/time_frequency_regression_group.md](docs/pipelines/time_frequency_regression_group.md)
 - [docs/pipelines/condition_test.md](docs/pipelines/condition_test.md)
 - [docs/pipelines/regression.md](docs/pipelines/regression.md)
 - [docs/pipelines/condition_test_group.md](docs/pipelines/condition_test_group.md)

@@ -58,6 +58,11 @@ def _load_hdf5(path: Path) -> TimeFrequencyConditionTestResult:
             condition_a_trial_count=int(np.asarray(fh["meta/trial_counts"][:]).ravel()[0]),
             condition_b_trial_count=int(np.asarray(fh["meta/trial_counts"][:]).ravel()[1]),
             source_tfr_file=source,
+            source_ieeg_files=_load_optional_str_list(fh, "provenance/source_ieeg_files"),
+            source_electrodes_files=_load_optional_str_list(
+                fh,
+                "provenance/source_electrodes_files",
+            ),
             signal_activity=TFConditionPair(
                 condition_a=TFConditionEstimate(
                     mean=np.asarray(fh[f"data/signal_activity/{cond_a}/mean"][:], dtype=np.float64),
@@ -209,6 +214,13 @@ def _load_meta(fh: h5py.File) -> dict[str, Any]:
                 value = value.decode("utf-8")
             out[key] = value
     return out
+
+
+def _load_optional_str_list(fh: h5py.File, key: str) -> list[str]:
+    ds = dataset_or_none(fh, key)
+    if ds is None:
+        return []
+    return decode_str_array(np.asarray(ds[:], dtype=object))
 
 
 def _coerce_tf_map(

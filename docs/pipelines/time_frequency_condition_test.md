@@ -23,3 +23,10 @@ channel x frequency x time
 
 See `scripts/run_time_frequency_condition_test.py` for an editable runner.
 
+## Downstream Group Analysis
+
+Use `time_frequency_condition_test_group` to aggregate channel-level subject
+outputs into ROI maps. The default group metric is `t_values`, matching the
+Matlab b3 TF condition-test display logic.
+
+See [Time-Frequency Condition Test Group](./time_frequency_condition_test_group.md).

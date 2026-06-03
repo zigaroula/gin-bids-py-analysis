@@ -236,6 +236,56 @@ RegressionGroupProcessing(params).run(groups, writer, n_jobs=1)
 
 For atlas-based ROI definitions, set `roi_mode="atlas"` and provide `atlas_name`, which must match a column in the electrodes tables referenced by the subject-level provenance.
 
+### Time-Frequency Group-Level ROI Statistics
+
+The TF branch follows the same pattern, but consumes subject-level
+`time_frequency_condition_test` or `time_frequency_regression` files and writes
+ROI maps shaped `region x frequency x time`.
+
+```python
+from bidsforge.processing.time_frequency_stats_group.regression import (
+    TimeFrequencyRegressionGroupParams,
+    TimeFrequencyRegressionGroupProcessing,
+    TimeFrequencyRegressionGroupWriter,
+    TimeFrequencyRegressionGroupWriterParams,
+    build_time_frequency_regression_compatible_groups,
+)
+
+files = ds.get_files(
+    scope="time_frequency_regression",
+    datatype="ieeg",
+    suffix="stats",
+    extension=".h5",
+    desc="tfregressiononset",
+)
+groups = build_time_frequency_regression_compatible_groups(
+    files,
+    primary_regression_metric="t_values",
+)
+
+params = TimeFrequencyRegressionGroupParams(
+    primary_regression_metric="t_values",
+    roi_mode="manual",
+    manual_region_channels={
+        "roi_a": {"01": ["A1", "A2"], "02": ["B1"]},
+        "roi_b": {"01": ["C1"], "03": ["D1", "D2"]},
+    },
+    min_subjects_per_roi=2,
+)
+
+writer = TimeFrequencyRegressionGroupWriter(
+    TimeFrequencyRegressionGroupWriterParams(
+        bids_root=ds.root,
+        output_description="tfregressiongroup",
+    )
+)
+
+TimeFrequencyRegressionGroupProcessing(params).run(groups, writer, n_jobs=1)
+```
+
+Use `time_frequency_condition_test_group` in the same way when the source files
+come from `time_frequency_condition_test`.
+
 ## 7. Inspect or Visualize Outputs
 
 Interactive visualization requires the `viz` extra:

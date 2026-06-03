@@ -43,6 +43,8 @@ class BaseTimeFrequencyStatsResult(BaseProcessingResult):
     resolved_trials: list[ResolvedTrial] = field(default_factory=list)
     source_tfr_file: str = ""
     source_table_files: list[str] = field(default_factory=list)
+    source_ieeg_files: list[str] = field(default_factory=list)
+    source_electrodes_files: list[str] = field(default_factory=list)
     signal_activity: TFConditionPair = field(default_factory=TFConditionPair)
     epochs: TFConditionEpochs = field(default_factory=TFConditionEpochs)
     stats_valid: bool = False
@@ -101,6 +103,11 @@ class BaseTimeFrequencyStatsResult(BaseProcessingResult):
             "provenance": {
                 "source_tfr_file": str(self.source_tfr_file),
                 "source_table_files": np.asarray(self.source_table_files, dtype=object),
+                "source_ieeg_files": np.asarray(self.source_ieeg_files, dtype=object),
+                "source_electrodes_files": np.asarray(
+                    self.source_electrodes_files,
+                    dtype=object,
+                ),
                 "pipeline_name": pipeline_name,
                 "pipeline_version": pipeline_version,
             },
@@ -164,4 +171,3 @@ class BaseTimeFrequencyStatsResult(BaseProcessingResult):
 
     def _trial_table_extra_tree(self) -> dict[str, object]:
         return {}
-
