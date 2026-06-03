@@ -28,7 +28,7 @@ import numpy as np
 import scipy.io
 
 from bidsforge.bids import BIDSDataset
-from bidsforge.processing.trial_stats.regression.stats import (
+from bidsforge.processing.utils.regression_stats import (
     compute_linear_regression_maps,
 )
 from bidsforge.processing.trial_stats.regression import (

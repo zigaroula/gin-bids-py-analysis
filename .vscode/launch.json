@@ -6,10 +6,11 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
+            "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             "justMyCode": true,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/src"
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/src"
             }
         },
         {
@@ -17,11 +18,12 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/scripts/${input:scriptName}",
+            "cwd": "${workspaceFolder}",
             "args": "${input:scriptArgs}",
             "console": "integratedTerminal",
             "justMyCode": true,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/src"
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/src"
             }
         },
         {
@@ -29,6 +31,7 @@
             "type": "debugpy",
             "request": "launch",
             "module": "pytest",
+            "cwd": "${workspaceFolder}",
             "args": [
                 "tests/",
                 "-v"
@@ -36,7 +39,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/src"
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/src"
             }
         },
         {
@@ -44,6 +47,7 @@
             "type": "debugpy",
             "request": "launch",
             "module": "pytest",
+            "cwd": "${workspaceFolder}",
             "args": [
                 "${file}",
                 "-v"
@@ -51,7 +55,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/src"
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/src"
             }
         }
     ],

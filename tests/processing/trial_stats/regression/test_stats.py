@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from bidsforge.processing.trial_stats.regression.stats import (
+from bidsforge.processing.utils.regression_stats import (
     compute_linear_regression_maps,
     compute_permuted_regression_maps,
 )
@@ -115,6 +115,53 @@ def test_compute_linear_regression_maps_nan_per_channel_independent() -> None:
     np.testing.assert_allclose(intercept[0, 0], 1.0, atol=1e-10)
     np.testing.assert_allclose(slope[1, 0], -1.0, atol=1e-10)
     np.testing.assert_allclose(intercept[1, 0], 5.0, atol=1e-10)
+
+
+def test_compute_linear_regression_maps_default_uses_feature_time0_nan_mask() -> None:
+    """The trial_stats default preserves the historical feature-level NaN mask."""
+    x = np.array([0.0, 1.0, 2.0, 3.0, 4.0], dtype=np.float64)
+    y = np.full((5, 1, 2), np.nan, dtype=np.float64)
+    # Time 0 uses trials 0, 1, 2: y = 2x + 1.
+    y[:3, 0, 0] = 2.0 * x[:3] + 1.0
+    # Time 1 uses trials 2, 3, 4: y = -3x + 8.
+    y[2:, 0, 1] = -3.0 * x[2:] + 8.0
+
+    slope, intercept, _r, _p, valid, n_obs = compute_linear_regression_maps(
+        x,
+        y,
+        n_features=1,
+        n_times=2,
+        return_n_obs=True,
+    )
+
+    assert valid is True
+    np.testing.assert_array_equal(n_obs, np.array([[3, 3]], dtype=np.int64))
+    np.testing.assert_allclose(slope[0, 0], 2.0, atol=1e-10)
+    np.testing.assert_allclose(intercept[0, 0], 1.0, atol=1e-10)
+    assert np.isnan(slope[0, 1])
+    assert np.isnan(intercept[0, 1])
+
+
+def test_compute_linear_regression_maps_pointwise_nan_policy() -> None:
+    """The shared TF path can use finite response rows per feature/time point."""
+    x = np.array([0.0, 1.0, 2.0, 3.0, 4.0], dtype=np.float64)
+    y = np.full((5, 1, 2), np.nan, dtype=np.float64)
+    y[:3, 0, 0] = 2.0 * x[:3] + 1.0
+    y[2:, 0, 1] = -3.0 * x[2:] + 8.0
+
+    slope, intercept, _r, _p, valid, n_obs = compute_linear_regression_maps(
+        x,
+        y,
+        n_features=1,
+        n_times=2,
+        return_n_obs=True,
+        nan_policy="pointwise",
+    )
+
+    assert valid is True
+    np.testing.assert_array_equal(n_obs, np.array([[3, 3]], dtype=np.int64))
+    np.testing.assert_allclose(slope[0], np.array([2.0, -3.0]), atol=1e-10)
+    np.testing.assert_allclose(intercept[0], np.array([1.0, 8.0]), atol=1e-10)
 
 
 def test_compute_linear_regression_maps_nan_aware_returns_false_when_all_channels_invalid() -> None:

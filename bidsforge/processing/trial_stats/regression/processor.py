@@ -10,6 +10,12 @@ from mne.io import BaseRaw
 
 from bidsforge.bids.file import BIDSFile
 from bidsforge.bids.file_group import BIDSFileGroup
+from bidsforge.processing.utils.regression_stats import (
+    compute_linear_regression_maps,
+    compute_permuted_regression_maps,
+    zscore_epochs_across_trials,
+    zscore_predictor_values_by_scope,
+)
 from bidsforge.processing.utils.statistics import compute_condition_mean, compute_condition_sem
 from bidsforge.processing.utils.trial_annotator import TrialWindowAnnotator
 from bidsforge.processing.utils.trial_resolver import ResolvedTrial, TrialResolver
@@ -23,12 +29,6 @@ from .result import (
     RegressionPredictor,
     RegressionProcessingResult,
     RegressionStats,
-)
-from .stats import (
-    compute_linear_regression_maps,
-    compute_permuted_regression_maps,
-    zscore_epochs_across_trials,
-    zscore_predictor_values_by_scope,
 )
 
 

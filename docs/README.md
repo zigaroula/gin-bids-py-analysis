@@ -11,6 +11,8 @@ This directory has three documentation layers. Start with the end-to-end guide i
 
 - [Hilbert Pipeline](./pipelines/hilbert.md): band envelope extraction from iEEG recordings.
 - [Time-Frequency Pipeline](./pipelines/time_frequency.md): trial-level multitaper TFR power from iEEG recordings.
+- [Time-Frequency Condition Test](./pipelines/time_frequency_condition_test.md): subject-level two-condition statistics on TFR derivatives.
+- [Time-Frequency Regression](./pipelines/time_frequency_regression.md): subject-level trial-wise regression on TFR derivatives.
 - [Condition Test Pipeline](./pipelines/condition_test.md): subject-level two-condition statistics.
 - [Regression Pipeline](./pipelines/regression.md): subject-level condition-specific slope regression.
 - [Condition Test Group Pipeline](./pipelines/condition_test_group.md): group-level ROI statistics from `condition_test` outputs.
