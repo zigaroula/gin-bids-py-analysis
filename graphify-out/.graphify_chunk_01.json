@@ -1,0 +1,1251 @@
+{
+  "nodes": [
+    {
+      "id": "github_copilot_instructions_bidsforge_architecture",
+      "label": "bidsforge Architecture Document",
+      "file_type": "document",
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "github_copilot_instructions_bidsdataset",
+      "label": "BIDSDataset",
+      "file_type": "concept",
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "github_copilot_instructions_bidsfilegroup",
+      "label": "BIDSFileGroup",
+      "file_type": "concept",
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "github_copilot_instructions_bidsfile",
+      "label": "BIDSFile",
+      "file_type": "concept",
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "github_copilot_instructions_load_ieeg",
+      "label": "load_ieeg",
+      "file_type": "concept",
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "github_copilot_instructions_baseprocessing",
+      "label": "BaseProcessing",
+      "file_type": "concept",
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "github_copilot_instructions_baseprocessingwriter",
+      "label": "BaseProcessingWriter",
+      "file_type": "concept",
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "github_copilot_instructions_processor_pattern",
+      "label": "Processor Pattern: Orchestration Separate From Numerical Code",
+      "file_type": "rationale",
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "github_copilot_instructions_pure_computation_pattern",
+      "label": "Pure Computation Pattern: File-IO-Free Numerical Modules",
+      "file_type": "rationale",
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "github_copilot_instructions_writer_pattern",
+      "label": "Writer Pattern: Base Writer Constructs Canonical BIDS Output Path",
+      "file_type": "rationale",
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "readme_bidsforge",
+      "label": "bidsforge Package Overview",
+      "file_type": "document",
+      "source_file": "README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "docs_readme_documentation_index",
+      "label": "Documentation Index",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "docs_add_pipeline_guide_new_pipeline_steps",
+      "label": "Add a Pipeline Guide",
+      "file_type": "document",
+      "source_file": "docs/add_pipeline_guide.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "docs_add_pipeline_guide_basetrialstatsparams",
+      "label": "BaseTrialStatsParams / BaseTrialStatsGroupParams",
+      "file_type": "concept",
+      "source_file": "docs/add_pipeline_guide.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "end_to_end_guide_analysis_workflow",
+      "label": "End-to-End Analysis Workflow Guide",
+      "file_type": "document",
+      "source_file": "docs/end_to_end_guide.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "end_to_end_guide_build_subject_groups",
+      "label": "build_subject_groups",
+      "file_type": "concept",
+      "source_file": "docs/end_to_end_guide.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_hilbert_hilbert_pipeline",
+      "label": "Hilbert Pipeline",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/hilbert.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_hilbert_hilbertparams",
+      "label": "HilbertParams",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/hilbert.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_hilbert_hilbertwriterparams",
+      "label": "HilbertWriterParams",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/hilbert.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_hilbert_band_envelope_extraction",
+      "label": "Band-Limited Envelope Extraction (Hilbert Method)",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/hilbert.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_condition_test_condition_test_pipeline",
+      "label": "Condition Test Pipeline",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/condition_test.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_condition_test_conditiontestparams",
+      "label": "ConditionTestParams",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/condition_test.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_condition_test_tabletrialresolver",
+      "label": "TableTrialResolver",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/condition_test.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_regression_regression_pipeline",
+      "label": "Regression Pipeline",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/regression.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_regression_regressionparams",
+      "label": "RegressionParams",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/regression.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_condition_test_group_condition_test_group_pipeline",
+      "label": "Condition Test Group Pipeline",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/condition_test_group.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_condition_test_group_conditiontestgroupparams",
+      "label": "ConditionTestGroupParams",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/condition_test_group.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_condition_test_group_build_condition_test_compatible_groups",
+      "label": "build_condition_test_compatible_groups",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/condition_test_group.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_condition_test_group_roi_aggregation",
+      "label": "ROI Aggregation (Atlas vs Manual Channel Maps)",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/condition_test_group.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_regression_group_regression_group_pipeline",
+      "label": "Regression Group Pipeline",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/regression_group.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_regression_group_regressiongroupparams",
+      "label": "RegressionGroupParams",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/regression_group.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_regression_group_build_regression_compatible_groups",
+      "label": "build_regression_compatible_groups",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/regression_group.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_time_frequency_time_frequency_pipeline",
+      "label": "Time-Frequency Pipeline",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/time_frequency.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_time_frequency_fieldtrip_estimator",
+      "label": "FieldTrip-Compatible Multitaper Estimator (ft_specest_mtmconvol)",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/time_frequency.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_time_frequency_multitaper_tfr",
+      "label": "Multitaper Time-Frequency Power (DPSS)",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/time_frequency.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_time_frequency_condition_test_tf_condition_test_pipeline",
+      "label": "Time-Frequency Condition Test Pipeline",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/time_frequency_condition_test.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_time_frequency_regression_tf_regression_pipeline",
+      "label": "Time-Frequency Regression Pipeline",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/time_frequency_regression.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_hfo_spike_detection_hfo_spike_detection_pipeline",
+      "label": "HFO / Spike Detection Pipeline (Internal)",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/hfo_spike_detection.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pipelines_hfo_spike_detection_dog_wavelet",
+      "label": "Derivative-of-Gaussian Wavelet Approach",
+      "file_type": "concept",
+      "source_file": "docs/pipelines/hfo_spike_detection.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "docs_troubleshooting_guide_troubleshooting_guide",
+      "label": "Troubleshooting Guide",
+      "file_type": "document",
+      "source_file": "docs/troubleshooting_guide.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_readme_analysis_scripts",
+      "label": "Analysis Scripts Overview",
+      "file_type": "document",
+      "source_file": "scripts/README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "dev_readme_create_public_snapshot",
+      "label": "create_public_snapshot.py — Public Snapshot Workflow",
+      "file_type": "concept",
+      "source_file": "scripts/dev/README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "github_copilot_instructions_baseprocessing",
+      "target": "github_copilot_instructions_processor_pattern",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "github_copilot_instructions_baseprocessingwriter",
+      "target": "github_copilot_instructions_writer_pattern",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "github_copilot_instructions_bidsfilegroup",
+      "target": "github_copilot_instructions_bidsfile",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "github_copilot_instructions_load_ieeg",
+      "target": "github_copilot_instructions_bidsfile",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "github_copilot_instructions_pure_computation_pattern",
+      "target": "github_copilot_instructions_processor_pattern",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/copilot-instructions.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_bidsforge",
+      "target": "pipelines_hilbert_hilbert_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_bidsforge",
+      "target": "pipelines_condition_test_condition_test_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_bidsforge",
+      "target": "pipelines_regression_regression_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_bidsforge",
+      "target": "pipelines_condition_test_group_condition_test_group_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_bidsforge",
+      "target": "pipelines_regression_group_regression_group_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "readme_bidsforge",
+      "target": "github_copilot_instructions_bidsdataset",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_readme_documentation_index",
+      "target": "end_to_end_guide_analysis_workflow",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_readme_documentation_index",
+      "target": "pipelines_hilbert_hilbert_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_readme_documentation_index",
+      "target": "pipelines_condition_test_condition_test_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_readme_documentation_index",
+      "target": "pipelines_regression_regression_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_readme_documentation_index",
+      "target": "pipelines_time_frequency_time_frequency_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_readme_documentation_index",
+      "target": "docs_add_pipeline_guide_new_pipeline_steps",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_add_pipeline_guide_new_pipeline_steps",
+      "target": "github_copilot_instructions_baseprocessing",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/add_pipeline_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_add_pipeline_guide_new_pipeline_steps",
+      "target": "github_copilot_instructions_baseprocessingwriter",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/add_pipeline_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_add_pipeline_guide_new_pipeline_steps",
+      "target": "docs_add_pipeline_guide_basetrialstatsparams",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/add_pipeline_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_add_pipeline_guide_new_pipeline_steps",
+      "target": "pipelines_hilbert_hilbert_pipeline",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/add_pipeline_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "end_to_end_guide_analysis_workflow",
+      "target": "pipelines_hilbert_hilbert_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/end_to_end_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "end_to_end_guide_analysis_workflow",
+      "target": "pipelines_condition_test_condition_test_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/end_to_end_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "end_to_end_guide_analysis_workflow",
+      "target": "pipelines_regression_regression_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/end_to_end_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "end_to_end_guide_analysis_workflow",
+      "target": "pipelines_condition_test_group_condition_test_group_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/end_to_end_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "end_to_end_guide_analysis_workflow",
+      "target": "pipelines_regression_group_regression_group_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/end_to_end_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "end_to_end_guide_analysis_workflow",
+      "target": "end_to_end_guide_build_subject_groups",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/end_to_end_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "end_to_end_guide_build_subject_groups",
+      "target": "github_copilot_instructions_bidsdataset",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/end_to_end_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "end_to_end_guide_build_subject_groups",
+      "target": "github_copilot_instructions_bidsfilegroup",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "docs/end_to_end_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_hilbert_hilbert_pipeline",
+      "target": "pipelines_hilbert_hilbertparams",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/hilbert.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_hilbert_hilbert_pipeline",
+      "target": "pipelines_hilbert_hilbertwriterparams",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/hilbert.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_hilbert_hilbert_pipeline",
+      "target": "pipelines_hilbert_band_envelope_extraction",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/hilbert.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_hilbert_hilbert_pipeline",
+      "target": "github_copilot_instructions_load_ieeg",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/hilbert.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_hilbert_hilbert_pipeline",
+      "target": "github_copilot_instructions_bidsdataset",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/hilbert.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_condition_test_condition_test_pipeline",
+      "target": "pipelines_condition_test_conditiontestparams",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/condition_test.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_condition_test_condition_test_pipeline",
+      "target": "pipelines_condition_test_tabletrialresolver",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/condition_test.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_condition_test_condition_test_pipeline",
+      "target": "pipelines_hilbert_hilbert_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/condition_test.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_condition_test_condition_test_pipeline",
+      "target": "end_to_end_guide_build_subject_groups",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/condition_test.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_regression_regression_pipeline",
+      "target": "pipelines_regression_regressionparams",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/regression.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_regression_regression_pipeline",
+      "target": "pipelines_condition_test_tabletrialresolver",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/regression.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_regression_regression_pipeline",
+      "target": "pipelines_hilbert_hilbert_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/regression.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_regression_regression_pipeline",
+      "target": "end_to_end_guide_build_subject_groups",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/regression.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_condition_test_group_condition_test_group_pipeline",
+      "target": "pipelines_condition_test_group_conditiontestgroupparams",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/condition_test_group.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_condition_test_group_condition_test_group_pipeline",
+      "target": "pipelines_condition_test_group_build_condition_test_compatible_groups",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/condition_test_group.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_condition_test_group_condition_test_group_pipeline",
+      "target": "pipelines_condition_test_condition_test_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/condition_test_group.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_condition_test_group_condition_test_group_pipeline",
+      "target": "pipelines_condition_test_group_roi_aggregation",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/condition_test_group.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_regression_group_regression_group_pipeline",
+      "target": "pipelines_regression_group_regressiongroupparams",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/regression_group.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_regression_group_regression_group_pipeline",
+      "target": "pipelines_regression_group_build_regression_compatible_groups",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/regression_group.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_regression_group_regression_group_pipeline",
+      "target": "pipelines_regression_regression_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/regression_group.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_regression_group_regression_group_pipeline",
+      "target": "pipelines_condition_test_group_roi_aggregation",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "docs/pipelines/regression_group.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_time_frequency_time_frequency_pipeline",
+      "target": "pipelines_time_frequency_fieldtrip_estimator",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/time_frequency.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_time_frequency_time_frequency_pipeline",
+      "target": "pipelines_time_frequency_multitaper_tfr",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/time_frequency.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_time_frequency_time_frequency_pipeline",
+      "target": "github_copilot_instructions_load_ieeg",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "docs/pipelines/time_frequency.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_time_frequency_time_frequency_pipeline",
+      "target": "github_copilot_instructions_bidsdataset",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "docs/pipelines/time_frequency.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_time_frequency_condition_test_tf_condition_test_pipeline",
+      "target": "pipelines_time_frequency_time_frequency_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/time_frequency_condition_test.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_time_frequency_condition_test_tf_condition_test_pipeline",
+      "target": "pipelines_condition_test_tabletrialresolver",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/time_frequency_condition_test.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_time_frequency_regression_tf_regression_pipeline",
+      "target": "pipelines_time_frequency_time_frequency_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/time_frequency_regression.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_time_frequency_regression_tf_regression_pipeline",
+      "target": "pipelines_condition_test_tabletrialresolver",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/time_frequency_regression.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_hfo_spike_detection_hfo_spike_detection_pipeline",
+      "target": "pipelines_hfo_spike_detection_dog_wavelet",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/hfo_spike_detection.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_hfo_spike_detection_hfo_spike_detection_pipeline",
+      "target": "github_copilot_instructions_load_ieeg",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/pipelines/hfo_spike_detection.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_troubleshooting_guide_troubleshooting_guide",
+      "target": "github_copilot_instructions_bidsdataset",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/troubleshooting_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_troubleshooting_guide_troubleshooting_guide",
+      "target": "pipelines_hilbert_hilbert_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/troubleshooting_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_readme_analysis_scripts",
+      "target": "pipelines_hilbert_hilbert_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_readme_analysis_scripts",
+      "target": "pipelines_condition_test_condition_test_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_readme_analysis_scripts",
+      "target": "pipelines_regression_regression_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_readme_analysis_scripts",
+      "target": "pipelines_condition_test_group_condition_test_group_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_readme_analysis_scripts",
+      "target": "pipelines_regression_group_regression_group_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "dev_readme_create_public_snapshot",
+      "target": "pipelines_hfo_spike_detection_hfo_spike_detection_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/dev/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "dev_readme_create_public_snapshot",
+      "target": "scripts_readme_analysis_scripts",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/dev/README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_hilbert_band_envelope_extraction",
+      "target": "pipelines_time_frequency_multitaper_tfr",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "docs/pipelines/hilbert.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_condition_test_condition_test_pipeline",
+      "target": "pipelines_time_frequency_condition_test_tf_condition_test_pipeline",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/pipelines/condition_test.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "pipelines_regression_regression_pipeline",
+      "target": "pipelines_time_frequency_regression_tf_regression_pipeline",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/pipelines/regression.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_add_pipeline_guide_basetrialstatsparams",
+      "target": "pipelines_condition_test_conditiontestparams",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "docs/add_pipeline_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "docs_add_pipeline_guide_basetrialstatsparams",
+      "target": "pipelines_regression_regressionparams",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "docs/add_pipeline_guide.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "subject_level_analysis_chain",
+      "label": "Subject-Level iEEG Analysis Chain: Hilbert → ConditionTest / Regression",
+      "nodes": [
+        "pipelines_hilbert_hilbert_pipeline",
+        "pipelines_condition_test_condition_test_pipeline",
+        "pipelines_regression_regression_pipeline"
+      ],
+      "relation": "form",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "README.md"
+    },
+    {
+      "id": "group_level_roi_statistics_chain",
+      "label": "Group-Level ROI Statistics Aggregation Chain",
+      "nodes": [
+        "pipelines_condition_test_group_condition_test_group_pipeline",
+        "pipelines_regression_group_regression_group_pipeline",
+        "pipelines_condition_test_group_roi_aggregation"
+      ],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/condition_test_group.md"
+    },
+    {
+      "id": "time_frequency_analysis_chain",
+      "label": "Time-Frequency Analysis Chain: TF Extraction → TF Statistics",
+      "nodes": [
+        "pipelines_time_frequency_time_frequency_pipeline",
+        "pipelines_time_frequency_condition_test_tf_condition_test_pipeline",
+        "pipelines_time_frequency_regression_tf_regression_pipeline"
+      ],
+      "relation": "form",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/pipelines/time_frequency_condition_test.md"
+    }
+  ],
+  "input_tokens": 7200,
+  "output_tokens": 2100
+}

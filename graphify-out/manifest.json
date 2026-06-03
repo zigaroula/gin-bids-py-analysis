@@ -1,0 +1,1292 @@
+{
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\.vscode\\launch.json": {
+    "mtime": 1780476074.65953,
+    "ast_hash": "9bc6af33971f9e625139ffdb5d82b893",
+    "semantic_hash": "9bc6af33971f9e625139ffdb5d82b893"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\__init__.py": {
+    "mtime": 1780389434.634434,
+    "ast_hash": "4a805d773c5d2faf1aae924d86d32001",
+    "semantic_hash": "4a805d773c5d2faf1aae924d86d32001"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\bids\\__init__.py": {
+    "mtime": 1780389434.635439,
+    "ast_hash": "71193597184a7589b5e8ecfaf2f6f68a",
+    "semantic_hash": "71193597184a7589b5e8ecfaf2f6f68a"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\bids\\dataset.py": {
+    "mtime": 1780389434.635439,
+    "ast_hash": "adcc031da2f467233a8e50d31a774946",
+    "semantic_hash": "adcc031da2f467233a8e50d31a774946"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\bids\\file.py": {
+    "mtime": 1780389434.635439,
+    "ast_hash": "cd30a677f3b9986654c31cc73bbc3203",
+    "semantic_hash": "cd30a677f3b9986654c31cc73bbc3203"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\bids\\file_group.py": {
+    "mtime": 1780389434.635439,
+    "ast_hash": "d71cc0786b7f631d7fee1cd3e8a7e7f0",
+    "semantic_hash": "d71cc0786b7f631d7fee1cd3e8a7e7f0"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\bids\\helpers.py": {
+    "mtime": 1780389434.6364427,
+    "ast_hash": "528b9f11278c0eff2f8a3dc0c235a96c",
+    "semantic_hash": "528b9f11278c0eff2f8a3dc0c235a96c"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\bids\\matching.py": {
+    "mtime": 1780389434.6384733,
+    "ast_hash": "74efa3b43f15bedda983ec6310fa834f",
+    "semantic_hash": "74efa3b43f15bedda983ec6310fa834f"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\bids\\subject.py": {
+    "mtime": 1780389434.6384733,
+    "ast_hash": "0abffb0b9fbd253533d9f71fb63afb67",
+    "semantic_hash": "0abffb0b9fbd253533d9f71fb63afb67"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\data\\__init__.py": {
+    "mtime": 1780389434.6384733,
+    "ast_hash": "4fcc7e2a58d3190a61cde0a93b06807b",
+    "semantic_hash": "4fcc7e2a58d3190a61cde0a93b06807b"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\data\\loader.py": {
+    "mtime": 1780389434.6384733,
+    "ast_hash": "a13e02e8f9b531c2de40344b7360123e",
+    "semantic_hash": "a13e02e8f9b531c2de40344b7360123e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\__init__.py": {
+    "mtime": 1780389434.6399784,
+    "ast_hash": "afba3ef967d456b3ab980c3b814fcfda",
+    "semantic_hash": "afba3ef967d456b3ab980c3b814fcfda"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\base.py": {
+    "mtime": 1780389434.6399784,
+    "ast_hash": "d0fe30086b4011b7ad968512a6a6da79",
+    "semantic_hash": "d0fe30086b4011b7ad968512a6a6da79"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hfo_spike_detection\\__init__.py": {
+    "mtime": 1780389434.640988,
+    "ast_hash": "e9c20c46307c75d485b64575ce7d6c8f",
+    "semantic_hash": "e9c20c46307c75d485b64575ce7d6c8f"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hfo_spike_detection\\hfo_spike_detector.py": {
+    "mtime": 1780389434.640988,
+    "ast_hash": "fc0a72c1c46feaac6249fb685bea51b4",
+    "semantic_hash": "fc0a72c1c46feaac6249fb685bea51b4"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hfo_spike_detection\\params.py": {
+    "mtime": 1780389434.640988,
+    "ast_hash": "2a1b51a274caf2147dcaac0c99daa14d",
+    "semantic_hash": "2a1b51a274caf2147dcaac0c99daa14d"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hfo_spike_detection\\processor.py": {
+    "mtime": 1780389434.6419926,
+    "ast_hash": "8bd12bbc0146bcba0097ba16759495ba",
+    "semantic_hash": "8bd12bbc0146bcba0097ba16759495ba"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hfo_spike_detection\\result.py": {
+    "mtime": 1780389434.6419926,
+    "ast_hash": "b08b5d5264c62bdbad8a699950321d61",
+    "semantic_hash": "b08b5d5264c62bdbad8a699950321d61"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hfo_spike_detection\\result_loader.py": {
+    "mtime": 1780389434.6419926,
+    "ast_hash": "7ef57f23ad2d6cb77e4ee90279c08684",
+    "semantic_hash": "7ef57f23ad2d6cb77e4ee90279c08684"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hfo_spike_detection\\writer.py": {
+    "mtime": 1780389434.6429982,
+    "ast_hash": "27d0f1b0365cff7235edf0fa53837012",
+    "semantic_hash": "27d0f1b0365cff7235edf0fa53837012"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hilbert\\__init__.py": {
+    "mtime": 1780389434.6429982,
+    "ast_hash": "032bb94eb9d44eb55f19d78b8196a45c",
+    "semantic_hash": "032bb94eb9d44eb55f19d78b8196a45c"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hilbert\\dsp.py": {
+    "mtime": 1780389434.6429982,
+    "ast_hash": "cf9752b936f9c63ff786189af900f56d",
+    "semantic_hash": "cf9752b936f9c63ff786189af900f56d"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hilbert\\fir.py": {
+    "mtime": 1780389434.6440172,
+    "ast_hash": "3218bd3469be2966a3046128cd3c758b",
+    "semantic_hash": "3218bd3469be2966a3046128cd3c758b"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hilbert\\params.py": {
+    "mtime": 1780389434.6440172,
+    "ast_hash": "18c7f76e8b9cee102148c25ee11e2e8e",
+    "semantic_hash": "18c7f76e8b9cee102148c25ee11e2e8e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hilbert\\processor.py": {
+    "mtime": 1780389434.6440172,
+    "ast_hash": "e5e484c08297ec17cabb3e65560b7b45",
+    "semantic_hash": "e5e484c08297ec17cabb3e65560b7b45"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hilbert\\result.py": {
+    "mtime": 1780389434.6450584,
+    "ast_hash": "47a7076545ae9b678bed99a00525448f",
+    "semantic_hash": "47a7076545ae9b678bed99a00525448f"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hilbert\\result_loader.py": {
+    "mtime": 1780389434.6450584,
+    "ast_hash": "880e6795220ef729a85162ab24705dc9",
+    "semantic_hash": "880e6795220ef729a85162ab24705dc9"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\hilbert\\writer.py": {
+    "mtime": 1780389434.6450584,
+    "ast_hash": "ac925ff1fb2bb4663a28b71893e0a62c",
+    "semantic_hash": "ac925ff1fb2bb4663a28b71893e0a62c"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency\\__init__.py": {
+    "mtime": 1780389473.9899616,
+    "ast_hash": "c404aa2acb713e5e2d8ca98ae9440c30",
+    "semantic_hash": "c404aa2acb713e5e2d8ca98ae9440c30"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency\\dsp.py": {
+    "mtime": 1780397437.6090581,
+    "ast_hash": "ba58f0844c529ee7def83ff5a08335f5",
+    "semantic_hash": "ba58f0844c529ee7def83ff5a08335f5"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency\\params.py": {
+    "mtime": 1780389473.9909618,
+    "ast_hash": "f12b1137242fdaa240f9891577d97e2c",
+    "semantic_hash": "f12b1137242fdaa240f9891577d97e2c"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency\\processor.py": {
+    "mtime": 1780389473.9909618,
+    "ast_hash": "30f985c1f5bdec6c922f9b3bb3dffc7d",
+    "semantic_hash": "30f985c1f5bdec6c922f9b3bb3dffc7d"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency\\result.py": {
+    "mtime": 1780389473.9942887,
+    "ast_hash": "cea971fb8e5b8f3deec70f11c5b8d7a3",
+    "semantic_hash": "cea971fb8e5b8f3deec70f11c5b8d7a3"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency\\result_loader.py": {
+    "mtime": 1780389473.9942887,
+    "ast_hash": "32d4345c529e5ef6235ab0242aa34755",
+    "semantic_hash": "32d4345c529e5ef6235ab0242aa34755"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency\\writer.py": {
+    "mtime": 1780389473.9942887,
+    "ast_hash": "802d8471dd809ce23e3416a9faadbe19",
+    "semantic_hash": "802d8471dd809ce23e3416a9faadbe19"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\__init__.py": {
+    "mtime": 1780473916.6949494,
+    "ast_hash": "9337ad2ee077a4c0acccd4b5ea3eeed7",
+    "semantic_hash": "9337ad2ee077a4c0acccd4b5ea3eeed7"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\condition_test\\__init__.py": {
+    "mtime": 1780473680.373743,
+    "ast_hash": "24575a91503cd9e0254c2be3385d3154",
+    "semantic_hash": "24575a91503cd9e0254c2be3385d3154"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\condition_test\\params.py": {
+    "mtime": 1780473680.3615966,
+    "ast_hash": "e02e6f8ae7a38edd1814460b1a3608bc",
+    "semantic_hash": "e02e6f8ae7a38edd1814460b1a3608bc"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\condition_test\\processor.py": {
+    "mtime": 1780473680.3646193,
+    "ast_hash": "859ff8c5a84854650949bb5e18cb61f2",
+    "semantic_hash": "859ff8c5a84854650949bb5e18cb61f2"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\condition_test\\result.py": {
+    "mtime": 1780473691.9700294,
+    "ast_hash": "ea26ed5df5c543ffb59f43361e698ac1",
+    "semantic_hash": "ea26ed5df5c543ffb59f43361e698ac1"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\condition_test\\result_loader.py": {
+    "mtime": 1780474355.1903064,
+    "ast_hash": "7fa6510ebd1a483386a76d3ac16a01a5",
+    "semantic_hash": "7fa6510ebd1a483386a76d3ac16a01a5"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\condition_test\\writer.py": {
+    "mtime": 1780473680.3646193,
+    "ast_hash": "2e2eca504a1ca2854557f09fdbdf2d6d",
+    "semantic_hash": "2e2eca504a1ca2854557f09fdbdf2d6d"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\params.py": {
+    "mtime": 1780473572.735358,
+    "ast_hash": "4cfaa4a93ded5b6faee491299ee877c2",
+    "semantic_hash": "4cfaa4a93ded5b6faee491299ee877c2"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\processor.py": {
+    "mtime": 1780473572.7376275,
+    "ast_hash": "8d0a88b6423e1344a4d68f9faa87a0ae",
+    "semantic_hash": "8d0a88b6423e1344a4d68f9faa87a0ae"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\regression\\__init__.py": {
+    "mtime": 1780482517.9816284,
+    "ast_hash": "7d8c5189496d8f9faf0a7ea04166ccba",
+    "semantic_hash": "7d8c5189496d8f9faf0a7ea04166ccba"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\regression\\params.py": {
+    "mtime": 1780482514.1650083,
+    "ast_hash": "5a50ef54571ccae770b8855d3d4c086f",
+    "semantic_hash": "5a50ef54571ccae770b8855d3d4c086f"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\regression\\processor.py": {
+    "mtime": 1780482414.4029,
+    "ast_hash": "817fa9f1aa37433b3aef93f39f81c18a",
+    "semantic_hash": "817fa9f1aa37433b3aef93f39f81c18a"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\regression\\result.py": {
+    "mtime": 1780473822.6070876,
+    "ast_hash": "ae43e690c74a5ceb40f1202d9e96cebd",
+    "semantic_hash": "ae43e690c74a5ceb40f1202d9e96cebd"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\regression\\result_loader.py": {
+    "mtime": 1780474325.096693,
+    "ast_hash": "f0b585c91285ffc047bf8c67a1ed613e",
+    "semantic_hash": "f0b585c91285ffc047bf8c67a1ed613e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\regression\\writer.py": {
+    "mtime": 1780473822.608149,
+    "ast_hash": "edc5ba921c234678c1afa9a64abba23f",
+    "semantic_hash": "edc5ba921c234678c1afa9a64abba23f"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\result.py": {
+    "mtime": 1780473572.736356,
+    "ast_hash": "4b4422965e89a8a2918ea5824d44e1cc",
+    "semantic_hash": "4b4422965e89a8a2918ea5824d44e1cc"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\time_frequency_stats\\writer.py": {
+    "mtime": 1780473572.741143,
+    "ast_hash": "0ba7e47cc369ec6f0f79851cf2607607",
+    "semantic_hash": "0ba7e47cc369ec6f0f79851cf2607607"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\__init__.py": {
+    "mtime": 1780389434.6450584,
+    "ast_hash": "f72678d66c737cfa57edd6107342c868",
+    "semantic_hash": "f72678d66c737cfa57edd6107342c868"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\condition_test\\__init__.py": {
+    "mtime": 1780389434.646425,
+    "ast_hash": "9266e45d47af594a291eeec7ae968f34",
+    "semantic_hash": "9266e45d47af594a291eeec7ae968f34"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\condition_test\\params.py": {
+    "mtime": 1780389434.646425,
+    "ast_hash": "8e45d646c07dab527b6b6e04cda0e19b",
+    "semantic_hash": "8e45d646c07dab527b6b6e04cda0e19b"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\condition_test\\processor.py": {
+    "mtime": 1780389434.646425,
+    "ast_hash": "09972c85fa35c66ad00d064d6d163ba7",
+    "semantic_hash": "09972c85fa35c66ad00d064d6d163ba7"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\condition_test\\result.py": {
+    "mtime": 1780389434.6474352,
+    "ast_hash": "0ad7a1b1d1d20c71704429735aa60405",
+    "semantic_hash": "0ad7a1b1d1d20c71704429735aa60405"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\condition_test\\result_loader.py": {
+    "mtime": 1780389434.6474352,
+    "ast_hash": "a3fe7937ad8eb1d94356c2cb77502fba",
+    "semantic_hash": "a3fe7937ad8eb1d94356c2cb77502fba"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\condition_test\\stats.py": {
+    "mtime": 1780389434.6474352,
+    "ast_hash": "a89301826d1fc7ff69819db8a149a715",
+    "semantic_hash": "a89301826d1fc7ff69819db8a149a715"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\condition_test\\writer.py": {
+    "mtime": 1780389434.6484473,
+    "ast_hash": "820733da5009da7ec1e9d1ef9fd71dbc",
+    "semantic_hash": "820733da5009da7ec1e9d1ef9fd71dbc"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\params.py": {
+    "mtime": 1780389434.6484473,
+    "ast_hash": "6a72f9adc721fce395bc049e9a292c2c",
+    "semantic_hash": "6a72f9adc721fce395bc049e9a292c2c"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\processor.py": {
+    "mtime": 1780389434.6494524,
+    "ast_hash": "2058b3841d9c842a01b434e7f2cbb8b9",
+    "semantic_hash": "2058b3841d9c842a01b434e7f2cbb8b9"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\regression\\__init__.py": {
+    "mtime": 1780389434.6494524,
+    "ast_hash": "1b748297fff0cc8c76ebcc32b7a823b2",
+    "semantic_hash": "1b748297fff0cc8c76ebcc32b7a823b2"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\regression\\params.py": {
+    "mtime": 1780482507.9227076,
+    "ast_hash": "3fcdc0b537639d22e55db3d65ef333c1",
+    "semantic_hash": "3fcdc0b537639d22e55db3d65ef333c1"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\regression\\processor.py": {
+    "mtime": 1780482419.9291494,
+    "ast_hash": "c0e043e0afd1a2a8a9e45209dd591bde",
+    "semantic_hash": "c0e043e0afd1a2a8a9e45209dd591bde"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\regression\\result.py": {
+    "mtime": 1780389434.650462,
+    "ast_hash": "bd3855c5feae2317cb1039f1dc1caf06",
+    "semantic_hash": "bd3855c5feae2317cb1039f1dc1caf06"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\regression\\result_loader.py": {
+    "mtime": 1780389434.650462,
+    "ast_hash": "77533419424f3f8f06da25e05e4d87b0",
+    "semantic_hash": "77533419424f3f8f06da25e05e4d87b0"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\regression\\writer.py": {
+    "mtime": 1780389434.6514666,
+    "ast_hash": "a2d01fd5086b4bce9dabf31784571b99",
+    "semantic_hash": "a2d01fd5086b4bce9dabf31784571b99"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\result.py": {
+    "mtime": 1780389434.6514666,
+    "ast_hash": "41b0b4a7294c3683b61e7a03e4a95a89",
+    "semantic_hash": "41b0b4a7294c3683b61e7a03e4a95a89"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats\\writer.py": {
+    "mtime": 1780389434.6514666,
+    "ast_hash": "25b9d104aaf4e18441f06d68be399314",
+    "semantic_hash": "25b9d104aaf4e18441f06d68be399314"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\__init__.py": {
+    "mtime": 1780389434.652474,
+    "ast_hash": "046efa6d8234896dbe6e43b73eeb5592",
+    "semantic_hash": "046efa6d8234896dbe6e43b73eeb5592"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\compatibility.py": {
+    "mtime": 1780389434.6537642,
+    "ast_hash": "2c4b19c7db947bde59f129b8cd167cbd",
+    "semantic_hash": "2c4b19c7db947bde59f129b8cd167cbd"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\condition_test\\__init__.py": {
+    "mtime": 1780389434.6537642,
+    "ast_hash": "43dd3df8ed56b8174b930cd82470e924",
+    "semantic_hash": "43dd3df8ed56b8174b930cd82470e924"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\condition_test\\params.py": {
+    "mtime": 1780389434.6537642,
+    "ast_hash": "00aecb2f921a1fdf3fb2c4357e437981",
+    "semantic_hash": "00aecb2f921a1fdf3fb2c4357e437981"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\condition_test\\processor.py": {
+    "mtime": 1780389434.6547718,
+    "ast_hash": "ccb0d112b4bc78ea33e9659c312c9833",
+    "semantic_hash": "ccb0d112b4bc78ea33e9659c312c9833"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\condition_test\\result.py": {
+    "mtime": 1780389434.6547718,
+    "ast_hash": "8f66f7e93528011e87297b212fb671fc",
+    "semantic_hash": "8f66f7e93528011e87297b212fb671fc"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\condition_test\\result_loader.py": {
+    "mtime": 1780389434.6557767,
+    "ast_hash": "36d9b56bd9fa505146108cbb6043cc12",
+    "semantic_hash": "36d9b56bd9fa505146108cbb6043cc12"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\condition_test\\writer.py": {
+    "mtime": 1780389434.6557767,
+    "ast_hash": "7435e1350adb1d11685436b7158de30b",
+    "semantic_hash": "7435e1350adb1d11685436b7158de30b"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\params.py": {
+    "mtime": 1780389434.6557767,
+    "ast_hash": "b7eaa830ea6947b8384bb1f0af94f7ba",
+    "semantic_hash": "b7eaa830ea6947b8384bb1f0af94f7ba"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\processor.py": {
+    "mtime": 1780389434.6568773,
+    "ast_hash": "66c3a5152a01c483cc74b554c3503de0",
+    "semantic_hash": "66c3a5152a01c483cc74b554c3503de0"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\regression\\__init__.py": {
+    "mtime": 1780389434.6568773,
+    "ast_hash": "1245792291e446a7c8203676a72b21ef",
+    "semantic_hash": "1245792291e446a7c8203676a72b21ef"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\regression\\params.py": {
+    "mtime": 1780389434.6568773,
+    "ast_hash": "8fc59f27e007b36190a815321fc37da5",
+    "semantic_hash": "8fc59f27e007b36190a815321fc37da5"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\regression\\processor.py": {
+    "mtime": 1780389434.6578796,
+    "ast_hash": "fa409dadd927ee0ae1f8679b756a0cba",
+    "semantic_hash": "fa409dadd927ee0ae1f8679b756a0cba"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\regression\\result.py": {
+    "mtime": 1780389434.6578796,
+    "ast_hash": "d4094278e9c44dbefe3351caba748e70",
+    "semantic_hash": "d4094278e9c44dbefe3351caba748e70"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\regression\\result_loader.py": {
+    "mtime": 1780389434.6578796,
+    "ast_hash": "fcec3d06124b251469cd33fdb5aebaff",
+    "semantic_hash": "fcec3d06124b251469cd33fdb5aebaff"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\regression\\writer.py": {
+    "mtime": 1780389434.6589637,
+    "ast_hash": "bdeb838d254f45b2a16463f3e3eebe8b",
+    "semantic_hash": "bdeb838d254f45b2a16463f3e3eebe8b"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\result.py": {
+    "mtime": 1780389434.6589637,
+    "ast_hash": "b18cead47a7e98c153c5f2e702b220a8",
+    "semantic_hash": "b18cead47a7e98c153c5f2e702b220a8"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\trial_stats_group\\writer.py": {
+    "mtime": 1780389434.6589637,
+    "ast_hash": "dfb22e02633c743b1b5e17b14d49e741",
+    "semantic_hash": "dfb22e02633c743b1b5e17b14d49e741"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\__init__.py": {
+    "mtime": 1780389434.6589637,
+    "ast_hash": "aba93423b57af1e7e8dbd7d72be1da9d",
+    "semantic_hash": "aba93423b57af1e7e8dbd7d72be1da9d"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\atlas.py": {
+    "mtime": 1780389434.6599722,
+    "ast_hash": "88c32cf669323e3ee5da37aca8890757",
+    "semantic_hash": "88c32cf669323e3ee5da37aca8890757"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\channels.py": {
+    "mtime": 1780389434.6599722,
+    "ast_hash": "e6505abaf2ef6b2c5f680897833ba176",
+    "semantic_hash": "e6505abaf2ef6b2c5f680897833ba176"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\cluster_permutation.py": {
+    "mtime": 1780389434.6599722,
+    "ast_hash": "8d22b6e963fc9edbb74c6b3a71aad4cf",
+    "semantic_hash": "8d22b6e963fc9edbb74c6b3a71aad4cf"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\condition_rules.py": {
+    "mtime": 1780389434.6611128,
+    "ast_hash": "7073911085b6f37b81c2d83fab0b37ee",
+    "semantic_hash": "7073911085b6f37b81c2d83fab0b37ee"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\epoch_quality.py": {
+    "mtime": 1780389434.6611128,
+    "ast_hash": "86664b85c96a3dbb6b67d8ee574f6c2a",
+    "semantic_hash": "86664b85c96a3dbb6b67d8ee574f6c2a"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\epoching.py": {
+    "mtime": 1780389434.6611128,
+    "ast_hash": "e4f4173efbf2d6f8cb069092a44ed97e",
+    "semantic_hash": "e4f4173efbf2d6f8cb069092a44ed97e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\events.py": {
+    "mtime": 1780389434.6611128,
+    "ast_hash": "03c87adbaf534c78c135793c35eab5c6",
+    "semantic_hash": "03c87adbaf534c78c135793c35eab5c6"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\field_names.py": {
+    "mtime": 1780389434.6622376,
+    "ast_hash": "23a6c9509d89b7666f1c4a1d5d50a383",
+    "semantic_hash": "23a6c9509d89b7666f1c4a1d5d50a383"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\filters.py": {
+    "mtime": 1780389434.6622376,
+    "ast_hash": "da1957b77274426c6e7163a5d32b36d9",
+    "semantic_hash": "da1957b77274426c6e7163a5d32b36d9"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\group_stats.py": {
+    "mtime": 1780389434.6622376,
+    "ast_hash": "698a3d5b7cb11cace67eee82767ce0ec",
+    "semantic_hash": "698a3d5b7cb11cace67eee82767ce0ec"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\hdf5.py": {
+    "mtime": 1780389434.6632469,
+    "ast_hash": "11659515da2743e7919d445a1873e0a5",
+    "semantic_hash": "11659515da2743e7919d445a1873e0a5"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\input_events.py": {
+    "mtime": 1780389434.6632469,
+    "ast_hash": "b6cd98352fcd75552c2c0343a7888c7e",
+    "semantic_hash": "b6cd98352fcd75552c2c0343a7888c7e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\matlab.py": {
+    "mtime": 1780389434.6632469,
+    "ast_hash": "b17d622ea9736799375926a286e79695",
+    "semantic_hash": "b17d622ea9736799375926a286e79695"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\multithreading.py": {
+    "mtime": 1780389434.6642466,
+    "ast_hash": "a4577d761b1b3b8cad462b3b84062bca",
+    "semantic_hash": "a4577d761b1b3b8cad462b3b84062bca"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\regression_params.py": {
+    "mtime": 1780482501.0720427,
+    "ast_hash": "178c9e49550420acbd47dbd88aeb0ab7",
+    "semantic_hash": "178c9e49550420acbd47dbd88aeb0ab7"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\regression_stats.py": {
+    "mtime": 1780482530.6389427,
+    "ast_hash": "99fd62182a976e48b0af2c8fe2e52f1f",
+    "semantic_hash": "99fd62182a976e48b0af2c8fe2e52f1f"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\serialization.py": {
+    "mtime": 1780389434.6642466,
+    "ast_hash": "b22d8e6fa99cc81053c8beb766b69a34",
+    "semantic_hash": "b22d8e6fa99cc81053c8beb766b69a34"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\statistics.py": {
+    "mtime": 1780389434.6642466,
+    "ast_hash": "e960013120283bf6abb318367015ce48",
+    "semantic_hash": "e960013120283bf6abb318367015ce48"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\tables.py": {
+    "mtime": 1780389434.6642466,
+    "ast_hash": "a9976cdf0c93a4752be8b19cc39b2a2e",
+    "semantic_hash": "a9976cdf0c93a4752be8b19cc39b2a2e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\trial_annotator.py": {
+    "mtime": 1780389434.6655083,
+    "ast_hash": "22860d74b959f048cdb8cf5c9be48dd4",
+    "semantic_hash": "22860d74b959f048cdb8cf5c9be48dd4"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\processing\\utils\\trial_resolver.py": {
+    "mtime": 1780389434.6655083,
+    "ast_hash": "777b5c87317de8b54e6910dd2c0865be",
+    "semantic_hash": "777b5c87317de8b54e6910dd2c0865be"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\__init__.py": {
+    "mtime": 1780389434.6655083,
+    "ast_hash": "95a1a6e9467f0ad42ec4312365d0d57f",
+    "semantic_hash": "95a1a6e9467f0ad42ec4312365d0d57f"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\__init__.py": {
+    "mtime": 1780389434.6665173,
+    "ast_hash": "e2d8d5fcb25f6a0357fe3b13cbeb2651",
+    "semantic_hash": "e2d8d5fcb25f6a0357fe3b13cbeb2651"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\_bridge.py": {
+    "mtime": 1780389434.6665173,
+    "ast_hash": "57ead06f8e482a807f9e810cd5b43650",
+    "semantic_hash": "57ead06f8e482a807f9e810cd5b43650"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\_bridge_slope.py": {
+    "mtime": 1780389434.6665173,
+    "ast_hash": "a5670ee949ee21ebd1a36ab083541828",
+    "semantic_hash": "a5670ee949ee21ebd1a36ab083541828"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\app.py": {
+    "mtime": 1780389434.6665173,
+    "ast_hash": "1ebed19cfd3f8f73e7feddb2ba1d4bfc",
+    "semantic_hash": "1ebed19cfd3f8f73e7feddb2ba1d4bfc"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\panels\\__init__.py": {
+    "mtime": 1780389434.6675236,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\panels\\group_params_panel.py": {
+    "mtime": 1780389434.6675236,
+    "ast_hash": "a44fb73e3ea7891b5233a5f9f3b11eec",
+    "semantic_hash": "a44fb73e3ea7891b5233a5f9f3b11eec"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\panels\\group_plot_panel.py": {
+    "mtime": 1780389434.668529,
+    "ast_hash": "6c9c4952b9facc2e4a737fbde92dd85b",
+    "semantic_hash": "6c9c4952b9facc2e4a737fbde92dd85b"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\panels\\manual_region_channels_dialog.py": {
+    "mtime": 1780389434.668529,
+    "ast_hash": "f6443e9d5d184e28bdd6a24e9c084a8e",
+    "semantic_hash": "f6443e9d5d184e28bdd6a24e9c084a8e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\panels\\params_panel.py": {
+    "mtime": 1780389434.6695545,
+    "ast_hash": "23a5417b80c2ba641b92a84b0b27e7f5",
+    "semantic_hash": "23a5417b80c2ba641b92a84b0b27e7f5"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\panels\\plot_panel.py": {
+    "mtime": 1780389434.6695545,
+    "ast_hash": "5a8ca638812b99c417515050c5841f59",
+    "semantic_hash": "5a8ca638812b99c417515050c5841f59"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\panels\\save_dialog.py": {
+    "mtime": 1780389434.6705635,
+    "ast_hash": "9c395db6d45e28a88f6a23c5755177b1",
+    "semantic_hash": "9c395db6d45e28a88f6a23c5755177b1"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\panels\\save_group_dialog.py": {
+    "mtime": 1780389434.6705635,
+    "ast_hash": "74dc63a8f5dd5505c69b016fa594fd5e",
+    "semantic_hash": "74dc63a8f5dd5505c69b016fa594fd5e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\panels\\subject_panel.py": {
+    "mtime": 1780389434.6705635,
+    "ast_hash": "05d6baa0c09e51ac7ca5d88cc59e8f7e",
+    "semantic_hash": "05d6baa0c09e51ac7ca5d88cc59e8f7e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\window.py": {
+    "mtime": 1780389434.6705635,
+    "ast_hash": "13e63834698cd5e89e6850ac164309c5",
+    "semantic_hash": "13e63834698cd5e89e6850ac164309c5"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\window_group_precomputed.py": {
+    "mtime": 1780389434.6715755,
+    "ast_hash": "5037602a2dbb4203a47fa70ccd278125",
+    "semantic_hash": "5037602a2dbb4203a47fa70ccd278125"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\window_precomputed.py": {
+    "mtime": 1780389434.6715755,
+    "ast_hash": "23605b9a6d48423f470f70e8a018f846",
+    "semantic_hash": "23605b9a6d48423f470f70e8a018f846"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\bidsforge\\visualization\\trial_stats\\worker.py": {
+    "mtime": 1780389434.6715755,
+    "ast_hash": "249be5d2005487bcff1ed7e58aec56aa",
+    "semantic_hash": "249be5d2005487bcff1ed7e58aec56aa"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\codemeta.json": {
+    "mtime": 1780389473.9942887,
+    "ast_hash": "407a1adc741698f7a999c176165ed478",
+    "semantic_hash": "407a1adc741698f7a999c176165ed478"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\compare_a.py": {
+    "mtime": 1780389434.6759574,
+    "ast_hash": "e7e1cd6f1bd609aea4213fd164124ecf",
+    "semantic_hash": "e7e1cd6f1bd609aea4213fd164124ecf"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\compare_b1.py": {
+    "mtime": 1780389434.6770208,
+    "ast_hash": "c76271ed32139df72aba90950400580f",
+    "semantic_hash": "c76271ed32139df72aba90950400580f"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\compare_b1_TF.py": {
+    "mtime": 1780389473.9962883,
+    "ast_hash": "9d43de5838f78f464b480104ae06b7cc",
+    "semantic_hash": "9d43de5838f78f464b480104ae06b7cc"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\compare_b2.py": {
+    "mtime": 1780389434.6780274,
+    "ast_hash": "3219f46016604ea0ce4783db94702ba2",
+    "semantic_hash": "3219f46016604ea0ce4783db94702ba2"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\compare_b2_TF_condition_test.py": {
+    "mtime": 1780480766.0454183,
+    "ast_hash": "cc16d97f74bddc27438d10a8e755f81c",
+    "semantic_hash": "cc16d97f74bddc27438d10a8e755f81c"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\compare_b2_TF_regression.py": {
+    "mtime": 1780480693.1638553,
+    "ast_hash": "a31a2c2496cc62c37cc360d2e5a697a6",
+    "semantic_hash": "a31a2c2496cc62c37cc360d2e5a697a6"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\compare_b3.py": {
+    "mtime": 1780482618.1708195,
+    "ast_hash": "8e067fa162349a8afe46432489c6839e",
+    "semantic_hash": "8e067fa162349a8afe46432489c6839e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\compare_b5.py": {
+    "mtime": 1780389434.6780274,
+    "ast_hash": "8db2ce05895ef393605f2158645b5fd0",
+    "semantic_hash": "8db2ce05895ef393605f2158645b5fd0"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\compare_subject_config.py": {
+    "mtime": 1780480609.2937026,
+    "ast_hash": "fdaee3255d2790c56ac07ce51d6d66bb",
+    "semantic_hash": "fdaee3255d2790c56ac07ce51d6d66bb"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\correct_trial_slope_unpleasant_sign.py": {
+    "mtime": 1780389434.6790328,
+    "ast_hash": "10bd0ecdb07fce3e40116fe29394c7f8",
+    "semantic_hash": "10bd0ecdb07fce3e40116fe29394c7f8"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\export_regression_results_format.py": {
+    "mtime": 1780389434.6790328,
+    "ast_hash": "1c5ed66e106a0479f23ceb1b8db27f34",
+    "semantic_hash": "1c5ed66e106a0479f23ceb1b8db27f34"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\export_trial_slope_group_mean.py": {
+    "mtime": 1780389434.6790328,
+    "ast_hash": "2a91fe2b85ba353c4e6f2d9aac448fe2",
+    "semantic_hash": "2a91fe2b85ba353c4e6f2d9aac448fe2"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\inspect_trial_stats.py": {
+    "mtime": 1780389434.6800437,
+    "ast_hash": "318ae2c2e9390223401c055b37e64109",
+    "semantic_hash": "318ae2c2e9390223401c055b37e64109"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\run_hfo_spike_detection.py": {
+    "mtime": 1780389434.6800437,
+    "ast_hash": "71002c72bcaa11d61beccea2e1ecac88",
+    "semantic_hash": "71002c72bcaa11d61beccea2e1ecac88"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\run_hilbert.py": {
+    "mtime": 1780389473.9962883,
+    "ast_hash": "0f0c6b35f55c8ba2a917fbb847285ad0",
+    "semantic_hash": "0f0c6b35f55c8ba2a917fbb847285ad0"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\run_time_frequency.py": {
+    "mtime": 1780400596.884139,
+    "ast_hash": "1a4f978790f9323039d3a5c945aaf15b",
+    "semantic_hash": "1a4f978790f9323039d3a5c945aaf15b"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\run_time_frequency_condition_test_debug.py": {
+    "mtime": 1780476089.3676915,
+    "ast_hash": "23a6bd2fe5ca0f7ac0f05b409614855c",
+    "semantic_hash": "23a6bd2fe5ca0f7ac0f05b409614855c"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\run_time_frequency_regression_debug.py": {
+    "mtime": 1780476089.3676915,
+    "ast_hash": "fb7695bdb22077da80936e3d982dc533",
+    "semantic_hash": "fb7695bdb22077da80936e3d982dc533"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\run_trial_slope_stats.py": {
+    "mtime": 1780389434.6810515,
+    "ast_hash": "2c90a548eb815da10e6a28d6df5903a7",
+    "semantic_hash": "2c90a548eb815da10e6a28d6df5903a7"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\run_trial_slope_stats_group.py": {
+    "mtime": 1780389434.6810515,
+    "ast_hash": "f13ea8012edad01f4750e43fc69dd289",
+    "semantic_hash": "f13ea8012edad01f4750e43fc69dd289"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\run_trial_stats.py": {
+    "mtime": 1780389434.6810515,
+    "ast_hash": "959c50bb7fa94ae12e58df6313c4ede8",
+    "semantic_hash": "959c50bb7fa94ae12e58df6313c4ede8"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\run_trial_stats_group.py": {
+    "mtime": 1780389434.6810515,
+    "ast_hash": "9fd0088c9bb2abbfcc8731bc4c2db940",
+    "semantic_hash": "9fd0088c9bb2abbfcc8731bc4c2db940"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\time_frequency_stats_debug_shared.py": {
+    "mtime": 1780481326.664118,
+    "ast_hash": "77aa977d8e70a898b306a21b301cdecb",
+    "semantic_hash": "77aa977d8e70a898b306a21b301cdecb"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\trial_slope_shared.py": {
+    "mtime": 1780400575.7539396,
+    "ast_hash": "f8a23a7f22c64da9c3f185ba464ffdc8",
+    "semantic_hash": "f8a23a7f22c64da9c3f185ba464ffdc8"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\visualize_trial_slope_stats.py": {
+    "mtime": 1780389434.6820593,
+    "ast_hash": "13431cab4fba3bd2dfcb3b016b351be9",
+    "semantic_hash": "13431cab4fba3bd2dfcb3b016b351be9"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\visualize_trial_slope_stats_group_precomputed.py": {
+    "mtime": 1780389434.6820593,
+    "ast_hash": "6a133fa699c0b5dde20e9a4e91b36224",
+    "semantic_hash": "6a133fa699c0b5dde20e9a4e91b36224"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\visualize_trial_stats.py": {
+    "mtime": 1780389434.683059,
+    "ast_hash": "c831291498e5076251e5ce5cb0e84541",
+    "semantic_hash": "c831291498e5076251e5ce5cb0e84541"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\visualize_trial_stats_group_precomputed.py": {
+    "mtime": 1780389434.683059,
+    "ast_hash": "a3423fc7578b7e212dae73e4de544a0a",
+    "semantic_hash": "a3423fc7578b7e212dae73e4de544a0a"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\debug\\visualize_trial_stats_precomputed.py": {
+    "mtime": 1780389434.683059,
+    "ast_hash": "8551b30dd81cbf3862f5d56bcd5c2720",
+    "semantic_hash": "8551b30dd81cbf3862f5d56bcd5c2720"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\dev\\create_public_snapshot.py": {
+    "mtime": 1780389434.683059,
+    "ast_hash": "a5439313cc49b958a8d94ca22ed6b9bf",
+    "semantic_hash": "a5439313cc49b958a8d94ca22ed6b9bf"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\run_condition_test.py": {
+    "mtime": 1780389434.6842947,
+    "ast_hash": "8e0acf76e7c229aeba623caca45ef72d",
+    "semantic_hash": "8e0acf76e7c229aeba623caca45ef72d"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\run_condition_test_group.py": {
+    "mtime": 1780389434.6842947,
+    "ast_hash": "6c621e822099907ebbbe152fe8ae6cfe",
+    "semantic_hash": "6c621e822099907ebbbe152fe8ae6cfe"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\run_hilbert.py": {
+    "mtime": 1780389434.6842947,
+    "ast_hash": "54c7e6341f26b3be13a2ba437aab506b",
+    "semantic_hash": "54c7e6341f26b3be13a2ba437aab506b"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\run_regression.py": {
+    "mtime": 1780389434.6853032,
+    "ast_hash": "beddca985b72e420094063b77b092fcd",
+    "semantic_hash": "beddca985b72e420094063b77b092fcd"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\run_regression_group.py": {
+    "mtime": 1780389434.6853032,
+    "ast_hash": "276466c9c4d901d4fd5a90ddc0622c96",
+    "semantic_hash": "276466c9c4d901d4fd5a90ddc0622c96"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\run_time_frequency.py": {
+    "mtime": 1780389473.9972885,
+    "ast_hash": "60321b71180bca2387c46ba6d0623a71",
+    "semantic_hash": "60321b71180bca2387c46ba6d0623a71"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\run_time_frequency_condition_test.py": {
+    "mtime": 1780473916.6960225,
+    "ast_hash": "60aaab1795914823a89df75c21420ce5",
+    "semantic_hash": "60aaab1795914823a89df75c21420ce5"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\run_time_frequency_regression.py": {
+    "mtime": 1780473916.6970806,
+    "ast_hash": "a9cd2cbb814b1b218c7ce2b62d656145",
+    "semantic_hash": "a9cd2cbb814b1b218c7ce2b62d656145"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\bids\\test_dataset.py": {
+    "mtime": 1780389434.6853032,
+    "ast_hash": "01d63801495aad80d00831a815a0cbe5",
+    "semantic_hash": "01d63801495aad80d00831a815a0cbe5"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\bids\\test_file.py": {
+    "mtime": 1780389434.6863098,
+    "ast_hash": "8e49720bc9e8a1a01d4ca5d225df9e61",
+    "semantic_hash": "8e49720bc9e8a1a01d4ca5d225df9e61"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\bids\\test_helpers.py": {
+    "mtime": 1780389434.6863098,
+    "ast_hash": "6755e3fc237eff7b152c8147b5afc267",
+    "semantic_hash": "6755e3fc237eff7b152c8147b5afc267"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\bids\\test_matching.py": {
+    "mtime": 1780389434.6863098,
+    "ast_hash": "e6d7b16b252c2b48629d5967a6067e1d",
+    "semantic_hash": "e6d7b16b252c2b48629d5967a6067e1d"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\bids\\test_subject.py": {
+    "mtime": 1780389434.6873162,
+    "ast_hash": "740fa6aabf8c667defc4079d4da1e063",
+    "semantic_hash": "740fa6aabf8c667defc4079d4da1e063"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\conftest.py": {
+    "mtime": 1780389434.6873162,
+    "ast_hash": "758b7cbe2fd1594e1a6afffd1e75da9c",
+    "semantic_hash": "758b7cbe2fd1594e1a6afffd1e75da9c"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\data\\__init__.py": {
+    "mtime": 1773216980.0039954,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\data\\test_loader.py": {
+    "mtime": 1780389434.6873162,
+    "ast_hash": "3ce0d0eca6101ead923a50996bae1420",
+    "semantic_hash": "3ce0d0eca6101ead923a50996bae1420"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\__init__.py": {
+    "mtime": 1780389434.6883228,
+    "ast_hash": "90bf63fa7217a4e5a60f421b64ab30eb",
+    "semantic_hash": "90bf63fa7217a4e5a60f421b64ab30eb"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\hilbert\\__init__.py": {
+    "mtime": 1773226339.4111156,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\hilbert\\test_dsp.py": {
+    "mtime": 1780389434.6883228,
+    "ast_hash": "131789edc6a13559550dab9e8a3db30a",
+    "semantic_hash": "131789edc6a13559550dab9e8a3db30a"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\hilbert\\test_processor.py": {
+    "mtime": 1780389434.689332,
+    "ast_hash": "b22f8fa314cc5f935b00566e0467ec5d",
+    "semantic_hash": "b22f8fa314cc5f935b00566e0467ec5d"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\hilbert\\test_writer_bv.py": {
+    "mtime": 1780389434.689332,
+    "ast_hash": "18d9c25e1e85b9f2a77765a747ed985e",
+    "semantic_hash": "18d9c25e1e85b9f2a77765a747ed985e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\hilbert\\test_writer_hdf5_matlab.py": {
+    "mtime": 1780389434.689332,
+    "ast_hash": "7ef3500115a6cd1419b094918f52a80d",
+    "semantic_hash": "7ef3500115a6cd1419b094918f52a80d"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\test_base.py": {
+    "mtime": 1780389434.6903415,
+    "ast_hash": "b588f7c912a1ce346129909e75fdfc65",
+    "semantic_hash": "b588f7c912a1ce346129909e75fdfc65"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\test_hfo_spike_detector_processor.py": {
+    "mtime": 1780389434.6903415,
+    "ast_hash": "0a91c3444545f500613eef42973393a1",
+    "semantic_hash": "0a91c3444545f500613eef42973393a1"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\test_hfo_spike_detector_writer.py": {
+    "mtime": 1780389434.6903415,
+    "ast_hash": "1b99ad6b5652c702a682a5f8ce72a60f",
+    "semantic_hash": "1b99ad6b5652c702a682a5f8ce72a60f"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\time_frequency\\__init__.py": {
+    "mtime": 1780389473.9982884,
+    "ast_hash": "81051bcc2cf1bedf378224b0a93e2877",
+    "semantic_hash": "81051bcc2cf1bedf378224b0a93e2877"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\time_frequency\\test_dsp.py": {
+    "mtime": 1780397483.352011,
+    "ast_hash": "921f247a2354fff5a551197bdca36304",
+    "semantic_hash": "921f247a2354fff5a551197bdca36304"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\time_frequency\\test_processor.py": {
+    "mtime": 1780389473.9982884,
+    "ast_hash": "f506cfd525e984e2e7ea3ad8efc405b5",
+    "semantic_hash": "f506cfd525e984e2e7ea3ad8efc405b5"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\time_frequency\\test_writer_loader.py": {
+    "mtime": 1780389473.9982884,
+    "ast_hash": "c19f325be66079048f523b187a06e93d",
+    "semantic_hash": "c19f325be66079048f523b187a06e93d"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\time_frequency_stats\\__init__.py": {
+    "mtime": 1780474003.774754,
+    "ast_hash": "68b329da9893e34099c7d8ad5cb9c940",
+    "semantic_hash": "68b329da9893e34099c7d8ad5cb9c940"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\time_frequency_stats\\test_condition_test.py": {
+    "mtime": 1780474258.3583255,
+    "ast_hash": "dd01707d38824dcd06f952cb61af5aae",
+    "semantic_hash": "dd01707d38824dcd06f952cb61af5aae"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\time_frequency_stats\\test_regression.py": {
+    "mtime": 1780474258.359488,
+    "ast_hash": "67f4fe2f80d43e100e6925b7674db35a",
+    "semantic_hash": "67f4fe2f80d43e100e6925b7674db35a"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\__init__.py": {
+    "mtime": 1780389434.6903415,
+    "ast_hash": "90bf63fa7217a4e5a60f421b64ab30eb",
+    "semantic_hash": "90bf63fa7217a4e5a60f421b64ab30eb"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\condition_test\\__init__.py": {
+    "mtime": 1780389434.691347,
+    "ast_hash": "90bf63fa7217a4e5a60f421b64ab30eb",
+    "semantic_hash": "90bf63fa7217a4e5a60f421b64ab30eb"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\condition_test\\test_processor.py": {
+    "mtime": 1780389434.691347,
+    "ast_hash": "cdb4322bcf5801538eda9cb6f650cdf6",
+    "semantic_hash": "cdb4322bcf5801538eda9cb6f650cdf6"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\condition_test\\test_resolver.py": {
+    "mtime": 1780389434.691347,
+    "ast_hash": "0daeb9e267c77d22b5e92a65d3905e22",
+    "semantic_hash": "0daeb9e267c77d22b5e92a65d3905e22"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\condition_test\\test_stats.py": {
+    "mtime": 1780389434.692375,
+    "ast_hash": "cd9d196e448ccf8c078b1b213dfb0554",
+    "semantic_hash": "cd9d196e448ccf8c078b1b213dfb0554"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\condition_test\\test_writer.py": {
+    "mtime": 1780389434.692375,
+    "ast_hash": "cf8bf8506824909a63fde2cadedade97",
+    "semantic_hash": "cf8bf8506824909a63fde2cadedade97"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\regression\\__init__.py": {
+    "mtime": 1780389434.692375,
+    "ast_hash": "90bf63fa7217a4e5a60f421b64ab30eb",
+    "semantic_hash": "90bf63fa7217a4e5a60f421b64ab30eb"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\regression\\test_params.py": {
+    "mtime": 1780389434.692375,
+    "ast_hash": "ced4bb96ed2a9136616924d7d3bd620f",
+    "semantic_hash": "ced4bb96ed2a9136616924d7d3bd620f"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\regression\\test_processor.py": {
+    "mtime": 1780389434.6933806,
+    "ast_hash": "3fdd3b980ccb0cc4518f667e3255ed12",
+    "semantic_hash": "3fdd3b980ccb0cc4518f667e3255ed12"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\regression\\test_stats.py": {
+    "mtime": 1780482624.7041647,
+    "ast_hash": "3537be02d8c880c453d2f3f48e5870c1",
+    "semantic_hash": "3537be02d8c880c453d2f3f48e5870c1"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\regression\\test_writer.py": {
+    "mtime": 1780389434.6933806,
+    "ast_hash": "4739f8a19c026042cb07c3db88c4eb38",
+    "semantic_hash": "4739f8a19c026042cb07c3db88c4eb38"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\test_params.py": {
+    "mtime": 1780389434.6944573,
+    "ast_hash": "1b7428eaf4b03b896498a62d30591ec1",
+    "semantic_hash": "1b7428eaf4b03b896498a62d30591ec1"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\test_processor.py": {
+    "mtime": 1780389434.6944573,
+    "ast_hash": "9afaa62fdfaf275bf6c95f51ed8f8a31",
+    "semantic_hash": "9afaa62fdfaf275bf6c95f51ed8f8a31"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats\\test_writer.py": {
+    "mtime": 1780389434.6944573,
+    "ast_hash": "72c00458b541eb51e54affcda855df40",
+    "semantic_hash": "72c00458b541eb51e54affcda855df40"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\__init__.py": {
+    "mtime": 1774369087.9832838,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\condition_test\\__init__.py": {
+    "mtime": 1780389434.6944573,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\condition_test\\test_params.py": {
+    "mtime": 1780389434.695467,
+    "ast_hash": "41f28c2f3049f473ee49c957d55bf914",
+    "semantic_hash": "41f28c2f3049f473ee49c957d55bf914"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\condition_test\\test_processor.py": {
+    "mtime": 1780389434.695467,
+    "ast_hash": "8075c625f0afec9c0a43c5bc1e579763",
+    "semantic_hash": "8075c625f0afec9c0a43c5bc1e579763"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\condition_test\\test_stats.py": {
+    "mtime": 1780389434.695467,
+    "ast_hash": "e5fe374ddef096e3bdf95487fd87fbf6",
+    "semantic_hash": "e5fe374ddef096e3bdf95487fd87fbf6"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\condition_test\\test_writer.py": {
+    "mtime": 1780389434.6964724,
+    "ast_hash": "067217e4b760fdf3130330c183762c05",
+    "semantic_hash": "067217e4b760fdf3130330c183762c05"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\regression\\__init__.py": {
+    "mtime": 1780389434.6964724,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\regression\\test_params.py": {
+    "mtime": 1780389434.6964724,
+    "ast_hash": "7383bfbce71f4d5c94454645b9b2d669",
+    "semantic_hash": "7383bfbce71f4d5c94454645b9b2d669"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\regression\\test_processor.py": {
+    "mtime": 1780389434.6964724,
+    "ast_hash": "e8f0824861e8fa41bfc04c7912554b97",
+    "semantic_hash": "e8f0824861e8fa41bfc04c7912554b97"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\regression\\test_stats.py": {
+    "mtime": 1780389434.6974807,
+    "ast_hash": "7d6fa69d5b584102839111779fa811f7",
+    "semantic_hash": "7d6fa69d5b584102839111779fa811f7"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\regression\\test_writer.py": {
+    "mtime": 1780389434.6974807,
+    "ast_hash": "0120d654ff76ae7992796a56a1e73c0e",
+    "semantic_hash": "0120d654ff76ae7992796a56a1e73c0e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\test_base.py": {
+    "mtime": 1780389434.6974807,
+    "ast_hash": "e1ccdb9372237f5b21adaf8aa3345aef",
+    "semantic_hash": "e1ccdb9372237f5b21adaf8aa3345aef"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\trial_stats_group\\test_compatibility.py": {
+    "mtime": 1780389434.6974807,
+    "ast_hash": "f61a6d9a4722c3508bed4965822f4a29",
+    "semantic_hash": "f61a6d9a4722c3508bed4965822f4a29"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\__init__.py": {
+    "mtime": 1773820559.6395988,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_channels.py": {
+    "mtime": 1780389434.6984856,
+    "ast_hash": "6218f089cf3c3a7547ecf87b3b6bd526",
+    "semantic_hash": "6218f089cf3c3a7547ecf87b3b6bd526"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_cluster_permutation.py": {
+    "mtime": 1780389434.6984856,
+    "ast_hash": "23f5fe7d95458b58548c40631e559146",
+    "semantic_hash": "23f5fe7d95458b58548c40631e559146"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_condition_rules.py": {
+    "mtime": 1780389434.6984856,
+    "ast_hash": "b63c7e175a1177b8e3dfac41388e4fdc",
+    "semantic_hash": "b63c7e175a1177b8e3dfac41388e4fdc"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_epoch_quality.py": {
+    "mtime": 1780389434.6984856,
+    "ast_hash": "f11d20b9d4e0ec8c226fd67526817b04",
+    "semantic_hash": "f11d20b9d4e0ec8c226fd67526817b04"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_epoching.py": {
+    "mtime": 1780389434.6994927,
+    "ast_hash": "293106e4ea8ce5635c0e4f3ff9d88f3a",
+    "semantic_hash": "293106e4ea8ce5635c0e4f3ff9d88f3a"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_events.py": {
+    "mtime": 1780389434.6994927,
+    "ast_hash": "deae6074d91511ca7f890a68b2c598f7",
+    "semantic_hash": "deae6074d91511ca7f890a68b2c598f7"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_filters.py": {
+    "mtime": 1780389434.6994927,
+    "ast_hash": "924c7253df564558887b78be54d11162",
+    "semantic_hash": "924c7253df564558887b78be54d11162"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_hdf5.py": {
+    "mtime": 1780389434.7005076,
+    "ast_hash": "9e65dbac72a826c379a39cc24a1550ea",
+    "semantic_hash": "9e65dbac72a826c379a39cc24a1550ea"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_input_events.py": {
+    "mtime": 1780389434.7005076,
+    "ast_hash": "f0bcb218f61ad1799103e95a369f0651",
+    "semantic_hash": "f0bcb218f61ad1799103e95a369f0651"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_matlab.py": {
+    "mtime": 1780389434.7005076,
+    "ast_hash": "9378c41a904f4ba8302e44d11280a9f2",
+    "semantic_hash": "9378c41a904f4ba8302e44d11280a9f2"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_serialization.py": {
+    "mtime": 1780389434.7005076,
+    "ast_hash": "e98a8784f18128aa30c830c3614a85e3",
+    "semantic_hash": "e98a8784f18128aa30c830c3614a85e3"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_tables.py": {
+    "mtime": 1780389434.701629,
+    "ast_hash": "b81a8a8344eb0fdc69dfcee894ca4b05",
+    "semantic_hash": "b81a8a8344eb0fdc69dfcee894ca4b05"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\processing\\utils\\test_trial_annotator.py": {
+    "mtime": 1780389434.701629,
+    "ast_hash": "fbf7c936b89041dcdf25ec7dc304701b",
+    "semantic_hash": "fbf7c936b89041dcdf25ec7dc304701b"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\visualization\\__init__.py": {
+    "mtime": 1774947495.4469216,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\visualization\\trial_stats\\__init__.py": {
+    "mtime": 1774947495.4469216,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\visualization\\trial_stats\\conftest.py": {
+    "mtime": 1780389434.701629,
+    "ast_hash": "807a6aec875413133a7cfd55817eb75f",
+    "semantic_hash": "807a6aec875413133a7cfd55817eb75f"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\visualization\\trial_stats\\test_bridge.py": {
+    "mtime": 1780389434.701629,
+    "ast_hash": "ead9b41b183dfcc3257f48bd57d2f07b",
+    "semantic_hash": "ead9b41b183dfcc3257f48bd57d2f07b"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\visualization\\trial_stats\\test_group_params_panel.py": {
+    "mtime": 1780389434.703,
+    "ast_hash": "550be6623d4b1e1939fc959f7a6e66b9",
+    "semantic_hash": "550be6623d4b1e1939fc959f7a6e66b9"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\visualization\\trial_stats\\test_group_plot_panel.py": {
+    "mtime": 1780389434.703,
+    "ast_hash": "9988aa4c03c9f17b628061b238a565dc",
+    "semantic_hash": "9988aa4c03c9f17b628061b238a565dc"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\visualization\\trial_stats\\test_params_panel.py": {
+    "mtime": 1780389434.703,
+    "ast_hash": "edf0064b48e8ae71e465a124d70f528f",
+    "semantic_hash": "edf0064b48e8ae71e465a124d70f528f"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\visualization\\trial_stats\\test_plot_panel.py": {
+    "mtime": 1780389434.7040074,
+    "ast_hash": "a745b34a3789ab83ce7954632ab47f60",
+    "semantic_hash": "a745b34a3789ab83ce7954632ab47f60"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\tests\\visualization\\trial_stats\\test_worker.py": {
+    "mtime": 1780389434.7040074,
+    "ast_hash": "fef54045cf243b90c3d155dac3debb55",
+    "semantic_hash": "fef54045cf243b90c3d155dac3debb55"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\.github\\copilot-instructions.md": {
+    "mtime": 1780389434.6262958,
+    "ast_hash": "b1ffe67500f04cf9fc88d0035965cee4",
+    "semantic_hash": "b1ffe67500f04cf9fc88d0035965cee4"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\README.md": {
+    "mtime": 1780389434.634434,
+    "ast_hash": "c22b7749f091fadb9dc714893d2599b0",
+    "semantic_hash": "c22b7749f091fadb9dc714893d2599b0"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\README.md": {
+    "mtime": 1780474161.4326985,
+    "ast_hash": "5a801f24e216c8d3350445f409002c57",
+    "semantic_hash": "5a801f24e216c8d3350445f409002c57"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\add_pipeline_guide.md": {
+    "mtime": 1780389434.6725826,
+    "ast_hash": "bed7330ddcb18d4e98433ed171bb4ceb",
+    "semantic_hash": "bed7330ddcb18d4e98433ed171bb4ceb"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\end_to_end_guide.md": {
+    "mtime": 1780389434.6725826,
+    "ast_hash": "eebc28c4b6a3a0c4b55c3efea755de4b",
+    "semantic_hash": "eebc28c4b6a3a0c4b55c3efea755de4b"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\pipelines\\condition_test.md": {
+    "mtime": 1780389434.6735873,
+    "ast_hash": "fa3d1505d2b9c17839227f4ae5e48ebf",
+    "semantic_hash": "fa3d1505d2b9c17839227f4ae5e48ebf"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\pipelines\\condition_test_group.md": {
+    "mtime": 1780389434.6735873,
+    "ast_hash": "ff2343f2366c959cf71969b5cd00ee27",
+    "semantic_hash": "ff2343f2366c959cf71969b5cd00ee27"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\pipelines\\hfo_spike_detection.md": {
+    "mtime": 1780389434.6735873,
+    "ast_hash": "a7519545d7901cfbb47266ad2a80cdba",
+    "semantic_hash": "a7519545d7901cfbb47266ad2a80cdba"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\pipelines\\hilbert.md": {
+    "mtime": 1780389434.6745927,
+    "ast_hash": "a3a5b98917b6867af598a936605424c2",
+    "semantic_hash": "a3a5b98917b6867af598a936605424c2"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\pipelines\\regression.md": {
+    "mtime": 1780389434.6745927,
+    "ast_hash": "c5a7a0db9e3ffb8cfc993c2d4066a06e",
+    "semantic_hash": "c5a7a0db9e3ffb8cfc993c2d4066a06e"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\pipelines\\regression_group.md": {
+    "mtime": 1780389434.6745927,
+    "ast_hash": "36fbc344ac2d1e1199404d2781c2c260",
+    "semantic_hash": "36fbc344ac2d1e1199404d2781c2c260"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\pipelines\\time_frequency.md": {
+    "mtime": 1780389473.9952884,
+    "ast_hash": "596818d26c74973594fa048c0a757419",
+    "semantic_hash": "596818d26c74973594fa048c0a757419"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\pipelines\\time_frequency_condition_test.md": {
+    "mtime": 1780474161.43019,
+    "ast_hash": "fd6346793a0ddb878fa511aebed7c385",
+    "semantic_hash": "fd6346793a0ddb878fa511aebed7c385"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\pipelines\\time_frequency_regression.md": {
+    "mtime": 1780474161.4311955,
+    "ast_hash": "daeea355d7081260fe7d37ed16b4cfa6",
+    "semantic_hash": "daeea355d7081260fe7d37ed16b4cfa6"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\docs\\troubleshooting_guide.md": {
+    "mtime": 1780389434.6745927,
+    "ast_hash": "dd318da7b126cea621f6d2f44a6f4356",
+    "semantic_hash": "dd318da7b126cea621f6d2f44a6f4356"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\README.md": {
+    "mtime": 1780389434.6759574,
+    "ast_hash": "31b6ebfa2fe576b3c6d1d96d04580f96",
+    "semantic_hash": "31b6ebfa2fe576b3c6d1d96d04580f96"
+  },
+  "C:\\GRE\\dev\\gin-bids-py-analysis\\scripts\\dev\\README.md": {
+    "mtime": 1780389434.683059,
+    "ast_hash": "69d5d62d92f9cdb3e7503a6a6e913acc",
+    "semantic_hash": "69d5d62d92f9cdb3e7503a6a6e913acc"
+  }
+}
