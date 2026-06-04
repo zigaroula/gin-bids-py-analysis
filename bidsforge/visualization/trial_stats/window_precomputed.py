@@ -262,8 +262,11 @@ class TrialStatsPrecomputedWindow(QMainWindow):
             f"{result.condition_b_trial_count}× {result.condition_b}"
         )
         previous = self._subject_panel.current_channel_name
+        contrast = getattr(result, "contrast", None)
         self._subject_panel.set_channels(
-            result.channel_names, restore_name=previous
+            result.channel_names,
+            restore_name=previous,
+            channel_significant_mask=getattr(contrast, "channel_significant_mask", None),
         )
         self._plot_panel.update_plots(result, self._subject_panel.current_channel_index)
 

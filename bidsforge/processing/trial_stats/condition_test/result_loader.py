@@ -537,6 +537,15 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
         significant_mask = np.asarray(sig_raw, dtype=bool).reshape(n_ch, n_t)
     else:
         significant_mask = np.isfinite(p_values) & (p_values < significance_alpha)
+    ch_sig_raw = getattr(stats, "channel_significant_mask", None)
+    channel_significant_mask: np.ndarray | None
+    if ch_sig_raw is not None:
+        ch_sig_arr = np.asarray(ch_sig_raw, dtype=bool).ravel()
+        channel_significant_mask = (
+            ch_sig_arr if ch_sig_arr.size == n_ch else None
+        )
+    else:
+        channel_significant_mask = None
 
     # --- means ---
     signal_activity = data.data.signal_activity
@@ -781,7 +790,7 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
             p_values_uncorrected=p_values_uncorrected,
             significant_mask=significant_mask,
             permuted_t_values=None,
-            channel_significant_mask=None,
+            channel_significant_mask=channel_significant_mask,
         ),
     )
 

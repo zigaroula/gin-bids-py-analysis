@@ -439,6 +439,32 @@ def test_writer_hdf5_channel_significant_mask_absent_when_none(
     assert loaded.contrast.channel_significant_mask is None
 
 
+def test_writer_matlab_channel_significant_mask_written_and_loaded(
+    tmp_path: Path,
+) -> None:
+    from bidsforge.processing.trial_stats import load_condition_test_result
+
+    mask = np.array([True, False], dtype=bool)
+    result = _make_minimal_result(tmp_path, channel_significant_mask=mask)
+
+    writer = ConditionTestProcessingWriter(
+        ConditionTestWriterParams(bids_root=tmp_path, output_format="matlab")
+    )
+    output_path = writer.write(result)
+
+    mat = scipy.io.loadmat(str(output_path), squeeze_me=True, struct_as_record=False)
+    data = mat["conditiontest"]
+    stored = np.asarray(
+        data.stats.condition_contrast.channel_significant_mask,
+        dtype=bool,
+    ).ravel()
+    np.testing.assert_array_equal(stored, mask)
+
+    loaded = load_condition_test_result(output_path)
+    assert loaded.contrast.channel_significant_mask is not None
+    np.testing.assert_array_equal(loaded.contrast.channel_significant_mask, mask)
+
+
 def test_writer_round_trips_trial_activity_summary_for_condition_test(
     tmp_path: Path,
 ) -> None:
