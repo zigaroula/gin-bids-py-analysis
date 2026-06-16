@@ -20,7 +20,7 @@ from bidsforge.visualization.trial_stats import launch
 # Parameters  (edit these)
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"E:\CBT\bids")
+BIDS_ROOT = Path(r"D:\CBT\bids")
 
 # iEEG files to visualize. These are grouped per subject.
 IEEG_FILTERS = {

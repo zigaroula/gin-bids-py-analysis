@@ -5,6 +5,7 @@ import pytest
 
 from bidsforge.processing.trial_stats import ConditionTestParams
 from bidsforge.processing.trial_stats.condition_test.stats import (
+    compute_analytic_difference_ci95,
     compute_bootstrap_difference_ci95,
     compute_condition_statistics,
     compute_duration_channel_significance,
@@ -190,6 +191,34 @@ def test_bootstrap_difference_ci95_returns_nan_when_trials_insufficient() -> Non
 
     assert np.all(np.isnan(low))
     assert np.all(np.isnan(high))
+
+
+def test_analytic_difference_ci95_is_fast_parametric_interval() -> None:
+    epochs_a = np.array(
+        [
+            [[4.0, 5.0]],
+            [[5.0, 6.0]],
+            [[6.0, 7.0]],
+        ],
+        dtype=np.float64,
+    )
+    epochs_b = np.array(
+        [
+            [[1.0, 2.0]],
+            [[2.0, 3.0]],
+            [[3.0, 4.0]],
+        ],
+        dtype=np.float64,
+    )
+
+    low, high = compute_analytic_difference_ci95(epochs_a, epochs_b)
+
+    assert low.shape == (1, 2)
+    assert high.shape == (1, 2)
+    assert np.all(np.isfinite(low))
+    assert np.all(np.isfinite(high))
+    assert np.all(low < 3.0)
+    assert np.all(high > 3.0)
 
 
 def test_trial_stats_params_rejects_permutation_correction_method() -> None:

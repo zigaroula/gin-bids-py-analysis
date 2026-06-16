@@ -68,8 +68,8 @@ def _write_hdf5_structure(
     * ``meta/effective_n_bins``                 — int (= n_times)
     * ``stats/condition_contrast/t_values``     — (n_channels, n_times) float64
     * ``data/signal_activity/difference/mean``         — (n_channels, n_times) float64
-    * ``data/signal_activity/condition_a/mean``        — (n_channels, n_times) float64
-    * ``data/signal_activity/condition_b/mean``        — (n_channels, n_times) float64
+    * ``data/signal_activity/<condition_a>/mean``      — (n_channels, n_times) float64
+    * ``data/signal_activity/<condition_b>/mean``      — (n_channels, n_times) float64
     * ``provenance/source_ieeg_files``          — string array
     * ``provenance/source_electrodes_files``    — string array
     """
@@ -140,9 +140,9 @@ def _write_hdf5_structure(
         cond_a = np.zeros_like(t)
     if cond_b.size == 0:
         cond_b = np.zeros_like(t)
-    cond_a_grp = activity_grp.create_group("condition_a")
+    cond_a_grp = activity_grp.create_group(str(result.condition_a))
     cond_a_grp.create_dataset("mean", data=cond_a.astype(np.float64))
-    cond_b_grp = activity_grp.create_group("condition_b")
+    cond_b_grp = activity_grp.create_group(str(result.condition_b))
     cond_b_grp.create_dataset("mean", data=cond_b.astype(np.float64))
 
     # provenance

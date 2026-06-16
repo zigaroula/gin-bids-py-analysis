@@ -36,6 +36,15 @@ class ConditionTestParams(BaseTrialStatsParams):
             "as significant in 'duration' mode."
         ),
     )
+    difference_ci95_n_bootstraps: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Number of bootstrap resamples used to estimate 95% confidence intervals "
+            "for mean(condition_a) - mean(condition_b). 0 uses a fast parametric "
+            "CI consistent with the selected t-test variance model."
+        ),
+    )
 
     @field_validator("activity_zscore")
     @classmethod

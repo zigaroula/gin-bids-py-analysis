@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import replace
 from typing import Literal
 
 import numpy as np
-from scipy.stats import ttest_ind
+from scipy.stats import t, ttest_ind
 
 from bidsforge.processing.utils.epoching import (
     EpochExtractionResult,
@@ -110,6 +111,63 @@ def compute_bootstrap_difference_ci95(
     low = np.nanpercentile(boot_diff, 2.5, axis=0)
     high = np.nanpercentile(boot_diff, 97.5, axis=0)
     return np.asarray(low, dtype=np.float64), np.asarray(high, dtype=np.float64)
+
+
+def compute_analytic_difference_ci95(
+    epochs_a: np.ndarray,
+    epochs_b: np.ndarray,
+    *,
+    equal_var: bool = False,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Estimate fast parametric 95% CIs for mean(A) - mean(B)."""
+    arr_a = np.asarray(epochs_a, dtype=np.float64)
+    arr_b = np.asarray(epochs_b, dtype=np.float64)
+    if arr_a.ndim != 3 or arr_b.ndim != 3:
+        raise ValueError("epochs_a and epochs_b must be 3-D (n_trials, n_channels, n_times).")
+    if arr_a.shape[1:] != arr_b.shape[1:]:
+        raise ValueError(
+            "epochs_a and epochs_b must share channel/time dimensions, got "
+            f"{arr_a.shape[1:]!r} and {arr_b.shape[1:]!r}."
+        )
+
+    n_channels, n_times = arr_a.shape[1:]
+    count_a = np.sum(np.isfinite(arr_a), axis=0).astype(np.float64)
+    count_b = np.sum(np.isfinite(arr_b), axis=0).astype(np.float64)
+    valid = (count_a >= 2) & (count_b >= 2)
+    if not np.any(valid):
+        nan = np.full((n_channels, n_times), np.nan, dtype=np.float64)
+        return nan.copy(), nan.copy()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        mean_a = np.nanmean(arr_a, axis=0, dtype=np.float64)
+        mean_b = np.nanmean(arr_b, axis=0, dtype=np.float64)
+        var_a = np.nanvar(arr_a, axis=0, ddof=1, dtype=np.float64)
+        var_b = np.nanvar(arr_b, axis=0, ddof=1, dtype=np.float64)
+    diff = mean_a - mean_b
+
+    if equal_var:
+        df = count_a + count_b - 2.0
+        pooled_var = ((count_a - 1.0) * var_a + (count_b - 1.0) * var_b) / df
+        se = np.sqrt(pooled_var * ((1.0 / count_a) + (1.0 / count_b)))
+    else:
+        term_a = var_a / count_a
+        term_b = var_b / count_b
+        se = np.sqrt(term_a + term_b)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            df = np.square(term_a + term_b) / (
+                np.square(term_a) / (count_a - 1.0)
+                + np.square(term_b) / (count_b - 1.0)
+            )
+
+    finite = valid & np.isfinite(diff) & np.isfinite(se) & np.isfinite(df) & (df > 0)
+    low = np.full((n_channels, n_times), np.nan, dtype=np.float64)
+    high = low.copy()
+    if np.any(finite):
+        margin = t.ppf(0.975, df[finite]) * se[finite]
+        low[finite] = diff[finite] - margin
+        high[finite] = diff[finite] + margin
+    return low, high
 
 
 def extract_epochs(

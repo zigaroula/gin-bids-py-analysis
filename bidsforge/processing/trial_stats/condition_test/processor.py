@@ -18,6 +18,7 @@ from ..result import ConditionSignalActivity, SignalActivityEstimate
 from .params import ConditionTestParams
 from .result import ConditionContrast, ConditionTestProcessingResult, DifferenceEstimate
 from .stats import (
+    compute_analytic_difference_ci95,
     compute_bootstrap_difference_ci95,
     compute_condition_statistics,
     compute_duration_channel_significance,
@@ -85,6 +86,7 @@ class ConditionTestProcessing(BaseTrialStatsProcessing):
         return {
             "equal_var": self.params.equal_var,
             "n_permutations": self.params.n_permutations,
+            "difference_ci95_n_bootstraps": self.params.difference_ci95_n_bootstraps,
             "channel_significance_mode": self.params.channel_significance_mode,
             "channel_significance_duration_threshold_ms": self.params.channel_significance_duration_threshold_ms,
         }
@@ -124,12 +126,19 @@ class ConditionTestProcessing(BaseTrialStatsProcessing):
             n_times=n_times,
         )
         difference_sem = (condition_a_sem ** 2 + condition_b_sem ** 2) ** 0.5
-        difference_ci95_low, difference_ci95_high = compute_bootstrap_difference_ci95(
-            context.epochs_a,
-            context.epochs_b,
-            n_bootstraps=2000,
-            random_state=self.params.permutation_seed,
-        )
+        if self.params.difference_ci95_n_bootstraps > 0:
+            difference_ci95_low, difference_ci95_high = compute_bootstrap_difference_ci95(
+                context.epochs_a,
+                context.epochs_b,
+                n_bootstraps=self.params.difference_ci95_n_bootstraps,
+                random_state=self.params.permutation_seed,
+            )
+        else:
+            difference_ci95_low, difference_ci95_high = compute_analytic_difference_ci95(
+                context.epochs_a,
+                context.epochs_b,
+                equal_var=self.params.equal_var,
+            )
         p_values = correct_p_values(
             p_values_raw,
             method=self.params.p_value_correction_method,

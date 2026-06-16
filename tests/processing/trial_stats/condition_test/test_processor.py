@@ -236,6 +236,11 @@ def test_process_group_pools_multiple_ieeg_files_and_sets_shared_output_entities
     }
     assert result.stats_valid is True
     assert np.all(result.difference.mean > 0)
+    assert np.all(np.isfinite(result.difference.ci95_low))
+    assert np.all(np.isfinite(result.difference.ci95_high))
+    assert np.all(result.difference.ci95_low <= result.difference.mean)
+    assert np.all(result.difference.ci95_high >= result.difference.mean)
+    assert result.metadata["difference_ci95_n_bootstraps"] == 0
     assert len(result.source_ieeg_files) == 2
 
 
