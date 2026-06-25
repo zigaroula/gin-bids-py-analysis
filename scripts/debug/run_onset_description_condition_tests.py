@@ -46,7 +46,7 @@ from bidsforge.visualization.trial_stats._bridge import group_file_group_context
 # Parameters
 # ---------------------------------------------------------------------------
 
-BIDS_ROOT = Path(r"D:\CBT\bids")
+BIDS_ROOT = Path(r"E:\CBT\bids")
 
 IEEG_FILTERS = {
     "suffix": "ieeg",
@@ -75,28 +75,28 @@ RESOLVER = TableTrialResolver(
 MANUAL_REGION_CHANNELS = {
     "daINS": {
         "epi01": ["Y02", "Y06"],
-        "epi03": ["IAD2"],
+        "epi03": ["IAD02"],
         "epi05": ["X04", "X07", "X03", "X06"],
         "epi07": ["X08", "T03"],
         "epi11": ["X05", "X07", "X06"],
         "epi12": ["Ap02"],
         "epi14": ["Xp04"],
-        "epi17": ["II8"],
+        "epi17": ["II08"],
         "epi18": ["X06"],
-        "epi19": ["IMD2"],
-        "epi21": ["XS7", "XD7", "XD4", "XD8"],
-        "epi22": ["XS8"],
-        "epi23": ["EL2"],
+        "epi19": ["IMD02"],
+        "epi21": ["XS07", "XD07", "XD04", "XD08"],
+        "epi22": ["XS08"],
+        "epi23": ["EL02"],
     },
     "vaINS": {
         "epi04": ["Bp02"],
-        "epi08": ["IA2", "IA4"],
+        "epi08": ["IA02", "IA04"],
         "epi11": ["X04"],
         "epi14": ["Xp02"],
-        "epi17": ["II2"],
+        "epi17": ["II02"],
         "epi18": ["Y02", "X02"],
-        "epi21": ["XS4"],
-        "epi22": ["XS2", "YS2"],
+        "epi21": ["XS04"],
+        "epi22": ["XS02", "YS02"],
     },
 }
 
