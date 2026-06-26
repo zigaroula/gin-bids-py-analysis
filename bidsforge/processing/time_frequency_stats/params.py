@@ -9,7 +9,7 @@ from bidsforge.processing.utils.field_names import sanitize_field_name, validate
 
 
 PowerMode = Literal["stored", "raw", "baseline_corrected"]
-TimeSelectionMode = Literal["strict_matlab", "inclusive"]
+TimeSelectionMode = Literal["strict", "inclusive"]
 
 
 class BaseTimeFrequencyStatsParams(BaseProcessingParams):
@@ -28,9 +28,9 @@ class BaseTimeFrequencyStatsParams(BaseProcessingParams):
         description="Optional time window applied to the stored TFR time axis.",
     )
     time_selection: TimeSelectionMode = Field(
-        default="strict_matlab",
+        default="strict",
         description=(
-            "'strict_matlab' keeps t > min and t < max, matching b2_TF. "
+            "'strict' keeps t > min and t < max. "
             "'inclusive' keeps t >= min and t <= max."
         ),
     )
@@ -45,7 +45,7 @@ class BaseTimeFrequencyStatsParams(BaseProcessingParams):
         default=False,
         description=(
             "Subtract each trial/channel/frequency time mean before statistics, "
-            "matching MATLAB flag.baseline_grdavg."
+            "using the average across the selected time axis."
         ),
     )
     condition_a: str = Field(default="condition_a")

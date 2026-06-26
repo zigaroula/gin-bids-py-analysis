@@ -123,7 +123,7 @@ class GroupParamsPanel(QWidget):
 
         # cluster_permutation_method
         self._cluster_method = QComboBox()
-        for m in ("custom", "mne"):
+        for m in ("custom", "sign_flip"):
             self._cluster_method.addItem(m)
         self._cluster_method_label = QLabel("Cluster method")
         form.addRow(self._cluster_method_label, self._cluster_method)

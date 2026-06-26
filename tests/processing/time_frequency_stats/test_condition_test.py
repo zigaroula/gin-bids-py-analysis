@@ -26,7 +26,7 @@ def test_condition_test_splits_tfr_trials_and_writes_roundtrip(tmp_path: Path) -
 
     params = TimeFrequencyConditionTestParams(
         time_window_s=(0.0, 3.0),
-        time_selection="strict_matlab",
+        time_selection="strict",
         condition_a="condition_a",
         condition_b="condition_b",
         p_value_correction_method="none",

@@ -49,7 +49,7 @@ class TestGroupParamsPanelRoundTrip:
         new_params = ConditionTestGroupParams(
             primary_condition_metric="mean_difference",
             p_value_correction_method="bonferroni",
-            cluster_permutation_method="mne",
+            cluster_permutation_method="sign_flip",
             significance_alpha=0.01,
             roi_mode="manual",
             manual_region_channels={"regionB": {"03": ["CH5"]}},
@@ -61,7 +61,7 @@ class TestGroupParamsPanelRoundTrip:
 
         assert recovered.primary_condition_metric == "mean_difference"
         assert recovered.p_value_correction_method == "bonferroni"
-        assert recovered.cluster_permutation_method == "mne"
+        assert recovered.cluster_permutation_method == "sign_flip"
         assert recovered.significance_alpha == pytest.approx(0.01)
         assert recovered.manual_region_channels == new_params.manual_region_channels
         assert recovered.min_channels_per_roi == 2

@@ -222,7 +222,7 @@ def _load_from_hdf5(path: Path) -> ConditionTestProcessingResult:
         activity_zscore_ds = dataset_or_none(fh, "meta/activity_zscore")
         if activity_zscore_ds is None:
             raise ValueError(
-                f"{path.name}: unsupported legacy trial_stats schema; "
+                f"{path.name}: unsupported older trial_stats schema; "
                 "meta/activity_zscore is required."
             )
         activity_zscore = str_scalar(activity_zscore_ds, default="none")
@@ -591,7 +591,7 @@ def _load_from_matlab(path: Path) -> ConditionTestProcessingResult:
     activity_zscore_raw = getattr(meta, "activity_zscore", None)
     if activity_zscore_raw is None:
         raise ValueError(
-            f"{path.name}: unsupported legacy trial_stats schema; "
+            f"{path.name}: unsupported older trial_stats schema; "
             "meta.activity_zscore is required."
         )
     activity_zscore = mat_str(activity_zscore_raw, default="none")

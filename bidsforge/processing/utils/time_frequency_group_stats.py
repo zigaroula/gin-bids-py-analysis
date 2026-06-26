@@ -113,7 +113,7 @@ def correct_tf_p_values(p_values: np.ndarray, *, method: str) -> np.ndarray:
 
 
 def label_tf_clusters(mask: np.ndarray) -> tuple[np.ndarray, int]:
-    """Label 2-D TF clusters with 8-connectivity, matching SPM 18-connectivity in 2-D."""
+    """Label 2-D TF clusters with 8-connectivity."""
     arr = np.asarray(mask, dtype=bool)
     if arr.ndim != 2:
         raise ValueError(f"cluster mask must be 2-D, got {arr.shape!r}.")
@@ -122,7 +122,7 @@ def label_tf_clusters(mask: np.ndarray) -> tuple[np.ndarray, int]:
     return labels.astype(np.int64), int(n_labels)
 
 
-def matlab_style_cluster_mask(
+def signed_percentile_cluster_mask(
     *,
     source_map: np.ndarray,
     p_values: np.ndarray,
@@ -130,7 +130,7 @@ def matlab_style_cluster_mask(
     cluster_threshold_alpha: float,
     cluster_percentile_alpha: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Return Matlab-style significant cluster mask and per-cluster sums.
+    """Return a significant cluster mask and per-cluster sums.
 
     Clusters are detected from ``p_values <= cluster_threshold_alpha``.  Each
     observed cluster is retained when the sum of ``source_map`` inside it falls

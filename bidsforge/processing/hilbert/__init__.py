@@ -1,6 +1,6 @@
-"""Hilbert processing module for BIDS data. Based on Localizer's implementation: https://github.com/CRNL-Eduwell/Localizer"""
+"""Hilbert processing module for BIDS data."""
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from .params import (
     BipolarDirection,

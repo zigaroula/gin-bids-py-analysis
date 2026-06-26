@@ -1,8 +1,7 @@
 # Time-Frequency Regression
 
 `time_frequency_regression` computes per-condition trial-wise regression maps
-from stored `time_frequency` derivatives. It targets the regression branch of
-the MATLAB `b2_TF_subj_contact_levels_CB*.m` scripts.
+from stored `time_frequency` derivatives.
 
 ## Processing Summary
 
@@ -26,7 +25,7 @@ See `scripts/run_time_frequency_regression.py` for an editable runner.
 ## Downstream Group Analysis
 
 Use `time_frequency_regression_group` to aggregate channel-level subject outputs
-into ROI maps. The default group metric is `t_values`, matching the Matlab b3
-TF regression display logic; `slope` and `r_value` can also be aggregated.
+into ROI maps. The default group metric is `t_values`; `slope` and `r_value`
+can also be aggregated.
 
 See [Time-Frequency Regression Group](./time_frequency_regression_group.md).

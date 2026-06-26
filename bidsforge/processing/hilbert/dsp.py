@@ -14,7 +14,7 @@ Pipeline overview
    obtain per-subband amplitude envelopes, then combine according to the
    selected :class:`~bidsforge.processing.hilbert.params.ProcessingMethod`:
 
-   **LOCALIZER** (default — matches the CRNL Localizer implementation):
+   **LOCALIZER** (default):
 
    a. For each subband: apply FIR band-pass filter → Hilbert → magnitude
       envelope (float32).
@@ -24,7 +24,7 @@ Pipeline overview
    e. Apply a fixed-divisor sliding-average smoother for each requested
       window length (at the downsampled rate).
 
-   **SPM2ENV** (matches the Matlab ``spm2env.m`` pipeline):
+   **SPM2ENV**:
 
    a. For each subband: apply FIR band-pass filter → Hilbert → magnitude
       envelope (float32).
@@ -276,12 +276,10 @@ def moving_average(signal: np.ndarray, coefficient: int) -> np.ndarray:
 
 
 def matlab_conv_same_moving_average(signal: np.ndarray, coefficient: int) -> np.ndarray:
-    """Moving average matching MATLAB ``conv2(x', ones(1, n)/n, 'same')``.
+    """Moving average using convolution ``same`` alignment.
 
-    ``spm2env.m`` smooths the native-rate envelope with MATLAB's convolution
-    ``same`` mode before downsampling. For even-length kernels MATLAB keeps the
-    later central samples, which differs by one sample from several Python
-    centered-window conventions.
+    For even-length kernels, this keeps the later central samples, which differs
+    by one sample from several Python centered-window conventions.
     """
     n = len(signal)
     if coefficient <= 1:
@@ -326,9 +324,9 @@ def process_channel(
 
     2. Normalise each subband envelope to percentage of baseline at native ``fs``.
     3. Average the resulting envelopes across subbands.
-    4. For each smoothing window: apply MATLAB ``conv2(..., 'same')`` moving
-       average at native ``fs`` (or identity for ``window_ms = 0``), then
-       optionally subtract 100, then resample with
+    4. For each smoothing window: apply convolution ``same`` moving average at
+       native ``fs`` (or identity for ``window_ms = 0``), then optionally
+       subtract 100, then resample with
        :func:`scipy.signal.resample_poly`.
 
     Args:
@@ -508,8 +506,7 @@ def process_all_channels(
     )
 
     # ------------------------------------------------------------------
-    # Optional pre-downsample for BPF computation (matches Matlab
-    # param.comp_freq pre-processing in b1_BPF_computations).
+    # Optional pre-downsample for BPF computation.
     # ------------------------------------------------------------------
     if params.computation_frequency_hz is not None and params.computation_frequency_hz < fs:
         _g = math.gcd(int(params.computation_frequency_hz), int(fs))

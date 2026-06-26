@@ -2,17 +2,14 @@
 
 This module provides two levels of cleaning suitable for trial-epoched data:
 
-*Level A – trial-channel NaN masking.*
+*Level A - trial-channel NaN masking.*
     Per channel, trials whose temporal mean or maximum deviates more than
     ``threshold_factor`` standard deviations from the channel's across-trial
-    mean are set to NaN.  This replicates the Matlab ``rmoutliers(..., 'mean',
-    ...)``  call applied per channel on ``mean_alldata_per_trial`` and
-    ``max_alldata_per_trial`` (``std_thresh = 3`` in the Matlab initialisation).
+    mean are set to NaN.
 
-*Level B – channel exclusion.*
+*Level B - channel exclusion.*
     Channels are dropped when the across-trial spread of their per-trial means
-    (or maxima) is an outlier in the channel population
-    (``ThresholdFactor = 1`` in the Matlab code), or when more than
+    (or maxima) is an outlier in the channel population, or when more than
     ``max_nan_trial_ratio`` of their trials are NaN.
 
 Level A must be applied before Level B so that the NaN trial counts used in
@@ -74,9 +71,7 @@ def detect_outlier_trial_channel_pairs_by_mean(
 
     For each channel independently, trials whose mean activity deviates by more
     than ``threshold_factor × std`` from the channel's across-trial mean are
-    flagged.  The detection is equivalent to Matlab's
-    ``rmoutliers(mean_alldata_per_trial(:, ichan), 'mean', 'ThresholdFactor',
-    std_thresh)``.
+    flagged.
 
     NaN values (e.g. from a prior masking pass) are excluded from all
     distribution statistics and never flagged themselves.
@@ -115,16 +110,12 @@ def detect_outlier_trial_channel_pairs_by_max(
 
     Same as :func:`detect_outlier_trial_channel_pairs_by_mean` but uses the
     per-trial temporal absolute maximum instead of the mean.  This captures
-    large-amplitude artefacts regardless of polarity.  Inspired by Matlab's
-    ``rmoutliers(max_alldata_pertrial(:, ichan), 'mean', 'ThresholdFactor',
-    std_thresh)`` but applied to ``abs(epochs)`` for correctness on biphasic
-    signals.
+    large-amplitude artefacts regardless of polarity.
 
     NaN values (e.g. from a prior mean-detection pass via
     :func:`apply_trial_nan_mask`) are excluded from all distribution
     statistics and never flagged themselves.  This makes it safe to call this
-    function after applying a mean-outlier mask, mirroring Matlab's sequential
-    two-pass rejection.
+    function after applying a mean-outlier mask.
 
     Parameters
     ----------
@@ -191,16 +182,13 @@ def reject_channels_by_trial_mean_spread(
     For each channel the standard deviation of per-trial temporal means is
     computed.  Channels whose spread deviates more than ``threshold_factor``
     standard deviations from the population mean of spreads are flagged.
-    Equivalent to Matlab's ``rmoutliers(sd_perchan, 'mean',
-    'ThresholdFactor', 1)`` applied to the std-of-trial-means per channel.
-
     Parameters
     ----------
     epochs:
         Array of shape ``(n_trials, n_channels, n_times)``.  May contain NaN
         (after Level A).
     threshold_factor:
-        Outlier threshold; defaults to ``1.0`` to match the Matlab pipeline.
+        Outlier threshold.
 
     Returns
     -------

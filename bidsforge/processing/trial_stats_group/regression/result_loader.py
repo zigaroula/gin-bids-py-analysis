@@ -107,8 +107,8 @@ def _load_from_hdf5(path: Path) -> RegressionGroupProcessingResult:
 
         # Per-condition vs-zero — graceful fallback for old files
         condition_a_vs_zero_t = _read_2d(f"stats/regression/{label_a}_vs_zero/t_values")
-        # p_values is the corrected p (new files); fall back to p_values for old files that only
-        # had one p dataset (which was uncorrected in the original impl).
+        # p_values is the corrected p; fall back to p_values for older files that
+        # only had one uncorrected p dataset.
         condition_a_vs_zero_p_uncorr_ds = dataset_or_none(
             fh, f"stats/regression/{label_a}_vs_zero/p_values_uncorrected"
         )

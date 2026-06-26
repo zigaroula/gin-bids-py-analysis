@@ -7,12 +7,10 @@ time-frequency maps.
 ## Objective
 
 Use this pipeline after subject-level `time_frequency_regression` when you want
-ROI-level regression maps comparable to MATLAB
-`b3_TF_group_parcel_levels_CB.m`.
+ROI-level regression maps across subjects and channels.
 
-The default metric is `t_values`, because the MATLAB b3 CB script displays the
-mean of subject/channel regression t-maps inside each ROI. The pipeline can
-also aggregate `slope` and `r_value` maps.
+The default metric is `t_values`. The pipeline can also aggregate `slope` and
+`r_value` maps.
 
 ## Processing Summary
 
@@ -96,7 +94,7 @@ See `scripts/run_time_frequency_regression_group.py` for an editable runner.
 | `min_subjects_per_roi` | `1` | Minimum unique subject count to keep a ROI. |
 | `cluster_permutation_method` | `"custom"` | `custom` uses stored subject permutations; `sign_flip` generates a group sign-flip null. |
 | `cluster_threshold_alpha` | `0.05` | Cluster-forming threshold on the group p-map. |
-| `cluster_percentile_alpha` | `0.005` | Signed percentile tail, matching MATLAB's 99.5/0.5 logic by default. |
+| `cluster_percentile_alpha` | `0.005` | Signed percentile tail used to threshold cluster sums. |
 | `n_group_permutations` | `10000` | Number of sign-flip permutations when `cluster_permutation_method="sign_flip"`. |
 | `permutation_seed` | `None` | Random seed for sign-flip permutations. |
 
@@ -144,10 +142,6 @@ Cluster correction is disabled by default. When
 - sign-flip mode is available for tests or exploratory use without stored
   subject permutations.
 
-The custom mode is intended for Matlab-faithful slope maps. The default b3 CB
-comparison path (`primary_regression_metric="t_values"`) prioritizes matching
-the displayed Matlab maps rather than custom cluster correction.
-
 ## Writer Parameters
 
 `TimeFrequencyRegressionGroupWriterParams`:
@@ -193,12 +187,3 @@ selected metric, predictor, predictor z-score mode, and predictor transforms.
 Use `build_time_frequency_regression_compatible_groups` rather than manually
 batching files; it separates incompatible inputs into independent group runs.
 
-## Debug Comparison
-
-Use `scripts/debug/compare_b3_TF_regression.py` to inspect Python group outputs
-and optionally compare them to a numeric MATLAB export.
-
-The stock MATLAB `b3_TF_group_parcel_levels_CB.m` mostly saves PNG figures. For
-a direct numerical comparison, export a `.mat` containing maps such as
-`condition_a_mean_source_t_values` and `condition_b_mean_source_t_values`, or
-fields named after MATLAB regressors such as `P_Rating` and `UP_Rating`.

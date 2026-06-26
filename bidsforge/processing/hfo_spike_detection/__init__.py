@@ -10,7 +10,7 @@ Public API:
     - MontageMode, BipolarDirection, BipolarStorage: Montage configuration
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from bidsforge.processing.utils.channels import (
     BipolarDirection,

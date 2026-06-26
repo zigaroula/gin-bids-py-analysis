@@ -39,7 +39,7 @@ def build_frequency_grid(
     epoch_duration_s: float,
     params: TimeFrequencyParams,
 ) -> np.ndarray:
-    """Build the MATLAB-like logarithmic frequency grid."""
+    """Build the logarithmic frequency grid."""
     exponents = np.arange(
         0.0,
         params.frequency_exponent_max + (params.frequency_exponent_step / 2.0),

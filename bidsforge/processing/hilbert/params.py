@@ -76,10 +76,9 @@ class NormalizationMode(str, Enum):
 class ProcessingMethod(str, Enum):
     """Order of operations used in the Hilbert-band envelope pipeline.
 
-    * ``LOCALIZER`` - normalise and smooth *after* downsampling (default,
-      matches the CRNL Localizer implementation).
+    * ``LOCALIZER`` - normalise and smooth *after* downsampling (default).
     * ``SPM2ENV`` - normalise and smooth *at the native recording frequency*,
-      then downsample (matches the Matlab ``spm2env.m`` pipeline).
+      then downsample.
     """
 
     LOCALIZER = "localizer"
@@ -100,7 +99,7 @@ class HilbertParams(BaseProcessingParams):
     The ``method`` field selects the order of operations: ``LOCALIZER``
     (default) downsamples first and then normalises and smooths; ``SPM2ENV``
     normalises and smooths at the native recording frequency and downsamples
-    last (matches the Matlab ``spm2env.m`` pipeline).
+    last.
 
     Example::
 
@@ -126,9 +125,7 @@ class HilbertParams(BaseProcessingParams):
         gt=0,
         description=(
             "Sampling rate at which BPF and Hilbert computations are performed in Hz. "
-            "When set, the signal is downsampled to this rate *before* filtering — "
-            "matching the Matlab ``b1`` pre-processing step "
-            "(``param.comp_freq = 512``) applied before ``spm2env``. "
+            "When set, the signal is downsampled to this rate *before* filtering. "
             "Set to ``None`` (default) to run computations at the native recording "
             "sampling rate."
         ),
@@ -148,9 +145,7 @@ class HilbertParams(BaseProcessingParams):
         description=(
             "Temporary compatibility offset applied to annotation/event onsets "
             "in source-sampling-rate samples before exporting events at the "
-            "envelope sampling rate. This does not shift the signal itself. "
-            "Use -1 to reproduce the Micromed-to-SPM event offset observed in "
-            "the Matlab a1 pipeline."
+            "envelope sampling rate. This does not shift the signal itself."
         ),
     )
     events_source: EventSource = Field(
@@ -240,7 +235,7 @@ class HilbertParams(BaseProcessingParams):
             "Order of operations in the envelope pipeline. "
             "``LOCALIZER`` (default) downsamples first, then normalises and smooths. "
             "``SPM2ENV`` normalises and smooths at the native recording frequency, "
-            "then downsamples (matches the Matlab ``spm2env.m`` pipeline)."
+            "then downsamples."
         ),
     )
 

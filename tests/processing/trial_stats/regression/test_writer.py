@@ -276,7 +276,7 @@ def test_loader_falls_back_to_empty_when_no_trial_activity_summary(tmp_path: Pat
     assert loaded.trial_activity_summary_values.condition_b.shape == (2, 0)
 
 
-def test_loader_rejects_legacy_within_condition_predictor_zscore(tmp_path: Path) -> None:
+def test_loader_rejects_old_within_condition_predictor_zscore(tmp_path: Path) -> None:
     result = _make_result(tmp_path)
     writer = RegressionProcessingWriter(
         RegressionWriterParams(

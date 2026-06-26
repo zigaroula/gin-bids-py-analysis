@@ -326,10 +326,10 @@ class BaseTrialStatsParams(BaseProcessingParams):
         description=(
             "Outlier-detection criterion used when "
             "activity_baseline_remove_outlier_trial_means=True. "
-            "'median_mad' removes trial means more than 3 \u00d7 1.4826 \u00d7 MAD from the "
-            "median (matches MATLAB rmoutliers default). "
+            "'median_mad' removes trial means more than 3 x 1.4826 x MAD from the "
+            "median. "
             "'mean' removes trial means more than 3 standard deviations from the "
-            "mean (matches MATLAB rmoutliers(..., 'mean', 'ThresholdFactor', 3))."
+            "mean."
         ),
     )
     experiment_start_event_code: str | None = Field(

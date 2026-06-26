@@ -18,7 +18,7 @@ from bidsforge.processing.utils.time_frequency_group_stats import (
     compute_one_sample_tf_maps,
     compute_tf_epoch_summary,
     correct_tf_p_values,
-    matlab_style_cluster_mask,
+    signed_percentile_cluster_mask,
 )
 
 from ..compatibility import (
@@ -254,7 +254,7 @@ def _process_roi(
             perm_list,
             cluster_threshold_alpha=params.cluster_threshold_alpha,
         )
-        sig, cluster_labels, cluster_sums = matlab_style_cluster_mask(
+        sig, cluster_labels, cluster_sums = signed_percentile_cluster_mask(
             source_map=mean_values,
             p_values=p_raw,
             null_distribution=cluster_null,

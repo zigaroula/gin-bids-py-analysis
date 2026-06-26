@@ -85,13 +85,13 @@ result.
 After the checks pass, create a public release commit:
 
 ```bash
-python scripts/dev/create_public_snapshot.py --commit --message "Release 1.0.0"
+python scripts/dev/create_public_snapshot.py --commit --message "Release 1.1.0"
 ```
 
 To also create an annotated tag:
 
 ```bash
-python scripts/dev/create_public_snapshot.py --commit --message "Release 1.0.0" --tag v1.0.0
+python scripts/dev/create_public_snapshot.py --commit --message "Release 1.1.0" --tag v1.1.0
 ```
 
 Then push from the public repository:
@@ -99,7 +99,7 @@ Then push from the public repository:
 ```bash
 cd ../bidsforge-public
 git push origin master
-git push origin v1.0.0
+git push origin v1.1.0
 cd ../bidsforge
 ```
 

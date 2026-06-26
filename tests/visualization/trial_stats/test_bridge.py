@@ -18,54 +18,49 @@ class TestWriteHdf5Structure:
     def test_all_required_datasets_present(self, synthetic_result):
         import h5py
 
-        fh = h5py.File("test.h5", "w", driver="core", backing_store=False)
-        _write_hdf5_structure(fh, synthetic_result, "01")
+        with h5py.File("test.h5", "w", driver="core", backing_store=False) as fh:
+            _write_hdf5_structure(fh, synthetic_result, "01")
 
-        assert "axes/channel" in fh
-        assert "axes/time_s" in fh
-        assert "meta/analysis_level" in fh
-        assert "meta/condition_labels" in fh
-        assert "meta/binning_mode" in fh
-        assert "meta/window_ms" in fh
-        assert "meta/n_bins" in fh
-        assert "meta/effective_n_bins" in fh
-        assert "stats/condition_contrast/t_values" in fh
-        assert "data/signal_activity/difference/mean" in fh
-        assert "data/signal_activity/condition_a/mean" in fh
-        assert "data/signal_activity/condition_b/mean" in fh
-        assert "provenance/source_ieeg_files" in fh
-        assert "provenance/source_electrodes_files" in fh
-
-        fh.close()
+            assert "axes/channel" in fh
+            assert "axes/time_s" in fh
+            assert "meta/analysis_level" in fh
+            assert "meta/condition_labels" in fh
+            assert "meta/binning_mode" in fh
+            assert "meta/window_ms" in fh
+            assert "meta/n_bins" in fh
+            assert "meta/effective_n_bins" in fh
+            assert "stats/condition_contrast/t_values" in fh
+            assert "data/signal_activity/difference/mean" in fh
+            assert f"data/signal_activity/{synthetic_result.condition_a}/mean" in fh
+            assert f"data/signal_activity/{synthetic_result.condition_b}/mean" in fh
+            assert "provenance/source_ieeg_files" in fh
+            assert "provenance/source_electrodes_files" in fh
 
     def test_channel_names_round_trip(self, synthetic_result):
         import h5py
 
-        fh = h5py.File("test.h5", "w", driver="core", backing_store=False)
-        _write_hdf5_structure(fh, synthetic_result, "01")
+        with h5py.File("test.h5", "w", driver="core", backing_store=False) as fh:
+            _write_hdf5_structure(fh, synthetic_result, "01")
 
-        stored = [c.decode() if isinstance(c, bytes) else c for c in fh["axes/channel"][:]]
-        assert stored == list(synthetic_result.channel_names)
-        fh.close()
+            stored = [c.decode() if isinstance(c, bytes) else c for c in fh["axes/channel"][:]]
+            assert stored == list(synthetic_result.channel_names)
 
     def test_t_values_shape(self, synthetic_result):
         import h5py
 
-        fh = h5py.File("test.h5", "w", driver="core", backing_store=False)
-        _write_hdf5_structure(fh, synthetic_result, "01")
+        with h5py.File("test.h5", "w", driver="core", backing_store=False) as fh:
+            _write_hdf5_structure(fh, synthetic_result, "01")
 
-        expected_shape = (len(synthetic_result.channel_names), len(synthetic_result.time_axis_s))
-        assert fh["stats/condition_contrast/t_values"].shape == expected_shape
-        fh.close()
+            expected_shape = (len(synthetic_result.channel_names), len(synthetic_result.time_axis_s))
+            assert fh["stats/condition_contrast/t_values"].shape == expected_shape
 
     def test_time_axis_values(self, synthetic_result):
         import h5py
 
-        fh = h5py.File("test.h5", "w", driver="core", backing_store=False)
-        _write_hdf5_structure(fh, synthetic_result, "01")
+        with h5py.File("test.h5", "w", driver="core", backing_store=False) as fh:
+            _write_hdf5_structure(fh, synthetic_result, "01")
 
-        np.testing.assert_allclose(fh["axes/time_s"][:], synthetic_result.time_axis_s)
-        fh.close()
+            np.testing.assert_allclose(fh["axes/time_s"][:], synthetic_result.time_axis_s)
 
 
 class TestBuildInMemoryBIDSFile:

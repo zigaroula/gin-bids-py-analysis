@@ -26,7 +26,7 @@ def compute_permuted_statistics(
     """Compute permuted t-values by randomly shuffling condition labels.
 
     All trials are pooled and randomly split into two pseudo-groups (preserving
-    the original trial counts) on each iteration.  The resulting t-values form a
+    the source trial counts) on each iteration.  The resulting t-values form a
     null distribution against which the real statistic can be compared.
 
     Parameters

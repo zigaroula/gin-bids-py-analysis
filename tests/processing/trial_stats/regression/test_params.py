@@ -65,7 +65,7 @@ def test_params_rejects_baseline_outside_epoch_when_baseline_zscore_enabled() ->
         )
 
 
-def test_params_rejects_legacy_within_condition_predictor_zscore() -> None:
+def test_params_rejects_old_within_condition_predictor_zscore() -> None:
     with pytest.raises(ValueError, match="condition"):
         RegressionParams(
             anchor_event_codes=["10"],

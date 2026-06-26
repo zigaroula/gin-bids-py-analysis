@@ -69,7 +69,7 @@ class TimeFrequencyParams(BaseProcessingParams):
     frequency_start_hz: float = Field(
         default=4.0,
         gt=0,
-        description="First frequency in the logarithmic MATLAB-like grid.",
+        description="First frequency in the logarithmic frequency grid.",
     )
     frequency_exponent_max: float = Field(
         default=5.7,
@@ -103,7 +103,7 @@ class TimeFrequencyParams(BaseProcessingParams):
     )
     high_frequency_smoothing_mode: Literal["adaptive", "fixed"] = Field(
         default="adaptive",
-        description="High-frequency smoothing strategy matching the MATLAB scripts.",
+        description="High-frequency smoothing strategy.",
     )
     high_frequency_fixed_smoothing_hz: float = Field(
         default=12.0,

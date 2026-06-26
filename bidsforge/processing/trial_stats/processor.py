@@ -623,8 +623,7 @@ class BaseTrialStatsProcessing(BaseProcessing, ABC):
                 )
                 nan_tf_mask |= mean_mask
                 # Apply mean mask before max detection so that mean outliers do
-                # not inflate the max distribution — mirrors Matlab's sequential
-                # two-pass rejection in b2_BPF_apply_options.
+                # not inflate the max distribution.
                 if np.any(mean_mask):
                     epochs_pooled = apply_trial_nan_mask(epochs_pooled, mean_mask)
             if cfg.reject_trials_by_epoch_max:

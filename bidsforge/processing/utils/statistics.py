@@ -104,7 +104,7 @@ def zscore_activity_by_baseline(
     ``"condition"`` computes a separate reference for each condition from the
     per-trial baseline means of that condition. ``"global"`` computes one shared
     reference from the per-trial baseline means pooled across both conditions,
-    which matches the MATLAB direction used for the current alignment work.
+    with a positive sign when the first condition is larger than the second.
     """
     arr_a = np.asarray(epochs_a, dtype=np.float64)
     arr_b = np.asarray(epochs_b, dtype=np.float64)
@@ -280,11 +280,8 @@ def _outlier_trial_means_mask(
 ) -> np.ndarray:
     """Return a bool mask ``(n_trials, n_features)`` flagging outlier baseline means.
 
-    ``method='median_mad'`` uses the median ± 3 × 1.4826 × MAD criterion
-    (matching MATLAB ``rmoutliers`` default).
-    ``method='mean'`` uses the mean ± 3σ criterion (matching MATLAB
-    ``rmoutliers(..., 'mean', 'ThresholdFactor', 3)`` as used in ``b2``
-    HGA-trial cleaning).
+    ``method='median_mad'`` uses the median +/- 3 x 1.4826 x MAD criterion.
+    ``method='mean'`` uses the mean +/- 3 standard deviations criterion.
     """
     arr = np.asarray(trial_means, dtype=np.float64)
     if arr.ndim != 2 or arr.shape[0] == 0:
@@ -321,10 +318,10 @@ def _remove_outlier_trial_means(
     trial_means: np.ndarray,
     method: Literal["median_mad", "mean"] = "median_mad",
 ) -> np.ndarray:
-    """Approximate MATLAB ``rmoutliers`` on per-feature trial means.
+    """Remove per-feature trial-mean outliers.
 
-    ``method='median_mad'`` mirrors the MATLAB default (median/MAD).
-    ``method='mean'`` mirrors ``rmoutliers(..., 'mean', 'ThresholdFactor', 3)``.
+    ``method='median_mad'`` uses a median/MAD rule.
+    ``method='mean'`` uses a mean/standard-deviation rule.
     """
     arr = np.asarray(trial_means, dtype=np.float64).copy()
     if arr.ndim != 2 or arr.shape[0] == 0:

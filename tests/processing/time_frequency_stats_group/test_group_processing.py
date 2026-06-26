@@ -39,7 +39,7 @@ from bidsforge.processing.time_frequency_stats_group.regression import (
 from bidsforge.processing.utils.serialization import write_hdf5_tree
 from bidsforge.processing.utils.time_frequency_group_stats import (
     label_tf_clusters,
-    matlab_style_cluster_mask,
+    signed_percentile_cluster_mask,
 )
 
 
@@ -217,7 +217,7 @@ def test_cluster_helpers_use_8_connectivity_and_source_map_sum() -> None:
 
     source = np.array([[2.0, 0.0], [0.0, 3.0]])
     p_values = np.array([[0.01, 0.9], [0.9, 0.01]])
-    sig, cluster_labels, cluster_sums = matlab_style_cluster_mask(
+    sig, cluster_labels, cluster_sums = signed_percentile_cluster_mask(
         source_map=source,
         p_values=p_values,
         null_distribution=np.array([-4.0, -3.0, 3.0, 4.0]),
@@ -280,7 +280,7 @@ def _write_condition_subject(
         source_group=BIDSFileGroup(primary=BIDSFile.from_path(raw)),
         metadata={
             "analysis_type": "time_frequency_condition_test",
-            "time_selection": "strict_matlab",
+            "time_selection": "strict",
             "baseline_grand_average": False,
         },
         channel_names=channels,
@@ -342,7 +342,7 @@ def _write_regression_subject(
         source_group=BIDSFileGroup(primary=BIDSFile.from_path(raw)),
         metadata={
             "analysis_type": "time_frequency_regression",
-            "time_selection": "strict_matlab",
+            "time_selection": "strict",
             "baseline_grand_average": False,
         },
         channel_names=channels,

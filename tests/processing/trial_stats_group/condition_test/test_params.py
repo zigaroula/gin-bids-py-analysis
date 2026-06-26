@@ -48,13 +48,13 @@ def test_params_accept_new_cluster_method_names() -> None:
     assert params.cluster_permutation_method == "sign_flip"
 
 
-@pytest.mark.parametrize("legacy_name", ["hierarchical", "mne"])
-def test_params_reject_legacy_cluster_method_names(legacy_name: str) -> None:
+@pytest.mark.parametrize("old_name", ["hierarchical", "mne"])
+def test_params_reject_old_cluster_method_names(old_name: str) -> None:
     with pytest.raises(ValueError, match="custom' or 'sign_flip"):
         ConditionTestGroupParams(
             roi_mode="manual",
             manual_region_channels={"ROI": {"01": ["A1"]}},
-            cluster_permutation_method=legacy_name,  # type: ignore[arg-type]
+            cluster_permutation_method=old_name,  # type: ignore[arg-type]
         )
 
 

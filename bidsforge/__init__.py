@@ -2,7 +2,7 @@
 
 import logging
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # Prevent "No handlers could be found" warnings when the library is used
 # without an application-level logging configuration (PEP 8 / Python docs).

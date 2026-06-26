@@ -275,7 +275,7 @@ def _select_time_window(
     if time_window_s is None:
         return power, time_axis_s
     start, stop = time_window_s
-    if time_selection == "strict_matlab":
+    if time_selection == "strict":
         mask = (time_axis_s > start) & (time_axis_s < stop)
     elif time_selection == "inclusive":
         mask = (time_axis_s >= start) & (time_axis_s <= stop)

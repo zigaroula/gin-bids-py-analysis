@@ -29,8 +29,8 @@ def compute_linear_regression_maps(
 
     ``nan_policy="feature_time0"`` preserves the historical trial_stats behavior:
     each feature uses the finite-trial mask observed at time index 0 for all time
-    points. ``nan_policy="pointwise"`` matches Matlab ``glmfit``-style TF loops by
-    recomputing the finite response rows independently for every feature/time point.
+    points. ``nan_policy="pointwise"`` recomputes the finite response rows
+    independently for every feature/time point.
     """
     empty = np.full((n_features, n_times), np.nan, dtype=np.float64)
     empty_n = np.zeros((n_features, n_times), dtype=np.int64)
